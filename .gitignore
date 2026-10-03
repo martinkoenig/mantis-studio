@@ -1,0 +1,7 @@
+/build/
+*.mantis/
+__pycache__/
+.venv/
+*.ply
+sdk/python/mantis/mantis_pb2.py
+*.egg-info/

@@ -1,0 +1,34 @@
+syntax = "proto3";
+package mantis.wire.v1;
+// Control plane only. DataReference identifies an immutable object on the local data plane.
+message Empty {}
+message Error { uint32 code = 1; string message = 2; string component = 3; }
+message Device { string id = 1; string name = 2; string plugin_id = 3; repeated string capabilities = 4; repeated string children = 5; }
+message Capture { string id = 1; repeated string devices = 2; string raw_artifact = 3; bool active = 4; uint64 frames = 5; uint64 dropped = 6; uint64 queue_high_water = 7; string error = 8; }
+message Artifact { string id = 1; string type = 2; uint32 schema_version = 3; string state = 4; string producer = 5; repeated string inputs = 6; string hash = 7; uint64 bytes = 8; uint64 chunks = 9; }
+message Job { string id = 1; string name = 2; string state = 3; double progress = 4; string status = 5; string diagnostics = 6; string result_artifact = 7; }
+message Plugin { string id = 1; string version = 2; string kind = 3; string execution = 4; string state = 5; string diagnostic = 6; repeated string permissions = 7; }
+message Event { uint64 sequence = 1; string kind = 2; string component = 3; string message = 4; }
+message CaptureStart { repeated string devices = 1; }
+message Id { string id = 1; }
+message PipelineRun { string capture_id = 1; string recipe = 2; string raw_artifact_id = 3; }
+message ProjectOpen { string path = 1; bool create = 2; }
+message Export { string artifact_id = 1; string path = 2; }
+message PluginEnable { string id = 1; bool enabled = 2; }
+message EventsSince { uint64 after = 1; }
+message DataReference { string artifact_id = 1; string transport = 2; string locator = 3; uint32 format_version = 4; }
+message Request {
+ uint32 protocol_version = 1; string request_id = 2; string token = 3;
+ oneof command {
+  Empty snapshot = 10; Empty devices_list = 11; CaptureStart capture_start = 12; Id capture_stop = 13;
+  PipelineRun pipeline_run = 14; ProjectOpen project_open = 15; Empty artifacts_list = 16;
+  Export export_artifact = 17; Id job_cancel = 18; Empty plugins_list = 19; EventsSince events = 20;
+  Id artifact_data = 21; Id artifact_recover = 22; PluginEnable plugin_enable = 23; Empty shutdown = 24;
+ }
+}
+message Response {
+ uint32 protocol_version = 1; string request_id = 2; Error error = 3;
+ repeated Device devices = 4; repeated Capture captures = 5; repeated Artifact artifacts = 6;
+ repeated Job jobs = 7; repeated Plugin plugins = 8; repeated Event events = 9;
+ string project_path = 10; string result_id = 11; DataReference data = 12;
+}

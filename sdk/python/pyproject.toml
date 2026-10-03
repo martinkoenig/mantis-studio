@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "mantis-studio-client"
+version = "0.1.0"
+description = "Local protocol client for the Mantis Studio architecture skeleton"
+requires-python = ">=3.10"
+dependencies = ["protobuf>=3.20,<7"]
+[tool.setuptools]
+packages = ["mantis"]

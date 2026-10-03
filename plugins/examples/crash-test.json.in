@@ -1,0 +1,12 @@
+{
+  "manifest_version": 1,
+  "id": "org.mantis.crash-test",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "library": "$<TARGET_FILE_NAME:crash-test>",
+  "kind": "processor",
+  "execution": "isolated",
+  "permissions": [
+    "project_data"
+  ]
+}

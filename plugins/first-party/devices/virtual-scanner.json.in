@@ -1,0 +1,12 @@
+{
+  "manifest_version": 1,
+  "id": "org.mantis.virtual-scanner",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "library": "$<TARGET_FILE_NAME:virtual-scanner>",
+  "kind": "device",
+  "execution": "in_process",
+  "permissions": [
+    "synthetic"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "example",
+  "nodes": [
+    {
+      "id": "capture-source",
+      "source_type": "org.mantis.ImageFrame",
+      "source_schema": 1
+    },
+    {
+      "id": "geometry",
+      "plugin": "org.mantis.example-points",
+      "algorithm_version": [
+        0,
+        1,
+        0
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": [
+    {
+      "from": "capture-source",
+      "to": "geometry",
+      "capacity": 4,
+      "policy": "BLOCK"
+    }
+  ]
+}

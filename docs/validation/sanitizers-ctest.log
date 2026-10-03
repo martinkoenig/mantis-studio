@@ -1,0 +1,66 @@
+Start testing: Oct 04 00:54 CEST
+----------------------------------------------------------
+1/4 Testing: core
+1/4 Test: core
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-core-tests" "<SOURCE_ROOT>/build/sanitizers/plugins"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"core" start time: Oct 04 00:54 CEST
+Output:
+----------------------------------------------------------
+2099 architecture assertions passed
+<end of output>
+Test time =   0.22 sec
+----------------------------------------------------------
+Test Passed.
+"core" end time: Oct 04 00:54 CEST
+"core" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/4 Testing: c-abi
+2/4 Test: c-abi
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-c-contract"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"c-abi" start time: Oct 04 00:54 CEST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"c-abi" end time: Oct 04 00:54 CEST
+"c-abi" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/4 Testing: boundaries
+3/4 Test: boundaries
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/contract/boundaries.py" "<SOURCE_ROOT>"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"boundaries" start time: Oct 04 00:54 CEST
+Output:
+----------------------------------------------------------
+Foundation, frontend and plugin include boundaries passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"boundaries" end time: Oct 04 00:54 CEST
+"boundaries" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/4 Testing: acceptance
+4/4 Test: acceptance
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/integration/acceptance.py" "<SOURCE_ROOT>/build/sanitizers"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"acceptance" start time: Oct 04 00:54 CEST
+Output:
+----------------------------------------------------------
+PASS: Python, CLI, headless client reconnect, deterministic replay, isolated crash, capture continuity, daemon crash recovery
+<end of output>
+Test time =   0.60 sec
+----------------------------------------------------------
+Test Passed.
+"acceptance" end time: Oct 04 00:54 CEST
+"acceptance" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 04 00:54 CEST

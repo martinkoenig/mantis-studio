@@ -1,0 +1,12 @@
+{
+  "manifest_version": 1,
+  "id": "org.mantis.ply",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "library": "$<TARGET_FILE_NAME:ply-exporter>",
+  "kind": "exporter",
+  "execution": "in_process",
+  "permissions": [
+    "filesystem"
+  ]
+}

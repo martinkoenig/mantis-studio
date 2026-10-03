@@ -1,0 +1,12 @@
+{
+  "manifest_version": 1,
+  "id": "org.mantis.example-points",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "library": "$<TARGET_FILE_NAME:example-points>",
+  "kind": "processor",
+  "execution": "in_process",
+  "permissions": [
+    "project_data"
+  ]
+}
