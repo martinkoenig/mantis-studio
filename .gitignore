@@ -5,3 +5,6 @@ __pycache__/
 *.ply
 sdk/python/mantis/mantis_pb2.py
 *.egg-info/
+
+# Local runtime files
+/mantisd.log
