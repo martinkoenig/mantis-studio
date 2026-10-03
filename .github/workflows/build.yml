@@ -1,7 +1,14 @@
 name: architecture
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   linux:
     strategy:
@@ -22,6 +29,7 @@ jobs:
         run: cmake --build build/ci --parallel 4
       - name: Test
         run: ctest --test-dir build/ci --output-on-failure
+
   sanitizers:
     runs-on: ubuntu-24.04
     steps:
