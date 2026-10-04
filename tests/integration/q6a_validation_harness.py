@@ -23,7 +23,7 @@ spec.loader.exec_module(q6a)
 def graph(enabled=True):
     text = "Media controller API version 6.8\nbus info        platform:acb3000.isp\n"
     for index, (src, pad, dst, sink) in enumerate(q6a.LINKS):
-        text += (f'- entity {index + 1}: {src} (2 pads, 1 link)\n'
+        text += (f'- entity {index + 1}: {src} (2 pads, 1 link, 0 routes)\n'
                  f'    pad{pad}: Source\n'
                  f'        -> "{dst}":{sink} [{"ENABLED" if enabled else ""}]\n')
     return text + '- entity 100: rgb (1 pad, 1 link)\n    pad0: Source\n        -> "rgb-video":0 [ENABLED,IMMUTABLE]\n'

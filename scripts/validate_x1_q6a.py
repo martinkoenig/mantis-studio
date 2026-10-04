@@ -56,7 +56,7 @@ def graph_links(graph):
     result = {}
     entity = pad = None
     for line in graph.splitlines():
-        match = re.match(r"\s*- entity \d+: (.*?) \(\d+ pads?, \d+ links?\)", line)
+        match = re.match(r"\s*- entity \d+: (.*?) \(\d+ pads?, \d+ links?(?:, \d+ routes?)?\)", line)
         if match:
             entity = match[1]
             pad = None
