@@ -1,6 +1,7 @@
 #include <condition_variable>
 #include <mantis/replay.hpp>
 #include <mutex>
+#include <utility>
 namespace mantis::device {
 namespace {
 class RecordedSource final : public ImageStream {
