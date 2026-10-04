@@ -170,7 +170,9 @@ if(BUILD_TESTING)
  add_test(NAME boundaries COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/contract/boundaries.py ${CMAKE_CURRENT_SOURCE_DIR})
  add_test(NAME python-capture COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/python_capture.py ${CMAKE_BINARY_DIR})
  add_test(NAME acceptance COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/acceptance.py ${CMAKE_BINARY_DIR})
- set_tests_properties(acceptance PROPERTIES TIMEOUT 90)
+ # Deliberately contaminate the caller environment: acceptance must isolate X1.
+ set_tests_properties(acceptance PROPERTIES TIMEOUT 90 ENVIRONMENT
+  "MANTIS_X1_PROFILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/x1-acceptance-env.json;MANTIS_X1_FAKE=normal")
 endif()
 add_executable(mantis-benchmark benchmarks/queue.cpp)
 target_link_libraries(mantis-benchmark PRIVATE mantis-pipeline-api)

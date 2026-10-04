@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "measurement_cameras": {
+    "left": {"sensor_identity": "ov9281 18-0060"},
+    "right": {"sensor_identity": "ov9281 20-0060"}
+  },
+  "mode": {"width": 64, "height": 48, "fourcc": "GREY", "fps": 120}
+}
