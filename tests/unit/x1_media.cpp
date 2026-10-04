@@ -31,6 +31,41 @@ int main() {
             {"runtime_setup", {{"ownership", "selected-routes"}, {"disable_conflicting_links", true}}}};
         auto load = [&] { { std::ofstream out(file); out << profile; } return load_profile(file.string()); };
         auto parsed = load(); CHECK(parsed.vertical_blanking == 196 && parsed.mode.height == 720 && parsed.format_version == 2);
+        std::array<CameraInfo, 2> cameras{{{"sensor-left", "bus", "left-node", {"Y10P"}, "LEFT", "fixture-media", {}},
+            {"sensor-right", "bus", "right-node", {"Y10P"}, "RIGHT", "fixture-media", {}}}};
+        auto before = [&](MediaIo &io) {
+            std::string snapshot;
+            auto g = io.graph("fixture-media");
+            for (const auto &l : g.links) snapshot += std::to_string(l.enabled);
+            for (const auto &e : g.entities) if (e.id < 100 && !e.capture) for (const auto &pad : e.pads) {
+                auto f = io.get_format(e, pad.index);
+                snapshot += ":" + std::to_string(f.width) + ":" + std::to_string(f.height) + ":" + std::to_string(f.code);
+                if (e.pads.size() == 1) snapshot += ":" + std::to_string(io.get_vblank(e));
+            }
+            return snapshot;
+        };
+        for (const auto *scenario : {"normal", "conflict", "source-conflict"}) {
+            auto io = fake_media(parsed, cameras, scenario); auto initial = before(*io);
+            auto setup = configure_media(*io, parsed, cameras);
+            auto g = io->graph("fixture-media");
+            CHECK(g.links[0].enabled && g.links[1].enabled && g.links[2].enabled && g.links[3].enabled);
+            CHECK(g.links[4].enabled); // unrelated RGB route retained
+            CHECK(io->get_vblank(g.entities.front()) == 196);
+            CHECK(setup->diagnostics().at("left_readback_vblank") == "196");
+            CHECK(setup->diagnostics().at("right_sensor_driver_interval") == "unavailable");
+            setup->rollback(); CHECK(before(*io) == initial);
+        }
+        for (const auto *scenario : {"immutable-conflict", "missing-route", "ambiguous-route", "unsupported-mbus", "setup-left", "setup-right", "format-readback-mismatch", "vblank-readback-mismatch", "link-readback-mismatch"}) {
+            auto io = fake_media(parsed, cameras, scenario); auto initial = before(*io);
+            rejects([&] { (void)configure_media(*io, parsed, cameras); });
+            CHECK(before(*io) == initial);
+        }
+        auto io = fake_media(parsed, cameras, "conflict"); auto initial = before(*io);
+        parsed.disable_conflicting_links = false;
+        rejects([&] { (void)configure_media(*io, parsed, cameras); }); CHECK(before(*io) == initial);
+        parsed.disable_conflicting_links = true;
+        auto setup = configure_media(*io, parsed, cameras); auto configured = before(*io);
+        setup->commit(); setup->rollback(); CHECK(before(*io) == configured);
         profile["format_version"] = 1; rejects(load);
         profile["format_version"] = 2; profile["mode"]["media_bus_code"] = "unsupported"; rejects(load);
         std::cout << "Disabled-link route discovery and explicit ambiguity checks passed\n";

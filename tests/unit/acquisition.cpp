@@ -12,17 +12,20 @@ int main(int argc, char **argv) {
     try {
         CHECK(argc == 3);
         auto profile = x1::load_profile(argv[2]);
+        profile.buses = {"fixture", "fixture"};
         for (const auto *scenario : {"normal", "renumber"}) {
             auto backend = x1::fake_backend(scenario);
             auto cameras = x1::assign(profile, backend->discover());
             CHECK(cameras[0].sensor == profile.sensors[0]); CHECK(cameras[1].sensor == profile.sensors[1]);
         }
-        for (const auto *scenario : {"missing", "ambiguous", "unsupported"})
+        for (const auto *scenario : {"missing", "ambiguous", "y10p-unsupported"})
             rejects([&] { auto backend = x1::fake_backend(scenario); (void)x1::assign(profile, backend->discover()); });
         auto dir = std::filesystem::temp_directory_path() / Id::random().value;
         std::filesystem::create_directory(dir);
         struct Cleanup { std::filesystem::path path; ~Cleanup() { std::filesystem::remove_all(path); } } cleanup{dir};
         auto fixture = nlohmann::json::parse(profile.json);
+        fixture["format_version"] = 1; fixture.erase("runtime_setup");
+        for (const char *role : {"left", "right"}) { fixture["measurement_cameras"][role].erase("route"); fixture["measurement_cameras"][role].erase("bus_identity"); }
         fixture["mode"] = {{"width", 64}, {"height", 48}, {"fourcc", "GREY"}, {"fps", 120}};
         fixture["stall_timeout_ms"] = 100;
         fixture["calibration_id"] = "test.calibration"; fixture["calibration_revision"] = 7;
@@ -83,6 +86,37 @@ int main(int argc, char **argv) {
             CHECK(stream->stop());
             if (retained) CHECK((*retained->frames[0]->attributes[0].buffer.map_read())[0] == std::byte{0});
             std::cout << scenario << " passed\n";
+        }
+        fixture = nlohmann::json::parse(profile.json);
+        fixture["mode"]["width"] = 64; fixture["mode"]["height"] = 48;
+        for (const char *role : {"left", "right"}) fixture["measurement_cameras"][role]["bus_identity"] = "fixture";
+        { std::ofstream out(dir / "profile.json"); out << fixture; }
+        for (const char *scenario : {"normal", "renumber", "conflict", "setup-left", "setup-right", "streamon-left", "streamon-right"}) {
+            setenv("MANTIS_X1_FAKE", scenario, 1);
+            plugins::Loaded loaded(std::filesystem::path(argv[1]) / "mantis-x1.so");
+            const auto *api = loaded.query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1);
+            std::string id;
+            sdk::enumerate(api, [&](const MantisDiscoveredDeviceV1 &d) { if (!*d.parent_id) id = d.id; });
+            void *instance{}; sdk::check(api->open(plugins::host_api(), id.c_str(), &instance));
+            struct Instance { const MantisAcquisitionV1 *api; void *value; ~Instance() { api->stop(value); api->destroy(value); } } instance_owner{api, instance};
+            bool failed = api->start(instance) != 0;
+            const std::string name = scenario;
+            bool expected = name.starts_with("setup-") || name.starts_with("streamon-"); CHECK(failed == expected);
+            std::string diagnostics;
+            auto text = [](void *ctx, const char *json) noexcept { return sdk::boundary([&] { *static_cast<std::string *>(ctx) = json; }); };
+            sdk::check(api->diagnostics(instance, text, &diagnostics));
+            auto info = nlohmann::json::parse(diagnostics);
+            if (expected) {
+                auto error = info.at("error").get<std::string>();
+                CHECK(error.find(name.ends_with("right") ? "RIGHT" : "LEFT") != std::string::npos);
+                if (name.starts_with("streamon")) CHECK(error.find("STREAMON") != std::string::npos && error.find("Broken pipe") != std::string::npos);
+            } else {
+                CHECK(info.at("left_readback_vblank") == "196");
+                unsigned frames{};
+                auto emit = [](void *ctx, const MantisFrameSetV1 *set) { *static_cast<unsigned *>(ctx) = set->frame_count; return 0; };
+                CHECK(api->next(instance, 100, emit, &frames) == 0 && frames == 2);
+            }
+            sdk::check(api->stop(instance));
         }
         unsetenv("MANTIS_X1_PROFILE"); unsetenv("MANTIS_X1_FAKE");
         return 0;

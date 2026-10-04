@@ -16,6 +16,7 @@ using Metadata = std::map<std::string, std::string>;
 struct Mode {
     uint32_t width{1280}, height{800}, fps{120};
     std::string fourcc{"GREY"};
+    bool sensor_timing_configured{};
 };
 struct CameraInfo {
     std::string sensor, bus, video;

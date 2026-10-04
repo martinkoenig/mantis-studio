@@ -110,7 +110,10 @@ int start(void *p) noexcept {
             throw std::runtime_error("Profile v2 requires plugin-owned media setup; backend does not provide it");
         for (size_t i = 0; i < 2; ++i) d.streams[i] = d.config.backend->open(d.cameras[i], d.config.profile.mode);
         for (auto &stream : d.streams) stream->start();
-        if (d.setup) { d.metrics = d.setup->diagnostics(); d.setup->commit(); }
+        if (d.setup) d.metrics = d.setup->diagnostics();
+        for (size_t i = 0; i < 2; ++i) for (const auto &[key, value] : d.streams[i]->diagnostics())
+            d.metrics[(i ? "right_" : "left_") + key] = value;
+        if (d.setup) d.setup->commit();
         d.started = x1::monotonic_ns(); d.last_receive.fill(d.started); d.running = true;
         d.metrics["sync_configuration"] = d.config.profile.hardware_sync_configured ? "hardware sync configured" : "hardware sync not configured";
         d.metrics["sync_quality"] = "software";

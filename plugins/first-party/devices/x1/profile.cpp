@@ -50,6 +50,7 @@ Profile load_profile(const std::string &path) {
             throw std::runtime_error("Capture fourcc and media-bus sample depth disagree");
         if (mode.contains("vertical_blanking")) {
             p.vertical_blanking = mode.at("vertical_blanking");
+            p.mode.sensor_timing_configured = true;
             if (*p.vertical_blanking < 0) throw std::runtime_error("VBLANK must be nonnegative");
         }
         p.disable_conflicting_links = j.at("runtime_setup").value("disable_conflicting_links", false);

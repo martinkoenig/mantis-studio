@@ -27,5 +27,6 @@ class MediaIo {
     virtual int32_t set_vblank(const Entity &, int32_t) = 0;
     virtual Metadata timing(const Entity &) = 0;
 };
+std::unique_ptr<MediaIo> fake_media(const Profile &, const std::array<CameraInfo, 2> &, const std::string &scenario);
 std::unique_ptr<Setup> configure_media(MediaIo &, const Profile &, const std::array<CameraInfo, 2> &);
 } // namespace x1
