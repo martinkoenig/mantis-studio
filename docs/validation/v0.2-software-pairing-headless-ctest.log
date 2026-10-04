@@ -1,0 +1,38 @@
+Internal ctest changing into directory: <SOURCE_ROOT>/build/headless
+Test project <SOURCE_ROOT>/build/headless
+      Start  1: legacy-abi
+ 1/16 Test  #1: legacy-abi .......................   Passed    0.00 sec
+      Start  2: x1-pairing
+ 2/16 Test  #2: x1-pairing .......................   Passed    0.00 sec
+      Start  3: x1-pairing-stream
+ 3/16 Test  #3: x1-pairing-stream ................   Passed    3.65 sec
+      Start  4: x1-media
+ 4/16 Test  #4: x1-media .........................   Passed    0.00 sec
+      Start  5: acquisition
+ 5/16 Test  #5: acquisition ......................   Passed    1.11 sec
+      Start  6: acquisition-integration
+ 6/16 Test  #6: acquisition-integration ..........   Passed    1.90 sec
+      Start  7: acquisition-y10p-integration
+ 7/16 Test  #7: acquisition-y10p-integration .....   Passed    1.89 sec
+      Start  8: control-listener
+ 8/16 Test  #8: control-listener .................   Passed    6.25 sec
+      Start  9: acquisition-qos
+ 9/16 Test  #9: acquisition-qos ..................   Passed    0.05 sec
+      Start 10: raw-capture
+10/16 Test #10: raw-capture ......................   Passed    0.02 sec
+      Start 11: packed-image
+11/16 Test #11: packed-image .....................   Passed    0.00 sec
+      Start 12: core
+12/16 Test #12: core .............................   Passed    0.10 sec
+      Start 13: c-abi
+13/16 Test #13: c-abi ............................   Passed    0.00 sec
+      Start 14: boundaries
+14/16 Test #14: boundaries .......................   Passed    0.02 sec
+      Start 15: python-capture
+15/16 Test #15: python-capture ...................   Passed    0.06 sec
+      Start 16: acceptance
+16/16 Test #16: acceptance .......................   Passed    1.51 sec
+
+100% tests passed, 0 tests failed out of 16
+
+Total Test time (real) =  16.57 sec

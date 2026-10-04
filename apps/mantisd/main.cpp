@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
             binary / "mantis-plugin-host",
             std::filesystem::current_path() / "Example.mantis",
             binary.parent_path() / "recipes",
-            {"org.mantis.virtual-scanner", "org.mantis.example-points", "org.mantis.ply"}};
+            {"org.mantis.virtual-scanner", "org.mantis.example-points", "org.mantis.ply", "org.mantis.x1"}};
 #ifdef _WIN32
         config.plugin_host += ".exe";
 #endif
@@ -55,8 +55,11 @@ int main(int argc, char **argv) {
         auto server = mantis::platform::Socket::listen(port);
         std::cout << "mantisd ready on 127.0.0.1:" << port << std::endl;
         while (true) {
+            // Listener failures are fatal and reach the outer diagnostic once;
+            // retrying a broken listener here would produce an error busy loop.
+            // Interrupted/temporarily non-ready accepts are handled by Socket.
+            auto socket = server.accept();
             try {
-                auto socket = server.accept();
                 mantis::wire::v1::Request request;
                 mantis::protocol::receive(socket, request);
                 mantis::wire::v1::Response response;

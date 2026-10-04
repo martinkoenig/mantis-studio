@@ -152,6 +152,120 @@ int receive(void *context, const MantisPacketV1 *p) noexcept {
         return 1;
     }
 }
+data::Metadata metadata(const char *json) {
+    if (!json) return {};
+    if (std::char_traits<char>::length(json) > 65536)
+        fail(Status::incompatible, "Plugin metadata exceeds 64 KiB");
+    auto values = nlohmann::json::parse(json).get<data::Metadata>();
+    if (values.size() > 256) fail(Status::incompatible, "Too many metadata keys");
+    return values;
+}
+data::Published observation(const MantisObservationV1 &o) {
+    if (!sdk::compatible_table(&o) || o.sync_quality > 2)
+        fail(Status::incompatible, "Invalid observation header");
+    Receiver receiver;
+    if (receive(&receiver, &o.packet)) fail(Status::incompatible, receiver.error);
+    auto result = *receiver.result;
+    result.header.received.nanoseconds = o.host_receive_ns;
+    result.header.sync = {{o.sync_group ? o.sync_group : ""}, o.sync_trigger};
+    result.header.sync_quality = static_cast<time::SyncQuality>(o.sync_quality);
+    result.header.metadata = metadata(o.metadata_json);
+    return data::publish(std::move(result));
+}
+int receive_set(void *ctx, const MantisFrameSetV1 *set) noexcept {
+    auto &r = *static_cast<Receiver *>(ctx);
+    try {
+        if (r.result || !sdk::compatible_table(set) || !set->frames ||
+            !set->frame_count || set->frame_count > 16)
+            fail(Status::incompatible, "Invalid FrameSet");
+        // Decode the parent as a header-only packet before attaching children.
+        auto header = set->observation;
+        if (!header.packet.type_id || std::strcmp(header.packet.type_id, MANTIS_FRAMESET) ||
+            header.packet.attribute_count)
+            fail(Status::incompatible, "Invalid FrameSet type/attributes");
+        header.packet.type_id = MANTIS_IMAGE;
+        auto out = *observation(header);
+        out.type = schema::frameset;
+        for (uint32_t i = 0; i < set->frame_count; ++i)
+            out.frames.push_back(observation(set->frames[i]));
+        r.result = data::publish(std::move(out));
+        return 0;
+    } catch (const std::exception &e) { r.error = e.what(); return 1; }
+    catch (...) { r.error = "Unknown FrameSet error"; return 1; }
+}
+struct Discovery {
+    std::vector<device::Descriptor> devices;
+    std::string error;
+};
+int discovered(void *ctx, const MantisDiscoveredDeviceV1 *d) noexcept {
+    auto &state = *static_cast<Discovery *>(ctx);
+    try {
+        if (!sdk::compatible_table(d) || !d->id || !*d->id || !d->name ||
+            d->capability_count > 128 || (d->capability_count && !d->capabilities) ||
+            state.devices.size() >= 256)
+            fail(Status::incompatible, "Invalid discovered descriptor");
+        device::Descriptor out;
+        out.id = {d->id}; out.name = d->name; out.parent = {d->parent_id ? d->parent_id : ""};
+        out.metadata = metadata(d->metadata_json);
+        for (uint32_t i = 0; i < d->capability_count; ++i) {
+            if (!d->capabilities[i]) fail(Status::incompatible, "Null capability");
+            out.capabilities.emplace_back(d->capabilities[i]);
+        }
+        for (const auto &prior : state.devices)
+            if (prior.id == out.id) fail(Status::incompatible, "Duplicate discovered ID");
+        state.devices.push_back(std::move(out));
+        return 0;
+    } catch (const std::exception &e) { state.error = e.what(); return 1; }
+    catch (...) { state.error = "Unknown enumeration error"; return 1; }
+}
+class Acquisition final : public device::ImageStream {
+    std::shared_ptr<Loaded> loaded_;
+    const MantisAcquisitionV1 *api_;
+    device::Descriptor descriptor_;
+    std::vector<device::Descriptor> children_;
+    void *instance_{};
+  public:
+    Acquisition(std::shared_ptr<Loaded> loaded, device::Descriptor descriptor,
+                std::vector<device::Descriptor> children)
+        : loaded_(std::move(loaded)), api_(loaded_->query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1)),
+          descriptor_(std::move(descriptor)), children_(std::move(children)) {}
+    ~Acquisition() override {
+        if (instance_) { api_->stop(instance_); api_->destroy(instance_); }
+    }
+    const device::Descriptor &descriptor() const override { return descriptor_; }
+    std::vector<device::Descriptor> components() const override { return children_; }
+    bool source_paced() const override { return true; }
+    Result<void> start() override {
+        if (instance_) { api_->stop(instance_); api_->destroy(instance_); instance_ = nullptr; }
+        if (api_->open(&host, descriptor_.id.value.c_str(), &instance_) || !instance_)
+            return std::unexpected(Error{Status::plugin_failed, "Acquisition open failed: " + diagnostics()["error"], "device"});
+        if (api_->start(instance_))
+            return std::unexpected(Error{Status::plugin_failed, diagnostics()["error"], "device"});
+        return {};
+    }
+    Result<void> stop() override {
+        if (instance_ && api_->stop(instance_))
+            return std::unexpected(Error{Status::plugin_failed, "Acquisition stop failed: " + diagnostics()["error"], "device"});
+        return {};
+    }
+    data::Metadata diagnostics() const override {
+        data::Metadata result;
+        auto emit = [](void *ctx, const char *json) noexcept {
+            return sdk::boundary([&] { *static_cast<data::Metadata *>(ctx) = metadata(json); });
+        };
+        if (api_->diagnostics(instance_, emit, &result)) result["error"] = "Cannot read acquisition diagnostics";
+        return result;
+    }
+    Result<data::Published> next() override {
+        Receiver receiver;
+        auto status = api_->next(instance_, 100, receive_set, &receiver);
+        if (status == 2 && !receiver.result) return data::Published{};
+        if (status || !receiver.result)
+            return std::unexpected(Error{Status::plugin_failed,
+                "Acquisition failed: " + diagnostics()["error"] + " " + receiver.error, "device"});
+        return receiver.result;
+    }
+};
 class Stream final : public device::ImageStream {
     std::shared_ptr<Loaded> loaded_;
     const MantisDeviceV1 *api_;
@@ -350,9 +464,40 @@ std::vector<PluginStatus> Registry::statuses() const {
 }
 std::vector<std::unique_ptr<device::ImageStream>> Registry::devices() {
     std::vector<std::unique_ptr<device::ImageStream>> out;
-    for (auto &[id, e] : entries_)
-        if (e->manifest.kind == "device" && e->loaded && e->state == "registered")
-            out.push_back(std::make_unique<Stream>(e->loaded));
+    for (auto &[id, e] : entries_) {
+        if (e->manifest.kind != "device" || !e->loaded || e->state != "registered") continue;
+        try {
+            if (!e->loaded->api()->query_interface(MANTIS_ACQUISITION_V1)) {
+                out.push_back(std::make_unique<Stream>(e->loaded));
+                continue;
+            }
+            auto api = e->loaded->query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1);
+            if (!api->enumerate || !api->open || !api->destroy || !api->start || !api->next ||
+                !api->stop || !api->diagnostics) fail(Status::incompatible, "Incomplete acquisition table");
+            Discovery discovery;
+            if (api->enumerate(discovered, &discovery)) {
+                data::Metadata diagnostic;
+                auto emit = [](void *ctx, const char *json) noexcept {
+                    return sdk::boundary([&] { *static_cast<data::Metadata *>(ctx) = metadata(json); });
+                };
+                (void)api->diagnostics(nullptr, emit, &diagnostic);
+                fail(Status::plugin_failed, "Acquisition discovery failed: " + discovery.error + " " + diagnostic["error"]);
+            }
+            e->diagnostic.clear();
+            for (auto &d : discovery.devices) d.plugin_id = id;
+            for (auto &d : discovery.devices) {
+                if (std::find(d.capabilities.begin(), d.capabilities.end(), device::frameset_stream) == d.capabilities.end()) continue;
+                std::vector<device::Descriptor> children;
+                for (const auto &child : discovery.devices) if (child.parent == d.id) {
+                    d.children.push_back(child.id); children.push_back(child);
+                }
+                out.push_back(std::make_unique<Acquisition>(e->loaded, d, std::move(children)));
+            }
+        } catch (const std::exception &ex) {
+            e->diagnostic = ex.what();
+            if (logger_) logger_({"error", "discovery", id + ": " + ex.what()});
+        }
+    }
     return out;
 }
 void Registry::isolated(const std::shared_ptr<Entry> &e, const std::string &operation,

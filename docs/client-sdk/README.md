@@ -43,3 +43,51 @@ Use RAII/finally handling in applications to stop capture only when desired. Dis
 Client calls are synchronous; put them on an application worker thread. The Studio bridge demonstrates this with QtConcurrent. Job waits poll bounded control snapshots and check the optional CancellationToken; cancelling a wait token does not implicitly cancel the daemon job.
 
 Data retrieval requests a `DataReference`, then maps the immutable local packet file using the canonical codec. There is no direct connection to the store implementation. Remote clients will need another data-plane transport implementation.
+
+## Dual-camera acquisition and replay
+
+Select the acquisition parent explicitly; child descriptors represent component
+capabilities and cannot independently open the synchronized stream. The original
+example recipe accepts the Virtual Scanner's single image; future algorithms
+consume FrameSets through the same live/replay ImageStream contract.
+
+```python
+import mantis
+c = mantis.connect()
+x1 = next(d for d in c.devices.list() if d.plugin_id == "org.mantis.x1" and not d.parent)
+capture = c.capture.start(x1.id)
+print(capture.status())
+ref = c.preview(capture)
+if ref:
+    with ref:
+        print(ref.locator)  # map/read before releasing the lease
+capture.stop()             # waits for daemon-owned finalization
+report = c.replay.verify(capture.raw_artifact)
+assert report["raw_integrity"] == report["replay"] == "PASS"
+c.replay.start(capture.raw_artifact, real_time=True).wait(timeout=3600)
+```
+
+C++ adds `device_info`, `capture_status`, `captures`, `preview`, `replay` and
+`recover_artifact`. `preview` maps and releases automatically; its immutable
+Packet retains mapping ownership. Python exposes locator leases without moving
+high-rate pixels through Protobuf. `artifacts.recover(..., timeout=3600)` and C++
+recovery use a daemon job and return the finalized descriptor. Stop, recovery and
+verification wait up to an hour by default; timeouts do not terminate acquisition
+or the underlying job. CLI exposes the same controls (see `mantis-cli --help`).
+
+`Capture.stop()` raises `MantisError(component="capture")` immediately when the
+returned capture contains an error, including stop/cleanup failures. Successful
+stops continue waiting for daemon-owned asynchronous RawCapture finalization;
+finalization job failures retain their own diagnostics. Do not attempt replay of
+a failed/recoverable capture before explicit recovery.
+
+Capture diagnostics distinguish `pairing_mode`, selected `left.native_sequence`
+and `right.native_sequence`, signed LEFT−RIGHT `native_sequence_offset`,
+`paired_v4l2_delta_ns` (RIGHT−LEFT), startup exclusions, terminal lookahead,
+per-camera native gaps and raw recorder failures. Native counter equality is
+reported as `native_counter_equality`; it is not exposure synchronization.
+
+`receive_fps` is the received-observation count at the last valid dequeue divided
+by host elapsed time since acquisition started. It includes startup buffer drain
+and exclusions, so short-run rates can differ between cameras and from their
+steady cadence. It is separate from driver intervals and exposure timing.

@@ -1,5 +1,6 @@
 #pragma once
 #include <QFutureWatcher>
+#include "preview.hpp"
 #include <QObject>
 #include <QTimer>
 #include <QVariantList>
@@ -12,6 +13,8 @@ struct StudioResult {
 };
 class StudioBridge : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QString acquisitionText READ acquisitionText NOTIFY changed)
+    Q_PROPERTY(bool dualPreview READ dualPreview NOTIFY changed)
     Q_PROPERTY(QVariantList devices READ devices NOTIFY changed)
     Q_PROPERTY(QVariantList artifacts READ artifacts NOTIFY changed)
     Q_PROPERTY(QVariantList jobs READ jobs NOTIFY changed)
@@ -28,7 +31,12 @@ class StudioBridge : public QObject {
     bool connected_{};
     mantis::client::Client client_;
     QFutureWatcher<StudioResult> watcher_;
-    QTimer timer_;
+    QTimer timer_, preview_timer_;
+    QFutureWatcher<PreviewResult> preview_watcher_;
+    MeasurementView *left_{}, *right_{};
+    QString acquisition_text_, replay_;
+    bool dual_preview_{}, preview_reported_{};
+    void refreshPreview();
     mantis::render::PointCloudView *view_{};
     void execute(std::function<void(const mantis::client::Client &)> action = {});
 
@@ -68,6 +76,10 @@ class StudioBridge : public QObject {
     QString selectedArtifact() const {
         return selected_;
     }
+    QString acquisitionText() const { return acquisition_text_; }
+    bool dualPreview() const { return dual_preview_; }
+    Q_INVOKABLE void attachPreview(QObject *left, QObject *right);
+    Q_INVOKABLE void replay(QString artifact, bool verify);
     Q_INVOKABLE void attachView(QObject *);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void startCapture(QString device);

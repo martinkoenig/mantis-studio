@@ -54,3 +54,30 @@ On Windows the filename ends in `.dll`; on macOS CMake supplies the module suffi
 First-party plugins link only to the public SDK target. The contract test rejects includes from runtime modules.
 
 The host supports `probe`, `process`, and `export` operations. Control arguments refer to separate mapped packet files; payloads are not command arguments. Isolated jobs have a 30-second host timeout. This is crash containment, not a security sandbox.
+
+## v0.2 enumerated acquisition
+
+Query `org.mantis.acquisition.v1` from the unchanged root ABI. The
+MantisAcquisitionV1 table enumerates stable descriptors with parent IDs and
+bounded JSON metadata, opens a selected acquisition ID, and emits FrameSets.
+Composite children describe camera capabilities; the parent opens the stream.
+No product identity or Linux kernel types are part of this public interface.
+
+`next` is called serially with a timeout: return 0 after exactly one FrameSet,
+2 if not ready, or an error code. Stop follows the completed call. Each image's
+observation retains native sequence, clock-domain timestamp, host receive time,
+sync/calibration references and metadata. Descriptor pointers are borrowed during
+the callback; host-owned published buffers are retained without another pixel
+copy. `diagnostics(nullptr, ...)` reports discovery/open failures. Never let an
+exception cross the C boundary.
+
+The C++ SDK provides acquisition lifetime/enumeration wrappers. The existing
+MantisDeviceV1 and Virtual Scanner remain usable; a fixture compiled against the
+frozen v0.1 C header is loaded by the current host. See the Linux
+[X1 example](../../plugins/first-party/devices/mantis-x1.cpp) and
+[ADR-021](../adr/021-enumerated-acquisition-and-frameset-contract.md).
+
+MantisProcessorV1 retains its v0.1 single-packet attribute contract. FrameSet-aware
+native processing plugins will need a future queried processing interface; no
+scanner algorithm is added here. The v0.2 source and C++ semantic pipeline carry
+the complete FrameSet unchanged through acquisition/replay.

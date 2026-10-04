@@ -1,0 +1,1 @@
+{"manifest_version":1,"id":"org.mantis.x1","version":"0.2.0","abi_version":1,"kind":"device","execution":"in_process","permissions":["camera","filesystem"],"library":"$<TARGET_FILE_NAME:mantis-x1>"}

@@ -16,6 +16,8 @@ from mantis import mantis_pb2 as wire
 with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
     root = Path(directory)
     env = os.environ.copy()
+    env.pop("MANTIS_X1_PROFILE", None)
+    env.pop("MANTIS_X1_FAKE", None)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]

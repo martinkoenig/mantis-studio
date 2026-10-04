@@ -1,7 +1,8 @@
-"""Mantis Client SDK v0.1. No bindings to C++ runtime internals."""
+"""Mantis Client SDK v0.2. No bindings to C++ runtime internals."""
 from __future__ import annotations
 from dataclasses import dataclass
 import os
+import json
 from pathlib import Path
 import socket
 import struct
@@ -24,7 +25,14 @@ class Capture:
     id: str
     raw_artifact: str
     def stop(self):
-        return self.client._call(capture_stop=wire.Id(id=self.id))
+        result = self.client._call(capture_stop=wire.Id(id=self.id))
+        for capture in result.captures:
+            if capture.error:
+                raise MantisError(capture.error, component="capture")
+        if result.captures and result.captures[0].finalization_job_id:
+            Job(self.client, result.captures[0].finalization_job_id).wait(timeout=3600)
+        return result
+    def status(self): return self.client.capture.status(self.id)
 
 @dataclass(frozen=True)
 class Job:
@@ -32,6 +40,9 @@ class Job:
     id: str
     def cancel(self):
         self.client._call(job_cancel=wire.Id(id=self.id))
+    def wait_report(self, timeout=30.0):
+        self.wait(timeout)
+        return json.loads(next(j.status for j in self.client.snapshot().jobs if j.id == self.id))
     def wait(self, timeout=30.0):
         deadline = time.monotonic() + timeout
         while True:
@@ -46,12 +57,37 @@ class Job:
                 raise TimeoutError("Job remains owned by mantisd; waiting timed out")
             time.sleep(0.025)
 
+@dataclass(frozen=True)
+class Preview:
+    client: Client
+    locator: str
+    lease_id: str
+    format_version: int
+    def close(self): self.client._call(preview_release=wire.Id(id=self.lease_id))
+    def __enter__(self): return self
+    def __exit__(self, *args): self.close()
+
+class _Replay:
+    def __init__(self, client): self.client = client
+    def start(self, artifact, *, real_time=False, verify=False):
+        ident = artifact if isinstance(artifact, str) else artifact.id
+        result = self.client._call(replay=wire.Replay(artifact_id=ident, real_time=real_time, verify=verify))
+        return Job(self.client, result.result_id)
+    def verify(self, artifact, *, timeout=3600): return self.start(artifact, verify=True).wait_report(timeout)
+
 class _Devices:
     def __init__(self, client): self.client = client
     def list(self): return list(self.client._call(devices_list=wire.Empty()).devices)
+    def info(self, device):
+        ident = device if isinstance(device, str) else device.id
+        return self.client._call(devices_info=wire.Id(id=ident)).devices[0]
 
 class _Capture:
     def __init__(self, client): self.client = client
+    def list(self): return self.client._call(captures_list=wire.Empty())
+    def status(self, capture):
+        ident = capture if isinstance(capture, str) else capture.id
+        return self.client._call(capture_status=wire.Id(id=ident)).captures[0]
     def start(self, devices):
         if not isinstance(devices, (list, tuple)):
             devices = [devices]
@@ -71,9 +107,11 @@ class _Pipeline:
 class _Artifacts:
     def __init__(self, client): self.client = client
     def list(self): return list(self.client._call(artifacts_list=wire.Empty()).artifacts)
-    def recover(self, artifact):
+    def recover(self, artifact, *, timeout=3600):
         ident = artifact if isinstance(artifact, str) else artifact.id
-        return self.client._call(artifact_recover=wire.Id(id=ident)).artifacts[0]
+        response = self.client._call(artifact_recover_async=wire.Id(id=ident))
+        Job(self.client, response.result_id).wait(timeout)
+        return next(a for a in self.list() if a.id == ident)
 
 class Client:
     def __init__(self, port=None, token=None):
@@ -83,6 +121,7 @@ class Client:
             raise ValueError("Set MANTIS_TOKEN to the daemon's access token")
         self.devices, self.capture = _Devices(self), _Capture(self)
         self.pipeline, self.artifacts = _Pipeline(self), _Artifacts(self)
+        self.replay = _Replay(self)
     @staticmethod
     def _receive(sock, count):
         result = bytearray()
@@ -108,6 +147,13 @@ class Client:
         if response.HasField("error"):
             raise MantisError(response.error.message, response.error.code, response.error.component)
         return response
+    def preview(self, capture_or_replay):
+        ident = capture_or_replay if isinstance(capture_or_replay, str) else capture_or_replay.id
+        try: ref = self._call(preview=wire.Id(id=ident)).data
+        except MantisError as error:
+            if error.code == 6: return None  # busy / no new frame
+            raise
+        return Preview(self, ref.locator, ref.lease_id, ref.format_version)
     def snapshot(self): return self._call(snapshot=wire.Empty())
     def project(self, path, *, create=False):
         return self._call(project_open=wire.ProjectOpen(path=str(Path(path).resolve()), create=create)).project_path

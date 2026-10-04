@@ -141,6 +141,41 @@ int main(int argc, char **argv) {
                 std::filesystem::remove_all(p, ec);
             }
         } cleanup{tmp};
+        // FrameSet round trips retain child ownership, metadata and independent timing.
+        data::Packet set;
+        set.type = schema::frameset;
+        set.header = input->header;
+        set.header.sequence.value = 41;
+        set.header.sync = {{"test.sync"}, 19};
+        auto left = *input, right = *input;
+        left.header.sequence.value = 91;
+        right.header.sequence.value = 92;
+        left.header.received.nanoseconds = 101;
+        right.header.received.nanoseconds = 102;
+        left.header.metadata = {{"role", "left"}, {"identity", "sensor-a"}};
+        right.header.metadata = {{"role", "right"}, {"identity", "sensor-b"}};
+        set.frames = {data::publish(left), data::publish(right)};
+        auto published_set = data::publish(set);
+        CHECK(published_set->frames[0]->attributes[0].buffer.identity() == input->attributes[0].buffer.identity());
+        data::write_packet(tmp / "set.packet", *published_set);
+        auto decoded_set = data::read_packet(tmp / "set.packet");
+        CHECK(decoded_set->type == schema::frameset);
+        CHECK(decoded_set->header.sequence.value == 41);
+        CHECK(decoded_set->header.sync.id.value == "test.sync");
+        CHECK(decoded_set->frames.size() == 2);
+        CHECK(decoded_set->frames[0]->header.sequence.value == 91);
+        CHECK(decoded_set->frames[1]->header.sequence.value == 92);
+        CHECK(decoded_set->frames[1]->header.received.nanoseconds == 102);
+        CHECK(decoded_set->frames[0]->header.metadata == left.header.metadata);
+        CHECK(content_hash(*decoded_set->frames[1]->attributes[0].buffer.map_read()) == content_hash(*input->attributes[0].buffer.map_read()));
+        set.frames.clear();
+        rejects([&] { (void)data::publish(set); });
+        MantisAcquisitionV1 table{sizeof(MantisAcquisitionV1), 1, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+        CHECK(sdk::compatible_table(&table));
+        table.struct_size = 4;
+        CHECK(!sdk::compatible_table(&table));
+        table.struct_size = sizeof(table); table.abi_version = 99;
+        CHECK(!sdk::compatible_table(&table));
         // Host allocation ownership remains entirely on the host side of the C ABI.
         const auto *host_api = plugins::host_api();
         auto *abi_buffer = host_api->allocate(16, 64);

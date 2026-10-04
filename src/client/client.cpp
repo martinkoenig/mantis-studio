@@ -49,10 +49,49 @@ std::string Client::start_capture(const std::vector<std::string> &devices) const
         r.mutable_capture_start()->add_devices(id);
     return call(r).result_id();
 }
+wire::v1::Capture Client::capture_status(const std::string &id) const {
+    wire::v1::Request request; request.mutable_capture_status()->set_id(id); return call(request).captures(0);
+}
+wire::v1::Response Client::captures() const {
+    wire::v1::Request request; request.mutable_captures_list(); return call(request);
+}
+wire::v1::Device Client::device_info(const std::string &id) const {
+    wire::v1::Request request; request.mutable_devices_info()->set_id(id); return call(request).devices(0);
+}
+std::string Client::replay(const std::string &id, bool realtime, bool verify) const {
+    wire::v1::Request request; auto *replay = request.mutable_replay();
+    replay->set_artifact_id(id); replay->set_real_time(realtime); replay->set_verify(verify);
+    return call(request).result_id();
+}
+data::Published Client::preview(const std::string &id) const {
+    wire::v1::Request request; request.mutable_preview()->set_id(id);
+    wire::v1::Response result;
+    try { result = call(request); }
+    catch (const Failure &e) { if (e.error.code == Status::busy) return {}; throw; }
+    const auto &ref = result.data();
+    auto release = [&] { wire::v1::Request r; r.mutable_preview_release()->set_id(ref.lease_id()); (void)call(r); };
+    try {
+        if (ref.transport() != "local-mapped-file" || ref.format_version() != 2 || ref.lease_id().empty())
+            fail(Status::incompatible, "Unsupported preview reference");
+        auto packet = data::read_packet(ref.locator()); release(); return packet;
+    } catch (...) { try { release(); } catch (...) {} throw; }
+}
 void Client::stop_capture(const std::string &id) const {
     wire::v1::Request r;
     r.mutable_capture_stop()->set_id(id);
-    (void)call(r);
+    auto result = call(r);
+    if (result.captures_size() && !result.captures(0).finalization_job_id().empty())
+        (void)wait(result.captures(0).finalization_job_id(), std::chrono::hours(1));
+}
+wire::v1::Artifact Client::recover_artifact(const std::string &id) const {
+    wire::v1::Request request;
+    request.mutable_artifact_recover_async()->set_id(id);
+    (void)wait(call(request).result_id(), std::chrono::hours(1));
+    request.Clear(); request.mutable_artifacts_list();
+    auto response = call(request);
+    for (const auto &artifact : response.artifacts())
+        if (artifact.id() == id) return artifact;
+    fail(Status::not_found, "Recovered artifact not found");
 }
 std::string Client::run_pipeline(const std::string &capture, const std::string &recipe,
                                  const std::string &raw) const {

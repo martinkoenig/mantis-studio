@@ -2,14 +2,14 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)]()
 
-# Mantis Studio — Architecture Skeleton v0.1
+# Mantis Studio — v0.2 Acquisition Foundation (development)
 
-An executable validation of the frozen [Mantis Studio Architecture v1](MANTIS_STUDIO_ARCHITECTURE.md).
+Continues the validated v0.1 implementation of the frozen [Mantis Studio Architecture v1](MANTIS_STUDIO_ARCHITECTURE.md).
 The daemon owns devices, captures, projects, jobs and plugins. Qt Quick Studio, the C++ CLI and the Python SDK are independent protocol clients.
 
 ![Mantis Studio with synthetic geometry](docs/images/studio.png)
 
-**This is a development milestone, not production scanner software.** It generates deterministic synthetic images and converts a reference image into a small point cloud. It does not implement Mantis X1 hardware acquisition or reconstruction algorithms.
+**This is a development milestone, not production scanner software.** The existing Virtual Scanner workflow remains. v0.2 adds a Linux Mantis X1 plugin, explicit dual-camera FrameSets, segmented recoverable raw recording, dual grayscale preview and deterministic hardware-free replay. The user has validated Q6A ARM64 build/tests, native CAMSS setup, dual Y10P streaming near 119.22 FPS and a finalized 141-FrameSet recording with deterministic replay. Corrected 4 ms software pairing and sustained recording remain **PENDING USER EXECUTION**. No reconstruction algorithms are added.
 
 ## Quick start
 
@@ -33,7 +33,44 @@ PYTHONPATH=build/debug/python /usr/bin/python3 examples/python/workflow.py pytho
 
 Export filenames must not already exist. Exports belong outside the `.mantis` project directory.
 
-## Implemented reference workflow
+## Real Acquisition Foundation
+
+- Stable media/V4L2 discovery with a versioned explicit LEFT/RIGHT profile.
+- Additive acquisition C interface; ABI v1 and Virtual Scanner remain supported.
+- Native scoped media-link/pad/timing setup, packed Y10P RAW10 and optional RAW8 MMAP capture with one acquisition copy; DMABUF is deferred.
+- Bounded timestamp-nearest software pairing with explicit startup exclusions; strict counter/timestamp checks when hardware synchronization is configured.
+- Bounded LOSSLESS recorder for published FrameSets and independent LATEST_ONLY preview.
+- Sequential RawCapture v2 segments, batched durability/SQLite indexing and recovery.
+- Real-time/ASAP replay, two-pass canonical byte/metadata verification.
+- Shared service semantics in C++, Python, CLI and the existing dark Studio shell.
+
+See the [architecture gap review](docs/architecture/v0.2-acquisition-review.md),
+[storage format](docs/architecture/storage.md) and
+[exact Q6A acceptance procedure](docs/hardware/x1-q6a-acquisition-validation.md).
+The current Q6A reference profile selects **1280×720 Y10P**, Y10_1X10 upstream
+and VBLANK=196, with requested target 120 FPS. The user has validated this plugin-owned setup and streaming mode. Independent
+V4L2 counters showed a ~51.8 ms same-counter offset; timestamp pairing now selects
+observations within the unchanged 4 ms tolerance and needs a Q6A rerun.
+Dual packed payload is **276.48 MB/s** before overhead. The reported microSD
+benchmark was 32.04 MB/s; sustained recording awaits suitable storage testing.
+Deterministic fixtures are not physical scanner evidence.
+
+```bash
+export MANTIS_X1_PROFILE="$PWD/profiles/x1-q6a.json" # review physical roles, bus/entity routes and native formats first
+./build/debug/bin/mantis-cli devices list
+./build/debug/bin/mantis-cli devices info DEVICE_ID
+./build/debug/bin/mantis-cli capture start DEVICE_ID
+./build/debug/bin/mantis-cli capture status CAPTURE_ID
+./build/debug/bin/mantis-cli capture stop CAPTURE_ID
+./build/debug/bin/mantis-cli captures list
+./build/debug/bin/mantis-cli replay verify RAW_ARTIFACT_ID
+```
+
+Set the profile in the daemon's environment before launching it. No profile
+means no assumed physical left/right assignment. The explicit test-only backend
+uses `MANTIS_X1_FAKE=normal` with a fixture profile (`bus_identity: fixture`); never enable it for hardware acceptance.
+
+## Preserved v0.1 reference workflow
 
 1. Discover Virtual Scanner through the public device plugin ABI.
 2. Start runtime-owned capture with a bounded, lossless recording queue.
@@ -53,7 +90,7 @@ The frame-zero reference is intentional: client timing does not change the demon
 | Platform | Architectural target | Validation in this delivery | Support commitment |
 | --- | --- | --- | --- |
 | Linux x86_64 | Yes | Ubuntu 24.04; GCC 13; Qt 6.4; native build and process tests | Skeleton development reference |
-| Linux ARM64 | Tier 1 | Native ARM64 GitHub Actions job configured; not executed in this workspace | Must pass CI before binary support is claimed |
+| Linux ARM64 | Tier 1 | Native GitHub Actions Studio ON/OFF passed for v0.2; user-validated Q6A setup/streaming/replay; corrected pairing pending | Linux build and fixture tests validated |
 | Windows x86_64 | Yes | Platform implementation present; not built/tested here | Not yet supported |
 | macOS ARM64 | Yes | POSIX implementation used; not built/tested here | Not yet supported |
 

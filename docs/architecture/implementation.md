@@ -38,3 +38,30 @@ The reference pipeline passes image buffers through the ABI without copying payl
 Studio owns no capture, project store or job thread. Disconnecting any client leaves runtime state intact. Runtime restart preserves project/artifact/chunk state and classifies unfinished artifacts as RECOVERABLE. Ephemeral job/capture handles are not restored as running jobs after a daemon restart; their committed artifacts remain available.
 
 The plugin host is launched without a shell, has a bounded timeout and is killed/reaped on cancellation. Host exit status becomes a failed plugin/job plus a persistent diagnostic. Disabling or re-enabling a failed processor is available through the same service/protocol model.
+
+## v0.2 extensions to the implementation map
+
+The preceding skeleton descriptions preserve the v0.1 baseline. Current capture
+uses a capacity-32 LOSSLESS queue and a separate capacity-one LATEST_ONLY preview
+queue. Saturation after 50 ms fails explicitly; stop finishes enqueueing an
+already acquired observation and drains the writer. Source-paced acquisition
+bypasses synthetic pacing. All threads are joined before plugin instances unload.
+
+`org.mantis.x1` owns native Linux discovery/streaming and a narrow deterministic
+backend seam. The generic queried acquisition ABI describes composites and
+FrameSets without Linux types. MMAP views exist only during the callback; one
+copy into published host-owned buffers precedes QBUF. Raw fan-out shares those
+immutable buffers. Qt conversion and its additional display copy occur in Studio.
+
+RawCapture v2 appends canonical FrameSets to normally 64-MiB sequential segments.
+Integrity probing reads spans without a packet-sized staging copy. File sync,
+rename and SQLite indexing happen at segment boundaries. Finalization/recovery
+jobs scan outside the metadata mutex; record/segment checks and sequence order
+precede immutable publication. CaptureReader parses one segment at a time and
+RecordedSource feeds the same ImageStream contract as acquisition. Preview is a
+leased local immutable packet file, bounded independently of raw recording.
+
+Discovery refresh is deferred while captures are active; stopped sessions release
+stream pointers before enumeration rebuilds instances. The current media graph
+must already be configured with enabled links and suitable pad formats. Q6A
+driver/media setup and sustained throughput require user validation.

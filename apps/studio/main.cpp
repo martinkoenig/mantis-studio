@@ -11,6 +11,7 @@ int main(int argc, char **argv) {
     app.setApplicationName("Mantis Studio");
     QQuickStyle::setStyle("Basic");
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
+    qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
     StudioBridge bridge;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("studio", &bridge);

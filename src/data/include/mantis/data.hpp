@@ -45,9 +45,18 @@ struct Packet {
     schema::DataTypeId type;
     Header header;
     std::vector<Attribute> attributes;
+    std::vector<std::shared_ptr<const Packet>> frames;
 };
 using Published = std::shared_ptr<const Packet>;
 inline Published publish(Packet packet) {
+    if (packet.type == schema::frameset) {
+        if (packet.frames.empty() || packet.frames.size() > 16 || !packet.attributes.empty())
+            fail(Status::invalid_argument, "FrameSet requires 1..16 image children and no flat attributes");
+        for (const auto &frame : packet.frames)
+            if (!frame || frame->type != schema::image || !frame->frames.empty())
+                fail(Status::invalid_argument, "FrameSet child must be an ImageFrame");
+    } else if (!packet.frames.empty())
+        fail(Status::invalid_argument, "Only FrameSet may contain image children");
     for (const auto &a : packet.attributes) {
         auto r = schema::validate(a.descriptor, a.buffer.size());
         if (!r)

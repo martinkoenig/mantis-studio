@@ -6,6 +6,8 @@ void device(wire::v1::Response &r, const device::Descriptor &d) {
     o->set_id(d.id.value);
     o->set_name(d.name);
     o->set_plugin_id(d.plugin_id);
+    o->set_parent(d.parent.value);
+    for (const auto &[key, value] : d.metadata) (*o->mutable_metadata())[key] = value;
     for (auto &c : d.capabilities)
         o->add_capabilities(c);
     for (auto &c : d.children)
@@ -21,7 +23,13 @@ void capture(wire::v1::Response &r, const services::CaptureInfo &c) {
     o->set_frames(c.frames);
     o->set_dropped(c.dropped);
     o->set_queue_high_water(c.queue_high_water);
-    o->set_error(c.error);
+    o->set_error(c.error); o->set_finalization_job_id(c.finalization_job.value);
+    o->set_framesets_produced(c.produced); o->set_framesets_committed(c.committed);
+    o->set_queue_depth(c.queue_depth); o->set_queue_capacity(c.queue_capacity);
+    o->set_queue_saturation(c.queue_saturation); o->set_preview_drops(c.preview_drops);
+    o->set_total_bytes(c.total_bytes); o->set_duration_seconds(c.duration);
+    o->set_writer_mb_s(c.writer_mb_s); o->set_writer_mib_s(c.writer_mib_s);
+    for (const auto &[key, value] : c.diagnostics) (*o->mutable_diagnostics())[key] = value;
 }
 void artifact(wire::v1::Response &r, const artifact::ArtifactDescriptor &a) {
     auto *o = r.add_artifacts();
@@ -149,8 +157,38 @@ wire::v1::Response dispatch(services::Runtime &runtime, const wire::v1::Request 
         case R::kArtifactRecover:
             artifact(out, runtime.recover_artifact({request.artifact_recover().id()}));
             break;
+        case R::kArtifactRecoverAsync:
+            out.set_result_id(runtime.recover_artifact_job({request.artifact_recover_async().id()}).value);
+            break;
         case R::kPluginEnable:
             runtime.enable_plugin(request.plugin_enable().id(), request.plugin_enable().enabled());
+            break;
+        case R::kDevicesInfo: {
+            bool found = false;
+            for (const auto &d : runtime.devices()) if (d.id.value == request.devices_info().id()) { device(out, d); found = true; }
+            if (!found) fail(Status::not_found, "Device not found");
+            break;
+        }
+        case R::kCaptureStatus: {
+            bool found = false;
+            for (const auto &c : runtime.captures()) if (c.id.value == request.capture_status().id()) { capture(out, c); found = true; }
+            if (!found) fail(Status::not_found, "Capture handle not found; after restart inspect its RawCapture artifact");
+            break;
+        }
+        case R::kCapturesList:
+            for (const auto &c : runtime.captures()) capture(out, c);
+            for (const auto &a : runtime.artifacts()) if (a.type.name == "org.mantis.RawCapture") artifact(out, a);
+            break;
+        case R::kPreview: {
+            auto ref = runtime.preview({request.preview().id()}); auto *d = out.mutable_data();
+            d->set_transport("local-mapped-file"); d->set_locator(ref.path.string());
+            d->set_format_version(2); d->set_lease_id(ref.lease.value); d->set_lease_seconds(60);
+            break;
+        }
+        case R::kPreviewRelease:
+            runtime.release_preview({request.preview_release().id()}); break;
+        case R::kReplay:
+            out.set_result_id(runtime.replay_capture({request.replay().artifact_id()}, request.replay().real_time(), request.replay().verify()).value);
             break;
         case R::kShutdown:
             break;
