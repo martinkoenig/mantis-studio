@@ -49,19 +49,34 @@ class FakeCamera final : public Camera {
         }
         if (sequence_ == 4 && scenario_ == "disconnect" && right_) throw std::runtime_error("Fake camera disconnected");
         uint32_t native = sequence_;
+        if (scenario_ == "unequal-origins" && right_) native += 100;
+        if (scenario_ == "startup-left-gap" && sequence_ >= 4 && right_) ++native;
+        if (scenario_ == "startup-left-repeat" && sequence_ == 4 && right_) --native;
+        if (scenario_ == "startup-left-reverse" && sequence_ == 4 && right_) native -= 2;
         if (sequence_ >= 4 && ((scenario_ == "drop-left" && !right_) || (scenario_ == "drop-right" && right_))) ++native;
         if (scenario_ == "mismatch" && right_) ++native;
         if (scenario_ == "repeat" && sequence_ == 4 && right_) --native;
-        auto timestamp = int64_t(native) * (1000000000 / mode_.fps);
+        const auto period = 1000000000 / mode_.fps;
+        auto timestamp = int64_t(scenario_ == "unequal-origins" ? sequence_ : native) * period;
+        if (scenario_.starts_with("startup-left") && right_) timestamp += 6 * period + 1800000;
+        if (scenario_ == "startup-right" && !right_) timestamp += 6 * period + 1800000;
+        if (scenario_ == "startup-limit" && right_) timestamp += 40 * period;
+        if (scenario_ == "close-timestamps" && right_) timestamp += 1800000;
+        if (scenario_ == "startup-left-steady-delta" && sequence_ >= 4 && right_) timestamp += period / 2;
+        if (scenario_ == "startup-left-timestamp-jump" && sequence_ == 4 && right_) timestamp = -1;
         if (scenario_ == "timestamp-jump" && sequence_ == 4 && right_) timestamp = -1;
         if (scenario_ == "lag" && right_) timestamp += (1000000000 / mode_.fps) / 2;
         uint32_t stride = mode_.fourcc == "Y10P" ? mode_.width / 4 * 5 : mode_.width;
         std::vector<std::byte> pixels(size_t(stride) * mode_.height);
         for (size_t i = 0; i < pixels.size(); ++i)
             pixels[i] = static_cast<std::byte>((i + native * 7u + (right_ ? 97u : 0u)) & 255u);
+        std::string clock = "org.mantis.fake.monotonic";
+        if (scenario_ == "incomparable" && right_) clock = "other.clock";
+        if (scenario_ == "unknown-clock") clock = "linux.v4l2.unknown";
+        if (scenario_ == "startup-left-clock-change" && sequence_ >= 4 && right_) clock = "other.clock";
         FrameView view{pixels, native, mode_.width, mode_.height, stride,
                        static_cast<uint32_t>(pixels.size()), 0, timestamp,
-                       timestamp + 1000 + (right_ ? 100 : 0), "org.mantis.fake.monotonic", mode_.fourcc, {}};
+                       timestamp + 1000 + (right_ ? 100 : 0), clock, mode_.fourcc, {}};
         emit(view);
         ++sequence_;
         due_ += std::chrono::nanoseconds(1000000000 / mode_.fps);

@@ -147,6 +147,9 @@ int start(void *p) noexcept {
         d.metrics["pairing_pending_capacity_per_camera"] = std::to_string(x1::pairing_capacity);
         d.metrics["startup_discard_limit"] = std::to_string(x1::startup_discard_limit);
         d.metrics["max_v4l2_delta_ns"] = std::to_string(d.config.profile.max_timestamp_delta_ns);
+        for (const char *key : {"left.native_sequence", "right.native_sequence", "native_sequence_offset",
+             "native_counter_equality", "paired_v4l2_delta_ns", "v4l2_delta_ns", "host_arrival_delta_ns"})
+            d.metrics[key] = "unavailable";
         d.metrics["exposure_skew"] = "unavailable";
         d.metrics["copy_count"] = "1";
         d.metrics["buffer_mode"] = "MMAP with one acquisition copy";
@@ -186,6 +189,13 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
             for (size_t i = 0; i < 2; ++i) for (size_t j = 0; j < d.pending[i].size(); ++j) {
                 const auto &f = d.pending[i][j].frame;
                 observations[i][j] = {f.sequence, f.timestamp_ns, f.clock};
+            }
+            for (size_t i = 0; i < 2; ++i) {
+                const auto suffix = i ? "right" : "left";
+                d.metrics[std::string("pairing_candidate_sequence_") + suffix] = d.pending[i].empty()
+                    ? "unavailable" : std::to_string(d.pending[i][0].frame.sequence);
+                d.metrics[std::string("pairing_lookahead_timestamp_ns_") + suffix] = d.pending[i].size() < 2
+                    ? "unavailable" : std::to_string(d.pending[i][1].frame.timestamp_ns);
             }
             auto decision = x1::choose_pair({observations[0].data(), d.pending[0].size()},
                 {observations[1].data(), d.pending[1].size()}, d.config.profile.hardware_sync_configured,
@@ -233,6 +243,15 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
                     d.last_clock[i] = frame.clock;
                     d.last_sequence[i] = frame.sequence; d.last_timestamp[i] = frame.timestamp_ns;
                     d.last_receive[i] = x1::monotonic_ns();
+                    auto elapsed = double(d.last_receive[i] - d.started) / 1e9;
+                    d.metrics[role + "receive_fps"] = elapsed > 0 ? std::to_string(double(std::stoull(d.metrics.at(role + "frames"))) / elapsed) : "unavailable";
+                    d.metrics[role + "last_received_native_sequence"] = std::to_string(frame.sequence);
+                    d.metrics[role + "width"] = std::to_string(frame.width); d.metrics[role + "height"] = std::to_string(frame.height);
+                    d.metrics[role + "fourcc"] = frame.fourcc;
+                    d.metrics[role + "stride"] = std::to_string(frame.stride);
+                    d.metrics[role + "buffer_size"] = std::to_string(frame.buffer_size);
+                    d.metrics[role + "timestamp_clock"] = frame.clock;
+                    d.metrics[role + "timestamp_flags"] = std::to_string(frame.flags);
                     Pending value; value.frame = frame; value.bytes = frame.bytes.size();
                     value.buffer = std::make_unique<mantis::sdk::Buffer>(d.host, frame.bytes.size());
                     std::memcpy(value.buffer->writable().data(), frame.bytes.data(), frame.bytes.size());
@@ -282,18 +301,6 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
         d.metrics["host_arrival_delta_ns"] = std::to_string(right.received_ns - left.received_ns);
         d.metrics["pairing_state"] = "paired";
         d.aligned = true;
-        auto elapsed = double(x1::monotonic_ns() - d.started) / 1e9;
-        for (size_t i = 0; i < 2; ++i) {
-            std::string role = i ? "right." : "left.";
-            const auto &f = d.pending[i][0].frame;
-            d.metrics[role + "receive_fps"] = std::to_string(double(std::stoull(d.metrics.at(role + "frames"))) / elapsed);
-            d.metrics[role + "width"] = std::to_string(f.width); d.metrics[role + "height"] = std::to_string(f.height);
-            d.metrics[role + "fourcc"] = f.fourcc;
-            d.metrics[role + "stride"] = std::to_string(f.stride);
-            d.metrics[role + "buffer_size"] = std::to_string(f.buffer_size);
-            d.metrics[role + "timestamp_clock"] = f.clock;
-            d.metrics[role + "timestamp_flags"] = std::to_string(f.flags);
-        }
         MantisAttributeV1 a[2]{};
         MantisObservationV1 frames[]{observation(d, 0, a[0]), observation(d, 1, a[1])};
         auto meta = Json(d.metrics).dump();

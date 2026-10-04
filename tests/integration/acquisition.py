@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
     with socket.socket() as socket_probe:
         socket_probe.bind(("127.0.0.1", 0)); port = socket_probe.getsockname()[1]
     env = dict(os.environ, MANTIS_TOKEN="acquisition-" + os.urandom(16).hex(), MANTIS_PORT=str(port),
-               MANTIS_X1_PROFILE=str(root / "profile.json"), MANTIS_X1_FAKE="normal",
+               MANTIS_X1_PROFILE=str(root / "profile.json"), MANTIS_X1_FAKE="startup-left" if packed else "startup-right",
                QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
     client = mantis.connect(port=port, token=env["MANTIS_TOKEN"])
     daemon = None
@@ -78,7 +78,12 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert status.total_bytes > 0 and status.writer_mb_s > 0
         assert status.diagnostics["copy_count"] == "1"
         assert status.diagnostics["pairing_mode"] == "timestamp-nearest"
-        assert status.diagnostics["native_counter_equality"] == "equal"
+        assert status.diagnostics["native_counter_equality"] == "different"
+        assert status.diagnostics["native_sequence_offset"] == ("6" if packed else "-6")
+        assert status.diagnostics["startup_unmatched_left"] == ("6" if packed else "0")
+        assert status.diagnostics["startup_unmatched_right"] == ("0" if packed else "6")
+        assert abs(int(status.diagnostics["paired_v4l2_delta_ns"])) == 1800000
+        assert status.diagnostics["pairing_failures"] == "0"
         if packed:
             assert status.diagnostics["left_requested_vblank"] == status.diagnostics["left_readback_vblank"] == "196"
             assert status.diagnostics["right_readback_vblank"] == "196"
@@ -106,6 +111,11 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert not stopped["active"] and not stopped["error"]
         final_status = capture.status()
         assert final_status.framesets_produced == final_status.framesets_committed
+        for role in ("left", "right"):
+            metrics = final_status.diagnostics
+            assert int(metrics[f"{role}.frames"]) == final_status.framesets_produced + int(metrics[f"startup_unmatched_{role}"]) + int(metrics[f"shutdown_unmatched_{role}"])
+            assert int(metrics[f"pending_high_water_{role}"]) <= 2
+        assert final_status.queue_saturation == 0 and final_status.dropped == 0
         artifacts = client.capture.list().artifacts
         recorded = next(a for a in artifacts if a.id == capture.raw_artifact)
         assert recorded.schema_version == 2 and recorded.state == "FINALIZED"
