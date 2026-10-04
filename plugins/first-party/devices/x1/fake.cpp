@@ -54,7 +54,7 @@ class FakeCamera final : public Camera {
         if (scenario_ == "repeat" && sequence_ == 4 && right_) --native;
         auto timestamp = int64_t(native) * (1000000000 / mode_.fps);
         if (scenario_ == "timestamp-jump" && sequence_ == 4 && right_) timestamp = -1;
-        if (scenario_ == "lag" && right_) timestamp += 100000000;
+        if (scenario_ == "lag" && right_) timestamp += (1000000000 / mode_.fps) / 2;
         uint32_t stride = mode_.fourcc == "Y10P" ? mode_.width / 4 * 5 : mode_.width;
         std::vector<std::byte> pixels(size_t(stride) * mode_.height);
         for (size_t i = 0; i < pixels.size(); ++i)

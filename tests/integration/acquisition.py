@@ -77,7 +77,8 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert status.preview_drops > 0 and status.dropped == 0 and not status.error
         assert status.total_bytes > 0 and status.writer_mb_s > 0
         assert status.diagnostics["copy_count"] == "1"
-        assert status.diagnostics["sequence_agreement"] == "aligned"
+        assert status.diagnostics["pairing_mode"] == "timestamp-nearest"
+        assert status.diagnostics["native_counter_equality"] == "equal"
         if packed:
             assert status.diagnostics["left_requested_vblank"] == status.diagnostics["left_readback_vblank"] == "196"
             assert status.diagnostics["right_readback_vblank"] == "196"

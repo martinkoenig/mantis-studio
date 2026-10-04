@@ -30,14 +30,16 @@ StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
             if (c.active()) capture_ = s(c.id());
             if (c.diagnostics().contains("left.identity")) {
                 auto value = [&](const std::string &key) { auto it = c.diagnostics().find(key); return it == c.diagnostics().end() ? QString("unavailable") : s(it->second); };
-                acquisition_text_ = QString("LEFT %1 × %2 · %3\n%4 FPS · %5 sequence gaps\nRIGHT %6 × %7 · %8\n%9 FPS · %10 sequence gaps\n%11 · %12\nV4L2 Δt: %13 ns\nHost arrival Δt: %14 ns\nRaw: %15 MB/s · %16 MiB/s\nQueue %17 / %18 · high %19\nObserved raw loss: %20 · preview drops: %21\n%22")
+                acquisition_text_ = QString("LEFT %1 × %2 · %3\n%4 FPS · %5 sequence gaps\nRIGHT %6 × %7 · %8\n%9 FPS · %10 sequence gaps\n%11 · %12\nPaired V4L2 Δt: %13 ns\nHost arrival Δt: %14 ns\nRaw: %15 MB/s · %16 MiB/s\nQueue %17 / %18 · high %19\nObserved raw loss: %20 · preview drops: %21\n%22\nNative L/R: %23 / %24 · offset L−R: %25\nStartup unmatched L/R: %26 / %27\nPairing failures: %28 · exposure skew: %29")
                     ;
                 for (const auto &text : QStringList{value("left.width"), value("left.height"), value("left.fourcc"), value("left.receive_fps"), value("left.sequence_gaps"),
                          value("right.width"), value("right.height"), value("right.fourcc"), value("right.receive_fps"), value("right.sequence_gaps"),
-                         value("sync_configuration"), value("sequence_agreement"), value("v4l2_delta_ns"), value("host_arrival_delta_ns"),
+                         value("sync_configuration"), value("pairing_mode"), value("paired_v4l2_delta_ns"), value("host_arrival_delta_ns"),
                          QString::number(c.writer_mb_s(), 'f', 1), QString::number(c.writer_mib_s(), 'f', 1),
                          QString::number(c.queue_depth()), QString::number(c.queue_capacity()), QString::number(c.queue_high_water()),
-                         QString::number(c.dropped()), QString::number(c.preview_drops()), c.error().empty() ? value("buffer_mode") : s(c.error())})
+                         QString::number(c.dropped()), QString::number(c.preview_drops()), c.error().empty() ? value("buffer_mode") : s(c.error()),
+                         value("left.native_sequence"), value("right.native_sequence"), value("native_sequence_offset"),
+                         value("startup_unmatched_left"), value("startup_unmatched_right"), value("pairing_failures"), value("exposure_skew")})
                     acquisition_text_ = acquisition_text_.arg(text);
             }
         }

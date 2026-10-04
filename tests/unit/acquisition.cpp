@@ -32,6 +32,7 @@ int main(int argc, char **argv) {
         { std::ofstream out(dir / "profile.json"); out << fixture; }
         setenv("MANTIS_X1_PROFILE", (dir / "profile.json").c_str(), 1);
         for (const auto *scenario : {"normal", "y10p", "renumber", "eagain", "drop-left", "drop-right", "disconnect", "mismatch", "repeat", "timestamp-jump", "lag", "stall-left", "stall-right", "stop-right", "stream-mismatch"}) {
+            fixture["hardware_sync_configured"] = std::string(scenario) == "mismatch";
             fixture["mode"]["fourcc"] = std::string(scenario) == "y10p" ? "Y10P" : "GREY";
             { std::ofstream out(dir / "profile.json"); out << fixture; }
             setenv("MANTIS_X1_FAKE", scenario, 1);

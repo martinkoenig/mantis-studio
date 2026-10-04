@@ -1,12 +1,14 @@
 # Architecture Decision Records
 
+- [ADR-026: Bounded software observation pairing](026-bounded-software-observation-pairing.md)
+
 - [ADR-025: Packed monochrome byte layout](025-packed-monochrome-image-byte-layout.md)
 - [ADR-024: Scoped device-owned media setup](024-scoped-device-owned-media-setup.md)
 - [ADR-023: Preview leases and asynchronous storage validation](023-acquisition-preview-leases-and-storage-jobs.md)
 - [ADR-022: Segmented RawCapture and replay source](022-segmented-rawcapture-and-replay-source.md)
 - [ADR-021: Enumerated acquisition and FrameSet transport](021-enumerated-acquisition-and-frameset-contract.md)
 
-ADRs 021–025 are minimal v0.2 extensions. ADRs 001–020 below remain the accepted
+ADRs 021–026 are minimal v0.2 extensions. ADRs 001–020 below remain the accepted
 frozen Architecture v1 baseline; they are not redefined by these extensions.
 
 - [ADR-001: Daemon-centric runtime using mantisd](001-daemon-centric-runtime-using-mantisd.md)

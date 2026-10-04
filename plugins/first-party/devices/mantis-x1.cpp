@@ -1,4 +1,6 @@
 #include "x1/backend.hpp"
+#include "x1/pairing.hpp"
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -60,16 +62,34 @@ struct Device {
     std::array<x1::CameraInfo, 2> cameras;
     std::array<std::unique_ptr<x1::Camera>, 2> streams;
     std::unique_ptr<x1::Setup> setup;
-    std::array<std::optional<Pending>, 2> pending;
+    std::array<x1::PendingQueue<Pending>, 2> pending;
     std::array<std::optional<uint32_t>, 2> last_sequence;
     std::array<std::optional<int64_t>, 2> last_timestamp;
+    std::array<std::string, 2> last_clock;
     std::array<int64_t, 2> last_receive{};
     x1::Metadata metrics;
     uint64_t sequence{};
     int64_t started{};
     bool running{};
+    bool aligned{};
+    uint64_t startup_discarded{};
+    void pending_depth() {
+        for (size_t i = 0; i < 2; ++i) {
+            const std::string role = i ? "right" : "left";
+            metrics["pending_" + role] = std::to_string(pending[i].size());
+            auto &high = metrics["pending_high_water_" + role];
+            high = std::to_string(std::max(high.empty() ? size_t{} : size_t(std::stoull(high)), pending[i].size()));
+        }
+    }
     void stop() noexcept {
-        pending = {};
+        // Lookahead/startup observations are not published FrameSets. Account for
+        // every retained tail on stop/failure; the recorder itself never drops.
+        try {
+            for (size_t i = 0; i < 2; ++i) if (!pending[i].empty())
+                increment(i ? "shutdown_unmatched_right" : "shutdown_unmatched_left", pending[i].size());
+        } catch (...) {}
+        for (auto &queue : pending) queue.clear();
+        try { pending_depth(); } catch (...) {}
         for (size_t i = 0; i < streams.size(); ++i) if (streams[i]) {
             streams[i]->stop();
             try { for (const auto &[key, value] : streams[i]->diagnostics()) metrics[(i ? "right_" : "left_") + key] = value; } catch (...) {}
@@ -107,7 +127,8 @@ void destroy(void *p) { delete static_cast<Device *>(p); }
 int start(void *p) noexcept {
     auto &d = *static_cast<Device *>(p);
     return d.guard([&] {
-        d.stop(); d.metrics.clear(); d.sequence = 0; d.last_sequence = {}; d.last_timestamp = {};
+        d.stop(); d.metrics.clear(); d.sequence = 0; d.last_sequence = {}; d.last_timestamp = {}; d.last_clock = {};
+        d.aligned = false; d.startup_discarded = 0;
         d.setup = d.config.backend->prepare(d.config.profile, d.cameras);
         if (d.config.profile.format_version == 2 && !d.setup)
             throw std::runtime_error("Profile v2 requires plugin-owned media setup; backend does not provide it");
@@ -120,6 +141,12 @@ int start(void *p) noexcept {
         d.started = x1::monotonic_ns(); d.last_receive.fill(d.started); d.running = true;
         d.metrics["sync_configuration"] = d.config.profile.hardware_sync_configured ? "hardware sync configured" : "hardware sync not configured";
         d.metrics["sync_quality"] = "software";
+        d.metrics["hardware_sync_configured"] = d.config.profile.hardware_sync_configured ? "true" : "false";
+        d.metrics["pairing_mode"] = d.config.profile.hardware_sync_configured ? "native-sequence-and-timestamp" : "timestamp-nearest";
+        d.metrics["pairing_state"] = "startup";
+        d.metrics["pairing_pending_capacity_per_camera"] = std::to_string(x1::pairing_capacity);
+        d.metrics["startup_discard_limit"] = std::to_string(x1::startup_discard_limit);
+        d.metrics["max_v4l2_delta_ns"] = std::to_string(d.config.profile.max_timestamp_delta_ns);
         d.metrics["exposure_skew"] = "unavailable";
         d.metrics["copy_count"] = "1";
         d.metrics["buffer_mode"] = "MMAP with one acquisition copy";
@@ -129,11 +156,14 @@ int start(void *p) noexcept {
             d.metrics[role + "target_fps"] = std::to_string(d.config.profile.mode.fps);
             for (const char *counter : {"frames", "sequence_gaps", "capture_errors"}) d.metrics[role + counter] = "0";
         }
-        for (const char *counter : {"pairing_failures", "timestamp_discontinuities", "unmatched_frames"}) d.metrics[counter] = "0";
+        for (const char *counter : {"pairing_failures", "timestamp_discontinuities", "unmatched_frames",
+             "startup_unmatched_left", "startup_unmatched_right", "shutdown_unmatched_left", "shutdown_unmatched_right",
+             "pairing_pending_saturation"}) d.metrics[counter] = "0";
+        d.pending_depth();
     });
 }
 MantisObservationV1 observation(const Device &d, size_t i, MantisAttributeV1 &a) {
-    const auto &p = *d.pending[i]; const auto &f = p.frame;
+    const auto &p = d.pending[i][0]; const auto &f = p.frame;
     a = {sizeof(a), 1, "org.mantis.pixels", "intensity", 1, 2,
         {f.height, f.width}, {f.stride, 1}, p.buffer->get(), 0, p.bytes};
     if (f.fourcc == "Y10P") {
@@ -150,74 +180,113 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
     auto &d = *static_cast<Device *>(p); bool emitted = false;
     auto status = d.guard([&] {
         if (!d.running || !emit || timeout > 1000) throw std::runtime_error("Invalid next call/stopped stream");
-        for (size_t i = 0; i < 2; ++i) {
-            std::string role = i ? "right." : "left.";
-            if (!d.pending[i]) {
-                try {
-                    d.streams[i]->next(timeout / 2, [&](const x1::FrameView &frame) {
-                        d.increment(role + "frames");
-                        if (d.last_sequence[i] && frame.sequence != static_cast<uint32_t>(*d.last_sequence[i] + 1)) {
-                            uint32_t delta = frame.sequence - *d.last_sequence[i];
-                            if (delta > 1 && delta < 0x80000000u) d.increment(role + "sequence_gaps", delta - 1);
-                            else d.increment(role + "repeated_or_reversed_sequences");
-                            throw std::runtime_error(role + "native sequence discontinuity; raw capture failed");
-                        }
-                        if (d.last_timestamp[i] && frame.timestamp_ns <= *d.last_timestamp[i]) {
-                            d.increment("timestamp_discontinuities"); throw std::runtime_error(role + "timestamp discontinuity");
-                        }
-                        d.last_sequence[i] = frame.sequence; d.last_timestamp[i] = frame.timestamp_ns;
-                        d.last_receive[i] = x1::monotonic_ns();
-                        Pending value; value.frame = frame; value.bytes = frame.bytes.size();
-                        value.buffer = std::make_unique<mantis::sdk::Buffer>(d.host, frame.bytes.size());
-                        std::memcpy(value.buffer->writable().data(), frame.bytes.data(), frame.bytes.size());
-                        value.buffer->publish();
-                        auto info = frame.controls;
-                        info.insert({{"role", i ? "right" : "left"}, {"identity", identity(d.cameras[i])},
-                            {"video_node", d.cameras[i].video}, {"fourcc", frame.fourcc},
-                            {"v4l2_flags", std::to_string(frame.flags)}, {"buffer_size", std::to_string(frame.buffer_size)}});
-                        info["requested_target_fps"] = std::to_string(d.config.profile.mode.fps);
-                        const std::string prefix = i ? "right_" : "left_";
-                        for (const auto &[key, diagnostic] : d.metrics) if (key.starts_with(prefix) &&
-                            (key.find("vblank") != std::string::npos || key.find("driver_interval") != std::string::npos || key.find("initial_") != std::string::npos))
-                            info[key.substr(prefix.size())] = diagnostic;
-                        info["org.mantis.image.width"] = std::to_string(frame.width);
-                        info["org.mantis.image.height"] = std::to_string(frame.height);
-                        info["org.mantis.image.row_stride_bytes"] = std::to_string(frame.stride);
-                        if (frame.fourcc == "Y10P") {
-                            info["org.mantis.image.layout"] = "mipi-raw10-v1";
-                            info["org.mantis.image.bits_per_sample"] = "10";
-                        }
-                        value.metadata = Json(info).dump();
-                        // Keep only extent, never dereference the expired driver view.
-                        value.frame.bytes = {};
-                        d.pending[i] = std::move(value);
-                    });
-                } catch (...) { d.increment(role + "capture_errors"); throw; }
+        unsigned reads{};
+        while (true) {
+            std::array<std::array<x1::PairingObservation, x1::pairing_capacity>, 2> observations{};
+            for (size_t i = 0; i < 2; ++i) for (size_t j = 0; j < d.pending[i].size(); ++j) {
+                const auto &f = d.pending[i][j].frame;
+                observations[i][j] = {f.sequence, f.timestamp_ns, f.clock};
             }
-            if (!d.pending[i] && x1::monotonic_ns() - d.last_receive[i] > int64_t(d.config.profile.stall_ms) * 1000000) {
-                d.increment(role + "capture_errors"); d.increment("unmatched_frames", d.pending[1 - i] ? 1 : 0);
-                throw std::runtime_error(role + "camera stalled");
+            auto decision = x1::choose_pair({observations[0].data(), d.pending[0].size()},
+                {observations[1].data(), d.pending[1].size()}, d.config.profile.hardware_sync_configured,
+                static_cast<uint64_t>(d.config.profile.max_timestamp_delta_ns), d.aligned);
+            if (decision.action == x1::PairAction::fail) {
+                d.increment("pairing_failures"); throw std::runtime_error(decision.error);
+            }
+            if (decision.action == x1::PairAction::pair) break;
+            if (decision.action == x1::PairAction::discard_left || decision.action == x1::PairAction::discard_right) {
+                if (d.startup_discarded == x1::startup_discard_limit) {
+                    d.increment("pairing_failures"); throw std::runtime_error("Startup timestamp alignment exceeded unmatched-observation limit");
+                }
+                size_t i = decision.action == x1::PairAction::discard_right ? 1 : 0;
+                d.pending[i].pop(); ++d.startup_discarded;
+                d.increment(i ? "startup_unmatched_right" : "startup_unmatched_left");
+                d.pending_depth(); continue;
+            }
+            if (!d.aligned && x1::monotonic_ns() - d.started > int64_t(d.config.profile.stall_ms) * 1000000) {
+                d.increment("pairing_failures"); throw std::runtime_error("Startup timestamp alignment timed out");
+            }
+            if (reads == 2) return; // bounded work and caller timeout, even while aligning
+            ++reads;
+            size_t i = decision.action == x1::PairAction::right ? 1 : 0;
+            std::string role = i ? "right." : "left.";
+            if (d.pending[i].size() == x1::pairing_capacity) {
+                d.increment("pairing_pending_saturation"); d.increment("pairing_failures");
+                throw std::runtime_error(role + "pairing pending queue saturated");
+            }
+            bool received{};
+            try {
+                received = d.streams[i]->next(timeout / 2, [&](const x1::FrameView &frame) {
+                    d.increment(role + "frames");
+                    if (d.last_sequence[i] && frame.sequence != static_cast<uint32_t>(*d.last_sequence[i] + 1)) {
+                        uint32_t delta = frame.sequence - *d.last_sequence[i];
+                        if (delta > 1 && delta < 0x80000000u) d.increment(role + "sequence_gaps", delta - 1);
+                        else d.increment(role + "repeated_or_reversed_sequences");
+                        throw std::runtime_error(role + "native sequence discontinuity; raw capture failed");
+                    }
+                    if (d.last_timestamp[i] && frame.timestamp_ns <= *d.last_timestamp[i]) {
+                        d.increment("timestamp_discontinuities"); throw std::runtime_error(role + "timestamp discontinuity");
+                    }
+                    if (!d.last_clock[i].empty() && d.last_clock[i] != frame.clock) {
+                        d.increment("timestamp_discontinuities"); throw std::runtime_error(role + "timestamp clock discontinuity");
+                    }
+                    d.last_clock[i] = frame.clock;
+                    d.last_sequence[i] = frame.sequence; d.last_timestamp[i] = frame.timestamp_ns;
+                    d.last_receive[i] = x1::monotonic_ns();
+                    Pending value; value.frame = frame; value.bytes = frame.bytes.size();
+                    value.buffer = std::make_unique<mantis::sdk::Buffer>(d.host, frame.bytes.size());
+                    std::memcpy(value.buffer->writable().data(), frame.bytes.data(), frame.bytes.size());
+                    value.buffer->publish();
+                    auto info = frame.controls;
+                    info.insert({{"role", i ? "right" : "left"}, {"identity", identity(d.cameras[i])},
+                        {"video_node", d.cameras[i].video}, {"fourcc", frame.fourcc},
+                        {"v4l2_flags", std::to_string(frame.flags)}, {"buffer_size", std::to_string(frame.buffer_size)}});
+                    info["requested_target_fps"] = std::to_string(d.config.profile.mode.fps);
+                    const std::string prefix = i ? "right_" : "left_";
+                    for (const auto &[key, diagnostic] : d.metrics) if (key.starts_with(prefix) &&
+                        (key.find("vblank") != std::string::npos || key.find("driver_interval") != std::string::npos || key.find("initial_") != std::string::npos))
+                        info[key.substr(prefix.size())] = diagnostic;
+                    info["org.mantis.image.width"] = std::to_string(frame.width);
+                    info["org.mantis.image.height"] = std::to_string(frame.height);
+                    info["org.mantis.image.row_stride_bytes"] = std::to_string(frame.stride);
+                    if (frame.fourcc == "Y10P") {
+                        info["org.mantis.image.layout"] = "mipi-raw10-v1";
+                        info["org.mantis.image.bits_per_sample"] = "10";
+                    }
+                    value.metadata = Json(info).dump();
+                    // Keep only extent, never dereference the expired driver view.
+                    value.frame.bytes = {};
+                    d.pending[i].push(std::move(value)); d.pending_depth();
+                });
+            } catch (...) { d.increment(role + "capture_errors"); throw; }
+            if (!received) {
+                if (x1::monotonic_ns() - d.last_receive[i] > int64_t(d.config.profile.stall_ms) * 1000000) {
+                    d.increment(role + "capture_errors"); d.increment("unmatched_frames", d.pending[1 - i].size());
+                    throw std::runtime_error(role + "camera stalled");
+                }
+                return;
             }
         }
-        if (!d.pending[0] || !d.pending[1]) return;
-        const auto &left = d.pending[0]->frame, &right = d.pending[1]->frame;
-        d.metrics["sequence_agreement"] = left.sequence == right.sequence ? "aligned" : "mismatch";
-        if (left.sequence != right.sequence) { d.increment("pairing_failures"); throw std::runtime_error("Camera sequences disagree"); }
+        const auto &left = d.pending[0][0].frame, &right = d.pending[1][0].frame;
         if (left.width != right.width || left.height != right.height || left.fourcc != right.fourcc) {
             d.increment("pairing_failures"); throw std::runtime_error("Camera stream modes disagree");
         }
-        auto delta = right.timestamp_ns - left.timestamp_ns;
-        bool comparable = left.clock == right.clock && left.clock != "linux.v4l2.unknown";
-        d.metrics["v4l2_delta_ns"] = comparable ? std::to_string(delta) : "unavailable";
+        // choose_pair proved both comparability and a difference within tolerance.
+        const auto delta = right.timestamp_ns - left.timestamp_ns;
+        d.metrics["native_counter_equality"] = left.sequence == right.sequence ? "equal" : "different";
+        d.metrics["left.native_sequence"] = std::to_string(left.sequence);
+        d.metrics["right.native_sequence"] = std::to_string(right.sequence);
+        d.metrics["native_sequence_offset"] = std::to_string(x1::native_sequence_offset(left.sequence, right.sequence));
+        d.metrics["paired_v4l2_delta_ns"] = std::to_string(delta);
+        d.metrics["v4l2_delta_ns"] = std::to_string(delta); // compatible alias; always the selected pair
         d.metrics["host_arrival_delta_ns"] = std::to_string(right.received_ns - left.received_ns);
-        if (comparable && std::abs(delta) > d.config.profile.max_timestamp_delta_ns) {
-            d.increment("pairing_failures"); throw std::runtime_error("Camera timestamp delta exceeds profile pairing limit");
-        }
+        d.metrics["pairing_state"] = "paired";
+        d.aligned = true;
         auto elapsed = double(x1::monotonic_ns() - d.started) / 1e9;
         for (size_t i = 0; i < 2; ++i) {
             std::string role = i ? "right." : "left.";
-            const auto &f = d.pending[i]->frame;
-            d.metrics[role + "receive_fps"] = std::to_string(double(d.sequence + 1) / elapsed);
+            const auto &f = d.pending[i][0].frame;
+            d.metrics[role + "receive_fps"] = std::to_string(double(std::stoull(d.metrics.at(role + "frames"))) / elapsed);
             d.metrics[role + "width"] = std::to_string(f.width); d.metrics[role + "height"] = std::to_string(f.height);
             d.metrics[role + "fourcc"] = f.fourcc;
             d.metrics[role + "stride"] = std::to_string(f.stride);
@@ -232,7 +301,7 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
         header.packet.attributes = nullptr; header.packet.attribute_count = 0; header.metadata_json = meta.c_str();
         MantisFrameSetV1 set{sizeof(set), 1, header, frames, 2};
         mantis::sdk::check(emit(ctx, &set));
-        ++d.sequence; d.pending = {}; emitted = true;
+        ++d.sequence; for (auto &queue : d.pending) queue.pop(); d.pending_depth(); emitted = true;
     });
     return status ? status : emitted ? 0 : 2;
 }
