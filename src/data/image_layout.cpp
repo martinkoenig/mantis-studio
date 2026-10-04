@@ -44,6 +44,9 @@ void Y10PView::display_row(uint32_t y, std::span<std::byte> out) const {
 ImageLayout image_layout(const Packet &packet) {
     if (packet.type != schema::image) fail(Status::incompatible, "Expected ImageFrame");
     bool packed = packet.header.metadata.contains("org.mantis.image.layout");
+    auto fourcc = packet.header.metadata.find("fourcc");
+    if (!packed && fourcc != packet.header.metadata.end() && fourcc->second == "Y10P")
+        fail(Status::corrupt, "Y10P requires explicit packed image layout metadata");
     ImageLayout layout;
     if (packed) {
         if (packet.header.metadata.at("org.mantis.image.layout") != "mipi-raw10-v1" ||

@@ -163,10 +163,10 @@ The local toolchain remains Ubuntu 25.10 x86_64 / GCC 15.2 / Qt 6.9.2.
 
 | Configuration | Build | Test evidence |
 | --- | --- | --- |
-| Debug Studio ON | PASS | 13/13, 21.59 s |
-| Debug Studio OFF | PASS | 13/13, 12.34 s |
-| Release Studio OFF | PASS | 13/13, 11.33 s |
-| ASan + UBSan Studio OFF | PASS | 13/13, 13.49 s, detect_leaks=1 and halt_on_error=1 |
+| Debug Studio ON | PASS | 13/13, 21.44 s |
+| Debug Studio OFF | PASS | 13/13, 12.33 s |
+| Release Studio OFF | PASS | 13/13, 11.31 s |
+| ASan + UBSan Studio OFF | PASS | 13/13, 13.61 s, detect_leaks=1 and halt_on_error=1 |
 
 These final runs include the route-check/rollback review fixes.
 Stored logs: `docs/validation/v0.2-q6a-gap-{debug,headless,release,sanitizers}-ctest.log`.
@@ -178,7 +178,7 @@ validation; missing/ambiguous entities; unsupported media-bus/RAW10 format;
 scoped incoming conflicts and EBUSY-gated source conflicts; unrelated RGB/fan-out
 preservation; VBLANK set/read-back; format/link/control read-back mismatch;
 LEFT/RIGHT setup and STREAMON failures with context; failure rollback, committed
-setup and incomplete rollback reporting. Known Y10P bit vectors and padded rows
+setup and incomplete rollback reporting. Required packing metadata rejection, known Y10P bit vectors and padded rows
 prove sample access and display reduction while preserving raw bytes. RAW8 and
 Y10P both traverse daemon → protocol → CLI/Python/C++ → actual offscreen Studio
 dual preview, segmented recording, repeated deterministic replay/digest,
@@ -199,6 +199,7 @@ CI was inspected for these continuation checkpoints:
 | 54ffb5e | [37198878341](https://github.com/martinkoenig/mantis-studio/actions/runs/37198878341) | all five jobs PASS |
 | f096603 | [37199422239](https://github.com/martinkoenig/mantis-studio/actions/runs/37199422239) | all five jobs PASS |
 | c08452e | [37201194604](https://github.com/martinkoenig/mantis-studio/actions/runs/37201194604) | all five jobs PASS |
+| 95975df | [37202101702](https://github.com/martinkoenig/mantis-studio/actions/runs/37202101702) | all five jobs PASS |
 
 The matrix remains Ubuntu x86_64 Studio ON/OFF, native Ubuntu ARM64 Studio ON/OFF
 and ASan/UBSan. No workflow or tag-trigger policy change was made. Final HEAD

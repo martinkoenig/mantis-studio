@@ -7,11 +7,11 @@ Test project <SOURCE_ROOT>/build/release
       Start  3: acquisition
  3/13 Test  #3: acquisition ......................   Passed    0.83 sec
       Start  4: acquisition-integration
- 4/13 Test  #4: acquisition-integration ..........   Passed    1.22 sec
+ 4/13 Test  #4: acquisition-integration ..........   Passed    1.21 sec
       Start  5: acquisition-y10p-integration
- 5/13 Test  #5: acquisition-y10p-integration .....   Passed    1.21 sec
+ 5/13 Test  #5: acquisition-y10p-integration .....   Passed    1.25 sec
       Start  6: control-listener
- 6/13 Test  #6: control-listener .................   Passed    6.26 sec
+ 6/13 Test  #6: control-listener .................   Passed    6.28 sec
       Start  7: acquisition-qos
  7/13 Test  #7: acquisition-qos ..................   Passed    0.05 sec
       Start  8: raw-capture
@@ -25,8 +25,8 @@ Test project <SOURCE_ROOT>/build/release
       Start 12: boundaries
 12/13 Test #12: boundaries .......................   Passed    0.03 sec
       Start 13: acceptance
-13/13 Test #13: acceptance .......................   Passed    1.60 sec
+13/13 Test #13: acceptance .......................   Passed    1.55 sec
 
 100% tests passed, 0 tests failed out of 13
 
-Total Test time (real) =  11.33 sec
+Total Test time (real) =  11.31 sec

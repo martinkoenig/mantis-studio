@@ -5,11 +5,11 @@ Test project <SOURCE_ROOT>/build/debug
       Start  2: x1-media
  2/13 Test  #2: x1-media .........................   Passed    0.01 sec
       Start  3: acquisition
- 3/13 Test  #3: acquisition ......................   Passed    0.87 sec
+ 3/13 Test  #3: acquisition ......................   Passed    0.85 sec
       Start  4: acquisition-integration
- 4/13 Test  #4: acquisition-integration ..........   Passed    5.38 sec
+ 4/13 Test  #4: acquisition-integration ..........   Passed    5.34 sec
       Start  5: acquisition-y10p-integration
- 5/13 Test  #5: acquisition-y10p-integration .....   Passed    5.28 sec
+ 5/13 Test  #5: acquisition-y10p-integration .....   Passed    5.30 sec
       Start  6: control-listener
  6/13 Test  #6: control-listener .................   Passed    6.29 sec
       Start  7: acquisition-qos
@@ -25,8 +25,8 @@ Test project <SOURCE_ROOT>/build/debug
       Start 12: boundaries
 12/13 Test #12: boundaries .......................   Passed    0.02 sec
       Start 13: acceptance
-13/13 Test #13: acceptance .......................   Passed    3.56 sec
+13/13 Test #13: acceptance .......................   Passed    3.46 sec
 
 100% tests passed, 0 tests failed out of 13
 
-Total Test time (real) =  21.59 sec
+Total Test time (real) =  21.44 sec

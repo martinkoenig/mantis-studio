@@ -32,6 +32,11 @@ int main() {
         CHECK(std::ranges::equal(*image.attributes[0].buffer.map_read(), bytes));
         auto wrong = image; wrong.attributes[0].descriptor.shape = {2, 4}; wrong.attributes[0].descriptor.stride = {8, 1};
         rejects([&] { (void)data::image_layout(wrong); });
+        auto missing_layout = image;
+        missing_layout.header.metadata.erase("org.mantis.image.layout");
+        // A mislabeled u8 grid must never make packed RAW10 look like RAW8.
+        missing_layout.attributes[0].descriptor = {"org.mantis.pixels", schema::ScalarType::u8, {2, 4}, {8, 1}, "intensity"};
+        rejects([&] { (void)data::image_layout(missing_layout); });
         std::cout << "Y10P known vectors, padding, display reduction and raw preservation passed\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
