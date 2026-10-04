@@ -73,6 +73,9 @@ struct Device {
     bool running{};
     bool aligned{};
     uint64_t startup_discarded{};
+    uint64_t steady_state_discarded{}; // reset only on publication, not on next() retries
+    int64_t last_paired{};
+    Json exclusions = Json::array();
     void pending_depth() {
         for (size_t i = 0; i < 2; ++i) {
             const std::string role = i ? "right" : "left";
@@ -85,6 +88,7 @@ struct Device {
         // Lookahead/startup observations are not published FrameSets. Account for
         // every retained tail on stop/failure; the recorder itself never drops.
         try {
+            metrics["unpublished_pairing_exclusions"] = exclusions.dump();
             for (size_t i = 0; i < 2; ++i) if (!pending[i].empty())
                 increment(i ? "shutdown_unmatched_right" : "shutdown_unmatched_left", pending[i].size());
         } catch (...) {}
@@ -128,7 +132,8 @@ int start(void *p) noexcept {
     auto &d = *static_cast<Device *>(p);
     return d.guard([&] {
         d.stop(); d.metrics.clear(); d.sequence = 0; d.last_sequence = {}; d.last_timestamp = {}; d.last_clock = {};
-        d.aligned = false; d.startup_discarded = 0;
+        d.aligned = false; d.startup_discarded = 0; d.steady_state_discarded = 0;
+        d.exclusions = Json::array();
         d.setup = d.config.backend->prepare(d.config.profile, d.cameras);
         if (d.config.profile.format_version == 2 && !d.setup)
             throw std::runtime_error("Profile v2 requires plugin-owned media setup; backend does not provide it");
@@ -139,13 +144,21 @@ int start(void *p) noexcept {
             d.metrics[(i ? "right_" : "left_") + key] = value;
         if (d.setup) d.setup->commit();
         d.started = x1::monotonic_ns(); d.last_receive.fill(d.started); d.running = true;
+        d.last_paired = d.started;
         d.metrics["sync_configuration"] = d.config.profile.hardware_sync_configured ? "hardware sync configured" : "hardware sync not configured";
         d.metrics["sync_quality"] = "software";
         d.metrics["hardware_sync_configured"] = d.config.profile.hardware_sync_configured ? "true" : "false";
         d.metrics["pairing_mode"] = d.config.profile.hardware_sync_configured ? "native-sequence-and-timestamp" : "timestamp-nearest";
         d.metrics["pairing_state"] = "startup";
+        d.metrics["pairing_policy_version"] = "2";
+        d.metrics["pairing_exclusions"] = "[]";
+        d.metrics["pairing_tolerance_basis"] = d.config.profile.hardware_sync_configured
+            ? "hardware configured timestamp bound" : "software correspondence; half-period plus margin";
+        d.metrics["software_nominal_half_period_ns"] = std::to_string(x1::nominal_half_period_ns(d.config.profile.mode.fps));
+        d.metrics["software_recommended_tolerance_ns"] = std::to_string(x1::recommended_software_tolerance_ns(d.config.profile.mode.fps));
         d.metrics["pairing_pending_capacity_per_camera"] = std::to_string(x1::pairing_capacity);
         d.metrics["startup_discard_limit"] = std::to_string(x1::startup_discard_limit);
+        d.metrics["steady_state_discard_limit_per_pair"] = std::to_string(x1::steady_state_discard_limit);
         d.metrics["max_v4l2_delta_ns"] = std::to_string(d.config.profile.max_timestamp_delta_ns);
         for (const char *key : {"left.native_sequence", "right.native_sequence", "native_sequence_offset",
              "native_counter_equality", "paired_v4l2_delta_ns", "v4l2_delta_ns", "host_arrival_delta_ns"})
@@ -160,7 +173,8 @@ int start(void *p) noexcept {
             for (const char *counter : {"frames", "sequence_gaps", "capture_errors"}) d.metrics[role + counter] = "0";
         }
         for (const char *counter : {"pairing_failures", "timestamp_discontinuities", "unmatched_frames",
-             "startup_unmatched_left", "startup_unmatched_right", "shutdown_unmatched_left", "shutdown_unmatched_right",
+             "startup_unmatched_left", "startup_unmatched_right", "steady_state_unmatched_left", "steady_state_unmatched_right",
+             "shutdown_unmatched_left", "shutdown_unmatched_right",
              "pairing_pending_saturation"}) d.metrics[counter] = "0";
         d.pending_depth();
     });
@@ -188,6 +202,9 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
             if (!d.aligned && x1::monotonic_ns() - d.started > int64_t(d.config.profile.stall_ms) * 1000000) {
                 d.increment("pairing_failures"); throw std::runtime_error("Startup timestamp alignment timed out");
             }
+            if (d.aligned && x1::monotonic_ns() - d.last_paired > int64_t(d.config.profile.stall_ms) * 1000000) {
+                d.increment("pairing_failures"); throw std::runtime_error("Steady-state timestamp realignment timed out");
+            }
             std::array<std::array<x1::PairingObservation, x1::pairing_capacity>, 2> observations{};
             for (size_t i = 0; i < 2; ++i) for (size_t j = 0; j < d.pending[i].size(); ++j) {
                 const auto &f = d.pending[i][j].frame;
@@ -204,18 +221,31 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
             }
             auto decision = x1::choose_pair({observations[0].data(), d.pending[0].size()},
                 {observations[1].data(), d.pending[1].size()}, d.config.profile.hardware_sync_configured,
-                static_cast<uint64_t>(d.config.profile.max_timestamp_delta_ns), d.aligned);
+                static_cast<uint64_t>(d.config.profile.max_timestamp_delta_ns));
             if (decision.action == x1::PairAction::fail) {
                 d.increment("pairing_failures"); throw std::runtime_error(decision.error);
             }
             if (decision.action == x1::PairAction::pair) break;
             if (decision.action == x1::PairAction::discard_left || decision.action == x1::PairAction::discard_right) {
-                if (d.startup_discarded == x1::startup_discard_limit) {
-                    d.increment("pairing_failures"); throw std::runtime_error("Startup timestamp alignment exceeded unmatched-observation limit");
+                if ((!d.aligned && d.startup_discarded == x1::startup_discard_limit) ||
+                    (d.aligned && d.steady_state_discarded == x1::steady_state_discard_limit)) {
+                    d.increment("pairing_failures"); throw std::runtime_error(d.aligned
+                        ? "Steady-state timestamp realignment exceeded unmatched-observation limit"
+                        : "Startup timestamp alignment exceeded unmatched-observation limit");
                 }
                 size_t i = decision.action == x1::PairAction::discard_right ? 1 : 0;
-                d.pending[i].pop(); ++d.startup_discarded;
-                d.increment(i ? "startup_unmatched_right" : "startup_unmatched_left");
+                const auto &f = d.pending[i][0].frame;
+                d.exclusions.push_back({{"role", i ? "right" : "left"}, {"phase", d.aligned ? "steady-state" : "startup"},
+                    {"native_sequence", f.sequence}, {"timestamp_ns", f.timestamp_ns}, {"clock", f.clock}});
+                d.metrics["pairing_exclusions"] = d.exclusions.dump();
+                d.pending[i].pop();
+                if (d.aligned) {
+                    ++d.steady_state_discarded;
+                    d.increment(i ? "steady_state_unmatched_right" : "steady_state_unmatched_left");
+                } else {
+                    ++d.startup_discarded;
+                    d.increment(i ? "startup_unmatched_right" : "startup_unmatched_left");
+                }
                 d.pending_depth(); continue;
             }
             if (reads == 2) return; // bounded work and caller timeout, even while aligning
@@ -241,6 +271,18 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
                     }
                     if (!d.last_clock[i].empty() && d.last_clock[i] != frame.clock) {
                         d.increment("timestamp_discontinuities"); throw std::runtime_error(role + "timestamp clock discontinuity");
+                    }
+                    if (d.last_timestamp[i]) {
+                        auto interval = x1::timestamp_distance(frame.timestamp_ns, *d.last_timestamp[i]);
+                        auto half_period = interval / 2 + interval % 2;
+                        d.metrics[role + "observed_period_ns"] = std::to_string(interval);
+                        d.metrics[role + "observed_half_period_ns"] = std::to_string(half_period);
+                        auto &maximum = d.metrics[role + "observed_max_period_ns"];
+                        maximum = std::to_string(std::max(interval, maximum.empty() ? uint64_t{} : uint64_t(std::stoull(maximum))));
+                        if (!d.config.profile.hardware_sync_configured && half_period > static_cast<uint64_t>(d.config.profile.max_timestamp_delta_ns)) {
+                            d.increment("pairing_failures");
+                            throw std::runtime_error(role + "observed half-period exceeds software pairing tolerance");
+                        }
                     }
                     d.last_clock[i] = frame.clock;
                     d.last_sequence[i] = frame.sequence; d.last_timestamp[i] = frame.timestamp_ns;
@@ -302,6 +344,7 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
         d.metrics["v4l2_delta_ns"] = std::to_string(delta); // compatible alias; always the selected pair
         d.metrics["host_arrival_delta_ns"] = std::to_string(right.received_ns - left.received_ns);
         d.metrics["pairing_state"] = "paired";
+        d.metrics["pairing_exclusions"] = d.exclusions.dump();
         d.aligned = true;
         MantisAttributeV1 a[2]{};
         MantisObservationV1 frames[]{observation(d, 0, a[0]), observation(d, 1, a[1])};
@@ -310,6 +353,7 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
         header.packet.attributes = nullptr; header.packet.attribute_count = 0; header.metadata_json = meta.c_str();
         MantisFrameSetV1 set{sizeof(set), 1, header, frames, 2};
         mantis::sdk::check(emit(ctx, &set));
+        d.last_paired = x1::monotonic_ns(); d.steady_state_discarded = 0; d.exclusions = Json::array();
         ++d.sequence; for (auto &queue : d.pending) queue.pop(); d.pending_depth(); emitted = true;
     });
     return status ? status : emitted ? 0 : 2;

@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert final_status.framesets_produced == final_status.framesets_committed
         for role in ("left", "right"):
             metrics = final_status.diagnostics
-            assert int(metrics[f"{role}.frames"]) == final_status.framesets_produced + int(metrics[f"startup_unmatched_{role}"]) + int(metrics[f"shutdown_unmatched_{role}"])
+            assert int(metrics[f"{role}.frames"]) == final_status.framesets_produced + int(metrics[f"startup_unmatched_{role}"]) + int(metrics[f"steady_state_unmatched_{role}"]) + int(metrics[f"shutdown_unmatched_{role}"])
             assert int(metrics[f"pending_high_water_{role}"]) <= 2
         assert final_status.queue_saturation == 0 and final_status.dropped == 0
         artifacts = client.capture.list().artifacts
@@ -160,6 +160,17 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert validation["sustained_storage_acceptance"] == "NOT ESTABLISHED"
         # C++ Client SDK drives the same service, including preview maps/release.
         subprocess.check_call([str(build / "bin/mantis-acquisition-client-tests")], env=env)
+        # Public validator must accept counted oscillator-drift exclusions while
+        # continuing to demand zero native/recorder loss and exact replay.
+        env["MANTIS_X1_FAKE"] = "phase-drift-left"
+        client.shutdown(); assert daemon.wait(timeout=5) == 0
+        daemon = start()
+        drifting = json.loads(subprocess.check_output([sys.executable,
+            str(Path(__file__).resolve().parents[2] / "tools/validate_x1_pairing.py"),
+            "--allow-fixture", "--duration", "0.2"], env=dict(env, PYTHONPATH=str(build / "python")), text=True))
+        assert int(drifting["capture"]["diagnostics"]["steady_state_unmatched_left"]) > 0
+        assert drifting["short_pairing_check"] == "PASS"
+        assert drifting["verification"]["raw_integrity"] == drifting["verification"]["replay"] == "PASS"
         # A cleanup ioctl failure must be visible and keep raw data recoverable.
         env["MANTIS_X1_FAKE"] = "streamoff-right"
         client.shutdown(); assert daemon.wait(timeout=5) == 0

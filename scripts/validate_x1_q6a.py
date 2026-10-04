@@ -34,11 +34,11 @@ def require(condition, reason):
 
 def validate_profile(profile):
     expected = {"format_version": 2, "hardware_sync_configured": False,
-                "max_v4l2_delta_ns": 4000000}
+                "max_v4l2_delta_ns": 5000000}
     for name, value in expected.items():
         require(type(profile.get(name)) is type(value) and profile[name] == value,
                 f"Profile {name} must be {value!r}")
-    for name, value in dict(width=1280, height=720, fourcc="Y10P",
+    for name, value in dict(width=1280, height=720, fps=120, fourcc="Y10P",
                             media_bus_code="Y10_1X10", vertical_blanking=196).items():
         require(profile.get("mode", {}).get(name) == value, f"Profile mode.{name} must be {value!r}")
     require(profile.get("runtime_setup", {}).get("ownership") == "selected-routes",
@@ -468,9 +468,11 @@ class Validation:
         pairing = self.report.get("pairing", {})
         capture = pairing.get("capture", {})
         metrics = capture.get("diagnostics", {})
-        lines += ["", "Pairing", f"  Mode: {metrics.get('pairing_mode', 'NOT REACHED')}",
+        lines += ["", "Software correspondence (exposure skew unavailable)",
+                  f"  Tolerance: {metrics.get('max_v4l2_delta_ns', '?')} ns", f"  Mode: {metrics.get('pairing_mode', 'NOT REACHED')}",
                   f"  Native offset: {int(metrics['native_sequence_offset']):+d}" if "native_sequence_offset" in metrics else "  Native offset: ?",
                   f"  Startup unmatched: {metrics.get('startup_unmatched_left', '?')} / {metrics.get('startup_unmatched_right', '?')}",
+                  f"  Steady-state unmatched: {metrics.get('steady_state_unmatched_left', '?')} / {metrics.get('steady_state_unmatched_right', '?')}",
                   f"  Shutdown unmatched: {metrics.get('shutdown_unmatched_left', '?')} / {metrics.get('shutdown_unmatched_right', '?')}",
                   f"  Paired timestamp delta: {int(metrics['paired_v4l2_delta_ns']) / 1e6:+.3f} ms" if "paired_v4l2_delta_ns" in metrics else "  Paired timestamp delta: ?",
                   f"  Failures: {metrics.get('pairing_failures', '?')}"]

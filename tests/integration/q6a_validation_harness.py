@@ -39,7 +39,8 @@ class HarnessTests(unittest.TestCase):
     def test_reference_profile_rejected_without_rewriting(self):
         reference = json.loads((ROOT / "profiles/x1-q6a.json").read_text())
         q6a.validate_profile(reference)
-        for key, value in (("format_version", 1), ("hardware_sync_configured", True), ("max_v4l2_delta_ns", 100000000)):
+        for key, value in (("format_version", 1), ("hardware_sync_configured", True),
+                           ("max_v4l2_delta_ns", 4000000), ("max_v4l2_delta_ns", 100000000)):
             changed = dict(reference, **{key: value})
             with self.assertRaisesRegex(RuntimeError, key):
                 q6a.validate_profile(changed)

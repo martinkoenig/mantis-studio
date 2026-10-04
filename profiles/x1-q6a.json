@@ -34,7 +34,7 @@
   },
   "hardware_sync_configured": false,
   "stall_timeout_ms": 1000,
-  "max_v4l2_delta_ns": 4000000,
+  "max_v4l2_delta_ns": 5000000,
   "calibration_id": "",
   "calibration_revision": 0,
   "runtime_setup": {

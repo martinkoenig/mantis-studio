@@ -1,4 +1,5 @@
 #include "backend.hpp"
+#include "pairing.hpp"
 #include <algorithm>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -61,9 +62,12 @@ Profile load_profile(const std::string &path) {
         throw std::runtime_error("Runtime setup fields require profile version 2; version 1 remains externally configured");
     p.hardware_sync_configured = j.value("hardware_sync_configured", false);
     p.stall_ms = j.value("stall_timeout_ms", 1000u);
-    p.max_timestamp_delta_ns = j.value("max_v4l2_delta_ns", int64_t{4000000});
+    p.max_timestamp_delta_ns = j.value("max_v4l2_delta_ns", p.hardware_sync_configured ? int64_t{4000000}
+        : static_cast<int64_t>(recommended_software_tolerance_ns(p.mode.fps)));
     if (p.stall_ms < 100 || p.stall_ms > 10000 || p.max_timestamp_delta_ns < 0)
         throw std::runtime_error("Invalid pairing limits");
+    if (!p.hardware_sync_configured && static_cast<uint64_t>(p.max_timestamp_delta_ns) < nominal_half_period_ns(p.mode.fps))
+        throw std::runtime_error("Software pairing tolerance must cover half the requested frame period; review max_v4l2_delta_ns");
     p.calibration_id = j.value("calibration_id", "");
     p.calibration_revision = j.value("calibration_revision", uint64_t{});
     p.json = j.dump();

@@ -70,6 +70,28 @@ class FakeCamera final : public Camera {
         if (scenario_ == "startup-left-timestamp-jump" && sequence_ == 4 && right_) timestamp = -1;
         if (scenario_ == "timestamp-jump" && sequence_ == 4 && right_) timestamp = -1;
         if (scenario_ == "lag" && right_) timestamp += (1000000000 / mode_.fps) / 2;
+        // Timestamp-only fixtures run without wall-clock pacing. Native counters
+        // and packed pixels still exercise the ordinary acquisition path.
+        if (scenario_.starts_with("phase-")) {
+            int64_t camera_period = 8384000;
+            int64_t phase = 4192000;
+            if (scenario_ == "phase-drift-left" || scenario_ == "phase-drift-gap") {
+                if (right_) camera_period += 210; // 25 ppm, crosses a boundary after ~24 pairs
+                phase -= 5000;
+            }
+            if (scenario_ == "phase-drift-right") {
+                if (!right_) camera_period += 210;
+                phase += 5000;
+            }
+            if (scenario_ == "phase-4300") { camera_period = 8600000; phase = 4300000; }
+            if (scenario_ == "phase-4000") phase = 4000000;
+            if (scenario_ == "phase-limit") {
+                timestamp = sequence_ < 4 ? int64_t(sequence_) * camera_period
+                    : 3 * camera_period + int64_t(sequence_ - 3) * (right_ ? 8384000 : 1000000);
+            } else timestamp = int64_t(sequence_) * camera_period + (right_ ? phase : 0);
+            if (scenario_ == "phase-out-of-bound") timestamp = int64_t(sequence_) * (right_ ? 11000000 : 8384000);
+            if (scenario_ == "phase-drift-gap" && right_ && sequence_ >= 40) ++native;
+        }
         uint32_t stride = mode_.fourcc == "Y10P" ? mode_.width / 4 * 5 : mode_.width;
         std::vector<std::byte> pixels(size_t(stride) * mode_.height);
         for (size_t i = 0; i < pixels.size(); ++i)
@@ -83,7 +105,7 @@ class FakeCamera final : public Camera {
                        timestamp + 1000 + (right_ ? 100 : 0), clock, mode_.fourcc, {}};
         emit(view);
         ++sequence_;
-        due_ += std::chrono::nanoseconds(1000000000 / mode_.fps);
+        due_ += std::chrono::nanoseconds(scenario_.starts_with("phase-") ? 0 : 1000000000 / mode_.fps);
         return true;
     }
 };

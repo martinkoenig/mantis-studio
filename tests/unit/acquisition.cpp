@@ -29,6 +29,24 @@ int main(int argc, char **argv) {
         fixture["mode"] = {{"width", 64}, {"height", 48}, {"fourcc", "GREY"}, {"fps", 120}};
         fixture["stall_timeout_ms"] = 100;
         fixture["calibration_id"] = "test.calibration"; fixture["calibration_revision"] = 7;
+        // Defaults follow period only for software correspondence. Explicit
+        // under-sized software bounds fail; hardware retains its strict default.
+        fixture.erase("max_v4l2_delta_ns");
+        { std::ofstream out(dir / "profile.json"); out << fixture; }
+        CHECK(x1::load_profile((dir / "profile.json").string()).max_timestamp_delta_ns == 5000000);
+        fixture["max_v4l2_delta_ns"] = 4000000;
+        { std::ofstream out(dir / "profile.json"); out << fixture; }
+        rejects([&] { (void)x1::load_profile((dir / "profile.json").string()); });
+        fixture["hardware_sync_configured"] = true;
+        { std::ofstream out(dir / "profile.json"); out << fixture; }
+        CHECK(x1::load_profile((dir / "profile.json").string()).max_timestamp_delta_ns == 4000000);
+        fixture.erase("max_v4l2_delta_ns"); fixture["mode"]["fps"] = 60;
+        { std::ofstream out(dir / "profile.json"); out << fixture; }
+        CHECK(x1::load_profile((dir / "profile.json").string()).max_timestamp_delta_ns == 4000000);
+        fixture["hardware_sync_configured"] = false;
+        { std::ofstream out(dir / "profile.json"); out << fixture; }
+        CHECK(x1::load_profile((dir / "profile.json").string()).max_timestamp_delta_ns == 10000000);
+        fixture["mode"]["fps"] = 120; fixture["max_v4l2_delta_ns"] = 5000000;
         { std::ofstream out(dir / "profile.json"); out << fixture; }
         setenv("MANTIS_X1_PROFILE", (dir / "profile.json").c_str(), 1);
         // Readiness occurs after the 100ms startup deadline, inside the caller's
@@ -53,7 +71,7 @@ int main(int argc, char **argv) {
             CHECK(info.at("pairing_failures") == "1");
             CHECK(info.at("shutdown_unmatched_left") == "1" && info.at("shutdown_unmatched_right") == "1");
         }
-        for (const auto *scenario : {"normal", "y10p", "renumber", "eagain", "drop-left", "drop-right", "disconnect", "mismatch", "repeat", "timestamp-jump", "lag", "stall-left", "stall-right", "stop-right", "stream-mismatch"}) {
+        for (const auto *scenario : {"normal", "y10p", "renumber", "eagain", "drop-left", "drop-right", "disconnect", "mismatch", "repeat", "timestamp-jump", "phase-out-of-bound", "stall-left", "stall-right", "stop-right", "stream-mismatch"}) {
             fixture["hardware_sync_configured"] = std::string(scenario) == "mismatch";
             fixture["mode"]["fourcc"] = std::string(scenario) == "y10p" ? "Y10P" : "GREY";
             { std::ofstream out(dir / "profile.json"); out << fixture; }

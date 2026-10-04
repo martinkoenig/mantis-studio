@@ -11,6 +11,11 @@
 namespace x1 {
 inline constexpr size_t pairing_capacity = 2; // front + one bracketing observation
 inline constexpr uint64_t startup_discard_limit = 32; // total across both cameras
+inline constexpr uint64_t steady_state_discard_limit = 2; // total between published pairs
+// Worst arbitrary phase is half a period. Recommend 20% headroom on that
+// timestamp bound; requested FPS is only a baseline, checked against observations.
+inline uint64_t nominal_half_period_ns(uint32_t fps) { return (500000000ull + fps - 1) / fps; }
+inline uint64_t recommended_software_tolerance_ns(uint32_t fps) { return (600000000ull + fps - 1) / fps; }
 template<class T, size_t Capacity = pairing_capacity> class PendingQueue {
     std::array<std::optional<T>, Capacity> slots_;
     size_t head_{}, size_{};
@@ -46,7 +51,7 @@ inline int64_t native_sequence_offset(uint32_t left, uint32_t right) {
 }
 inline PairDecision choose_pair(std::span<const PairingObservation> left,
                                std::span<const PairingObservation> right,
-                               bool hardware, uint64_t tolerance, bool aligned) {
+                               bool hardware, uint64_t tolerance) {
     if (left.empty()) return {PairAction::left};
     if (right.empty()) return {PairAction::right};
     const auto &l = left[0], &r = right[0];
@@ -71,13 +76,10 @@ inline PairDecision choose_pair(std::span<const PairingObservation> left,
             return {PairAction::fail, "Nearest camera timestamps exceed profile pairing limit"};
         // Ties select the earlier observation, independently of receive order.
         if (next_distance < distance) {
-            if (aligned) return {PairAction::fail, "Steady-state timestamp pairing requires an unmatched observation"};
             return {discard};
         }
         if (distance <= tolerance) return {PairAction::pair};
     }
-    if (distance > tolerance && aligned)
-        return {PairAction::fail, "Camera timestamp delta exceeds profile pairing limit"};
     return {older_left ? PairAction::left : PairAction::right};
 }
 } // namespace x1
