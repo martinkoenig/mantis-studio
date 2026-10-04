@@ -11,7 +11,11 @@ struct CaptureInfo {
     bool active{};
     uint64_t frames{}, dropped{}, queue_high_water{};
     std::string error;
+    uint64_t produced{}, committed{}, queue_depth{}, queue_capacity{}, queue_saturation{}, preview_drops{}, total_bytes{};
+    double duration{}, writer_mb_s{}, writer_mib_s{};
+    data::Metadata diagnostics;
 };
+struct PreviewReference { Id lease; std::filesystem::path path; };
 struct PluginInfo {
     std::string id, version, kind, execution, state, diagnostic;
     std::vector<std::string> permissions;
@@ -90,6 +94,9 @@ class Runtime final : public DeviceService,
     CaptureInfo start_capture(const std::vector<Id> &) override;
     CaptureInfo stop_capture(const Id &) override;
     std::vector<CaptureInfo> captures() const override;
+    PreviewReference preview(const Id &);
+    void release_preview(const Id &);
+    Id replay_capture(const Id &, bool real_time, bool verify);
     Id run_pipeline(const Id &, const std::string &, const Id & = {}) override;
     std::string open_project(const std::filesystem::path &, bool) override;
     std::string project() const override;

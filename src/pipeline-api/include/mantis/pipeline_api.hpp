@@ -55,6 +55,21 @@ template <class T> class BoundedQueue {
         writable_.notify_one();
         return v;
     }
+    bool push_for(T value, std::chrono::milliseconds timeout, std::stop_token stop = {}) {
+        if (policy_ != QueuePolicy::lossless && policy_ != QueuePolicy::block)
+            return push(std::move(value), stop);
+        std::unique_lock lock(mutex_);
+        if (!writable_.wait_for(lock, stop, timeout, [&] { return closed_ || items_.size() < capacity_; }) || closed_)
+            return false;
+        items_.push_back(std::move(value)); ++metrics_.pushed;
+        metrics_.high_water = std::max(metrics_.high_water, items_.size()); readable_.notify_one(); return true;
+    }
+    std::optional<T> try_pop() {
+        std::lock_guard lock(mutex_);
+        if (items_.empty()) return {};
+        auto value = std::move(items_.front()); items_.pop_front(); ++metrics_.popped; writable_.notify_one(); return value;
+    }
+    size_t capacity() const { return capacity_; }
     void close() {
         std::lock_guard lock(mutex_);
         closed_ = true;

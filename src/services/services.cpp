@@ -1,6 +1,9 @@
 #include <fstream>
 #include <mantis/artifact_store.hpp>
 #include <mantis/device_runtime.hpp>
+#include <mantis/replay.hpp>
+#include <mantis/data_io.hpp>
+#include <nlohmann/json.hpp>
 #include <mantis/pipeline_runtime.hpp>
 #include <mantis/services.hpp>
 #include <set>
@@ -20,6 +23,10 @@ struct Runtime::Impl {
         std::unique_ptr<device::Session> session;
     };
     std::map<Id, Capture> captures;
+    struct Lease { std::filesystem::path path; std::chrono::steady_clock::time_point expires; };
+    std::map<Id, Lease> previews;
+    struct Replay { pipeline::BoundedQueue<data::Published> preview{1, pipeline::QueuePolicy::latest_only}; };
+    std::map<Id, std::shared_ptr<Replay>> replays;
     void event(std::string kind, std::string component, std::string message) {
         std::lock_guard lock(event_mutex);
         Event e{++event_sequence, std::move(kind), std::move(component), std::move(message)};
@@ -38,6 +45,11 @@ struct Runtime::Impl {
     explicit Impl(const Configuration &c) {
         recipes = c.recipes;
         store = std::make_shared<artifact::Store>(c.project);
+        auto preview_directory = store->root() / "cache" / "previews";
+        if (std::filesystem::exists(preview_directory))
+            for (const auto &file : std::filesystem::directory_iterator(preview_directory)) {
+                std::error_code ec; std::filesystem::remove(file.path(), ec);
+            }
         diagnostic_file.open(store->root() / "diagnostics.log", std::ios::app);
         registry =
             std::make_unique<plugins::Registry>(c.plugin_host, store->root() / "cache" / "hosts", logger());
@@ -52,6 +64,7 @@ struct Runtime::Impl {
             try {
                 if (c.session->error().empty() && store->get(c.raw).state == artifact::ArtifactState::open)
                     store->finalize(c.raw);
+                else if (store->get(c.raw).state == artifact::ArtifactState::open) store->abandon(c.raw);
             } catch (const std::exception &e) {
                 event("error", "capture", e.what());
             }
@@ -60,10 +73,28 @@ struct Runtime::Impl {
     }
     CaptureInfo info(const Id &id, const Capture &c) const {
         auto m = c.session->metrics();
-        return {id,           c.session->descriptor().devices,
-                c.raw,        c.session->active(),
-                m.popped,     m.dropped,
-                m.high_water, c.session->error()};
+        CaptureInfo out;
+        out.id = id; out.devices = c.session->descriptor().devices; out.raw_artifact = c.raw;
+        out.active = c.session->active(); out.frames = c.session->committed(); out.queue_high_water = m.high_water;
+        out.error = c.session->error(); out.committed = c.session->committed(); out.produced = c.session->produced();
+        out.queue_depth = m.occupancy; out.queue_capacity = c.session->queue_capacity(); out.queue_saturation = c.session->saturation();
+        out.preview_drops = c.session->preview_metrics().dropped; out.duration = c.session->duration();
+        out.diagnostics = c.session->diagnostics();
+        // Loss count is only known for observed sequence gaps / produced uncommitted packets.
+        // A disconnect cannot reveal how many physical exposures were never delivered.
+        out.dropped = out.queue_saturation;
+        for (const char *role : {"left.", "right."}) {
+            auto gaps = out.diagnostics.find(std::string(role) + "sequence_gaps");
+            if (gaps != out.diagnostics.end()) out.dropped += std::stoull(gaps->second);
+        }
+        out.total_bytes = store->get(c.raw).bytes;
+        if (out.duration > 0) {
+            out.writer_mb_s = double(c.session->payload_bytes()) / out.duration / 1e6;
+            out.writer_mib_s = double(c.session->payload_bytes()) / out.duration / 1048576;
+        }
+        out.diagnostics["throughput_basis"] = "committed raw pixel payload / capture duration";
+        out.diagnostics["raw_loss_observability"] = out.error.empty() ? "observed" : "failure; unobserved exposures unknown";
+        return out;
     }
 };
 Runtime::Runtime(Configuration c) : impl_(std::make_unique<Impl>(c)) {}
@@ -88,19 +119,37 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
     for (auto &id : ids) {
         auto &stream = impl_->devices->find(id);
         auto &caps = stream.descriptor().capabilities;
-        if (std::find(caps.begin(), caps.end(), device::image_stream) == caps.end())
+        if (std::find(caps.begin(), caps.end(), device::image_stream) == caps.end() &&
+            std::find(caps.begin(), caps.end(), device::frameset_stream) == caps.end())
             fail(Status::incompatible, "Device lacks image stream capability");
         streams.push_back(&stream);
     }
+    if (streams.size() > 1 && std::any_of(streams.begin(), streams.end(), [](auto *s) { return s->source_paced(); }))
+        fail(Status::invalid_argument, "Capture a composite parent as one stream; independent cameras do not establish FrameSets");
+    bool composite = std::find(streams.front()->descriptor().capabilities.begin(), streams.front()->descriptor().capabilities.end(), device::frameset_stream) != streams.front()->descriptor().capabilities.end();
     Id id = Id::random();
     artifact::Provenance provenance;
     provenance.producer = "org.mantis.capture";
     provenance.parameters["capture_id"] = id.value;
-    auto raw = impl_->store->begin({"org.mantis.RawCapture", 1}, provenance);
+    if (composite) {
+        const auto &descriptor = streams.front()->descriptor();
+        provenance.producer = descriptor.plugin_id; provenance.version = {0, 2, 0};
+        provenance.parameters = descriptor.metadata;
+        provenance.parameters["capture_id"] = id.value;
+        provenance.parameters["logical_device_id"] = descriptor.id.value;
+        provenance.parameters["format_version"] = "2";
+        provenance.parameters["segment_max_bytes"] = "67108864";
+        provenance.parameters["started_unix_ns"] = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+        for (const auto &child : streams.front()->components())
+            for (const auto &[key, value] : child.metadata) provenance.parameters[child.metadata.at("role") + "." + key] = value;
+    }
+    auto raw = impl_->store->begin({"org.mantis.RawCapture", composite ? 2u : 1u}, provenance);
     auto store = impl_->store;
-    auto session = std::make_unique<device::Session>(
+    std::unique_ptr<device::Session> session;
+    try { session = std::make_unique<device::Session>(
         device::CaptureDescriptor{id, ids, {}}, std::move(streams),
         [store, raw](data::Published p) { store->append(raw, *p); }, impl_->logger());
+    } catch (...) { store->abandon(raw); throw; }
     auto [it, inserted] = impl_->captures.emplace(id, Impl::Capture{raw, std::move(session)});
     (void)inserted;
     impl_->event("capture.started", "capture", id.value);
@@ -114,6 +163,8 @@ CaptureInfo Runtime::stop_capture(const Id &id) {
     if (impl_->store->get(it->second.raw).state == artifact::ArtifactState::open &&
         it->second.session->error().empty())
         impl_->store->finalize(it->second.raw);
+    else if (impl_->store->get(it->second.raw).state == artifact::ArtifactState::open)
+        impl_->store->abandon(it->second.raw);
     impl_->event("capture.stopped", "capture", id.value);
     return impl_->info(id, it->second);
 }
@@ -122,6 +173,96 @@ std::vector<CaptureInfo> Runtime::captures() const {
     for (auto &[id, c] : impl_->captures)
         out.push_back(impl_->info(id, c));
     return out;
+}
+PreviewReference Runtime::preview(const Id &id) {
+    auto now = std::chrono::steady_clock::now();
+    for (auto it = impl_->previews.begin(); it != impl_->previews.end();) {
+        if (it->second.expires <= now) { std::error_code ec; std::filesystem::remove(it->second.path, ec); it = impl_->previews.erase(it); }
+        else ++it;
+    }
+    if (impl_->previews.size() >= 8) fail(Status::busy, "Preview lease capacity reached; release references or wait 60 seconds");
+    data::Published packet;
+    if (auto live = impl_->captures.find(id); live != impl_->captures.end()) packet = live->second.session->preview();
+    else if (auto replay = impl_->replays.find(id); replay != impl_->replays.end()) {
+        auto latest = replay->second->preview.try_pop(); if (latest) packet = *latest;
+    } else fail(Status::not_found, "Capture/replay source not found");
+    if (!packet) fail(Status::busy, "No new preview frame available");
+    auto lease = Id::random();
+    auto directory = impl_->store->root() / "cache" / "previews";
+    std::filesystem::create_directories(directory);
+    auto path = directory / (lease.value + ".packet");
+    data::write_packet(path, *packet);
+    impl_->previews.emplace(lease, Impl::Lease{path, now + std::chrono::seconds(60)});
+    return {lease, path};
+}
+void Runtime::release_preview(const Id &id) {
+    auto it = impl_->previews.find(id);
+    if (it == impl_->previews.end()) return;
+    std::error_code ec; std::filesystem::remove(it->second.path, ec); impl_->previews.erase(it);
+}
+Id Runtime::replay_capture(const Id &id, bool real_time, bool verify) {
+    auto a = impl_->store->get(id);
+    if (a.state != artifact::ArtifactState::finalized || a.type.name != "org.mantis.RawCapture")
+        fail(Status::incompatible, "Replay requires a finalized RawCapture");
+    if (impl_->replays.size() >= 64) fail(Status::busy, "Replay history capacity reached");
+    auto preview = std::make_shared<Impl::Replay>();
+    auto store = impl_->store;
+    auto job = impl_->jobs->submit(verify ? "Verify deterministic replay" : "Replay RawCapture",
+        [store, id, real_time, verify, preview](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+            std::string baseline;
+            uint64_t frames{}, left{}, right{};
+            for (unsigned pass = 0; pass < (verify ? 2u : 1u); ++pass) {
+                auto source = device::recorded_source(store, id, real_time);
+                auto start = source->start(); if (!start) throw Failure(start.error());
+                uint64_t count{}; std::optional<uint64_t> sequence;
+                // Streaming digest is bounded memory, includes canonical serialized metadata and pixels.
+                uint64_t digest = 14695981039346656037ull;
+                while (!source->finished()) {
+                    context.cancellation.check(); auto next = source->next(); if (!next) throw Failure(next.error());
+                    if (!*next) continue;
+                    auto packet = *next;
+                    if (sequence && packet->header.sequence.value != *sequence + 1) fail(Status::corrupt, "Replay sequence discontinuity");
+                    sequence = packet->header.sequence.value;
+                    if (verify) {
+                        // Offline verification may hash bytes; never a preview/acquisition conversion.
+                        auto hash_header = [&](const data::Header &h) {
+                            std::string values = std::to_string(h.sequence.value) + ":" + std::to_string(h.timestamp.nanoseconds) + ":" +
+                                h.timestamp.domain.id.value + ":" + std::to_string(h.received.nanoseconds) + ":" + h.sync.id.value + ":" +
+                                std::to_string(h.sync.trigger) + ":" + std::to_string(static_cast<int>(h.sync_quality)) + ":" +
+                                h.calibration.id.value + ":" + std::to_string(h.calibration.revision) + ":" + nlohmann::json(h.metadata).dump();
+                            for (unsigned char byte : values) digest = (digest ^ byte) * 1099511628211ull;
+                        };
+                        auto hash_packet = [&](const data::Packet &p) {
+                            hash_header(p.header);
+                            for (const auto &attribute : p.attributes) {
+                                auto bytes = attribute.buffer.map_read(); if (!bytes) throw Failure(bytes.error());
+                                for (auto byte : *bytes) digest = (digest ^ std::to_integer<uint8_t>(byte)) * 1099511628211ull;
+                            }
+                        };
+                        hash_packet(*packet); for (const auto &frame : packet->frames) hash_packet(*frame);
+                    }
+                    preview->preview.push(packet); ++count;
+                    if (pass == 0) {
+                        ++frames;
+                        for (const auto &frame : packet->frames) {
+                            auto role = frame->header.metadata.find("role");
+                            if (role != frame->header.metadata.end() && role->second == "left") ++left;
+                            if (role != frame->header.metadata.end() && role->second == "right") ++right;
+                        }
+                    }
+                }
+                source->stop();
+                auto value = std::to_string(digest) + ":" + std::to_string(count);
+                if (pass == 0) baseline = value;
+                else if (value != baseline) fail(Status::corrupt, "Repeated replay digest mismatch");
+            }
+            auto report = nlohmann::json{{"framesets", frames}, {"left_frames", left}, {"right_frames", right},
+                {"sequences", "continuous"}, {"raw_integrity", "PASS"}, {"replay", "PASS"},
+                {"passes", verify ? 2 : 1}, {"digest", baseline}}.dump();
+            context.update(1, report);
+            return artifact::ArtifactReference{id, store->get(id).hash};
+        });
+    impl_->replays.emplace(job, std::move(preview)); return job;
 }
 Id Runtime::run_pipeline(const Id &capture, const std::string &recipe, const Id &artifact) {
     if (recipe.empty() || recipe.size() > 128 ||

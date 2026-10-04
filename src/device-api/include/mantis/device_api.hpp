@@ -27,6 +27,7 @@ class ImageStream {
     virtual Result<void> stop() = 0;
     virtual std::vector<Descriptor> components() const { return {}; }
     virtual data::Metadata diagnostics() const { return {}; }
+    virtual bool finished() const { return false; }
     virtual bool source_paced() const { return false; }
 };
 } // namespace mantis::device

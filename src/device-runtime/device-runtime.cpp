@@ -36,6 +36,11 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
         try {
             while (auto frame = recorder_.pop()) {
                 record_(*frame);
+                ++committed_;
+                const auto &packet = **frame;
+                for (const auto &a : packet.attributes) payload_bytes_ += a.buffer.size();
+                for (const auto &child : packet.frames)
+                    for (const auto &a : child->attributes) payload_bytes_ += a.buffer.size();
                 std::lock_guard lock(mutex_);
                 if (!first_)
                     first_ = *frame;
@@ -59,13 +64,28 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
             while (!stop.stop_requested() && active_) {
                 for (auto *stream : streams_) {
                     auto f = stream->next();
-                    if (!f)
+                    if (!f) {
+                        { std::lock_guard lock(mutex_); diagnostics_ = stream->diagnostics(); }
                         throw Failure(f.error());
-                    if (!recorder_.push(*f, stop))
+                    }
+                    {
+                        std::lock_guard lock(mutex_); diagnostics_ = stream->diagnostics();
+                    }
+                    if (!*f) continue;
+                    ++produced_;
+                    preview_.push(*f);
+                    if (!recorder_.push_for(*f, std::chrono::milliseconds(50), stop)) {
+                        if (!stop.stop_requested() && active_) {
+                            ++saturation_;
+                            fail(Status::io, "LOSSLESS writer queue saturated; capture failed explicitly");
+                        }
                         break;
+                    }
                 }
-                next += std::chrono::milliseconds(33);
-                std::this_thread::sleep_until(next);
+                if (!streams_.front()->source_paced()) {
+                    next += std::chrono::milliseconds(33);
+                    std::this_thread::sleep_until(next);
+                }
             }
         } catch (const std::exception &e) {
             {
@@ -103,6 +123,8 @@ void Session::stop() {
     recorder_.close();
     if (writer_.joinable())
         writer_.join();
+    if (!ended_.load()) ended_ = time::MonotonicTimestamp::now().nanoseconds;
+    preview_.close();
     for (auto *stream : streams_)
         (void)stream->stop();
 }
@@ -115,5 +137,11 @@ data::Published Session::first() const {
 std::string Session::error() const {
     std::lock_guard lock(mutex_);
     return error_;
+}
+data::Metadata Session::diagnostics() const {
+    std::lock_guard lock(mutex_); return diagnostics_;
+}
+data::Published Session::preview() {
+    auto packet = preview_.try_pop(); return packet ? *packet : data::Published{};
 }
 } // namespace mantis::device
