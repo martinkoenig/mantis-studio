@@ -565,3 +565,48 @@ Session handle. The test now validates the same exact native/budget rejection
 and healthy-observation accounting through either API outcome. Production
 acquisition semantics were not changed for that test issue. The final four
 full-suite runs above passed after the correction.
+
+
+## Final v0.2 real Q6A acquisition acceptance — 2026-10-05
+
+The user executed the official full harness on real Q6A at
+`fad4df6439e88c7ba4f265c532343c3317e93da4` after removal of the
+over-conservative observed-period guard. The run completed with **RESULT: PASS**.
+
+| Check | Real Q6A result |
+| --- | --- |
+| Debug CTest | 17/17 PASS |
+| Release CTest | 17/17 PASS |
+| Disabled-link discovery | PASS |
+| Plugin-owned media setup | PASS |
+| Capture format | Y10P 1280×720, stride 1600, sizeimage 1,152,000 |
+| Media-bus format | Y10_1X10 |
+| LEFT / RIGHT VBLANK | 196 / 196 |
+| Software correspondence | timestamp-nearest, 5,000,000 ns tolerance |
+| Native sequence offset | +8 |
+| Startup unmatched LEFT / RIGHT | 8 / 0 |
+| Steady-state unmatched LEFT / RIGHT | 0 / 0 |
+| Shutdown unmatched LEFT / RIGHT | 0 / 1 |
+| Final selected timestamp delta | -3.652 ms |
+| Pairing failures | 0 |
+| FrameSets produced / committed | 123 / 123 |
+| Raw drops / queue saturation | 0 / 0 |
+| RawCapture | FINALIZED |
+| Replay verification / raw integrity | PASS / PASS |
+
+Cadence diagnostics were retained without acting as correspondence vetoes. LEFT
+reported latest/half/max periods of 8,327,000 / 4,163,500 / 8,514,000 ns; RIGHT
+reported 8,252,000 / 4,126,000 / 9,252,000 ns. The 9.252 ms RIGHT maximum is
+direct real-hardware evidence for keeping native cadence diagnostic-only while
+requiring the actual selected cross-camera pair to remain within the 5 ms bound.
+
+This closes the **v0.2 Real Acquisition Foundation** acceptance scope for the
+validated Q6A 1280×720 Y10P path: real ARM64 software tests, disabled-route
+discovery, plugin-owned scoped setup, dual acquisition, bounded software
+correspondence, explicit observation accounting, lossless recording of published
+FrameSets, finalization and deterministic replay all pass together.
+
+This does **not** establish sustained-storage acceptance or physical exposure
+synchronization. Sustained NVMe/equivalent recording, real hardware process-crash
+recovery after this final policy, physical trigger synchronization, optical
+exposure-skew measurement and 1280×800 acquisition remain separate pending work.
