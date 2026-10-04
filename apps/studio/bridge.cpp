@@ -1,4 +1,5 @@
 #include "bridge.hpp"
+#include <mantis/image_layout.hpp>
 #include <QtConcurrent/QtConcurrentRun>
 #include <iostream>
 StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
@@ -191,18 +192,17 @@ void StudioBridge::refreshPreview() {
             auto packet = client.preview(id.toStdString());
             if (!packet || packet->frames.size() != 2) return result;
             for (const auto &frame : packet->frames) {
-                const auto &a = frame->attributes.at(0);
-                if (a.descriptor.scalar != mantis::schema::ScalarType::u8 || a.descriptor.shape.size() != 2 ||
-                    a.descriptor.stride.size() != 2 || a.descriptor.stride[1] != 1 || a.descriptor.shape[0] > 8192 ||
-                    a.descriptor.shape[1] > 8192 || a.descriptor.stride[0] > 65536) throw std::runtime_error("Unsupported grayscale preview layout");
-                auto bytes = a.buffer.map_read(); if (!bytes) throw mantis::Failure(bytes.error());
-                if (bytes->size() < a.descriptor.shape[0] * a.descriptor.stride[0])
-                    throw std::runtime_error("Preview requires complete row padding for Qt image copying");
-                QImage borrowed(reinterpret_cast<const uchar *>(bytes->data()), static_cast<int>(a.descriptor.shape[1]),
-                    static_cast<int>(a.descriptor.shape[0]), static_cast<qsizetype>(a.descriptor.stride[0]), QImage::Format_Grayscale8);
+                auto layout = mantis::data::image_layout(*frame);
+                if (layout.width > 8192 || layout.height > 8192 || layout.row_stride > 65536)
+                    throw std::runtime_error("Unsupported grayscale preview dimensions");
+                QImage image(static_cast<int>(layout.width), static_cast<int>(layout.height), QImage::Format_Grayscale8);
+                if (image.isNull()) throw std::bad_alloc();
+                image.fill(0); // deterministic Qt row padding; presentation conversion only
+                for (uint32_t row = 0; row < layout.height; ++row)
+                    mantis::data::grayscale_row(*frame, layout, row, {reinterpret_cast<std::byte *>(image.scanLine(static_cast<int>(row))), layout.width});
                 auto role = frame->header.metadata.at("role");
-                if (role == "left") result.left = borrowed.copy();
-                if (role == "right") result.right = borrowed.copy();
+                if (role == "left") result.left = std::move(image);
+                if (role == "right") result.right = std::move(image);
             }
         } catch (const std::exception &e) { result.error = e.what(); }
         return result;

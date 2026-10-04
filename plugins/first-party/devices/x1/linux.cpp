@@ -33,7 +33,7 @@ int call(int fd, unsigned long request, void *arg) {
     return rc;
 }
 void checked(int fd, unsigned long request, void *arg, const char *name) {
-    if (call(fd, request, arg) < 0) throw std::system_error(errno, std::generic_category(), name);
+    if (call(fd, request, arg) < 0) throw std::system_error(errno, std::generic_category(), std::string(name) + " (errno " + std::to_string(errno) + ")");
 }
 uint32_t code(const std::string &s) {
     if (s.size() != 4) throw std::runtime_error("fourcc must have four bytes");
@@ -172,13 +172,23 @@ class NativeMedia final : public MediaIo {
         checked(fd.value, VIDIOC_S_CTRL, &control, "VIDIOC_S_CTRL VBLANK"); return control.value;
     }
     Metadata timing(const Entity &entity) override {
-        Fd fd(entity.node); v4l2_subdev_frame_interval interval{};
-        if (call(fd.value, VIDIOC_SUBDEV_G_FRAME_INTERVAL, &interval) < 0) {
-            if (errno == EINVAL || errno == ENOTTY) return {{"sensor_driver_interval", "unavailable"}};
-            throw std::system_error(errno, std::generic_category(), entity.node + " SUBDEV_G_FRAME_INTERVAL");
+        Fd fd(entity.node); Metadata result;
+        for (auto [id, name] : std::array<std::pair<uint32_t, const char *>, 2>{{
+                {V4L2_CID_EXPOSURE, "initial_sensor_exposure_control"}, {V4L2_CID_ANALOGUE_GAIN, "initial_sensor_analogue_gain_control"}}}) {
+            v4l2_control control{}; control.id = id;
+            if (call(fd.value, VIDIOC_G_CTRL, &control) == 0) result[name] = std::to_string(control.value);
+            else if (errno == EINVAL || errno == ENOTTY) result[name] = "unavailable";
+            else throw std::system_error(errno, std::generic_category(), entity.node + " G_CTRL " + name);
         }
-        return {{"sensor_driver_interval_numerator", std::to_string(interval.interval.numerator)},
-            {"sensor_driver_interval_denominator", std::to_string(interval.interval.denominator)}};
+        v4l2_subdev_frame_interval interval{};
+        if (call(fd.value, VIDIOC_SUBDEV_G_FRAME_INTERVAL, &interval) < 0) {
+            if (errno == EINVAL || errno == ENOTTY) result["sensor_driver_interval"] = "unavailable";
+            else throw std::system_error(errno, std::generic_category(), entity.node + " SUBDEV_G_FRAME_INTERVAL");
+        } else {
+            result["sensor_driver_interval_numerator"] = std::to_string(interval.interval.numerator);
+            result["sensor_driver_interval_denominator"] = std::to_string(interval.interval.denominator);
+        }
+        return result;
     }
 };
 class LinuxCamera final : public Camera {
@@ -290,6 +300,8 @@ class LinuxCamera final : public Camera {
                     {V4L2_CID_EXPOSURE, "initial_exposure_control"}, {V4L2_CID_ANALOGUE_GAIN, "initial_analogue_gain_control"}}}) {
                 v4l2_control control{}; control.id = id;
                 if (call(fd_.value, VIDIOC_G_CTRL, &control) == 0) controls_[name] = std::to_string(control.value);
+                else if (errno == EINVAL || errno == ENOTTY) controls_[name] = "unavailable";
+                else throw std::system_error(errno, std::generic_category(), std::string("G_CTRL ") + name);
             }
             v4l2_requestbuffers request{}; request.type = type_; request.memory = V4L2_MEMORY_MMAP; request.count = 8;
             checked(fd_.value, VIDIOC_REQBUFS, &request, "REQBUFS");
@@ -315,7 +327,14 @@ class LinuxCamera final : public Camera {
         catch (const std::exception &e) { throw std::runtime_error(context_ + " " + e.what()); }
     }
     Metadata diagnostics() const override { return controls_; }
-    void stop() noexcept override { if (streaming_) { call(fd_.value, VIDIOC_STREAMOFF, &type_); streaming_ = false; } }
+    void stop() noexcept override {
+        if (!streaming_) return;
+        if (call(fd_.value, VIDIOC_STREAMOFF, &type_) < 0) {
+            const auto error = errno;
+            try { controls_["streamoff_error"] = context_ + " STREAMOFF: " + std::strerror(error) + " (errno " + std::to_string(error) + ")"; } catch (...) {}
+        }
+        streaming_ = false;
+    }
     bool next(uint32_t timeout, const std::function<void(const FrameView &)> &emit) override try {
         pollfd descriptor{fd_.value, POLLIN, 0};
         int rc;
@@ -334,7 +353,7 @@ class LinuxCamera final : public Camera {
         v4l2_buffer b{}; v4l2_plane plane{}; buffer(b, plane, 0);
         if (call(fd_.value, VIDIOC_DQBUF, &b) < 0) {
             if (errno == EAGAIN) return false;
-            throw std::runtime_error("DQBUF: " + std::string(std::strerror(errno)));
+            throw std::system_error(errno, std::generic_category(), "DQBUF (errno " + std::to_string(errno) + ")");
         }
         const auto received = monotonic_ns();
         try {

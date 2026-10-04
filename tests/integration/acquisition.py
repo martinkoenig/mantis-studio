@@ -17,6 +17,14 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         "left": {"sensor_identity": "ov9281 18-0060"}, "right": {"sensor_identity": "ov9281 20-0060"}},
         "mode": {"width": 64, "height": 48, "fourcc": "GREY", "fps": 120},
         "calibration_id": "fixture.calibration", "calibration_revision": 7}
+    packed = len(sys.argv) > 2 and sys.argv[2] == "Y10P"
+    if packed:
+        profile["format_version"] = 2
+        profile["runtime_setup"] = {"ownership": "selected-routes", "disable_conflicting_links": True}
+        profile["mode"].update(fourcc="Y10P", media_bus_code="Y10_1X10", vertical_blanking=196)
+        for role, n in (("left", 2), ("right", 3)):
+            camera = profile["measurement_cameras"][role]
+            camera.update(bus_identity="fixture", route=[camera["sensor_identity"], f"msm_csiphy{n}", f"msm_csid{n}", f"msm_vfe{n}_rdi0", f"msm_vfe{n}_video0"])
     (root / "profile.json").write_text(json.dumps(profile))
     with socket.socket() as socket_probe:
         socket_probe.bind(("127.0.0.1", 0)); port = socket_probe.getsockname()[1]
@@ -70,6 +78,10 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert status.total_bytes > 0 and status.writer_mb_s > 0
         assert status.diagnostics["copy_count"] == "1"
         assert status.diagnostics["sequence_agreement"] == "aligned"
+        if packed:
+            assert status.diagnostics["left_requested_vblank"] == status.diagnostics["left_readback_vblank"] == "196"
+            assert status.diagnostics["right_readback_vblank"] == "196"
+            assert status.diagnostics["left_sensor_driver_interval"] == "unavailable"
         assert cli("capture", "status", capture.id)["captures"][0]["id"] == capture.id
         ref = until(lambda: client.preview(capture))
         with ref:
@@ -110,6 +122,11 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         observations = json.loads(parameters["initial_observations"])
         assert observations[0]["calibration"]["id"] == "fixture.calibration"
         assert observations[1]["calibration"]["revision"] == 7
+        if packed:
+            for observation in observations:
+                assert observation["metadata"]["fourcc"] == "Y10P"
+                assert observation["metadata"]["org.mantis.image.layout"] == "mipi-raw10-v1"
+                assert observation["metadata"]["org.mantis.image.row_stride_bytes"] == "80"
         try:
             client._call(artifact_data=mantis.wire.Id(id=capture.raw_artifact))
             raise AssertionError("Segment advertised as standalone packet")

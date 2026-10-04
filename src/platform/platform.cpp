@@ -1,4 +1,5 @@
 #include <cstring>
+#include <cerrno>
 #include <mantis/platform.hpp>
 #include <thread>
 #include <utility>
@@ -12,6 +13,7 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/file.h>
@@ -93,6 +95,19 @@ Socket &Socket::operator=(Socket &&o) noexcept {
     return *this;
 }
 namespace {
+void connection_timeouts(NativeSocket native) {
+#ifdef _WIN32
+    DWORD timeout = 5000;
+    if (setsockopt(native, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&timeout), sizeof(timeout)) != 0 ||
+        setsockopt(native, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char *>(&timeout), sizeof(timeout)) != 0)
+        io("Control socket timeout configuration failed: WSA " + std::to_string(WSAGetLastError()));
+#else
+    timeval timeout{5, 0};
+    if (setsockopt(native, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0 ||
+        setsockopt(native, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0)
+        io("Control socket timeout configuration failed: " + std::string(std::strerror(errno)));
+#endif
+}
 Socket open_socket(uint16_t port, bool server) {
     net_init();
     auto native = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -103,22 +118,14 @@ Socket open_socket(uint16_t port, bool server) {
     int no_sigpipe = 1;
     setsockopt(native, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
 #endif
-#ifdef _WIN32
-    DWORD timeout_ms = 5000;
-    setsockopt(native, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&timeout_ms),
-               sizeof(timeout_ms));
-    setsockopt(native, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char *>(&timeout_ms),
-               sizeof(timeout_ms));
-#endif
 #ifndef _WIN32
     const int flags = fcntl(native, F_GETFD);
-    fcntl(native, F_SETFD, flags | FD_CLOEXEC);
-    struct timeval timeout {
-        5, 0
-    };
-    setsockopt(native, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    setsockopt(native, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    if (flags < 0 || fcntl(native, F_SETFD, flags | FD_CLOEXEC) < 0)
+        io("Control socket FD_CLOEXEC failed: " + std::string(std::strerror(errno)));
 #endif
+    // A listener must wait indefinitely. Connection read/write deadlines are
+    // applied to client/accepted sockets, never inherited by accept().
+    if (!server) connection_timeouts(native);
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -141,16 +148,37 @@ Socket Socket::listen(uint16_t port) {
     return open_socket(port, true);
 }
 Socket Socket::accept() const {
-    auto native = ::accept(static_cast<NativeSocket>(fd_), nullptr, nullptr);
-    if (static_cast<intptr_t>(native) == -1)
-        io("Accept failed");
-#ifndef _WIN32
-    fcntl(native, F_SETFD, FD_CLOEXEC);
-    timeval timeout{5, 0};
-    setsockopt(native, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    setsockopt(native, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    NativeSocket native;
+    for (;;) {
+        native = ::accept(static_cast<NativeSocket>(fd_), nullptr, nullptr);
+        if (static_cast<intptr_t>(native) != -1) break;
+#ifdef _WIN32
+        const auto error = WSAGetLastError();
+        if (error == WSAEINTR) continue;
+        if (error != WSAEWOULDBLOCK) io("Accept failed: WSA " + std::to_string(error));
+        WSAPOLLFD ready{static_cast<SOCKET>(fd_), POLLRDNORM, 0};
+        while (WSAPoll(&ready, 1, -1) < 0) {
+            const auto poll_error = WSAGetLastError();
+            if (poll_error != WSAEINTR) io("Accept wait failed: WSA " + std::to_string(poll_error));
+        }
+#else
+        const auto error = errno;
+        if (error == EINTR) continue;
+        if (error != EAGAIN && error != EWOULDBLOCK)
+            io("Accept failed: " + std::string(std::strerror(error)) + " (errno " + std::to_string(error) + ")");
+        pollfd ready{static_cast<int>(fd_), POLLIN, 0};
+        while (::poll(&ready, 1, -1) < 0) {
+            if (errno != EINTR) io("Accept wait failed: " + std::string(std::strerror(errno)));
+        }
 #endif
-    return Socket(static_cast<intptr_t>(native));
+        if (ready.revents & (POLLERR | POLLHUP | POLLNVAL)) io("Accept wait failed: listener unavailable");
+    }
+    Socket accepted(static_cast<intptr_t>(native));
+#ifndef _WIN32
+    if (fcntl(native, F_SETFD, FD_CLOEXEC) < 0) io("Accepted socket FD_CLOEXEC failed: " + std::string(std::strerror(errno)));
+#endif
+    connection_timeouts(native);
+    return accepted;
 }
 void Socket::send(std::span<const std::byte> bytes) const {
     while (!bytes.empty()) {

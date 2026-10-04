@@ -70,7 +70,10 @@ struct Device {
     bool running{};
     void stop() noexcept {
         pending = {};
-        for (auto &stream : streams) if (stream) stream->stop();
+        for (size_t i = 0; i < streams.size(); ++i) if (streams[i]) {
+            streams[i]->stop();
+            try { for (const auto &[key, value] : streams[i]->diagnostics()) metrics[(i ? "right_" : "left_") + key] = value; } catch (...) {}
+        }
         streams = {}; running = false;
         if (setup) {
             try { setup->rollback(); } catch (const std::exception &e) {
@@ -85,8 +88,8 @@ struct Device {
     }
     template<class F> int guard(F &&fn) noexcept {
         try { fn(); return 0; }
-        catch (const std::exception &e) { metrics["error"] = e.what(); stop(); return 1; }
-        catch (...) { metrics["error"] = "Unknown acquisition error"; stop(); return 1; }
+        catch (const std::exception &e) { try { metrics["error"] = e.what(); } catch (...) {} stop(); return 1; }
+        catch (...) { try { metrics["error"] = "Unknown acquisition error"; } catch (...) {} stop(); return 1; }
     }
 };
 int open_device(const MantisHostV1 *host, const char *id, void **out) noexcept {
@@ -172,6 +175,11 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
                         info.insert({{"role", i ? "right" : "left"}, {"identity", identity(d.cameras[i])},
                             {"video_node", d.cameras[i].video}, {"fourcc", frame.fourcc},
                             {"v4l2_flags", std::to_string(frame.flags)}, {"buffer_size", std::to_string(frame.buffer_size)}});
+                        info["requested_target_fps"] = std::to_string(d.config.profile.mode.fps);
+                        const std::string prefix = i ? "right_" : "left_";
+                        for (const auto &[key, diagnostic] : d.metrics) if (key.starts_with(prefix) &&
+                            (key.find("vblank") != std::string::npos || key.find("driver_interval") != std::string::npos || key.find("initial_") != std::string::npos))
+                            info[key.substr(prefix.size())] = diagnostic;
                         info["org.mantis.image.width"] = std::to_string(frame.width);
                         info["org.mantis.image.height"] = std::to_string(frame.height);
                         info["org.mantis.image.row_stride_bytes"] = std::to_string(frame.stride);
