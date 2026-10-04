@@ -104,9 +104,11 @@ class _Pipeline:
 class _Artifacts:
     def __init__(self, client): self.client = client
     def list(self): return list(self.client._call(artifacts_list=wire.Empty()).artifacts)
-    def recover(self, artifact):
+    def recover(self, artifact, *, timeout=3600):
         ident = artifact if isinstance(artifact, str) else artifact.id
-        return self.client._call(artifact_recover=wire.Id(id=ident)).artifacts[0]
+        response = self.client._call(artifact_recover_async=wire.Id(id=ident))
+        Job(self.client, response.result_id).wait(timeout)
+        return next(a for a in self.list() if a.id == ident)
 
 class Client:
     def __init__(self, port=None, token=None):

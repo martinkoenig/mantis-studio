@@ -1,9 +1,11 @@
 # Architecture Decision Records
 
+- [ADR-023: Preview leases and asynchronous storage validation](023-acquisition-preview-leases-and-storage-jobs.md)
 - [ADR-022: Segmented RawCapture and replay source](022-segmented-rawcapture-and-replay-source.md)
 - [ADR-021: Enumerated acquisition and FrameSet transport](021-enumerated-acquisition-and-frameset-contract.md)
 
-Status: accepted frozen Architecture v1 baseline. These records summarize the supplied decisions; they do not redefine them.
+ADRs 021–023 are minimal v0.2 extensions. ADRs 001–020 below remain the accepted
+frozen Architecture v1 baseline; they are not redefined by these extensions.
 
 - [ADR-001: Daemon-centric runtime using mantisd](001-daemon-centric-runtime-using-mantisd.md)
 - [ADR-002: Frontends are clients rather than engine owners](002-frontends-are-clients-rather-than-engine-owners.md)

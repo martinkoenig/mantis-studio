@@ -105,6 +105,7 @@ class Runtime final : public DeviceService,
     std::filesystem::path data_reference(const Id &) const override;
     Id export_artifact(const Id &, const std::filesystem::path &) override;
     artifact::ArtifactDescriptor recover_artifact(const Id &) override;
+    Id recover_artifact_job(const Id &);
     std::vector<jobs::Snapshot> jobs() const override;
     void cancel_job(const Id &) override;
     std::vector<PluginInfo> plugins() const override;

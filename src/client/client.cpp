@@ -83,6 +83,16 @@ void Client::stop_capture(const std::string &id) const {
     if (result.captures_size() && !result.captures(0).finalization_job_id().empty())
         (void)wait(result.captures(0).finalization_job_id(), std::chrono::hours(1));
 }
+wire::v1::Artifact Client::recover_artifact(const std::string &id) const {
+    wire::v1::Request request;
+    request.mutable_artifact_recover_async()->set_id(id);
+    (void)wait(call(request).result_id(), std::chrono::hours(1));
+    request.Clear(); request.mutable_artifacts_list();
+    auto response = call(request);
+    for (const auto &artifact : response.artifacts())
+        if (artifact.id() == id) return artifact;
+    fail(Status::not_found, "Recovered artifact not found");
+}
 std::string Client::run_pipeline(const std::string &capture, const std::string &recipe,
                                  const std::string &raw) const {
     wire::v1::Request r;

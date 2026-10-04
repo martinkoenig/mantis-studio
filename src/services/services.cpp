@@ -197,7 +197,7 @@ CaptureInfo Runtime::stop_capture(const Id &id) {
             store->prepare_finalize(raw);
             it->second.finalization_job = impl_->jobs->submit("Finalize RawCapture", [store, raw](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
                 context.update(0.1, "Validating sealed segments");
-                auto result = store->finalize(raw);
+                auto result = store->finalize(raw, context.cancellation);
                 context.update(1, "Finalized RawCapture"); return artifact::ArtifactReference{raw, result.hash};
             });
         } else impl_->store->finalize(it->second.raw);
@@ -216,8 +216,10 @@ std::vector<CaptureInfo> Runtime::captures() const {
 PreviewReference Runtime::preview(const Id &id) {
     auto now = std::chrono::steady_clock::now();
     for (auto it = impl_->previews.begin(); it != impl_->previews.end();) {
-        if (it->second.expires <= now) { std::error_code ec; std::filesystem::remove(it->second.path, ec); it = impl_->previews.erase(it); }
-        else ++it;
+        if (it->second.expires <= now) {
+            std::error_code ec; std::filesystem::remove(it->second.path, ec);
+            if (!ec) it = impl_->previews.erase(it); else ++it;
+        } else ++it;
     }
     if (impl_->previews.size() >= 8) fail(Status::busy, "Preview lease capacity reached; release references or wait 60 seconds");
     data::Published packet;
@@ -237,7 +239,8 @@ PreviewReference Runtime::preview(const Id &id) {
 void Runtime::release_preview(const Id &id) {
     auto it = impl_->previews.find(id);
     if (it == impl_->previews.end()) return;
-    std::error_code ec; std::filesystem::remove(it->second.path, ec); impl_->previews.erase(it);
+    std::error_code ec; std::filesystem::remove(it->second.path, ec);
+    if (!ec) impl_->previews.erase(it); else it->second.expires = std::chrono::steady_clock::now();
 }
 Id Runtime::replay_capture(const Id &id, bool real_time, bool verify) {
     auto a = impl_->store->get(id);
@@ -367,8 +370,11 @@ std::vector<artifact::ArtifactDescriptor> Runtime::artifacts() const {
     return impl_->store->list();
 }
 std::filesystem::path Runtime::data_reference(const Id &id) const {
-    if (impl_->store->get(id).state != artifact::ArtifactState::finalized)
+    auto artifact = impl_->store->get(id);
+    if (artifact.state != artifact::ArtifactState::finalized)
         fail(Status::busy, "Only finalized artifacts can be visualized");
+    if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version == 2)
+        fail(Status::unsupported, "Segmented RawCapture uses the replay source API, not a standalone packet reference");
     return impl_->store->object_path(id);
 }
 Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
@@ -411,6 +417,18 @@ artifact::ArtifactDescriptor Runtime::recover_artifact(const Id &id) {
     auto result = impl_->store->recover(id);
     impl_->event("artifact.recovered", "artifact", id.value);
     return result;
+}
+Id Runtime::recover_artifact_job(const Id &id) {
+    auto store = impl_->store;
+    if (store->get(id).state != artifact::ArtifactState::recoverable)
+        fail(Status::invalid_argument, "Artifact is not recoverable");
+    return impl_->jobs->submit("Recover RawCapture", [this, store, id](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+        context.update(0.1, "Validating capture records and recovering complete tail");
+        auto result = store->recover(id, context.cancellation);
+        impl_->event("artifact.recovered", "artifact", id.value);
+        context.update(1, "Recovered RawCapture");
+        return artifact::ArtifactReference{id, result.hash};
+    });
 }
 std::vector<jobs::Snapshot> Runtime::jobs() const {
     return impl_->jobs->list();

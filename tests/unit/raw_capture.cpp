@@ -4,6 +4,7 @@
 #include <mantis/data_io.hpp>
 #include <mantis/platform.hpp>
 #include <nlohmann/json.hpp>
+#include <sqlite3.h>
 #include "../../src/artifact-store/segments.hpp"
 using namespace mantis;
 #define CHECK(x) do { if (!(x)) throw std::runtime_error(std::string("Check failed: ") + #x); } while (false)
@@ -104,6 +105,48 @@ int main() {
         auto part = root / "objects" / unindexed.value / "0.segment.part";
         auto closed = part; closed.replace_extension(); std::filesystem::rename(part, closed);
         { artifact::Store store(root); CHECK(store.recover(unindexed).chunks == 1); equal(*store.packet(unindexed), *frame_set(0)); }
+        // A complete corrupt record is refused by the Store, preserving earlier bytes.
+        Id broken;
+        { artifact::Store store(root); broken = store.begin({"org.mantis.RawCapture", 2}, {}); store.append(broken, *frame_set(0)); store.append(broken, *frame_set(1)); store.abandon(broken); }
+        auto broken_tail = root / "objects" / broken.value / "0.segment.part";
+        auto broken_scan = artifact::segments::scan(broken_tail);
+        {
+            std::fstream out(broken_tail, std::ios::binary | std::ios::in | std::ios::out);
+            out.seekp(static_cast<std::streamoff>(broken_scan.records[1].offset + broken_scan.records[1].bytes - 1)); out.put(99);
+        }
+        auto broken_size = std::filesystem::file_size(broken_tail);
+        {
+            artifact::Store store(root);
+            rejects([&] { store.recover(broken); });
+            CHECK(store.get(broken).state == artifact::ArtifactState::recoverable);
+            CHECK(std::filesystem::file_size(broken_tail) == broken_size);
+            equal(*artifact::segments::packet(artifact::segments::scan(broken_tail), 0), *frame_set(0));
+        }
+        // An index checksum mismatch is never silently repaired or accepted.
+        Id mismatch;
+        {
+            artifact::Store store(root);
+            artifact::Provenance p; p.parameters = {{"segment_max_bytes", "4096"}};
+            mismatch = store.begin({"org.mantis.RawCapture", 2}, p);
+            for (uint64_t i = 0; i < 6; ++i) store.append(mismatch, *frame_set(i));
+            store.abandon(mismatch); CHECK(store.get(mismatch).chunks > 0);
+        }
+        sqlite3 *db{};
+        CHECK(sqlite3_open((root / "project.sqlite").string().c_str(), &db) == SQLITE_OK);
+        auto sql = "UPDATE chunks SET hash='0000000000000000' WHERE artifact='" + mismatch.value + "' AND idx=0";
+        int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, nullptr);
+        sqlite3_close(db); CHECK(rc == SQLITE_OK);
+        { artifact::Store store(root); rejects([&] { store.recover(mismatch); }); CHECK(store.get(mismatch).state == artifact::ArtifactState::recoverable); }
+        // Cancellation leaves a retryable capture and does not fabricate records.
+        Id cancelled;
+        { artifact::Store store(root); cancelled = store.begin({"org.mantis.RawCapture", 2}, {}); store.append(cancelled, *frame_set(0)); store.abandon(cancelled); }
+        {
+            artifact::Store store(root); CancellationToken token; token.cancel();
+            rejects([&] { store.recover(cancelled, token); });
+            CHECK(store.get(cancelled).state == artifact::ArtifactState::recoverable);
+            CHECK(store.recover(cancelled).state == artifact::ArtifactState::finalized);
+            CHECK(store.record_count(cancelled) == 1);
+        }
         // The original schema-v1 project manifest and packet path remain readable.
         { artifact::Store store(root); auto old = store.begin({"org.mantis.RawCapture", 1}, {}); store.append(old, *frame_set(0)->frames[0]); store.finalize(old); CHECK(store.packet(old)->type == schema::image); }
         { std::ifstream in(root / "manifest.json"); CHECK(nlohmann::json::parse(in).at("version") == 1); }

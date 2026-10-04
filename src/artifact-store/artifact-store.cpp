@@ -1,4 +1,6 @@
 #include <fstream>
+#include <iomanip>
+#include <sstream>
 #include "segments.hpp"
 #include <mantis/artifact_store.hpp>
 #include <mantis/data_io.hpp>
@@ -147,16 +149,27 @@ struct Store::Impl {
         writer.last_sequence = packet.header.sequence.value; ++writer.records;
         if (static_cast<uint64_t>(writer.output.tellp()) >= writer.limit || writer.records >= 100000) seal(id, writer);
     }
-    void recover_segments(const Id &id) {
-        auto a = get(id);
+    void recover_segments(const Id &id, const CancellationToken &token) {
+        ArtifactDescriptor a;
+        { std::lock_guard guard(mutex); a = get(id); }
         // Indexed immutable segments must match; never overwrite an integrity failure.
-        Statement indexed(db, "SELECT path,hash FROM chunks WHERE artifact=? ORDER BY idx");
-        indexed.text(1, id.value);
-        while (indexed.row())
-            if (file_hash(root / indexed.text(0)).hex != indexed.text(1)) fail(Status::corrupt, "Indexed segment integrity mismatch");
+        for (uint64_t i = 0; i < a.chunks; ++i) {
+            token.check();
+            std::filesystem::path path;
+            std::string expected;
+            {
+                std::lock_guard guard(mutex);
+                Statement indexed(db, "SELECT path,hash FROM chunks WHERE artifact=? AND idx=?");
+                indexed.text(1, id.value); indexed.integer(2, i);
+                if (!indexed.row()) fail(Status::corrupt, "Missing indexed segment");
+                path = root / indexed.text(0); expected = indexed.text(1);
+            }
+            if (file_hash(path).hex != expected) fail(Status::corrupt, "Indexed segment integrity mismatch");
+        }
         const auto directory = root / "objects" / id.value;
         uint64_t index = a.chunks;
         for (;;) {
+            token.check();
             auto file = directory / (std::to_string(index) + ".segment");
             auto part = file; part += ".part";
             bool partial = false;
@@ -182,8 +195,12 @@ struct Store::Impl {
                 std::filesystem::rename(file, closed); file = closed;
                 platform::durable_directory(directory);
             }
-            commit_chunk(id.value, index, std::filesystem::relative(file, root).generic_string(), file_hash(file).hex,
-                         std::filesystem::file_size(file));
+            auto hash = file_hash(file).hex;
+            auto bytes = std::filesystem::file_size(file);
+            {
+                std::lock_guard guard(mutex);
+                commit_chunk(id.value, index, std::filesystem::relative(file, root).generic_string(), hash, bytes);
+            }
             ++index;
         }
         for (const auto &entry : std::filesystem::directory_iterator(directory)) {
@@ -377,7 +394,7 @@ void Store::append(const Id &id, const data::Packet &packet) {
     std::filesystem::remove(journal);
     platform::durable_directory(journal.parent_path());
 }
-ArtifactDescriptor Store::finalize(const Id &id) {
+ArtifactDescriptor Store::finalize(const Id &id, const CancellationToken &token) {
     std::unique_lock guard(impl_->mutex);
     auto a = impl_->get(id);
     if (a.state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized artifacts are immutable");
@@ -391,28 +408,42 @@ ArtifactDescriptor Store::finalize(const Id &id) {
     guard.unlock();
     // Immutable sealed files can be checked without holding the metadata mutex:
     // multi-gigabyte verification must not block daemon snapshots/commands.
-    std::string hashes;
-    std::optional<uint64_t> sequence;
-    for (uint64_t i = 0; i < a.chunks; ++i) {
-        auto file = object_path(id, i);
-        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) {
-            auto scanned = segments::scan(file);
-            if (scanned.incomplete || !scanned.corruption.empty() || scanned.records.empty())
-                fail(Status::corrupt, "Cannot finalize invalid RawCapture segment");
-            for (size_t n = 0; n < scanned.records.size(); ++n) {
-                auto packet = segments::packet(scanned, n);
-                if (packet->type != schema::frameset || (sequence && packet->header.sequence.value != *sequence + 1))
-                    fail(Status::corrupt, "Invalid RawCapture FrameSet order");
-                sequence = packet->header.sequence.value;
+    try {
+        uint64_t aggregate = 14695981039346656037ULL;
+        std::optional<uint64_t> sequence;
+        for (uint64_t i = 0; i < a.chunks; ++i) {
+            token.check();
+            auto file = object_path(id, i);
+            if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) {
+                auto scanned = segments::scan(file);
+                if (scanned.incomplete || !scanned.corruption.empty() || scanned.records.empty())
+                    fail(Status::corrupt, "Cannot finalize invalid RawCapture segment");
+                for (size_t n = 0; n < scanned.records.size(); ++n) {
+                    token.check();
+                    auto packet = segments::packet(scanned, n);
+                    if (packet->type != schema::frameset || (sequence && packet->header.sequence.value != *sequence + 1))
+                        fail(Status::corrupt, "Invalid RawCapture FrameSet order");
+                    sequence = packet->header.sequence.value;
+                }
+            }
+            for (unsigned char byte : file_hash(file).hex) {
+                aggregate ^= byte; aggregate *= 1099511628211ULL;
             }
         }
-        hashes += file_hash(file).hex;
+        std::ostringstream digest;
+        digest << std::hex << std::setfill('0') << std::setw(16) << aggregate;
+        Hash hash{"fnv1a64", digest.str()};
+        token.check();
+        guard.lock();
+        Statement update(impl_->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
+        update.text(1, hash.hex); update.text(2, id.value); update.row();
+        return impl_->get(id);
+    } catch (...) {
+        if (!guard.owns_lock()) guard.lock();
+        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
+        update.text(1, id.value); update.row();
+        throw;
     }
-    auto hash = content_hash(std::as_bytes(std::span(hashes)));
-    guard.lock();
-    Statement update(impl_->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
-    update.text(1, hash.hex); update.text(2, id.value); update.row();
-    return impl_->get(id);
 }
 ArtifactDescriptor Store::get(const Id &id) const {
     std::lock_guard guard(impl_->mutex);
@@ -460,12 +491,22 @@ data::Published Store::packet(const Id &id, uint64_t chunk) const {
     }
     return data::read_packet(object_path(id, chunk));
 }
-ArtifactDescriptor Store::recover(const Id &id) {
-    std::lock_guard guard(impl_->mutex);
+ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) {
+    std::unique_lock guard(impl_->mutex);
     const auto a = impl_->get(id);
     if (a.state != ArtifactState::recoverable) fail(Status::invalid_argument, "Artifact is not recoverable");
-    if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) impl_->recover_segments(id);
-    return finalize(id);
+    {
+        Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
+    }
+    guard.unlock();
+    try {
+        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) impl_->recover_segments(id, token);
+        return finalize(id, token);
+    } catch (...) {
+        guard.lock();
+        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?"); update.text(1, id.value); update.row();
+        throw;
+    }
 }
 void Store::prepare_finalize(const Id &id) {
     std::lock_guard guard(impl_->mutex);

@@ -22,6 +22,7 @@ class Client {
     data::Published preview(const std::string &capture_or_replay) const;
     std::string replay(const std::string &artifact, bool real_time = false, bool verify = false) const;
     void stop_capture(const std::string &) const;
+    wire::v1::Artifact recover_artifact(const std::string &) const;
     std::string run_pipeline(const std::string &capture, const std::string &recipe = "example",
                              const std::string &raw_artifact = {}) const;
     wire::v1::Job wait(const std::string &job, std::chrono::milliseconds timeout = std::chrono::seconds(30),

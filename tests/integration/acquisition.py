@@ -50,7 +50,9 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert {d.metadata["role"] for d in children} == {"left", "right"}
         assert client.devices.info(parent.id).id == parent.id
         assert cli("devices", "info", parent.id)["devices"][0]["id"] == parent.id
-        capture = client.capture.start(parent.id)
+        # CLI creates the capture through the same protocol used by both SDKs.
+        started = cli("capture", "start", parent.id)["captures"][0]
+        capture = mantis.Capture(client, started["id"], started["raw_artifact"])
         until(lambda: capture.status().framesets_committed >= 24)
         status = capture.status()
         assert status.framesets_produced >= status.framesets_committed
@@ -78,10 +80,17 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
             assert "STUDIO_DUAL_PREVIEW_READY" in text, text
             assert "ReferenceError" not in text and "TypeError" not in text, text
             ui_log.close()
-        capture.stop()
+        stopped = cli("capture", "stop", capture.id)["captures"][0]
+        assert not stopped["active"] and not stopped["error"]
+        final_status = capture.status()
+        assert final_status.framesets_produced == final_status.framesets_committed
         artifacts = client.capture.list().artifacts
         recorded = next(a for a in artifacts if a.id == capture.raw_artifact)
         assert recorded.schema_version == 2 and recorded.state == "FINALIZED"
+        try:
+            client._call(artifact_data=mantis.wire.Id(id=capture.raw_artifact))
+            raise AssertionError("Segment advertised as standalone packet")
+        except mantis.MantisError as error: assert error.code == 8
         report = client.replay.verify(capture.raw_artifact)
         assert report["framesets"] >= 24 and report["left_frames"] == report["right_frames"] == report["framesets"]
         assert report["raw_integrity"] == report["replay"] == "PASS" and report["passes"] == 2

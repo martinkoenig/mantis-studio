@@ -32,6 +32,7 @@ message Request {
   Id artifact_data = 21; Id artifact_recover = 22; PluginEnable plugin_enable = 23; Empty shutdown = 24;
   Id capture_status = 25; Empty captures_list = 26; Id devices_info = 27;
   Id preview = 28; Id preview_release = 29; Replay replay = 30;
+  Id artifact_recover_async = 31;
  }
 }
 message Response {

@@ -21,3 +21,31 @@ Isolated plugin input/output likewise uses files on the data plane, with paths p
 Add optional fields without reusing tags; reserve removed names and numbers. Preserve unknown fields by using binary Protobuf round-trips. Unknown commands must fail rather than default to an unrelated operation. Algorithm determinism is checked using canonical payload bytes, not a claim that arbitrary Protobuf serialization is canonical.
 
 References: [Proto3 guide](https://protobuf.dev/programming-guides/proto3/), [serialization is not canonical](https://protobuf.dev/programming-guides/serialization-not-canonical/).
+
+## v0.2 additive acquisition operations
+
+Device descriptors carry parent/children and generic metadata. `devices_info`,
+`captures_list` and `capture_status` expose profiles, camera modes and diagnostics.
+Capture snapshots distinguish produced/committed FrameSets, observed raw loss,
+writer queue depth/capacity/high water/saturation, preview drops, duration, total
+container bytes and payload throughput in decimal MB/s and binary MiB/s.
+
+`preview` consumes a LATEST_ONLY observation and returns a leased immutable local
+packet reference, format 2, with explicit `preview_release`. Map before release;
+leases expire after 60 seconds and at most eight files can be outstanding. An
+empty latest-only branch returns BUSY. Linux mappings remain valid after unlink.
+`artifact_data` continues to return finalized format-1 packet references; it
+rejects segmented RawCapture, which requires the replay source API.
+
+`replay` returns a daemon job ID and supports observed host-arrival real-time
+pacing, ASAP, or verification. Verification status is JSON with counts,
+continuous-sequence status, integrity/replay PASS and a digest covering canonical
+headers and pixels from two passes. It does not measure exposure skew.
+
+RawCapture v2 stop drains recording and returns `finalization_job_id`; poll until
+Completed before replay. `artifact_recover_async` (tag 31) returns a recovery job
+ID in `result_id`; wait and query artifacts for the finalized descriptor. Existing
+tag 22 retains synchronous v0.1 recovery semantics. SDK/CLI helpers handle these
+waits. Interrupted/failed validation remains recoverable, never silently valid.
+
+See [ADR-023](../adr/023-acquisition-preview-leases-and-storage-jobs.md).

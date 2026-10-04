@@ -168,6 +168,7 @@ class LinuxCamera final : public Camera {
             v4l2_requestbuffers request{}; request.type = type_; request.memory = V4L2_MEMORY_MMAP; request.count = 8;
             checked(fd_.value, VIDIOC_REQBUFS, &request, "REQBUFS");
             if (request.count < 2 || request.count > 64) throw std::runtime_error("Invalid V4L2 buffer count");
+            mappings_.reserve(request.count); // allocation cannot fail after a successful mmap below
             for (uint32_t i = 0; i < request.count; ++i) {
                 v4l2_buffer b{}; v4l2_plane plane{}; buffer(b, plane, i);
                 checked(fd_.value, VIDIOC_QUERYBUF, &b, "QUERYBUF");

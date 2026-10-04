@@ -19,13 +19,13 @@ class Store {
     void prepare_finalize(const ArtifactId &);
     void replay(const ArtifactId &, const std::function<void(data::Published)> &, const CancellationToken & = {}) const;
     uint64_t record_count(const ArtifactId &) const;
-    ArtifactDescriptor finalize(const ArtifactId &);
+    ArtifactDescriptor finalize(const ArtifactId &, const CancellationToken & = {});
     std::vector<ArtifactDescriptor> list() const;
     ArtifactDescriptor get(const ArtifactId &) const;
     data::Published packet(const ArtifactId &, uint64_t chunk = 0) const;
     std::filesystem::path object_path(const ArtifactId &, uint64_t chunk = 0) const;
     // Startup classifies provisional state; explicit recovery finalizes only verified, committed chunks.
-    ArtifactDescriptor recover(const ArtifactId &);
+    ArtifactDescriptor recover(const ArtifactId &, const CancellationToken & = {});
 };
 // Generic reader/source seam: parser remains in storage, callers receive Published.
 class CaptureReader {

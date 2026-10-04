@@ -157,6 +157,9 @@ wire::v1::Response dispatch(services::Runtime &runtime, const wire::v1::Request 
         case R::kArtifactRecover:
             artifact(out, runtime.recover_artifact({request.artifact_recover().id()}));
             break;
+        case R::kArtifactRecoverAsync:
+            out.set_result_id(runtime.recover_artifact_job({request.artifact_recover_async().id()}).value);
+            break;
         case R::kPluginEnable:
             runtime.enable_plugin(request.plugin_enable().id(), request.plugin_enable().enabled());
             break;

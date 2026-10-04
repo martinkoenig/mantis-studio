@@ -93,8 +93,11 @@ int main(int argc, char **argv) {
             if (arg(2) != "cancel")
                 throw std::runtime_error("Unknown job command");
             request.mutable_job_cancel()->set_id(arg(3));
-        } else if (command == "artifact" && arg(2) == "recover")
-            request.mutable_artifact_recover()->set_id(arg(3));
+        } else if (command == "artifact" && arg(2) == "recover") {
+            mantis::wire::v1::Response response;
+            *response.add_artifacts() = client.recover_artifact(arg(3));
+            print(response); return 0;
+        }
         else if (command == "plugin") {
             auto mode = arg(2);
             if (mode != "enable" && mode != "disable")
