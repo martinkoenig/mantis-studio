@@ -137,8 +137,12 @@ void Session::stop() {
         writer_.join();
     if (!ended_.load()) ended_ = time::MonotonicTimestamp::now().nanoseconds;
     preview_.close();
-    for (auto *stream : streams_)
-        (void)stream->stop();
+    for (auto *stream : streams_) {
+        const auto result = stream->stop();
+        std::lock_guard lock(mutex_);
+        diagnostics_ = stream->diagnostics();
+        if (!result && error_.empty()) error_ = result.error().message;
+    }
     streams_.clear();
 }
 data::Published Session::first() const {

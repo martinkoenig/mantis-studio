@@ -66,6 +66,9 @@ ImageLayout image_layout(const Packet &packet) {
             fail(Status::unsupported, "Unsupported RAW8 layout");
         layout = {static_cast<uint32_t>(a.descriptor.shape[1]), static_cast<uint32_t>(a.descriptor.shape[0]),
                   static_cast<uint32_t>(a.descriptor.stride[0]), ImagePacking::raw8};
+        if (!layout.width || !layout.height || layout.row_stride < layout.width ||
+            uint64_t(layout.height - 1) * layout.row_stride + layout.width > a.buffer.size())
+            fail(Status::corrupt, "Invalid/truncated RAW8 row layout");
     }
     return layout;
 }

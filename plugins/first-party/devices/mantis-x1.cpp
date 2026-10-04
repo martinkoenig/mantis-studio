@@ -236,7 +236,16 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
     });
     return status ? status : emitted ? 0 : 2;
 }
-int stop(void *p) noexcept { static_cast<Device *>(p)->stop(); return 0; }
+int stop(void *p) noexcept {
+    auto &d = *static_cast<Device *>(p); d.stop();
+    try {
+        for (const auto &[key, value] : d.metrics) if (key.ends_with("streamoff_error") || key == "setup_rollback_error") {
+            if (!d.metrics.contains("error")) d.metrics["error"] = value;
+            return 1;
+        }
+    } catch (...) { return 1; }
+    return 0;
+}
 int diagnostics(void *p, MantisTextEmitV1 emit, void *ctx) noexcept {
     return mantis::sdk::boundary([&] {
         x1::Metadata info;

@@ -139,6 +139,21 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         realtime.wait(timeout=15)
         # C++ Client SDK drives the same service, including preview maps/release.
         subprocess.check_call([str(build / "bin/mantis-acquisition-client-tests")], env=env)
+        # A cleanup ioctl failure must be visible and keep raw data recoverable.
+        env["MANTIS_X1_FAKE"] = "streamoff-right"
+        client.shutdown(); assert daemon.wait(timeout=5) == 0
+        daemon = start()
+        failing = client.capture.start(parent.id)
+        until(lambda: failing.status().framesets_committed >= 4)
+        try:
+            failing.stop()
+        except mantis.MantisError:
+            pass
+        assert "STREAMOFF" in failing.status().error and "RIGHT" in failing.status().error
+        assert next(a for a in client.artifacts.list() if a.id == failing.raw_artifact).state == "RECOVERABLE"
+        env["MANTIS_X1_FAKE"] = "normal"
+        client.shutdown(); assert daemon.wait(timeout=5) == 0
+        daemon = start()
         active = client.capture.start(parent.id)
         until(lambda: active.status().framesets_committed >= 24)
         daemon.kill(); daemon.wait(timeout=5)

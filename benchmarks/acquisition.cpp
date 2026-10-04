@@ -1,6 +1,7 @@
 #include <chrono>
 #include <iostream>
 #include <mantis/artifact_store.hpp>
+#include <mantis/image_layout.hpp>
 #include <mantis/pipeline_api.hpp>
 #include <nlohmann/json.hpp>
 #include <thread>
@@ -15,14 +16,22 @@ int main(int argc, char **argv) {
         if (!count || count > 10000) throw std::runtime_error("Record count must be 1..10000");
         auto root = directory / ("mantis-benchmark-" + Id::random().value + ".mantis");
         struct Cleanup { std::filesystem::path p; ~Cleanup() { std::error_code ec; std::filesystem::remove_all(p, ec); } } cleanup{root};
-        constexpr size_t width = 1280, height = 800, payload = width * height * 2;
+        const std::string fourcc = argc > 3 ? argv[3] : "GREY";
+        if (fourcc != "GREY" && fourcc != "Y10P") throw std::runtime_error("Benchmark mode must be GREY or Y10P");
+        const bool packed = fourcc == "Y10P";
+        const size_t width = 1280, height = packed ? 720 : 800, stride = packed ? width / 4 * 5 : width, payload = stride * height * 2;
         std::vector<data::Published> images;
         auto copy_start = std::chrono::steady_clock::now();
-        std::vector<std::byte> fixture(width * height, std::byte{71});
+        std::vector<std::byte> fixture(stride * height, std::byte{71});
         for (unsigned role = 0; role < 2; ++role) {
             data::Packet image; image.type = schema::image;
-            image.header.metadata = {{"role", role ? "right" : "left"}, {"identity", role ? "fixture-b" : "fixture-a"}, {"fourcc", "GREY"}};
-            image.attributes.push_back({{"org.mantis.pixels", schema::ScalarType::u8, {height, width}, {width, 1}, "intensity"}, memory::copy(fixture)});
+            image.header.metadata = {{"role", role ? "right" : "left"}, {"identity", role ? "fixture-b" : "fixture-a"}, {"fourcc", fourcc}};
+            if (packed) {
+                image.header.metadata.insert({{"org.mantis.image.layout", "mipi-raw10-v1"}, {"org.mantis.image.bits_per_sample", "10"},
+                    {"org.mantis.image.width", std::to_string(width)}, {"org.mantis.image.height", std::to_string(height)},
+                    {"org.mantis.image.row_stride_bytes", std::to_string(stride)}});
+                image.attributes.push_back({{std::string(data::packed_image_bytes), schema::ScalarType::u8, {stride * height}, {1}, "byte"}, memory::copy(fixture)});
+            } else image.attributes.push_back({{"org.mantis.pixels", schema::ScalarType::u8, {height, width}, {width, 1}, "intensity"}, memory::copy(fixture)});
             images.push_back(data::publish(std::move(image)));
         }
         auto seconds = [](auto begin) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count(); };
@@ -55,7 +64,7 @@ int main(int argc, char **argv) {
         auto replay_seconds = seconds(replay_start);
         auto index_start = std::chrono::steady_clock::now();
         auto indexed_count = store.record_count(capture); auto index_seconds = seconds(index_start);
-        nlohmann::json result{{"width", width}, {"height", height}, {"framesets", count}, {"payload_bytes", count * payload},
+        nlohmann::json result{{"fourcc", fourcc}, {"row_stride_bytes", stride}, {"width", width}, {"height", height}, {"framesets", count}, {"payload_bytes", count * payload},
             {"container_bytes", artifact.bytes}, {"segments", artifact.chunks}, {"sqlite_segment_commits", artifact.chunks},
             {"frameset_construction_ns", construction_seconds * 1e9 / small_count},
             {"queue_items_per_second", small_count / queue_seconds}, {"queue_high_water", queue.metrics().high_water},
@@ -67,7 +76,7 @@ int main(int argc, char **argv) {
             {"write_and_finalize_payload_mb_s", double(count * payload) / (append_seconds + finalization_seconds) / 1e6},
             {"replay_seconds", replay_seconds}, {"verified_replay_payload_mb_s", double(count * payload) / replay_seconds / 1e6},
             {"validated_index_scan_seconds", index_seconds}, {"indexed_framesets", indexed_count},
-            {"theoretical_dual_raw8_120fps_mb_s", 245.76}, {"theoretical_dual_raw8_120fps_mib_s", 234.375}};
+            {"theoretical_selected_dual_120fps_mb_s", double(payload) * 120 / 1e6}, {"theoretical_selected_dual_120fps_mib_s", double(payload) * 120 / 1048576}};
 #ifdef __linux__
         rusage usage{}; if (getrusage(RUSAGE_SELF, &usage) == 0) result["process_peak_rss_bytes"] = uint64_t(usage.ru_maxrss) * 1024;
 #endif

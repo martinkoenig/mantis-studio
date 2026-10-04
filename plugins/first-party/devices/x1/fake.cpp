@@ -11,6 +11,7 @@ class FakeCamera final : public Camera {
     std::string scenario_;
     std::string context_;
     bool right_{}, running_{};
+    Metadata diagnostics_;
     uint32_t sequence_{};
     std::chrono::steady_clock::time_point due_;
     std::mutex mutex_;
@@ -22,7 +23,13 @@ class FakeCamera final : public Camera {
         if (scenario_ == (right_ ? "streamon-right" : "streamon-left"))
             throw std::runtime_error(context_ + " STREAMON failed: Broken pipe (errno 32)");
         running_ = true; sequence_ = 0; due_ = std::chrono::steady_clock::now(); }
-    void stop() noexcept override { running_ = false; ready_.notify_all(); }
+    void stop() noexcept override {
+        if (running_ && scenario_ == (right_ ? "streamoff-right" : "streamoff-left")) {
+            try { diagnostics_["streamoff_error"] = context_ + " STREAMOFF failed: Input/output error (errno 5)"; } catch (...) {}
+        }
+        running_ = false; ready_.notify_all();
+    }
+    Metadata diagnostics() const override { return diagnostics_; }
     bool next(uint32_t timeout, const std::function<void(const FrameView &)> &emit) override {
         if (!running_) throw std::runtime_error("Camera stopped");
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);

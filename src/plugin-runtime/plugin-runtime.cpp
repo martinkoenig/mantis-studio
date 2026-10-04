@@ -245,7 +245,7 @@ class Acquisition final : public device::ImageStream {
     }
     Result<void> stop() override {
         if (instance_ && api_->stop(instance_))
-            return std::unexpected(Error{Status::plugin_failed, "Acquisition stop failed", "device"});
+            return std::unexpected(Error{Status::plugin_failed, "Acquisition stop failed: " + diagnostics()["error"], "device"});
         return {};
     }
     data::Metadata diagnostics() const override {

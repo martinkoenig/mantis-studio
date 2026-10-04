@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
         fixture["mode"]["width"] = 64; fixture["mode"]["height"] = 48;
         for (const char *role : {"left", "right"}) fixture["measurement_cameras"][role]["bus_identity"] = "fixture";
         { std::ofstream out(dir / "profile.json"); out << fixture; }
-        for (const char *scenario : {"normal", "renumber", "conflict", "setup-left", "setup-right", "streamon-left", "streamon-right"}) {
+        for (const char *scenario : {"normal", "renumber", "conflict", "setup-left", "setup-right", "streamon-left", "streamon-right", "streamoff-right"}) {
             setenv("MANTIS_X1_FAKE", scenario, 1);
             plugins::Loaded loaded(std::filesystem::path(argv[1]) / "mantis-x1.so");
             const auto *api = loaded.query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1);
@@ -116,7 +116,12 @@ int main(int argc, char **argv) {
                 auto emit = [](void *ctx, const MantisFrameSetV1 *set) { *static_cast<unsigned *>(ctx) = set->frame_count; return 0; };
                 CHECK(api->next(instance, 100, emit, &frames) == 0 && frames == 2);
             }
-            sdk::check(api->stop(instance));
+            auto stop_status = api->stop(instance);
+            CHECK((stop_status != 0) == (name == "streamoff-right"));
+            if (name == "streamoff-right") {
+                sdk::check(api->diagnostics(instance, text, &diagnostics));
+                CHECK(diagnostics.find("RIGHT") != std::string::npos && diagnostics.find("STREAMOFF") != std::string::npos);
+            }
         }
         unsetenv("MANTIS_X1_PROFILE"); unsetenv("MANTIS_X1_FAKE");
         return 0;

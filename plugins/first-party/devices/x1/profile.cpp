@@ -1,4 +1,5 @@
 #include "backend.hpp"
+#include <algorithm>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
