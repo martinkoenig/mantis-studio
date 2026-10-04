@@ -7,9 +7,10 @@ dual STREAMON, real packed RAW10 acquisition and ~119.223 receive FPS per camera
 A short capture finalized and passed deterministic replay. The original GREY
 1280×800/upstream Y10_1X10 1280×720 EPIPE is historical; the validated native setup
 must be preserved. Software correspondence passed favorable 4 ms starts, including
-the new smoke harness, but a later cold full run failed its 4 ms criterion.
+the smoke harness, but a later cold full run failed its 4 ms criterion.
 **4 ms is not robustly validated for arbitrary free-running startup phase.**
-The candidate 5 ms policy and counted steady-state re-alignment await a real run.
+The final 5 ms policy with bounded counted re-alignment has now passed the official
+real-Q6A full harness at `fad4df6439e88c7ba4f265c532343c3317e93da4`.
 
 The validated development reference is `/usr/local/sbin/mantis-camera-setup`,
 SHA-256 `ae03e77305f1342eb2227cf3a62041c542e8ce94c309db6ad56e898e487e66e4`.
@@ -50,12 +51,14 @@ limits and interpretation.
 Hardware-configured mode keeps stricter native-counter checks. Host arrival is
 diagnostic only; SyncQuality stays software and exposure skew is unavailable.
 
+**USER-VALIDATED FULL HARNESS PASS:** the final 5 ms software-correspondence policy
+has now completed the real Q6A `--full` path: Debug/Release 17/17, disabled-link
+discovery, plugin-owned media setup, 123/123 FrameSets, zero raw loss/saturation,
+FINALIZED RawCapture and deterministic replay/integrity PASS.
+
 **PENDING USER EXECUTION:** sustained ten-second/full-rate recording on NVMe or
-equivalent storage, real process-crash
-recovery after corrected pairing, hardware trigger/synchronization, optical
-exposure skew and 1280×800 mode. The developer has no Q6A attached and does not claim the
-new 5 ms policy has been executed on hardware. The existing harness itself has
-now passed real smoke and full software/discovery stages, as recorded below.
+equivalent storage, real process-crash recovery after this final policy, hardware
+trigger/synchronization, optical exposure skew and 1280×800 mode.
 
 ## Preferred one-command validation
 
@@ -615,3 +618,24 @@ Native memory path is MMAP plus one acquisition copy before QBUF. Raw bytes rema
 packed; consumer-only preview maps sample intensity to its upper eight bits.
 RawCapture schema 2/container and SQLite project schema 1 are unchanged. Old
 RAW8/schema-1 data and the plugin ABI v1 remain usable.
+
+
+## Final full-harness evidence — 2026-10-05
+
+Real Q6A, commit `fad4df6439e88c7ba4f265c532343c3317e93da4`:
+
+- Debug 17/17 PASS; Release 17/17 PASS.
+- Discovery PASS with all four mutable measurement links disabled before daemon
+  start; LEFT resolved to `/dev/video8`, RIGHT to `/dev/video11`.
+- Plugin-owned setup read back Y10_1X10 / Y10P 1280×720, stride 1600,
+  sizeimage 1,152,000 and VBLANK 196 / 196.
+- Software correspondence used timestamp-nearest with a 5,000,000 ns bound.
+  Native offset was +8; startup unmatched 8/0, steady-state unmatched 0/0,
+  shutdown unmatched 0/1; final selected delta was -3.652 ms; failures were zero.
+- Cadence diagnostics: LEFT latest/half/max 8,327,000 / 4,163,500 / 8,514,000 ns;
+  RIGHT 8,252,000 / 4,126,000 / 9,252,000 ns.
+- Capture produced/committed 123/123 FrameSets with zero raw drops and zero queue
+  saturation. RawCapture finalized; deterministic replay and raw integrity passed.
+
+This is the accepted real-hardware evidence for the v0.2 720-line acquisition
+foundation. It does not certify sustained storage or physical synchronization.
