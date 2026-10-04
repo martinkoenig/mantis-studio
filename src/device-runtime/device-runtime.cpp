@@ -127,6 +127,7 @@ void Session::stop() {
     preview_.close();
     for (auto *stream : streams_)
         (void)stream->stop();
+    streams_.clear();
 }
 data::Published Session::first() const {
     std::lock_guard lock(mutex_);

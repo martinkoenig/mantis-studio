@@ -7,6 +7,7 @@ class Runtime {
 
   public:
     explicit Runtime(plugins::Registry &plugins) : streams_(plugins.devices()) {}
+    void refresh(plugins::Registry &registry) { streams_ = registry.devices(); }
     std::vector<Descriptor> list() const;
     ImageStream &find(const Id &);
 };

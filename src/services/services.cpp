@@ -8,6 +8,25 @@
 #include <mantis/services.hpp>
 #include <set>
 namespace mantis::services {
+namespace {
+class ReplayDigest : public std::streambuf {
+    uint64_t position_{};
+  public:
+    uint64_t value{14695981039346656037ull};
+  protected:
+    std::streamsize xsputn(const char *bytes, std::streamsize size) override {
+        for (std::streamsize i = 0; i < size; ++i) value = (value ^ static_cast<unsigned char>(bytes[i])) * 1099511628211ull;
+        position_ += static_cast<uint64_t>(size); return size;
+    }
+    int_type overflow(int_type byte) override {
+        if (!traits_type::eq_int_type(byte, traits_type::eof())) { auto c = traits_type::to_char_type(byte); xsputn(&c, 1); }
+        return traits_type::not_eof(byte);
+    }
+    pos_type seekoff(off_type offset, std::ios_base::seekdir direction, std::ios_base::openmode) override {
+        return offset == 0 && direction == std::ios_base::cur ? pos_type(position_) : pos_type(off_type(-1));
+    }
+};
+}
 struct Runtime::Impl {
     mutable std::mutex event_mutex;
     uint64_t event_sequence{};
@@ -21,6 +40,7 @@ struct Runtime::Impl {
     struct Capture {
         Id raw;
         std::unique_ptr<device::Session> session;
+        Id finalization_job;
     };
     std::map<Id, Capture> captures;
     struct Lease { std::filesystem::path path; std::chrono::steady_clock::time_point expires; };
@@ -87,11 +107,12 @@ struct Runtime::Impl {
             auto gaps = out.diagnostics.find(std::string(role) + "sequence_gaps");
             if (gaps != out.diagnostics.end()) out.dropped += std::stoull(gaps->second);
         }
-        out.total_bytes = store->get(c.raw).bytes;
+        out.total_bytes = store->get(c.raw).bytes; out.finalization_job = c.finalization_job;
         if (out.duration > 0) {
             out.writer_mb_s = double(c.session->payload_bytes()) / out.duration / 1e6;
             out.writer_mib_s = double(c.session->payload_bytes()) / out.duration / 1048576;
         }
+        out.diagnostics["preview_delivery_fps"] = out.duration > 0 ? std::to_string(double(c.session->preview_metrics().popped) / out.duration) : "unavailable";
         out.diagnostics["throughput_basis"] = "committed raw pixel payload / capture duration";
         out.diagnostics["raw_loss_observability"] = out.error.empty() ? "observed" : "failure; unobserved exposures unknown";
         return out;
@@ -100,9 +121,18 @@ struct Runtime::Impl {
 Runtime::Runtime(Configuration c) : impl_(std::make_unique<Impl>(c)) {}
 Runtime::~Runtime() = default;
 std::vector<device::Descriptor> Runtime::devices() const {
+    bool active = false;
+    for (auto &[id, capture] : impl_->captures) active |= capture.session->active();
+    if (!active) {
+        // Refresh only after all adapters have stopped; historical Sessions release
+        // their stream pointers while retaining descriptors/metrics/first frames.
+        for (auto &[id, capture] : impl_->captures) capture.session->stop();
+        impl_->devices->refresh(*impl_->registry);
+    }
     return impl_->devices->list();
 }
 CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
+    for (auto &[previous_id, capture] : impl_->captures) if (!capture.session->active()) capture.session->stop();
     if (ids.empty())
         fail(Status::invalid_argument, "Capture requires at least one device");
     if (impl_->captures.size() >= 64)
@@ -150,7 +180,7 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
         device::CaptureDescriptor{id, ids, {}}, std::move(streams),
         [store, raw](data::Published p) { store->append(raw, *p); }, impl_->logger());
     } catch (...) { store->abandon(raw); throw; }
-    auto [it, inserted] = impl_->captures.emplace(id, Impl::Capture{raw, std::move(session)});
+    auto [it, inserted] = impl_->captures.emplace(id, Impl::Capture{raw, std::move(session), {}});
     (void)inserted;
     impl_->event("capture.started", "capture", id.value);
     return impl_->info(id, it->second);
@@ -161,8 +191,17 @@ CaptureInfo Runtime::stop_capture(const Id &id) {
         fail(Status::not_found, "Capture not found");
     it->second.session->stop();
     if (impl_->store->get(it->second.raw).state == artifact::ArtifactState::open &&
-        it->second.session->error().empty())
-        impl_->store->finalize(it->second.raw);
+        it->second.session->error().empty()) {
+        if (impl_->store->get(it->second.raw).type.schema_version == 2) {
+            auto store = impl_->store; auto raw = it->second.raw;
+            store->prepare_finalize(raw);
+            it->second.finalization_job = impl_->jobs->submit("Finalize RawCapture", [store, raw](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+                context.update(0.1, "Validating sealed segments");
+                auto result = store->finalize(raw);
+                context.update(1, "Finalized RawCapture"); return artifact::ArtifactReference{raw, result.hash};
+            });
+        } else impl_->store->finalize(it->second.raw);
+    }
     else if (impl_->store->get(it->second.raw).state == artifact::ArtifactState::open)
         impl_->store->abandon(it->second.raw);
     impl_->event("capture.stopped", "capture", id.value);
@@ -216,31 +255,14 @@ Id Runtime::replay_capture(const Id &id, bool real_time, bool verify) {
                 auto start = source->start(); if (!start) throw Failure(start.error());
                 uint64_t count{}; std::optional<uint64_t> sequence;
                 // Streaming digest is bounded memory, includes canonical serialized metadata and pixels.
-                uint64_t digest = 14695981039346656037ull;
+                ReplayDigest digest; std::ostream canonical(&digest);
                 while (!source->finished()) {
                     context.cancellation.check(); auto next = source->next(); if (!next) throw Failure(next.error());
                     if (!*next) continue;
                     auto packet = *next;
                     if (sequence && packet->header.sequence.value != *sequence + 1) fail(Status::corrupt, "Replay sequence discontinuity");
                     sequence = packet->header.sequence.value;
-                    if (verify) {
-                        // Offline verification may hash bytes; never a preview/acquisition conversion.
-                        auto hash_header = [&](const data::Header &h) {
-                            std::string values = std::to_string(h.sequence.value) + ":" + std::to_string(h.timestamp.nanoseconds) + ":" +
-                                h.timestamp.domain.id.value + ":" + std::to_string(h.received.nanoseconds) + ":" + h.sync.id.value + ":" +
-                                std::to_string(h.sync.trigger) + ":" + std::to_string(static_cast<int>(h.sync_quality)) + ":" +
-                                h.calibration.id.value + ":" + std::to_string(h.calibration.revision) + ":" + nlohmann::json(h.metadata).dump();
-                            for (unsigned char byte : values) digest = (digest ^ byte) * 1099511628211ull;
-                        };
-                        auto hash_packet = [&](const data::Packet &p) {
-                            hash_header(p.header);
-                            for (const auto &attribute : p.attributes) {
-                                auto bytes = attribute.buffer.map_read(); if (!bytes) throw Failure(bytes.error());
-                                for (auto byte : *bytes) digest = (digest ^ std::to_integer<uint8_t>(byte)) * 1099511628211ull;
-                            }
-                        };
-                        hash_packet(*packet); for (const auto &frame : packet->frames) hash_packet(*frame);
-                    }
+                    if (verify) data::write_packet(canonical, *packet);
                     preview->preview.push(packet); ++count;
                     if (pass == 0) {
                         ++frames;
@@ -252,7 +274,7 @@ Id Runtime::replay_capture(const Id &id, bool real_time, bool verify) {
                     }
                 }
                 source->stop();
-                auto value = std::to_string(digest) + ":" + std::to_string(count);
+                auto value = std::to_string(digest.value) + ":" + std::to_string(count);
                 if (pass == 0) baseline = value;
                 else if (value != baseline) fail(Status::corrupt, "Repeated replay digest mismatch");
             }

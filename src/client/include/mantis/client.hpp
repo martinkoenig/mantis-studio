@@ -16,6 +16,11 @@ class Client {
     wire::v1::Response snapshot() const;
     std::vector<wire::v1::Device> devices() const;
     std::string start_capture(const std::vector<std::string> &) const;
+    wire::v1::Capture capture_status(const std::string &) const;
+    wire::v1::Response captures() const;
+    wire::v1::Device device_info(const std::string &) const;
+    data::Published preview(const std::string &capture_or_replay) const;
+    std::string replay(const std::string &artifact, bool real_time = false, bool verify = false) const;
     void stop_capture(const std::string &) const;
     std::string run_pipeline(const std::string &capture, const std::string &recipe = "example",
                              const std::string &raw_artifact = {}) const;

@@ -1,5 +1,6 @@
 # Architecture Decision Records
 
+- [ADR-022: Segmented RawCapture and replay source](022-segmented-rawcapture-and-replay-source.md)
 - [ADR-021: Enumerated acquisition and FrameSet transport](021-enumerated-acquisition-and-frameset-contract.md)
 
 Status: accepted frozen Architecture v1 baseline. These records summarize the supplied decisions; they do not redefine them.

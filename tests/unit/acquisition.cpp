@@ -27,10 +27,21 @@ int main(int argc, char **argv) {
         fixture["calibration_id"] = "test.calibration"; fixture["calibration_revision"] = 7;
         { std::ofstream out(dir / "profile.json"); out << fixture; }
         setenv("MANTIS_X1_PROFILE", (dir / "profile.json").c_str(), 1);
-        for (const auto *scenario : {"normal", "renumber", "eagain", "drop-left", "drop-right", "disconnect", "mismatch", "repeat", "timestamp-jump", "lag", "stall-left", "stall-right"}) {
+        for (const auto *scenario : {"normal", "renumber", "eagain", "drop-left", "drop-right", "disconnect", "mismatch", "repeat", "timestamp-jump", "lag", "stall-left", "stall-right", "stop-right", "stream-mismatch"}) {
             setenv("MANTIS_X1_FAKE", scenario, 1);
             plugins::Registry registry(std::filesystem::path(argv[1]).parent_path() / "bin/mantis-plugin-host", dir / "hosts", {});
             registry.discover(argv[1], {"org.mantis.virtual-scanner", "org.mantis.x1", "org.mantis.example-points", "org.mantis.ply"});
+            if (std::string(scenario) == "normal") {
+                plugins::Loaded loaded(std::filesystem::path(argv[1]) / "mantis-x1.so");
+                const auto *api = loaded.query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1);
+                std::string id;
+                unsigned descriptors{};
+                sdk::enumerate(api, [&](const MantisDiscoveredDeviceV1 &d) { ++descriptors; if (!*d.parent_id) id = d.id; });
+                CHECK(descriptors == 3);
+                sdk::Acquisition sdk_stream(api, plugins::host_api(), id.c_str()); sdk_stream.start();
+                auto emit = [](void *ctx, const MantisFrameSetV1 *set) { *static_cast<unsigned *>(ctx) = set->frame_count; return 0; };
+                unsigned frames{}; CHECK(sdk_stream.next(100, emit, &frames) == 0 && frames == 2); sdk_stream.stop();
+            }
             auto devices = registry.devices();
             device::ImageStream *stream{};
             for (auto &candidate : devices) if (candidate->descriptor().plugin_id == "org.mantis.x1") stream = candidate.get();

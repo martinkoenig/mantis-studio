@@ -14,6 +14,7 @@ struct CaptureInfo {
     uint64_t produced{}, committed{}, queue_depth{}, queue_capacity{}, queue_saturation{}, preview_drops{}, total_bytes{};
     double duration{}, writer_mb_s{}, writer_mib_s{};
     data::Metadata diagnostics;
+    Id finalization_job;
 };
 struct PreviewReference { Id lease; std::filesystem::path path; };
 struct PluginInfo {

@@ -16,6 +16,7 @@ class Store {
     // RawCapture v2: sequential records, segment-batched durability/SQLite commits.
     // Failed/incomplete live writers must be abandoned before explicit recovery.
     void abandon(const ArtifactId &);
+    void prepare_finalize(const ArtifactId &);
     void replay(const ArtifactId &, const std::function<void(data::Published)> &, const CancellationToken & = {}) const;
     uint64_t record_count(const ArtifactId &) const;
     ArtifactDescriptor finalize(const ArtifactId &);

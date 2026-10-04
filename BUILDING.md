@@ -107,3 +107,28 @@ These remain architecture targets, not verified releases. The platform layer inc
 - **No device:** inspect `mantis-cli plugins list`; keep generated manifests with the matching libraries.
 - **Export path exists:** choose a new filename. The Skeleton does not overwrite exports.
 - **RECOVERABLE:** `mantis-cli artifact recover ARTIFACT_ID` validates committed chunks and finalizes them.
+
+## v0.2 native acquisition
+
+The X1 plugin builds only on Linux and uses kernel media/V4L2 headers and the
+existing nlohmann-json dependency. No OpenCV, libcamera, udev library or new
+third-party dependency is added. Generic headers remain Qt/kernel independent.
+The versioned example profile is `profiles/x1-q6a.json`; set MANTIS_X1_PROFILE in
+the daemon environment. Discovery refreshes while acquisition is idle. Restart
+or stop an active capture before rediscovery after reconnect.
+
+For sustained recording and informational benchmarks use Release:
+
+```bash
+cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DMANTIS_BUILD_STUDIO=OFF -DPython3_EXECUTABLE=/usr/bin/python3
+cmake --build build/release --parallel 4
+./build/release/bin/mantis-acquisition-benchmark /tmp 64
+```
+
+Replace `/tmp` with a directory on the actual capture filesystem for storage
+measurements. The benchmark creates/removes its own temporary project and reports
+construction, bounded queue, append, finalization, validated replay/index and peak
+RSS observations. Cache-backed short results do not certify sustained media speed.
+See docs/hardware/x1-q6a-acquisition-validation.md for the real ten-second and
+process-kill acceptance procedures. All physical results are pending user execution.

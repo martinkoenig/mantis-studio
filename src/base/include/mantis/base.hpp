@@ -71,6 +71,6 @@ struct LogRecord {
     std::string level, component, message;
 };
 using LogSink = std::function<void(const LogRecord &)>;
-inline constexpr SemanticVersion application_version{0, 1, 0};
-inline constexpr std::string_view build_version = "Mantis Studio Skeleton 0.1.0";
+inline constexpr SemanticVersion application_version{0, 2, 0};
+inline constexpr std::string_view build_version = "Mantis Studio Acquisition Foundation 0.2.0-dev";
 } // namespace mantis

@@ -3,8 +3,13 @@ package mantis.wire.v1;
 // Control plane only. DataReference identifies an immutable object on the local data plane.
 message Empty {}
 message Error { uint32 code = 1; string message = 2; string component = 3; }
-message Device { string id = 1; string name = 2; string plugin_id = 3; repeated string capabilities = 4; repeated string children = 5; }
-message Capture { string id = 1; repeated string devices = 2; string raw_artifact = 3; bool active = 4; uint64 frames = 5; uint64 dropped = 6; uint64 queue_high_water = 7; string error = 8; }
+message Device { string id = 1; string name = 2; string plugin_id = 3; repeated string capabilities = 4; repeated string children = 5; string parent = 6; map<string,string> metadata = 7; }
+message Capture { string id = 1; repeated string devices = 2; string raw_artifact = 3; bool active = 4; uint64 frames = 5; uint64 dropped = 6; uint64 queue_high_water = 7; string error = 8;
+ uint64 framesets_produced = 9; uint64 framesets_committed = 10; uint64 queue_depth = 11;
+ uint64 queue_capacity = 12; uint64 queue_saturation = 13; uint64 preview_drops = 14;
+ uint64 total_bytes = 15; double duration_seconds = 16; double writer_mb_s = 17;
+ double writer_mib_s = 18; map<string,string> diagnostics = 19; string finalization_job_id = 20;
+}
 message Artifact { string id = 1; string type = 2; uint32 schema_version = 3; string state = 4; string producer = 5; repeated string inputs = 6; string hash = 7; uint64 bytes = 8; uint64 chunks = 9; }
 message Job { string id = 1; string name = 2; string state = 3; double progress = 4; string status = 5; string diagnostics = 6; string result_artifact = 7; }
 message Plugin { string id = 1; string version = 2; string kind = 3; string execution = 4; string state = 5; string diagnostic = 6; repeated string permissions = 7; }
@@ -16,7 +21,8 @@ message ProjectOpen { string path = 1; bool create = 2; }
 message Export { string artifact_id = 1; string path = 2; }
 message PluginEnable { string id = 1; bool enabled = 2; }
 message EventsSince { uint64 after = 1; }
-message DataReference { string artifact_id = 1; string transport = 2; string locator = 3; uint32 format_version = 4; }
+message Replay { string artifact_id = 1; bool real_time = 2; bool verify = 3; }
+message DataReference { string artifact_id = 1; string transport = 2; string locator = 3; uint32 format_version = 4; string lease_id = 5; uint32 lease_seconds = 6; }
 message Request {
  uint32 protocol_version = 1; string request_id = 2; string token = 3;
  oneof command {
@@ -24,6 +30,8 @@ message Request {
   PipelineRun pipeline_run = 14; ProjectOpen project_open = 15; Empty artifacts_list = 16;
   Export export_artifact = 17; Id job_cancel = 18; Empty plugins_list = 19; EventsSince events = 20;
   Id artifact_data = 21; Id artifact_recover = 22; PluginEnable plugin_enable = 23; Empty shutdown = 24;
+  Id capture_status = 25; Empty captures_list = 26; Id devices_info = 27;
+  Id preview = 28; Id preview_release = 29; Replay replay = 30;
  }
 }
 message Response {

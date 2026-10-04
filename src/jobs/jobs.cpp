@@ -28,9 +28,9 @@ Manager::Manager(LogSink logger) : logger_(std::move(logger)) {
                 auto result = job->task(context);
                 std::lock_guard lock(mutex_);
                 job->snapshot.result = std::move(result);
+                if (job->snapshot.progress < 1 || job->snapshot.status.empty()) job->snapshot.status = "Completed";
                 job->snapshot.progress = 1;
                 job->snapshot.state = State::completed;
-                job->snapshot.status = "Completed";
             } catch (const Failure &e) {
                 std::lock_guard lock(mutex_);
                 job->snapshot.state = e.error.code == Status::cancelled ? State::cancelled : State::failed;

@@ -14,9 +14,10 @@ void print(const google::protobuf::Message &message) {
     std::cout << json << '\n';
 }
 void usage() {
-    std::cout << "mantis-cli devices list | snapshot | artifacts list | plugins list\n"
+    std::cout << "mantis-cli devices list | devices info DEVICE | captures list | snapshot | artifacts list | plugins list\n"
                  "mantis-cli project create|open PATH\n"
-                 "mantis-cli capture start DEVICE | capture stop CAPTURE\n"
+                 "mantis-cli capture start DEVICE | capture status|stop CAPTURE\n"
+                 "mantis-cli replay verify|asap|realtime RAW_ARTIFACT\n"
                  "mantis-cli pipeline run CAPTURE [example|crash-test]\n"
                  "mantis-cli pipeline replay RAW_ARTIFACT\n"
                  "mantis-cli job wait|cancel JOB\n"
@@ -47,6 +48,16 @@ int main(int argc, char **argv) {
         }
         if (command == "devices" && arg(2) == "list")
             request.mutable_devices_list();
+        else if (command == "devices" && arg(2) == "info") request.mutable_devices_info()->set_id(arg(3));
+        else if (command == "captures" && arg(2) == "list") request.mutable_captures_list();
+        else if (command == "replay") {
+            auto mode = arg(2);
+            if (mode != "verify" && mode != "asap" && mode != "realtime") throw std::runtime_error("Unknown replay mode");
+            auto job = client.replay(arg(3), mode == "realtime", mode == "verify");
+            if (mode == "verify") { auto result = client.wait(job, std::chrono::hours(1)); std::cout << result.status() << '\n'; }
+            else { request.mutable_snapshot(); auto response = client.call(request); response.set_result_id(job); print(response); }
+            return 0;
+        }
         else if (command == "artifacts" && arg(2) == "list")
             request.mutable_artifacts_list();
         else if (command == "plugins" && arg(2) == "list")
@@ -54,10 +65,11 @@ int main(int argc, char **argv) {
         else if (command == "capture") {
             if (arg(2) == "start") {
                 request.mutable_capture_start()->add_devices(arg(3));
-            } else if (arg(2) == "stop")
-                request.mutable_capture_stop()->set_id(arg(3));
-            else
-                throw std::runtime_error("Unknown capture command");
+            } else if (arg(2) == "stop") {
+                client.stop_capture(arg(3)); request.mutable_capture_status()->set_id(arg(3));
+            }
+            else if (arg(2) == "status") request.mutable_capture_status()->set_id(arg(3));
+            else throw std::runtime_error("Unknown capture command");
         } else if (command == "pipeline") {
             auto mode = arg(2);
             if (mode == "run")

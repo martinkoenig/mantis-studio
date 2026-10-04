@@ -1,5 +1,6 @@
 #include "bridge.hpp"
 #include <QtConcurrent/QtConcurrentRun>
+#include <iostream>
 StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
     connect(&watcher_, &QFutureWatcher<StudioResult>::finished, this, [this] {
         auto result = watcher_.result();
@@ -22,11 +23,23 @@ StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
         project_ = QString::fromStdString(result.snapshot.project_path());
         auto s = [](const std::string &v) { return QString::fromStdString(v); };
         for (auto &d : result.snapshot.devices())
-            devices_.push_back(
+            if (d.parent().empty()) devices_.push_back(
                 QVariantMap{{"id", s(d.id())}, {"name", s(d.name())}, {"plugin", s(d.plugin_id())}});
-        for (auto &c : result.snapshot.captures())
-            if (c.active())
-                capture_ = s(c.id());
+        for (auto &c : result.snapshot.captures()) {
+            if (c.active()) capture_ = s(c.id());
+            if (c.diagnostics().contains("left.identity")) {
+                auto value = [&](const std::string &key) { auto it = c.diagnostics().find(key); return it == c.diagnostics().end() ? QString("unavailable") : s(it->second); };
+                acquisition_text_ = QString("LEFT %1 × %2 · %3\n%4 FPS · %5 sequence gaps\nRIGHT %6 × %7 · %8\n%9 FPS · %10 sequence gaps\n%11 · %12\nV4L2 Δt: %13 ns\nHost arrival Δt: %14 ns\nRaw: %15 MB/s · %16 MiB/s\nQueue %17 / %18 · high %19\nObserved raw loss: %20 · preview drops: %21\n%22")
+                    ;
+                for (const auto &text : QStringList{value("left.width"), value("left.height"), value("left.fourcc"), value("left.receive_fps"), value("left.sequence_gaps"),
+                         value("right.width"), value("right.height"), value("right.fourcc"), value("right.receive_fps"), value("right.sequence_gaps"),
+                         value("sync_configuration"), value("sequence_agreement"), value("v4l2_delta_ns"), value("host_arrival_delta_ns"),
+                         QString::number(c.writer_mb_s(), 'f', 1), QString::number(c.writer_mib_s(), 'f', 1),
+                         QString::number(c.queue_depth()), QString::number(c.queue_capacity()), QString::number(c.queue_high_water()),
+                         QString::number(c.dropped()), QString::number(c.preview_drops()), c.error().empty() ? value("buffer_mode") : s(c.error())})
+                    acquisition_text_ = acquisition_text_.arg(text);
+            }
+        }
         for (auto &a : result.snapshot.artifacts())
             artifacts_.push_back(QVariantMap{{"id", s(a.id())},
                                              {"type", s(a.type())},
@@ -55,13 +68,29 @@ StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
         }
         emit changed();
     });
+    connect(&preview_watcher_, &QFutureWatcher<PreviewResult>::finished, this, [this] {
+        auto result = preview_watcher_.result();
+        if (!result.left.isNull() && !result.right.isNull()) {
+            dual_preview_ = true;
+            if (left_) left_->setImage(std::move(result.left));
+            if (right_) right_->setImage(std::move(result.right));
+            emit changed();
+            if (!preview_reported_ && left_ && right_ && left_->ready() && right_->ready()) {
+                std::cout << "STUDIO_DUAL_PREVIEW_READY" << std::endl; preview_reported_ = true;
+            }
+        }
+    });
+    preview_timer_.setInterval(66);
+    connect(&preview_timer_, &QTimer::timeout, this, &StudioBridge::refreshPreview);
+    preview_timer_.start();
     timer_.setInterval(500);
     connect(&timer_, &QTimer::timeout, this, &StudioBridge::refresh);
     timer_.start();
     QTimer::singleShot(0, this, &StudioBridge::refresh);
 }
 StudioBridge::~StudioBridge() {
-    timer_.stop();
+    timer_.stop(); preview_timer_.stop();
+    preview_watcher_.waitForFinished();
     watcher_.waitForFinished();
 }
 void StudioBridge::attachView(QObject *object) {
@@ -145,5 +174,41 @@ void StudioBridge::enablePlugin(QString id, bool enabled) {
         r.mutable_plugin_enable()->set_id(id.toStdString());
         r.mutable_plugin_enable()->set_enabled(enabled);
         (void)client.call(r);
+    });
+}
+
+void StudioBridge::attachPreview(QObject *left, QObject *right) {
+    left_ = qobject_cast<MeasurementView *>(left); right_ = qobject_cast<MeasurementView *>(right);
+}
+void StudioBridge::refreshPreview() {
+    if (preview_watcher_.isRunning() || !connected_) return;
+    auto id = capture_.isEmpty() ? replay_ : capture_;
+    if (id.isEmpty()) return;
+    auto client = client_;
+    preview_watcher_.setFuture(QtConcurrent::run([client, id] {
+        PreviewResult result;
+        try {
+            auto packet = client.preview(id.toStdString());
+            if (!packet || packet->frames.size() != 2) return result;
+            for (const auto &frame : packet->frames) {
+                const auto &a = frame->attributes.at(0);
+                if (a.descriptor.scalar != mantis::schema::ScalarType::u8 || a.descriptor.shape.size() != 2 ||
+                    a.descriptor.stride.size() != 2 || a.descriptor.stride[1] != 1 || a.descriptor.shape[0] > 8192 ||
+                    a.descriptor.shape[1] > 8192 || a.descriptor.stride[0] > 65536) throw std::runtime_error("Unsupported grayscale preview layout");
+                auto bytes = a.buffer.map_read(); if (!bytes) throw mantis::Failure(bytes.error());
+                QImage borrowed(reinterpret_cast<const uchar *>(bytes->data()), static_cast<int>(a.descriptor.shape[1]),
+                    static_cast<int>(a.descriptor.shape[0]), static_cast<qsizetype>(a.descriptor.stride[0]), QImage::Format_Grayscale8);
+                auto role = frame->header.metadata.at("role");
+                if (role == "left") result.left = borrowed.copy();
+                if (role == "right") result.right = borrowed.copy();
+            }
+        } catch (const std::exception &e) { result.error = e.what(); }
+        return result;
+    }));
+}
+void StudioBridge::replay(QString artifact, bool verify) {
+    execute([this, artifact, verify](const auto &client) {
+        auto job = client.replay(artifact.toStdString(), !verify, verify);
+        QMetaObject::invokeMethod(this, [this, job] { replay_ = QString::fromStdString(job); }, Qt::QueuedConnection);
     });
 }

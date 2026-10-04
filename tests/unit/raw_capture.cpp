@@ -33,10 +33,16 @@ void equal(const data::Packet &a, const data::Packet &b) {
     CHECK(a.header.sync.id == b.header.sync.id && a.header.sync.trigger == b.header.sync.trigger);
     CHECK(a.header.sync_quality == b.header.sync_quality);
     CHECK(a.header.calibration.id == b.header.calibration.id && a.header.calibration.revision == b.header.calibration.revision);
+    CHECK(a.header.frame.id == b.header.frame.id && a.header.frame.name == b.header.frame.name);
+    CHECK(a.header.timestamp.domain.name == b.header.timestamp.domain.name);
+    CHECK(a.header.calibration.schema_version == b.header.calibration.schema_version);
     CHECK(a.header.metadata == b.header.metadata); CHECK(a.frames.size() == b.frames.size());
     CHECK(a.attributes.size() == b.attributes.size());
-    for (size_t i = 0; i < a.attributes.size(); ++i)
+    for (size_t i = 0; i < a.attributes.size(); ++i) {
+        const auto &x = a.attributes[i].descriptor, &y = b.attributes[i].descriptor;
+        CHECK(x.name == y.name && x.scalar == y.scalar && x.shape == y.shape && x.stride == y.stride && x.unit == y.unit);
         CHECK(std::ranges::equal(*a.attributes[i].buffer.map_read(), *b.attributes[i].buffer.map_read()));
+    }
     for (size_t i = 0; i < a.frames.size(); ++i) equal(*a.frames[i], *b.frames[i]);
 }
 int main() {

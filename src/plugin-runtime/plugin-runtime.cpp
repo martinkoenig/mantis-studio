@@ -238,7 +238,7 @@ class Acquisition final : public device::ImageStream {
     Result<void> start() override {
         if (instance_) { api_->stop(instance_); api_->destroy(instance_); instance_ = nullptr; }
         if (api_->open(&host, descriptor_.id.value.c_str(), &instance_) || !instance_)
-            return std::unexpected(Error{Status::plugin_failed, "Acquisition open failed; inspect plugin diagnostics/profile", "device"});
+            return std::unexpected(Error{Status::plugin_failed, "Acquisition open failed: " + diagnostics()["error"], "device"});
         if (api_->start(instance_))
             return std::unexpected(Error{Status::plugin_failed, diagnostics()["error"], "device"});
         return {};
@@ -250,7 +250,6 @@ class Acquisition final : public device::ImageStream {
     }
     data::Metadata diagnostics() const override {
         data::Metadata result;
-        if (!instance_) return result;
         auto emit = [](void *ctx, const char *json) noexcept {
             return sdk::boundary([&] { *static_cast<data::Metadata *>(ctx) = metadata(json); });
         };
@@ -476,8 +475,15 @@ std::vector<std::unique_ptr<device::ImageStream>> Registry::devices() {
             if (!api->enumerate || !api->open || !api->destroy || !api->start || !api->next ||
                 !api->stop || !api->diagnostics) fail(Status::incompatible, "Incomplete acquisition table");
             Discovery discovery;
-            if (api->enumerate(discovered, &discovery))
-                fail(Status::plugin_failed, "Acquisition discovery failed: " + discovery.error);
+            if (api->enumerate(discovered, &discovery)) {
+                data::Metadata diagnostic;
+                auto emit = [](void *ctx, const char *json) noexcept {
+                    return sdk::boundary([&] { *static_cast<data::Metadata *>(ctx) = metadata(json); });
+                };
+                (void)api->diagnostics(nullptr, emit, &diagnostic);
+                fail(Status::plugin_failed, "Acquisition discovery failed: " + discovery.error + " " + diagnostic["error"]);
+            }
+            e->diagnostic.clear();
             for (auto &d : discovery.devices) d.plugin_id = id;
             for (auto &d : discovery.devices) {
                 if (std::find(d.capabilities.begin(), d.capabilities.end(), device::frameset_stream) == d.capabilities.end()) continue;

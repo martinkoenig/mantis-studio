@@ -130,6 +130,28 @@ class LinuxCamera final : public Camera {
             if (width_ != mode.width || height_ != mode.height || format_ != mode.fourcc ||
                 stride_ < width_ || uint64_t(stride_) * height_ > size_ || size_ > 128 * 1024 * 1024)
                 throw std::runtime_error("Driver negotiated an incompatible RAW8 layout");
+            bool has_intervals = false, interval_matches = false;
+            for (uint32_t i = 0; i < 256; ++i) {
+                v4l2_frmivalenum interval{}; interval.index = i; interval.pixel_format = pixel;
+                interval.width = width_; interval.height = height_;
+                if (call(fd_.value, VIDIOC_ENUM_FRAMEINTERVALS, &interval) < 0) {
+                    if (errno == EINVAL || errno == ENOTTY) break;
+                    throw std::runtime_error("ENUM_FRAMEINTERVALS failed");
+                }
+                has_intervals = true;
+                if (interval.type == V4L2_FRMIVAL_TYPE_DISCRETE) {
+                    interval_matches |= uint64_t(interval.discrete.numerator) * mode.fps == interval.discrete.denominator;
+                } else {
+                    const auto &range = interval.stepwise;
+                    if (!range.min.denominator || !range.max.denominator) throw std::runtime_error("Invalid driver interval range");
+                    double requested = 1.0 / mode.fps;
+                    interval_matches |= requested >= double(range.min.numerator) / range.min.denominator &&
+                        requested <= double(range.max.numerator) / range.max.denominator;
+                    break;
+                }
+            }
+            if (has_intervals && !interval_matches) throw std::runtime_error("Requested camera FPS unavailable");
+            controls_["interval_enumeration"] = has_intervals ? "supported" : "unavailable";
             v4l2_streamparm parm{}; parm.type = type_;
             if (call(fd_.value, VIDIOC_G_PARM, &parm) == 0 && (parm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME)) {
                 parm.parm.capture.timeperframe = {1, mode.fps};
@@ -165,7 +187,15 @@ class LinuxCamera final : public Camera {
     bool next(uint32_t timeout, const std::function<void(const FrameView &)> &emit) override {
         pollfd descriptor{fd_.value, POLLIN, 0};
         int rc;
-        do { rc = ::poll(&descriptor, 1, static_cast<int>(timeout)); } while (rc < 0 && errno == EINTR);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
+        auto remaining = timeout;
+        for (;;) {
+            rc = ::poll(&descriptor, 1, static_cast<int>(remaining));
+            if (rc >= 0 || errno != EINTR) break;
+            auto now = std::chrono::steady_clock::now();
+            if (now >= deadline) return false;
+            remaining = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count());
+        }
         if (rc < 0 || (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL))) throw std::runtime_error("Camera poll failure/disconnect");
         if (!rc) return false;
         v4l2_buffer b{}; v4l2_plane plane{}; buffer(b, plane, 0);

@@ -378,18 +378,25 @@ void Store::append(const Id &id, const data::Packet &packet) {
     platform::durable_directory(journal.parent_path());
 }
 ArtifactDescriptor Store::finalize(const Id &id) {
-    std::lock_guard guard(impl_->mutex);
+    std::unique_lock guard(impl_->mutex);
     auto a = impl_->get(id);
-    if (a.state == ArtifactState::finalized)
-        fail(Status::invalid_argument, "Finalized artifacts are immutable");
+    if (a.state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized artifacts are immutable");
     if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
         impl_->seal(id, *writer->second); impl_->writers.erase(writer); a = impl_->get(id);
     }
-    if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) {
-        // Structural and sequence checks supplement segment hashes at finalization.
-        std::optional<uint64_t> sequence;
-        for (uint64_t i = 0; i < a.chunks; ++i) {
-            auto scanned = segments::scan(object_path(id, i));
+    if (!a.chunks) fail(Status::invalid_argument, "Cannot finalize an artifact with no committed chunks");
+    {
+        Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
+    }
+    guard.unlock();
+    // Immutable sealed files can be checked without holding the metadata mutex:
+    // multi-gigabyte verification must not block daemon snapshots/commands.
+    std::string hashes;
+    std::optional<uint64_t> sequence;
+    for (uint64_t i = 0; i < a.chunks; ++i) {
+        auto file = object_path(id, i);
+        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) {
+            auto scanned = segments::scan(file);
             if (scanned.incomplete || !scanned.corruption.empty() || scanned.records.empty())
                 fail(Status::corrupt, "Cannot finalize invalid RawCapture segment");
             for (size_t n = 0; n < scanned.records.size(); ++n) {
@@ -399,31 +406,12 @@ ArtifactDescriptor Store::finalize(const Id &id) {
                 sequence = packet->header.sequence.value;
             }
         }
-    }
-    if (!a.chunks)
-        fail(Status::invalid_argument, "Cannot finalize an artifact with no committed chunks");
-    {
-        Statement s(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?");
-        s.text(1, id.value);
-        s.row();
-    }
-    Statement chunks(impl_->db, "SELECT idx,path,hash FROM chunks WHERE artifact=? ORDER BY idx");
-    chunks.text(1, id.value);
-    std::string hashes;
-    uint64_t expected = 0;
-    while (chunks.row()) {
-        if (chunks.integer(0) != expected++)
-            fail(Status::corrupt, "Non-contiguous capture chunks");
-        auto file = impl_->root / chunks.text(1);
-        if (file_hash(file).hex != chunks.text(2))
-            fail(Status::corrupt, "Artifact checksum mismatch");
-        hashes += chunks.text(2);
+        hashes += file_hash(file).hex;
     }
     auto hash = content_hash(std::as_bytes(std::span(hashes)));
-    Statement s(impl_->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
-    s.text(1, hash.hex);
-    s.text(2, id.value);
-    s.row();
+    guard.lock();
+    Statement update(impl_->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
+    update.text(1, hash.hex); update.text(2, id.value); update.row();
     return impl_->get(id);
 }
 ArtifactDescriptor Store::get(const Id &id) const {
@@ -444,14 +432,18 @@ std::vector<ArtifactDescriptor> Store::list() const {
     return out;
 }
 std::filesystem::path Store::object_path(const Id &id, uint64_t chunk) const {
-    std::lock_guard guard(impl_->mutex);
+    std::unique_lock guard(impl_->mutex);
     Statement s(impl_->db, "SELECT path,hash FROM chunks WHERE artifact=? AND idx=?");
     s.text(1, id.value);
     s.integer(2, chunk);
     if (!s.row())
         fail(Status::not_found, "Artifact chunk not found");
     auto path = impl_->root / s.text(0);
-    if (file_hash(path).hex != s.text(1))
+    auto expected_hash = s.text(1);
+    // Finalize the statement before releasing SQLite connection ownership.
+    sqlite3_finalize(s.s); s.s = nullptr;
+    guard.unlock();
+    if (file_hash(path).hex != expected_hash)
         fail(Status::corrupt, "Object integrity check failed");
     return path;
 }
@@ -474,6 +466,14 @@ ArtifactDescriptor Store::recover(const Id &id) {
     if (a.state != ArtifactState::recoverable) fail(Status::invalid_argument, "Artifact is not recoverable");
     if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) impl_->recover_segments(id);
     return finalize(id);
+}
+void Store::prepare_finalize(const Id &id) {
+    std::lock_guard guard(impl_->mutex);
+    if (impl_->get(id).state != ArtifactState::open) fail(Status::invalid_argument, "Only OPEN captures can begin finalization");
+    if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
+        impl_->seal(id, *writer->second); impl_->writers.erase(writer);
+    }
+    Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
 }
 void Store::abandon(const Id &id) {
     std::lock_guard guard(impl_->mutex);

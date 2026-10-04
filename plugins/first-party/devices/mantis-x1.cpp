@@ -183,6 +183,10 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
             d.metrics[role + "receive_fps"] = std::to_string(double(d.sequence + 1) / elapsed);
             d.metrics[role + "width"] = std::to_string(f.width); d.metrics[role + "height"] = std::to_string(f.height);
             d.metrics[role + "fourcc"] = f.fourcc;
+            d.metrics[role + "stride"] = std::to_string(f.stride);
+            d.metrics[role + "buffer_size"] = std::to_string(f.buffer_size);
+            d.metrics[role + "timestamp_clock"] = f.clock;
+            d.metrics[role + "timestamp_flags"] = std::to_string(f.flags);
         }
         MantisAttributeV1 a[2]{};
         MantisObservationV1 frames[]{observation(d, 0, a[0]), observation(d, 1, a[1])};
@@ -197,7 +201,15 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
 }
 int stop(void *p) noexcept { static_cast<Device *>(p)->stop(); return 0; }
 int diagnostics(void *p, MantisTextEmitV1 emit, void *ctx) noexcept {
-    return mantis::sdk::boundary([&] { auto json = Json(static_cast<Device *>(p)->metrics).dump(); mantis::sdk::check(emit(ctx, json.c_str())); });
+    return mantis::sdk::boundary([&] {
+        x1::Metadata info;
+        if (p) info = static_cast<Device *>(p)->metrics;
+        else {
+            try { auto c = configuration(); (void)x1::assign(c.profile, c.backend->discover()); }
+            catch (const std::exception &e) { info["error"] = e.what(); }
+        }
+        auto json = Json(info).dump(); mantis::sdk::check(emit(ctx, json.c_str()));
+    });
 }
 int initialize(const MantisHostV1 *host) { return mantis::sdk::compatible(host) ? 0 : 1; }
 void shutdown() {}

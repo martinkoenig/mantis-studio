@@ -8,7 +8,7 @@ ApplicationWindow {
     visible: true
     width: 1420; height: 900
     minimumWidth: 1080; minimumHeight: 720
-    title: "Mantis Studio · Architecture Skeleton"
+    title: "Mantis Studio · Acquisition Foundation"
     color: "#10151c"
     palette.window: "#10151c"
     palette.windowText: "#e4edf5"
@@ -32,7 +32,7 @@ ApplicationWindow {
             Label { text: "MANTIS"; font.pixelSize: 25; font.bold: true; font.letterSpacing: 4; color: "#6fe0bc" }
             Rectangle { width: 1; height: 25; color: "#34404c" }
             Label { text: "Studio"; font.pixelSize: 20 }
-            Caption { text: "ARCHITECTURE SKELETON  0.1"; Layout.leftMargin: 10 }
+            Caption { text: "ACQUISITION FOUNDATION  0.2"; Layout.leftMargin: 10 }
             Item { Layout.fillWidth: true }
             Rectangle { width: 8; height: 8; radius: 4; color: studio.connected ? "#6fe0bc" : "#eaad6b" }
             Label { text: studio.connected ? "Runtime connected" : "Runtime unavailable"; color: "#a8bbcb" }
@@ -57,6 +57,7 @@ ApplicationWindow {
                             }
                         }
                         Action { text: "Stop capture"; Layout.fillWidth: true; enabled: studio.capturing && !studio.busy; onClicked: studio.stopCapture() }
+                        Label { text: studio.acquisitionText; visible: text.length > 0; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 11; color: "#a8bbcb" }
                         Rectangle { Layout.fillWidth: true; height: 1; color: "#2b3945" }
                         Caption { text: "PROCESSING RECIPE" }
                         ComboBox { id: recipe; Layout.fillWidth: true; model: ["example", "crash-test"] }
@@ -85,6 +86,24 @@ ApplicationWindow {
             }
             ColumnLayout {
                 Layout.minimumWidth: 300; Layout.preferredWidth: 750; Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
+                Panel {
+                    visible: studio.dualPreview
+                    Layout.fillWidth: true; Layout.preferredHeight: 235
+                    RowLayout {
+                        anchors.fill: parent; anchors.margins: 12; spacing: 12
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.fillHeight: true
+                            Caption { text: "LEFT · NATIVE GRAYSCALE" }
+                            MeasurementView { id: leftPreview; objectName: "leftPreview"; Layout.fillWidth: true; Layout.fillHeight: true }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.fillHeight: true
+                            Caption { text: "RIGHT · NATIVE GRAYSCALE" }
+                            MeasurementView { id: rightPreview; objectName: "rightPreview"; Layout.fillWidth: true; Layout.fillHeight: true }
+                        }
+                    }
+                    Component.onCompleted: studio.attachPreview(leftPreview, rightPreview)
+                }
                 Panel {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                     ColumnLayout {
@@ -149,7 +168,7 @@ ApplicationWindow {
                             Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: studio.artifacts; spacing: 8
                             delegate: Rectangle {
                                 required property var modelData
-                                width: ListView.view.width; height: 76; radius: 6
+                                width: ListView.view.width; height: modelData.type === "org.mantis.RawCapture" ? 110 : 76; radius: 6
                                 color: modelData.id === studio.selectedArtifact ? "#233f40" : "#202c37"
                                 border.color: modelData.id === studio.selectedArtifact ? "#55cba7" : "#2d3b48"
                                 Column {
@@ -157,6 +176,11 @@ ApplicationWindow {
                                     Label { text: modelData.type.replace("org.mantis.", ""); font.bold: true }
                                     Label { text: modelData.state + " · " + modelData.chunks + " chunks"; color: "#95adbc"; font.pixelSize: 11 }
                                     Label { text: modelData.id.substring(0, 18) + "…"; color: "#728c9f"; font.pixelSize: 10; font.family: "Monospace" }
+                                    Row {
+                                        visible: modelData.type === "org.mantis.RawCapture" && modelData.state === "FINALIZED"
+                                        Button { text: "Replay"; enabled: !studio.busy; onClicked: studio.replay(modelData.id, false) }
+                                        Button { text: "Verify"; enabled: !studio.busy; onClicked: studio.replay(modelData.id, true) }
+                                    }
                                 }
                                 MouseArea { anchors.fill: parent; enabled: modelData.type === "org.mantis.PointCloud" && modelData.state === "FINALIZED" && !studio.busy; onClicked: studio.selectArtifact(modelData.id) }
                             }

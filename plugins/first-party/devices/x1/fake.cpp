@@ -20,7 +20,8 @@ class FakeCamera final : public Camera {
     bool next(uint32_t timeout, const std::function<void(const FrameView &)> &emit) override {
         if (!running_) throw std::runtime_error("Camera stopped");
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
-        if ((scenario_ == "stall-left" && !right_) || (scenario_ == "stall-right" && right_)) {
+        if ((scenario_ == "stall-left" && !right_) || (scenario_ == "stall-right" && right_) ||
+            (scenario_ == "stop-right" && right_ && sequence_ >= 4)) {
             std::unique_lock lock(mutex_); ready_.wait_until(lock, deadline); return false;
         }
         if (scenario_ == "eagain" && sequence_ % 2 == 0) {
@@ -67,7 +68,9 @@ class FakeBackend final : public Backend {
         return out;
     }
     std::unique_ptr<Camera> open(const CameraInfo &info, const Mode &mode) override {
-        return std::make_unique<FakeCamera>(mode, scenario_, info.sensor == "ov9281 20-0060");
+        auto selected = mode;
+        if (scenario_ == "stream-mismatch" && info.sensor == "ov9281 20-0060") ++selected.width;
+        return std::make_unique<FakeCamera>(selected, scenario_, info.sensor == "ov9281 20-0060");
     }
 };
 }
