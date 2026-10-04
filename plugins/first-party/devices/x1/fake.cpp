@@ -99,7 +99,7 @@ class FakeMedia final : public MediaIo {
         graph_.links.push_back({{100, 0}, {101, 0}, true, false});
         if (scenario_ == "conflict" || scenario_ == "immutable-conflict")
             graph_.links.push_back({{100, 0}, {3, 0}, true, scenario_ == "immutable-conflict"});
-        if (scenario_ == "source-conflict") graph_.links.push_back({{2, 1}, {101, 0}, true, false});
+        if (scenario_ == "source-conflict" || scenario_ == "fanout") graph_.links.push_back({{2, 1}, {101, 0}, true, false});
         if (scenario_ == "missing-route") graph_.entities.erase(graph_.entities.begin() + 1);
         if (scenario_ == "ambiguous-route") { auto e = graph_.entities[1]; e.id = 200; graph_.entities.push_back(e); }
     }
@@ -116,8 +116,17 @@ class FakeMedia final : public MediaIo {
     }
     uint32_t format_code(const std::string &name) override { return name == "Y10_1X10" ? 10 : 8; }
     std::vector<uint32_t> codes(const Entity &, uint32_t) override { return scenario_ == "unsupported-mbus" ? std::vector<uint32_t>{8} : std::vector<uint32_t>{8, 10}; }
-    PadFormat get_format(const Entity &e, uint32_t pad) override { return formats_.at({e.id, pad}); }
+    PadFormat get_format(const Entity &e, uint32_t pad) override {
+        auto f = formats_.at({e.id, pad});
+        if (!injected_ && scenario_ == "pad-readback-failure" && f.width != 320) {
+            injected_ = true; throw std::system_error(EIO, std::generic_category(), "SUBDEV_G_FMT");
+        }
+        return f;
+    }
     PadFormat set_format(const Entity &e, uint32_t pad, const PadFormat &f) override {
+        if (scenario_ == "rollback-failure" && ((!injected_ && e.id >= 32) || (injected_ && f.width == 320 && e.id < 32))) {
+            injected_ = true; throw std::system_error(EIO, std::generic_category(), "SUBDEV_S_FMT (rollback fixture)");
+        }
         if (!injected_ && ((scenario_ == "setup-left" && e.id < 32) || (scenario_ == "setup-right" && e.id >= 32))) {
             injected_ = true; throw std::system_error(EIO, std::generic_category(), "SUBDEV_S_FMT");
         }
@@ -128,6 +137,9 @@ class FakeMedia final : public MediaIo {
     int32_t get_vblank(const Entity &e) override { return vblank_.at(e.id); }
     int32_t set_vblank(const Entity &e, int32_t value) override {
         if (!injected_ && scenario_ == "vblank-readback-mismatch") { ++value; injected_ = true; }
+        if (!injected_ && scenario_ == "late-route-mismatch" && e.id >= 32 && value == 196) {
+            graph_.links[1].enabled = false; injected_ = true;
+        }
         vblank_[e.id] = value; return value;
     }
     Metadata timing(const Entity &) override { return {{"sensor_driver_interval", "unavailable"}}; }

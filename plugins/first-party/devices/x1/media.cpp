@@ -128,7 +128,7 @@ class Transaction final : public Setup {
                     for (const auto &pad : entity.pads) if (selected.contains({entity.id, pad.index})) {
                         if (!owned.insert({graphs[i].path, {entity.id, pad.index}}).second)
                             throw std::runtime_error("Measurement routes share a subdevice pad");
-                        auto prefix = context + " " + entity.name + ":" + std::to_string(pad.index);
+                        auto prefix = context + " " + entity.name + ":" + std::to_string(pad.index) + " (" + entity.node + ")";
                         try {
                             auto codes = io_.codes(entity, pad.index);
                             if (!codes.empty() && std::find(codes.begin(), codes.end(), desired_code) == codes.end())
@@ -205,9 +205,21 @@ class Transaction final : public Setup {
             } catch (const std::exception &e) { throw std::runtime_error(control.context + " VBLANK: " + e.what()); }
         }
         for (const auto &pad : pads_) {
-            auto actual = io_.get_format(pad.entity, pad.pad);
-            if (actual.code != desired_code || actual.width != p.mode.width || actual.height != p.mode.height)
-                throw std::runtime_error(pad.context + " final pad-format verification mismatch");
+            try {
+                auto actual = io_.get_format(pad.entity, pad.pad);
+                if (actual.code != desired_code || actual.width != p.mode.width || actual.height != p.mode.height)
+                    throw std::runtime_error("Final pad-format verification mismatch");
+            } catch (const std::exception &e) { throw std::runtime_error(pad.context + " G_FMT verification: " + e.what()); }
+        }
+        for (size_t i = 0; i < 2; ++i) {
+            const auto context = camera_context(cameras[i]);
+            auto graph = io_.graph(graphs[i].path);
+            auto route = select_route(graph, p.routes[i], cameras[i].role);
+            for (const auto &required : route.links) {
+                if (!required.enabled) throw std::runtime_error(context + " final route disabled: " + link_name(graph, required));
+                for (const auto &other : graph.links) if (other.enabled && other.sink == required.sink && !same_link(other, required))
+                    throw std::runtime_error(context + " final route conflict: " + link_name(graph, other));
+            }
         }
         for (size_t i = 0; i < 2; ++i) {
             auto context = camera_context(cameras[i]);

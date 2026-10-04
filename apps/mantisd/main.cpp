@@ -55,8 +55,11 @@ int main(int argc, char **argv) {
         auto server = mantis::platform::Socket::listen(port);
         std::cout << "mantisd ready on 127.0.0.1:" << port << std::endl;
         while (true) {
+            // Listener failures are fatal and reach the outer diagnostic once;
+            // retrying a broken listener here would produce an error busy loop.
+            // Interrupted/temporarily non-ready accepts are handled by Socket.
+            auto socket = server.accept();
             try {
-                auto socket = server.accept();
                 mantis::wire::v1::Request request;
                 mantis::protocol::receive(socket, request);
                 mantis::wire::v1::Response response;
