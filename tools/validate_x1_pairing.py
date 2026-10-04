@@ -44,10 +44,13 @@ def main():
     status = capture.status()
     metrics = status.diagnostics
     require(not status.error, status.error)
+    require(not status.active, "Capture remained active after stop")
     require(status.framesets_produced > 0 and status.framesets_produced == status.framesets_committed, "Incomplete paired recording")
     require(status.dropped == 0 and status.queue_saturation == 0, "Raw recorder loss/saturation")
     require(metrics["pairing_mode"] == "timestamp-nearest" and metrics["max_v4l2_delta_ns"] == "4000000", "Unexpected pairing configuration")
     require(metrics["pairing_failures"] == "0" and metrics["pairing_pending_saturation"] == "0", "Pairing failure/saturation")
+    require(abs(int(metrics["paired_v4l2_delta_ns"])) <= 4000000, "Final selected pair exceeded 4 ms")
+    require(metrics["timestamp_discontinuities"] == "0", "Timestamp discontinuity")
     require(metrics["exposure_skew"] == "unavailable" and metrics["sync_quality"] == "software", "Unexpected timing claim")
     for role in ("left", "right"):
         require(metrics[f"{role}.sequence_gaps"] == "0" and metrics[f"{role}.capture_errors"] == "0", f"{role} acquisition failed")
@@ -60,10 +63,15 @@ def main():
                     ("1280", "720", "Y10P", "1600", "1152000"), f"Unexpected {role} capture layout")
             require(metrics[f"{role}_readback_vblank"] == "196", f"Unexpected {role} VBLANK read-back")
     require(metrics["left.timestamp_clock"] == metrics["right.timestamp_clock"] != "linux.v4l2.unknown", "Incomparable clocks")
+    artifact = next(a for a in client.artifacts.list() if a.id == capture.raw_artifact)
+    require(artifact.state == "FINALIZED", "RawCapture is not FINALIZED")
+    if not args.allow_fixture:
+        require(metrics.get("media_setup") == "plugin-owned selected routes verified", "Plugin-owned setup was not verified")
     first = client.replay.verify(capture.raw_artifact)
     second = client.replay.verify(capture.raw_artifact)
     require(first == second and first["raw_integrity"] == first["replay"] == "PASS", "Deterministic replay verification failed")
     print(json.dumps({"backend": parent.metadata["backend"],
+                      "raw_artifact_state": artifact.state,
                       "capture": MessageToDict(status, preserving_proto_field_name=True),
                       "verification": first, "short_pairing_check": "PASS",
                       "sustained_storage_acceptance": "NOT ESTABLISHED"}, indent=2))

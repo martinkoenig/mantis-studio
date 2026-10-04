@@ -173,6 +173,10 @@ if(BUILD_TESTING)
  # Deliberately contaminate the caller environment: acceptance must isolate X1.
  set_tests_properties(acceptance PROPERTIES TIMEOUT 90 ENVIRONMENT
   "MANTIS_X1_PROFILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/x1-acceptance-env.json;MANTIS_X1_FAKE=normal")
+ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_test(NAME q6a-validation-harness COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/q6a_validation_harness.py)
+  set_tests_properties(q6a-validation-harness PROPERTIES TIMEOUT 30)
+ endif()
 endif()
 add_executable(mantis-benchmark benchmarks/queue.cpp)
 target_link_libraries(mantis-benchmark PRIVATE mantis-pipeline-api)

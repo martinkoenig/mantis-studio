@@ -8,3 +8,6 @@ sdk/python/mantis/mantis_pb2.py
 
 # Local runtime files
 /mantisd.log
+
+# Local hardware validation diagnostics (captures are retained on selected storage)
+/validation-output/
