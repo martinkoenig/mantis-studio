@@ -132,8 +132,9 @@ measurements. The benchmark creates/removes its own temporary project and report
 construction, bounded queue, append, finalization, validated replay/index and peak
 RSS observations. Cache-backed short results do not certify sustained media speed.
 See docs/hardware/x1-q6a-acquisition-validation.md for the real ten-second and
-process-kill acceptance procedures. User-reported Q6A build and discovery results are recorded separately; plugin-owned
-setup/streaming and recording remain pending user execution.
+process-kill acceptance procedures. User-validated Q6A setup, dual Y10P streaming (~119.22 receive FPS) and short
+recording/replay are recorded separately. Corrected 4 ms software pairing,
+sustained NVMe recording and real crash recovery remain pending user execution.
 
 The reference profile is version 2: explicit sensor/bus/entity routes, 1280×720
 Y10P / Y10_1X10 and VBLANK=196. Existing version-1 profiles remain externally
@@ -147,3 +148,11 @@ FPS are different diagnostics. VBLANK=196 does not certify exactly 120 FPS.
 A full-rate 720-line Y10P capture requires 276.48 MB/s payload before overhead;
 the user's 32.04 MB/s microSD observation is not a recorder throughput limit.
 NVMe or equivalent storage will be evaluated later.
+
+Software pairing uses two pending observations per camera and at most 32 startup
+exclusions total, bounded by the profile stall timeout. Keep the reference
+`max_v4l2_delta_ns` at 4,000,000; 100 ms was diagnostic only. The daemon must be
+restarted after changing its profile. Camera-native counters are independent;
+inspect `pairing_mode`, `native_sequence_offset`, `startup_unmatched_left/right`
+and `paired_v4l2_delta_ns`. Zero recorder drops covers published FrameSets, not
+startup exclusions or shutdown lookahead. No build/runtime dependency changed.

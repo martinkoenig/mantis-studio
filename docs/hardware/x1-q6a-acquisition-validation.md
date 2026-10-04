@@ -1,10 +1,12 @@
 # Mantis X1 / Q6A acquisition validation
 
-The user has already reported **PASS** for Q6A ARM64 build/tests, loading
-org.mantis.x1, discovery of real Qualcomm CAMSS and both OV9281 sensors, stable
-LEFT/RIGHT assignment and dynamic capture-node resolution. The first capture
-failed **EPIPE / Broken pipe**: GREY 1280×800 capture nodes disagreed with upstream
-Y10_1X10 1280×720. Discovery success is not evidence of successful acquisition.
+**USER-VALIDATED PASS:** Q6A ARM64 build/tests, X1 discovery with all four mutable
+measurement links disabled, stable LEFT/RIGHT mapping and dynamic nodes,
+plugin-owned CAMSS setup, Y10_1X10 pads, VBLANK=196 set/read-back, Y10P 1280×720
+dual STREAMON, real packed RAW10 acquisition and ~119.223 receive FPS per camera.
+A short capture finalized and passed deterministic replay. The original GREY
+1280×800/upstream Y10_1X10 1280×720 EPIPE is historical; the validated native setup
+must be preserved.
 
 The validated development reference is `/usr/local/sbin/mantis-camera-setup`,
 SHA-256 `ae03e77305f1342eb2227cf3a62041c542e8ce94c309db6ad56e898e487e66e4`.
@@ -13,10 +15,38 @@ stride 1600, sizeimage 1,152,000 and sensor **VBLANK=196**. Requested target is
 120 FPS; VBLANK does not mathematically prove 120.000 FPS. Crop bounds 1280×800
 are not a validated acquisition mode. RAW8 remains optional/debug support.
 
-**PENDING USER EXECUTION:** plugin-owned links/pads/timing setup, Y10P STREAMON,
-dual FrameSets, measured receive FPS, ten-second lossless recording, NVMe/storage
-throughput, replay and crash recovery of real Y10P data, physical synchronization
-and optical exposure skew. Codex has no Q6A attached. Fixtures do not certify these.
+The successful user capture used a **temporary 100 ms** tolerance for diagnosis:
+
+| Real hardware observation | User result |
+| --- | --- |
+| FrameSets produced / committed; LEFT / RIGHT frames | 141 / 141; 141 / 141 |
+| LEFT / RIGHT receive FPS | 119.223228 / 119.223228 |
+| Native sequence gaps / capture errors | 0 / 0 on both cameras |
+| Queue high water / capacity | 12 / 32 |
+| Raw recorder drops / saturation | 0 / 0 |
+| Artifact state / bytes / chunks | FINALIZED / 325,625,318 / 5 |
+| Artifact hash | fnv1a64:26a3ea204d51863c |
+| Two-pass replay | 141 FrameSets, 141 LEFT, 141 RIGHT; continuous; integrity PASS; replay PASS |
+
+This is evidence of native acquisition, recorder integrity and deterministic
+replay, not correct cross-camera exposure association. Equal native counters had
+~51.5–51.9 ms V4L2 delta (final 51,786,000 ns), with 5–8 ms host-arrival delta,
+zero gaps, and both clocks `linux.monotonic` with flags 8193. At ~119.22 FPS this
+is approximately six frame periods. Independently started V4L2 counters are
+camera-local identifiers, not cross-camera exposure identifiers. The old
+`sequence_agreement=aligned` was counter equality, not synchronization.
+
+The profile is restored to **4,000,000 ns** and must remain there. Software
+pairing now selects nearest comparable V4L2 timestamps with bounded lookahead,
+counts startup exclusions and fails on steady-state unmatched observations.
+Hardware-configured mode keeps stricter native-counter checks. Host arrival is
+diagnostic only; SyncQuality stays software and exposure skew is unavailable.
+
+**PENDING USER EXECUTION:** corrected 4 ms software pairing on Q6A, sustained
+ten-second/full-rate recording on NVMe or equivalent storage, real process-crash
+recovery after corrected pairing, hardware trigger/synchronization, optical
+exposure skew and 1280×800 mode. Codex has no Q6A attached; it does not claim the
+new pairing implementation is hardware-validated.
 
 ## Inspect the target
 
@@ -103,8 +133,8 @@ or concurrent graph mutation is a failure, not a fallback to another route.
 
 The implementation preserves timestamp flags described by the kernel
 [buffer API](https://docs.kernel.org/userspace-api/media/v4l/buffer.html).
-Clock type and timestamp source vary by driver. Software sequence agreement and
-V4L2 timestamp delta do not measure optical exposure skew. Formats are queried
+Clock type and timestamp source vary by driver. Camera-local counter equality and
+selected V4L2 timestamp delta do not measure optical exposure skew. Formats are queried
 through [ENUM_FMT](https://docs.kernel.org/userspace-api/media/v4l/vidioc-enum-fmt.html).
 
 ## Build and discover
@@ -150,6 +180,47 @@ The fake backend requires explicit `MANTIS_X1_FAKE=normal` and a fixture profile
 with `bus_identity: fixture`;
 never enable it for hardware acceptance.
 
+
+## Corrected 4 ms software pairing acceptance — PENDING USER EXECUTION
+
+Build the current feature branch, copy/review the unchanged reference profile
+again and restart `mantisd` using that profile. Keep
+`hardware_sync_configured=false` and `max_v4l2_delta_ns=4000000`. Stop other users
+of the selected measurement routes. With the matching daemon/SDK environment
+from above, run a brief check before attempting sustained recording:
+
+```bash
+PYTHONPATH="$MANTIS_PYTHONPATH" /usr/bin/python3 tools/validate_x1_pairing.py --duration 1 > /tmp/x1-pairing-4ms.json
+cat /tmp/x1-pairing-4ms.json
+```
+
+The tool uses only the public Python client API. It rejects a fake backend,
+a widened tolerance or a different reference mode, records briefly, stops and
+waits for finalization, then runs verification twice and compares the reports.
+A capture error is raised at stop instead of proceeding to a misleading replay
+failure. Save the result and daemon log; do not classify the corrected pairing as
+hardware PASS until this command passes on Q6A. A short buffered/cache-backed
+capture does not establish sustained microSD/NVMe throughput.
+
+Require timestamp-nearest pairing, both clocks comparable, the actually selected
+RIGHT−LEFT V4L2 delta within ±4 ms, zero native gaps/capture errors and pairing
+failures, zero recorder drops/saturation and equal produced/committed FrameSets.
+Review selected native LEFT/RIGHT counters and signed LEFT−RIGHT offset; an offset
+near six is plausible from the earlier result but not required on every start.
+Startup exclusions are counted separately and are not steady-state sequence
+loss. Received counts must equal paired FrameSets plus startup exclusions plus
+shutdown lookahead for each camera. Never describe intentional exclusions as a
+lossless recording of all sensor observations.
+
+Pending memory is two owned observations per camera: front plus one successor.
+Nearest decisions use monotonically increasing comparable V4L2 timestamps;
+ties choose the earlier observation. Startup permits 32 exclusions total within
+the profile stall timeout (1000 ms in the reference). Once aligned, any required
+unmatched advancement fails capture. Hardware-configured mode additionally
+requires equal native counters; neither path measures optical exposure skew.
+Parent metadata stores decisions, tolerance, counters/offset, deltas and lookahead
+for exact replay. Camera-native counters still detect gaps, repeats and reversals.
+The profile, media setup, packed bytes and RawCapture schema are unchanged.
 
 ## Ten-second acquisition acceptance
 
@@ -219,8 +290,9 @@ PY
 
 Save duration, FrameSets produced/committed, camera frame counts and sequence gaps,
 queue depth/capacity/high water, total container bytes, writer MB/s and MiB/s,
-copy/buffer mode, sequence agreement, V4L2 delta, host-arrival delta and configured
-sync mode. Also record `left_requested_vblank`, `right_requested_vblank`, both
+copy/buffer mode, pairing mode, selected native counters and signed LEFT−RIGHT
+offset, paired V4L2 delta, host-arrival delta, startup unmatched counts, terminal
+lookahead counts, pairing failures and configured sync mode. Also record `left_requested_vblank`, `right_requested_vblank`, both
 `*_readback_vblank`, requested target FPS, optional `*_sensor_driver_interval_*`
 and capture driver interval, and measured per-camera receive FPS. Missing driver
 intervals/controls are unavailable, not fabricated. VBLANK is set on graph-resolved
@@ -231,8 +303,9 @@ Writer throughput is committed raw **payload** divided by duration;
 camera receive FPS. A capture failure means acceptance failed, even if a count
 cannot identify all exposures never delivered by a disconnected camera.
 
-Target receive rates should be near the requested mode, but **PENDING USER EXECUTION**:
-120 FPS is not an automatic success criterion proven by software fixtures.
+The short user capture measured ~119.223 receive FPS per camera. Sustained rates
+with corrected pairing remain **PENDING USER EXECUTION**; fixtures do not prove
+physical timing or storage capacity.
 `hardware_sync_configured` records an operator assertion; no trigger controller
 is programmed in v0.2. Ordinary V4L2/host timestamps do not measure optical skew.
 
@@ -305,23 +378,25 @@ A process kill validates process recovery, not device power-loss certification.
 
 ## Result classification
 
-- **USER-REPORTED HARDWARE PASS:** Q6A ARM64 build/tests, X1 loading, real CAMSS
-  traversal, dual sensor discovery, stable LEFT/RIGHT and capture-node resolution.
-- **OBSERVED FAILURE:** initial GREY 1280×800 STREAMON against Y10_1X10 1280×720
-  upstream graph returned EPIPE. The known-good external setup is documented above.
-- **IMPLEMENTED AND AUTOMATICALLY TESTED:** versioned route profiles, discovery
-  with disabled links, scoped conflicts and unrelated-route preservation,
-  transactional rollback/read-back failures, VBLANK fixtures, RAW8/Y10P acquisition,
-  known-vector unpack/display mapping, exact packed storage/replay, bounded QoS,
-  leased preview, real Studio dual preview, clients, restart/recovery, frozen ABI,
-  old capture readability, cleanup error propagation and quiet idle listener.
-- **IMPLEMENTED BUT REQUIRES Q6A VALIDATION — PENDING USER EXECUTION:** plugin-owned
-  media setup/Y10P STREAMON, actual FrameSets and receive FPS, sustained recording
-  on suitable storage, real Y10P replay/crash recovery, timing source semantics,
-  physical synchronization and optical exposure skew. No hardware PASS is claimed.
-- **DEFERRED:** DMABUF/external-buffer zero-copy, 1280×800 mode investigation,
-  physical trigger programming, true optical timing instrumentation and scanner
-  algorithms beyond acquisition. No optical exposure-skew measurement exists.
+- **USER-VALIDATED HARDWARE PASS:** native ARM64 build/tests, disabled-link
+  discovery, stable roles/nodes, plugin-owned CAMSS setup, Y10_1X10 pads,
+  VBLANK=196 read-back, 720-line Y10P dual STREAMON and ~119.22 receive FPS, zero
+  native gaps/capture errors, short lossless recording/finalization and two-pass
+  real replay. The 141-FrameSet results above used the diagnostic 100 ms tolerance.
+- **OBSERVED PAIRING FAILURE:** equal native counters had ~51.8 ms timestamp
+  offset, so the old 4 ms equality-based pairing failed. Independent sequence
+  origins require software timestamp correspondence; the tolerance is not widened.
+- **IMPLEMENTED AND AUTOMATICALLY TESTED:** timestamp-nearest software pairing,
+  two-slot pending queues, startup offsets in both directions, startup budget,
+  gap/repeat/reversal/clock/tolerance failures after alignment, strict hardware
+  mode, explicit accounting and packed-byte replay. Existing native route setup,
+  RAW8, Y10P, preview/QoS, recovery, clients and frozen ABI remain tested.
+- **PENDING USER EXECUTION:** corrected 4 ms pairing, sustained ten-second/full-rate
+  NVMe recording, corrected-pairing process-crash recovery, physical hardware
+  synchronization, optical exposure skew and 1280×800 mode. No fixture result
+  changes these to PASS.
+- **DEFERRED:** DMABUF/external-buffer zero-copy, physical trigger programming,
+  optical timing instrumentation and scanner algorithms beyond acquisition.
 
 Native memory path is MMAP plus one acquisition copy before QBUF. Raw bytes remain
 packed; consumer-only preview maps sample intensity to its upper eight bits.

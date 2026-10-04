@@ -147,7 +147,7 @@ of v0.1 data. No later scanner algorithm or release tag is included.
 
 Final CTest logs are preserved in `docs/validation/v0.2-{debug,headless,sanitizers}-ctest.log`.
 
-## Q6A hardware-gap continuation — 2026-10-04
+## Q6A hardware-gap continuation — 2026-10-04 (historical checkpoint)
 
 This section supersedes the earlier v0.2 mode/setup limitations. The architecture,
 project format, recorder, protocol/data plane and public ABI remain in place.
@@ -234,7 +234,7 @@ be 307.20 MB/s, but that mode is unvalidated. The user reported approximately
 observation, not evidence of a RawCapture implementation ceiling. No NVMe is
 installed yet; suitable storage and full-rate recording acceptance remain pending.
 
-### Real hardware evidence and handoff
+### Historical hardware evidence at the setup checkpoint
 
 **USER-REPORTED PASS:** Q6A ARM64 build, automated tests on Q6A, real plugin load,
 CAMSS traversal, both OV9281 sensors, stable LEFT/RIGHT assignment and dynamic
@@ -259,3 +259,90 @@ failure; selected media configuration remains after successful stop. Provisionin
 permissions and exclusive use of selected resources remain operator duties.
 The raw recorder/durability design is unchanged. Process crash tests do not certify
 power-loss behavior of an untested storage device.
+
+
+## Timestamp-pairing continuation — 2026-10-04
+
+This section supersedes historical pending setup/streaming results above.
+**USER-VALIDATED PASS:** Q6A ARM64 build/tests, discovery with four mutable routes
+disabled, plugin-owned CAMSS setup, Y10_1X10 pads, both VBLANK=196 read-backs,
+Y10P 1280×720 dual STREAMON, real packed RAW10 and ~119.223228 receive FPS on each
+camera. The reported capture produced/committed 141 FrameSets, 141 LEFT/RIGHT
+frames, zero native gaps/errors, zero raw recorder drops/saturation and queue
+high water 12/32. Artifact FINALIZED: 325,625,318 bytes, five chunks,
+`fnv1a64:26a3ea204d51863c`. Two-pass real replay verified 141 FrameSets/LEFT/RIGHT,
+continuous sequences, raw integrity PASS and replay PASS.
+
+That capture used a temporary diagnostic 100 ms tolerance. Equal native counters
+showed ~51.5–51.9 ms V4L2 offset (final 51,786,000 ns), host delta 5–8 ms,
+`linux.monotonic` clocks and flags 8193. Independent counter origins are not
+exposure correspondence. The profile stays at 4 ms; [ADR-026](../adr/026-bounded-software-observation-pairing.md)
+replaces software counter equality with bounded timestamp-nearest pairing.
+**PENDING USER EXECUTION:** corrected 4 ms pairing, sustained ten-second/full-rate
+NVMe recording, real process-crash recovery after correction, hardware trigger
+synchronization, optical exposure skew and 1280×800 mode. The short successful
+recording does not certify sustained microSD throughput. No new performance
+benchmark or physical timing measurement is claimed for this pairing change.
+
+### Added deterministic coverage
+
+- Equal origins/exact or close timestamps; LEFT/RIGHT startup six frames apart;
+  stable unequal-counter pairing and independent origins with offset −100.
+- Nearest lookahead, deterministic ties, tolerance failures, bounded two-slot
+  queues, total startup limit, clock mismatch/unknown/change and native gaps,
+  repeats, reversals and timestamp discontinuity after alignment.
+- Hardware-configured mode retains counter equality plus timestamp bounds;
+  SyncQuality stays software and optical exposure skew is unavailable.
+- Thirty-eight format/scenario combinations exercise the loaded plugin through
+  the public ImageStream adapter. RAW8 and Y10P pixel bytes, native counters,
+  clocks/timing, calibration, sync and pairing metadata survive two exact canonical
+  replays through the generic recorded source. Native setup remains unchanged. A delayed-ready first pair is rejected after
+  the startup deadline even when the caller requests a longer blocking read.
+- Real daemon/CLI/Python/C++ and offscreen Studio tests use ±6 counter offsets;
+  no raw drops/saturation, explicit startup/tail accounting, exact replay digest,
+  restart/recovery and the public-client Q6A validation command remain covered.
+- Python Capture.stop returns the capture error immediately; successful asynchronous
+  finalization waits and job-error propagation are independently covered.
+
+All thirteen baseline suites remain, plus pairing policy, loaded pairing/replay
+and Python stop tests (sixteen total). ABI-v1 C/Virtual Scanner, old RawCapture/
+project readability, native route setup, bounded QoS and control-listener tests
+are retained. New tests use deterministic sequences/timestamps and readiness
+waits rather than sleeps to force outcomes.
+
+
+### Final local matrix and checkpoint CI
+
+The final runs include the startup-deadline guard and executable Q6A validation
+handoff. No project-source compiler warnings or sanitizer reports were observed.
+
+| Configuration | Build | CTest |
+| --- | --- | --- |
+| Debug Studio ON | PASS | 16/16 PASS, 27.06 s |
+| Debug Studio OFF | PASS | 16/16 PASS, 16.57 s |
+| Release Studio OFF | PASS | 16/16 PASS, 16.42 s |
+| ASan + UBSan Studio OFF | PASS | 16/16 PASS, 20.74 s; leak detection and halt-on-error enabled |
+
+Logs: `docs/validation/v0.2-software-pairing-{debug,headless,release,sanitizers}-ctest.log`.
+The theoretical 720-line dual packed payload remains 276.48 MB/s at 120 FPS;
+no new throughput benchmark is claimed. Pending buffer capacity is two frames
+per camera (at the validated size, at most 4,608,000 bytes of pending payload,
+separate from the existing driver, recorder and preview bounds).
+
+| Checkpoint | Inspected architecture run | Conclusion |
+| --- | --- | --- |
+| bc870cb | [37206748881](https://github.com/martinkoenig/mantis-studio/actions/runs/37206748881) | all five jobs PASS |
+| cf752a2 | [37207910251](https://github.com/martinkoenig/mantis-studio/actions/runs/37207910251) | all five jobs PASS |
+| 3a287a2 | [37211493832](https://github.com/martinkoenig/mantis-studio/actions/runs/37211493832) | all five jobs PASS |
+| a64c2d1 | [37213924718](https://github.com/martinkoenig/mantis-studio/actions/runs/37213924718) | all five jobs PASS |
+
+The unchanged matrix covers native Ubuntu x86_64/ARM64 Studio ON/OFF and
+sanitizers. The final documentation/handoff checkpoint requires its own CI
+inspection after push; this table does not invent its conclusion.
+
+Review against origin/main and the preceding hardware-gap HEAD found no new
+native media/backend or profile change, kernel/Qt leakage, raw-path unpacking,
+unbounded queue, frame payload in Protobuf, per-frame storage transaction,
+ABI/layout/schema modification or synchronization overclaim. Pairing metadata
+is additive; old recordings replay without re-pairing or fabricated metadata.
+The reference profile remains 1280×720 Y10P, Y10_1X10, VBLANK=196 and 4 ms.

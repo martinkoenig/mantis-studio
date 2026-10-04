@@ -148,6 +148,16 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert cli("replay", "verify", capture.raw_artifact)["digest"] == report["digest"]
         realtime = client.replay.start(capture.raw_artifact, real_time=True)
         realtime.wait(timeout=15)
+        validation_env = dict(env, PYTHONPATH=str(build / "python"))
+        hardware_check = subprocess.run([sys.executable,
+            str(Path(__file__).resolve().parents[2] / "tools/validate_x1_pairing.py"),
+            "--duration", "0.2"], env=validation_env, text=True, capture_output=True)
+        assert hardware_check.returncode != 0 and "rejects the fake backend" in hardware_check.stderr
+        validation = json.loads(subprocess.check_output([sys.executable,
+            str(Path(__file__).resolve().parents[2] / "tools/validate_x1_pairing.py"),
+            "--allow-fixture", "--duration", "0.2"], env=validation_env, text=True))
+        assert validation["short_pairing_check"] == "PASS"
+        assert validation["sustained_storage_acceptance"] == "NOT ESTABLISHED"
         # C++ Client SDK drives the same service, including preview maps/release.
         subprocess.check_call([str(build / "bin/mantis-acquisition-client-tests")], env=env)
         # A cleanup ioctl failure must be visible and keep raw data recoverable.

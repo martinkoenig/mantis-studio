@@ -74,3 +74,20 @@ high-rate pixels through Protobuf. `artifacts.recover(..., timeout=3600)` and C+
 recovery use a daemon job and return the finalized descriptor. Stop, recovery and
 verification wait up to an hour by default; timeouts do not terminate acquisition
 or the underlying job. CLI exposes the same controls (see `mantis-cli --help`).
+
+`Capture.stop()` raises `MantisError(component="capture")` immediately when the
+returned capture contains an error, including stop/cleanup failures. Successful
+stops continue waiting for daemon-owned asynchronous RawCapture finalization;
+finalization job failures retain their own diagnostics. Do not attempt replay of
+a failed/recoverable capture before explicit recovery.
+
+Capture diagnostics distinguish `pairing_mode`, selected `left.native_sequence`
+and `right.native_sequence`, signed LEFT−RIGHT `native_sequence_offset`,
+`paired_v4l2_delta_ns` (RIGHT−LEFT), startup exclusions, terminal lookahead,
+per-camera native gaps and raw recorder failures. Native counter equality is
+reported as `native_counter_equality`; it is not exposure synchronization.
+
+`receive_fps` is the received-observation count at the last valid dequeue divided
+by host elapsed time since acquisition started. It includes startup buffer drain
+and exclusions, so short-run rates can differ between cameras and from their
+steady cadence. It is separate from driver intervals and exposure timing.

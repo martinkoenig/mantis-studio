@@ -98,3 +98,16 @@ bit depth and packing remain explicit. Original V4L2 bytes, including padding,
 are recorded and replayed without unpacking or color conversion. Record/segment
 checksums and replay digest cover these exact bytes. Old RAW8/schema-1 captures
 continue through their original reader; no project schema migration is required.
+
+
+## Software-paired observations (schema unchanged)
+
+Live X1 FrameSets retain each camera's own sequence/timestamp and the parent
+Mantis sequence. Parent metadata includes timestamp pairing mode, chosen counters,
+signed LEFT−RIGHT offset, RIGHT−LEFT paired V4L2 delta, host delta, profile tolerance,
+startup exclusion counts and pending/lookahead diagnostics. Replay returns these
+exact associations and bytes; storage and downstream algorithms never re-pair
+camera observations. Startup exclusions and shutdown lookahead were never
+published and are explicitly counted outside the LOSSLESS recorder guarantee.
+This adds metadata keys only: RawCapture schema 2 and project schema 1 are unchanged,
+and old captures do not acquire invented pairing metadata during replay.

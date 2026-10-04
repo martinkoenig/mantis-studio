@@ -40,7 +40,7 @@ See the validation report for actually executed checks. Platform support is expl
 ## v0.2 — Real Acquisition Foundation
 
 Continues the same daemon, public SDK, typed pipeline, SQLite project store and
-dark QML shell. Architecture v1 remains frozen; ADRs 021–025 document additive extensions.
+dark QML shell. Architecture v1 remains frozen; ADRs 021–026 document additive extensions.
 
 | Requirement | Implemented evidence / boundary |
 | --- | --- |
@@ -49,26 +49,29 @@ dark QML shell. Architecture v1 remains frozen; ADRs 021–025 document additive
 | Scoped native setup | Explicit disabled-link route discovery, necessary conflict handling, ACTIVE pad formats, VBLANK set/read-back, verified setup with rollback; no global reset |
 | Packed RAW10 | Y10P byte-oriented attribute plus logical layout metadata; exact payload recording/replay, consumer-only sample view and Qt grayscale conversion; RAW8 unchanged |
 | Dual observation | Immutable FrameSet with native sequences, timestamps/clocks, host arrival, role/identity, raw mode, sync and calibration metadata |
-| Failure detection | Deterministic pairing, gaps/repeats/mismatch, backward timestamps, lag/stall/disconnect; failures are explicit |
-| Raw QoS | Capacity-32 LOSSLESS writer queue, timed saturation failure, depth/high water; clean stop drains already acquired observations |
+| Pairing and failures | Timestamp-nearest software pairing, fixed two-slot camera queues, bounded/counted startup exclusions; strict hardware-mode counters, native gaps/repeats/reversals, backward timestamps, incomparable clocks and steady-state unmatched observations fail explicitly |
+| Raw QoS | Capacity-32 LOSSLESS writer queue, timed saturation failure, depth/high water; clean stop drains published FrameSets; startup exclusions and terminal lookahead are counted separately |
 | Preview | Independent capacity-one LATEST_ONLY branch; bounded immutable local leases, client-only grayscale conversion, actual dual Studio views tested |
 | RawCapture v2 | Sequential segments, record checksums/boundaries, segment durability/index transactions, bounded replay mappings |
 | Recovery | Process-kill/restart exposes RECOVERABLE; explicit job scans/validates complete records, truncates only incomplete tail, rejects corruption/index mismatch |
 | Replay | Generic ImageStream source, real-time/ASAP, two-pass canonical verification; no physical device required |
 | Clients | Additive protocol, CLI/C++/Python capture status, diagnostics, preview/replay/recovery; existing Virtual Scanner workflow passes |
 | Compatibility | Project/SQLite schema stays 1; RawCapture schema 2 and MANTIS02 are explicit additions; v0.1 packet/capture path remains readable |
-| Validation | Thirteen suites; local Studio/headless/sanitizers and native x86_64/ARM64 CI; hardware status separate |
+| Validation | Sixteen suites; local Studio/headless/sanitizers and native x86_64/ARM64 CI; hardware status separate |
 
-**USER-REPORTED HARDWARE PASS:** Q6A ARM64 build and automated tests, X1 plugin
-loading, real CAMSS graph traversal, stable LEFT/RIGHT sensor identities and
-dynamic capture-node identification. The initial GREY 1280×800 STREAMON failed
-EPIPE against an upstream Y10_1X10 1280×720 graph.
+**USER-VALIDATED HARDWARE PASS:** Q6A ARM64 build/tests, real discovery with the
+four mutable measurement links disabled, stable roles/nodes, plugin-owned CAMSS
+setup, Y10_1X10 pads, VBLANK=196 read-back, Y10P 1280×720 dual STREAMON and
+~119.223 receive FPS on both cameras. A short 141-FrameSet capture had zero native
+gaps/capture errors, recorder drops or saturation, finalized and passed two-pass
+replay verification. This used a temporary 100 ms pairing tolerance; equal native
+counters had ~51.8 ms timestamp offset and did not establish exposure association.
 
-**IMPLEMENTED BUT REQUIRES Q6A VALIDATION:** plugin-owned media setup and Y10P
-STREAMON, actual dual FrameSets/receive rate, sustained recording on suitable
-storage, real replay/crash recovery and physical synchronization. These remain
-**PENDING USER EXECUTION**. The reference is 1280×720 Y10P / Y10_1X10 / VBLANK=196;
-1280×800 crop bounds are not evidence of a validated acquisition mode.
+**PENDING USER EXECUTION:** corrected timestamp-nearest pairing at the restored
+4 ms tolerance, sustained ten-second/full-rate NVMe recording, real process-crash
+recovery after this correction, hardware trigger synchronization and optical
+exposure skew. The validated native mode remains 1280×720 Y10P / Y10_1X10 /
+VBLANK=196. 1280×800 mode remains unvalidated.
 
 **DEFERRED:** DMABUF/external-buffer zero-copy, physical trigger programming and
 true exposure-skew measurement, investigation of 1280×800 Y10P, sophisticated
@@ -78,7 +81,7 @@ introduced. The example algorithm remains image-only; a FrameSet-aware native
 processing ABI is deferred to the algorithm milestone.
 
 One MMAP-to-owned-buffer acquisition copy is explicit. Hardware sync configured
-is an operator assertion, separate from sequence agreement, V4L2 delta and host
-arrival delta. SyncQuality remains software; no optical timing accuracy is claimed.
+is an operator assertion, separate from camera-local counter equality, selected
+V4L2 timestamp delta and host arrival delta. SyncQuality remains software; no optical timing accuracy is claimed.
 See the [review](v0.2-acquisition-review.md), [storage format](storage.md),
 [validation](validation.md), and [Q6A procedure](../hardware/x1-q6a-acquisition-validation.md).
