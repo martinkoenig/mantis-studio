@@ -88,3 +88,13 @@ can continue polling control snapshots while immutable segments are validated;
 only metadata updates briefly hold the SQLite mutex. Cancellation checks between
 segments/records leave the artifact RECOVERABLE and retryable. CLI/SDK helpers
 wait for completion; a disconnected client does not cancel these operations.
+
+## Packed image payloads
+
+Y10P uses the [packed image byte contract](image-layout.md), not a u8 pixel grid.
+The unchanged MANTIS01 child codec persists its rank-one byte attribute and image
+metadata inside RawCapture schema 2. Logical dimensions, byte row stride, sample
+bit depth and packing remain explicit. Original V4L2 bytes, including padding,
+are recorded and replayed without unpacking or color conversion. Record/segment
+checksums and replay digest cover these exact bytes. Old RAW8/schema-1 captures
+continue through their original reader; no project schema migration is required.

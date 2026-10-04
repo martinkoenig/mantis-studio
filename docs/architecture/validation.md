@@ -48,7 +48,7 @@ A local Debug run of `mantis-benchmark` transferred 100,000 integer queue items 
 
 Reproduce with the commands in `BUILDING.md`. CTest evidence logs from the final successful validation and the separate LeakSanitizer environment limitation are included in `docs/validation/`.
 
-## v0.2 acquisition validation — 2026-10-04
+## Historical v0.2 acquisition validation before Q6A findings — 2026-10-04
 
 The earlier sections are historical v0.1 evidence. The v0.2 continuation preserves
 those workflows and adds the following executed checks; physical hardware is absent.
@@ -121,16 +121,17 @@ insufficient; evaluate NVMe rather than assuming its performance.
 
 ### Hardware acceptance and known limits
 
-Q6A build, real dual OV9281 discovery, RAW8 capture, approximately 120 FPS,
-sustained recording and physical synchronization are all **PENDING USER EXECUTION**.
+At this earlier checkpoint, Q6A build, real discovery, acquisition, throughput
+and physical synchronization were unexecuted. The hardware-gap record below
+supersedes this earlier status.
 Use [the exact procedure](../hardware/x1-q6a-acquisition-validation.md), including
 hardware-free double replay and abrupt daemon termination/recovery.
 
 Production uses native V4L2 MMAP and **one acquisition copy**, followed by shared
 immutable fan-out. DMABUF zero-copy is deferred. Preview file writes and grayscale
 display conversion add separate preview costs. Real ioctl behavior is not proven
-by backend fixtures; enabled media links/pads must already be configured.
-Only RAW8 recording is implemented. Exposure/gain snapshots are queried when
+by backend fixtures; that checkpoint required preconfigured enabled media links/pads.
+At that checkpoint only RAW8 recording was implemented. Exposure/gain snapshots are queried when
 supported, not fabricated per-exposure telemetry. V4L2 timestamp source varies
 by driver; software timestamp/arrival deltas and sequence agreement do not measure
 true optical exposure skew. Hardware-sync configuration is an operator assertion.
@@ -145,3 +146,115 @@ original path. New RawCapture schema 2 / MANTIS02 do not require migration or re
 of v0.1 data. No later scanner algorithm or release tag is included.
 
 Final CTest logs are preserved in `docs/validation/v0.2-{debug,headless,sanitizers}-ctest.log`.
+
+## Q6A hardware-gap continuation — 2026-10-04
+
+This section supersedes the earlier v0.2 mode/setup limitations. The architecture,
+project format, recorder, protocol/data plane and public ABI remain in place.
+The reference mode is now 1280×720 packed Y10P, Y10_1X10 upstream and VBLANK=196,
+requested target 120 FPS. RAW8 remains supported and version-1 profiles preserve
+externally configured semantics. ADRs 024–025 document scoped plugin setup and
+the additive packed image byte contract; project/SQLite schema remains 1 and
+RawCapture schema/container remains 2. No v0.1 data rewrite or tag change occurs.
+
+### Automated implementation evidence
+
+The local toolchain remains Ubuntu 25.10 x86_64 / GCC 15.2 / Qt 6.9.2.
+
+| Configuration | Build | Test evidence |
+| --- | --- | --- |
+| Debug Studio ON | PASS | 13/13, 21.59 s |
+| Debug Studio OFF | PASS | 13/13, 12.34 s |
+| Release Studio OFF | PASS | 13/13, 11.33 s |
+| ASan + UBSan Studio OFF | PASS | 13/13, 13.49 s, detect_leaks=1 and halt_on_error=1 |
+
+These final runs include the route-check/rollback review fixes.
+Stored logs: `docs/validation/v0.2-q6a-gap-{debug,headless,release,sanitizers}-ctest.log`.
+No sanitizer errors occurred. The intentional isolated crash fixture remains a
+successful daemon-survival test, not an unreported parent crash.
+
+Added coverage includes disabled-link route selection; explicit entity/pad
+validation; missing/ambiguous entities; unsupported media-bus/RAW10 format;
+scoped incoming conflicts and EBUSY-gated source conflicts; unrelated RGB/fan-out
+preservation; VBLANK set/read-back; format/link/control read-back mismatch;
+LEFT/RIGHT setup and STREAMON failures with context; failure rollback, committed
+setup and incomplete rollback reporting. Known Y10P bit vectors and padded rows
+prove sample access and display reduction while preserving raw bytes. RAW8 and
+Y10P both traverse daemon → protocol → CLI/Python/C++ → actual offscreen Studio
+dual preview, segmented recording, repeated deterministic replay/digest,
+hardware-free restart and interrupted-capture recovery. A STREAMOFF failure
+remains explicit and leaves the artifact RECOVERABLE. ABI-v1 C DSO and old
+RawCapture compatibility tests still pass. Listener idle regression exceeds six
+seconds, then verifies control requests and shutdown without accept error spam.
+Genuine listener failures remain errors; a failed listener is not retried in a
+busy loop. POSIX and Windows branches keep bounded connection read/write timeouts;
+Windows/macOS native execution remains untested.
+
+CI was inspected for these continuation checkpoints:
+
+| Commit | Architecture run | Result |
+| --- | --- | --- |
+| 0b7177c | [37197914514](https://github.com/martinkoenig/mantis-studio/actions/runs/37197914514) | all five jobs PASS |
+| dfd8628 | [37198468003](https://github.com/martinkoenig/mantis-studio/actions/runs/37198468003) | all five jobs PASS |
+| 54ffb5e | [37198878341](https://github.com/martinkoenig/mantis-studio/actions/runs/37198878341) | all five jobs PASS |
+| f096603 | [37199422239](https://github.com/martinkoenig/mantis-studio/actions/runs/37199422239) | all five jobs PASS |
+| c08452e | [37201194604](https://github.com/martinkoenig/mantis-studio/actions/runs/37201194604) | all five jobs PASS |
+
+The matrix remains Ubuntu x86_64 Studio ON/OFF, native Ubuntu ARM64 Studio ON/OFF
+and ASan/UBSan. No workflow or tag-trigger policy change was made. Final HEAD
+requires its own inspected conclusion.
+
+### Informational Y10P Release fixture
+
+Executed `build/release/bin/mantis-acquisition-benchmark /tmp 64 Y10P`.
+Exact [JSON](../validation/v0.2-q6a-gap-y10p-release-benchmark.json) is retained.
+Two reusable 1280×720 byte-packed buffers, stride 1600, 64 FrameSets, 147,456,000
+payload bytes, 147,559,616 container bytes and three segments/SQLite segment
+commits. Construction/queue phases use 10,000 observations. No physical V4L2
+frame is acquired; only the initial owned-buffer copy is measured.
+
+| Measurement | Observed |
+| --- | --- |
+| FrameSet construction | 108.76 ns/observation |
+| Raw queue | 1,292,460 items/s, capacity/high water 32/32, zero drops |
+| Append payload | 365.45 MB/s |
+| Finalization | 0.5670 s |
+| Append plus finalization | 151.94 MB/s |
+| Verified replay payload | 480.62 MB/s |
+| Validated index scan | 0.2642 s |
+| Initial fixture copy | 0.001044 s |
+| Process peak RSS | 78,303,232 bytes |
+
+This short cache-backed workstation result is not sustained disk speed, Q6A
+speed or real 120 FPS evidence. The theoretical dual 1280×720 Y10P payload at
+120 FPS is **276.48 MB/s / 263.671875 MiB/s** before overhead. 1280×800 Y10P would
+be 307.20 MB/s, but that mode is unvalidated. The user reported approximately
+32.04 MB/s on the current `/dev/mmcblk1p3` ext4 microSD. That is a storage-device
+observation, not evidence of a RawCapture implementation ceiling. No NVMe is
+installed yet; suitable storage and full-rate recording acceptance remain pending.
+
+### Real hardware evidence and handoff
+
+**USER-REPORTED PASS:** Q6A ARM64 build, automated tests on Q6A, real plugin load,
+CAMSS traversal, both OV9281 sensors, stable LEFT/RIGHT assignment and dynamic
+capture-node resolution. **OBSERVED FAILURE:** initial GREY 1280×800 STREAMON
+returned EPIPE against upstream Y10_1X10 1280×720. **KNOWN-GOOD EXTERNAL SETUP:**
+1280×720 Y10_1X10/Y10P, stride 1600, sizeimage 1,152,000, VBLANK=196, as documented
+in the [hardware procedure](../hardware/x1-q6a-acquisition-validation.md).
+
+**PENDING USER EXECUTION:** plugin-owned setup and Y10P STREAMON, actual dual
+FrameSets/receive FPS, ten-second lossless capture, NVMe performance, real Y10P
+replay and crash recovery, physical synchronization and optical exposure skew.
+No pending item is a PASS. VBLANK/read-back, requested FPS, driver intervals,
+V4L2 timestamp delta and host arrival delta are distinct from measured optical
+exposure timing. Exposure/gain are start-time queried snapshots or unavailable.
+
+Memory path: MMAP plus one copy before QBUF; exact packed bytes share immutable
+fan-out. Preview converts on the client worker with LATEST_ONLY semantics.
+DMABUF/external-buffer zero-copy and physical trigger programming are deferred.
+Selected upstream state rollback is attempted and verified, but cannot be atomic
+against another camera setup process. Capture-node S_FMT is not restored on
+failure; selected media configuration remains after successful stop. Provisioning,
+permissions and exclusive use of selected resources remain operator duties.
+The raw recorder/durability design is unchanged. Process crash tests do not certify
+power-loss behavior of an untested storage device.

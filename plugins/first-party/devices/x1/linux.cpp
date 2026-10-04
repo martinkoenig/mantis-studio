@@ -370,7 +370,17 @@ class LinuxCamera final : public Camera {
                 int64_t(b.timestamp.tv_sec) * 1000000000 + int64_t(b.timestamp.tv_usec) * 1000,
                 received, clock, format_, controls_};
             emit(view); // The only acquisition copy occurs here, before driver reuse.
-        } catch (...) { call(fd_.value, VIDIOC_QBUF, &b); throw; }
+        } catch (const std::exception &e) {
+            if (call(fd_.value, VIDIOC_QBUF, &b) < 0) {
+                const auto error = errno;
+                throw std::runtime_error(std::string(e.what()) + "; cleanup QBUF: " + std::strerror(error) +
+                    " (errno " + std::to_string(error) + ")");
+            }
+            throw;
+        } catch (...) {
+            checked(fd_.value, VIDIOC_QBUF, &b, "QBUF after unknown frame callback failure");
+            throw;
+        }
         checked(fd_.value, VIDIOC_QBUF, &b, "QBUF");
         return true;
     } catch (const std::exception &e) { throw std::runtime_error(context_ + " " + e.what()); }

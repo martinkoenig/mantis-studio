@@ -9,7 +9,7 @@ The daemon owns devices, captures, projects, jobs and plugins. Qt Quick Studio, 
 
 ![Mantis Studio with synthetic geometry](docs/images/studio.png)
 
-**This is a development milestone, not production scanner software.** The existing Virtual Scanner workflow remains. v0.2 adds a Linux Mantis X1 plugin, explicit dual-camera FrameSets, segmented recoverable raw recording, dual grayscale preview and deterministic hardware-free replay. Native OV9281/Q6A behavior and sustained 120 FPS recording remain **PENDING USER EXECUTION**. No reconstruction algorithms are added.
+**This is a development milestone, not production scanner software.** The existing Virtual Scanner workflow remains. v0.2 adds a Linux Mantis X1 plugin, explicit dual-camera FrameSets, segmented recoverable raw recording, dual grayscale preview and deterministic hardware-free replay. The user has validated Q6A ARM64 build/tests and real dual-sensor discovery. Plugin-owned media setup, Y10P streaming and sustained recording remain **PENDING USER EXECUTION**. No reconstruction algorithms are added.
 
 ## Quick start
 
@@ -37,7 +37,7 @@ Export filenames must not already exist. Exports belong outside the `.mantis` pr
 
 - Stable media/V4L2 discovery with a versioned explicit LEFT/RIGHT profile.
 - Additive acquisition C interface; ABI v1 and Virtual Scanner remain supported.
-- Native RAW8 MMAP capture with one acquisition copy; DMABUF is deferred.
+- Native scoped media-link/pad/timing setup, packed Y10P RAW10 and optional RAW8 MMAP capture with one acquisition copy; DMABUF is deferred.
 - Bounded LOSSLESS recorder and independent LATEST_ONLY preview.
 - Sequential RawCapture v2 segments, batched durability/SQLite indexing and recovery.
 - Real-time/ASAP replay, two-pass canonical byte/metadata verification.
@@ -46,10 +46,15 @@ Export filenames must not already exist. Exports belong outside the `.mantis` pr
 See the [architecture gap review](docs/architecture/v0.2-acquisition-review.md),
 [storage format](docs/architecture/storage.md) and
 [exact Q6A acceptance procedure](docs/hardware/x1-q6a-acquisition-validation.md).
-Hardware results are pending; deterministic fixtures are not physical scanner evidence.
+The current Q6A reference profile selects **1280×720 Y10P**, Y10_1X10 upstream
+and VBLANK=196, with requested target 120 FPS. This is the known-good external
+setup reported by the user; plugin-owned streaming still needs hardware validation.
+Dual packed payload is **276.48 MB/s** before overhead. The reported microSD
+benchmark was 32.04 MB/s; sustained recording awaits suitable storage testing.
+Deterministic fixtures are not physical scanner evidence.
 
 ```bash
-export MANTIS_X1_PROFILE="$PWD/profiles/x1-q6a.json" # review physical roles and enumerated RAW8 fourcc first
+export MANTIS_X1_PROFILE="$PWD/profiles/x1-q6a.json" # review physical roles, bus/entity routes and native formats first
 ./build/debug/bin/mantis-cli devices list
 ./build/debug/bin/mantis-cli devices info DEVICE_ID
 ./build/debug/bin/mantis-cli capture start DEVICE_ID
@@ -61,7 +66,7 @@ export MANTIS_X1_PROFILE="$PWD/profiles/x1-q6a.json" # review physical roles and
 
 Set the profile in the daemon's environment before launching it. No profile
 means no assumed physical left/right assignment. The explicit test-only backend
-uses `MANTIS_X1_FAKE=normal` and the same profile; never enable it for hardware acceptance.
+uses `MANTIS_X1_FAKE=normal` with a fixture profile (`bus_identity: fixture`); never enable it for hardware acceptance.
 
 ## Preserved v0.1 reference workflow
 
@@ -83,7 +88,7 @@ The frame-zero reference is intentional: client timing does not change the demon
 | Platform | Architectural target | Validation in this delivery | Support commitment |
 | --- | --- | --- | --- |
 | Linux x86_64 | Yes | Ubuntu 24.04; GCC 13; Qt 6.4; native build and process tests | Skeleton development reference |
-| Linux ARM64 | Tier 1 | Native GitHub Actions Studio ON/OFF passed for v0.2; physical Q6A pending | Linux build and fixture tests validated |
+| Linux ARM64 | Tier 1 | Native GitHub Actions Studio ON/OFF passed for v0.2; user-reported Q6A build/tests pass; new streaming pending | Linux build and fixture tests validated |
 | Windows x86_64 | Yes | Platform implementation present; not built/tested here | Not yet supported |
 | macOS ARM64 | Yes | POSIX implementation used; not built/tested here | Not yet supported |
 

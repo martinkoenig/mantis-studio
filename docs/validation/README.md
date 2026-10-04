@@ -15,3 +15,11 @@ The `v0.2-*-ctest.log` files preserve the final local runs with source-root path
 normalized, matching the historical log convention.
 `v0.2-acquisition-release-benchmark.json` preserves the actual informational
 64-FrameSet fixture output; it is not sustained storage or hardware evidence.
+
+The Q6A hardware-gap continuation adds thirteen-suite results in
+`v0.2-q6a-gap-{debug,headless,release,sanitizers}-ctest.log`, covering RAW8/Y10P,
+scoped media setup/rollback, quiet idle control sockets, clients, actual Studio
+preview, frozen ABI, storage and replay. Leak detection is enabled for the
+sanitizer result. `v0.2-q6a-gap-y10p-release-benchmark.json` records the 64-FrameSet
+1280×720 packed fixture; it is not Q6A or sustained storage evidence. Physical
+status and user-reported earlier findings are separated in the validation report.

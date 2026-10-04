@@ -40,12 +40,14 @@ See the validation report for actually executed checks. Platform support is expl
 ## v0.2 — Real Acquisition Foundation
 
 Continues the same daemon, public SDK, typed pipeline, SQLite project store and
-dark QML shell. Architecture v1 remains frozen; ADRs 021–023 document extensions.
+dark QML shell. Architecture v1 remains frozen; ADRs 021–025 document additive extensions.
 
 | Requirement | Implemented evidence / boundary |
 | --- | --- |
-| Hardware discovery and roles | Linux media topology + V4L2, version-1 JSON profile, sensor/bus identity, explicit LEFT/RIGHT; transient node numbers are diagnostic |
+| Hardware discovery and roles | Linux media topology + V4L2, compatible version-1/version-2 JSON profiles, sensor/bus identity, explicit LEFT/RIGHT; transient node numbers are diagnostic |
 | Public composite device | Queried acquisition table on unchanged ABI-v1 root, selected parent opening, generic parent/child descriptors; frozen v0.1 C DSO still loads |
+| Scoped native setup | Explicit disabled-link route discovery, necessary conflict handling, ACTIVE pad formats, VBLANK set/read-back, verified setup with rollback; no global reset |
+| Packed RAW10 | Y10P byte-oriented attribute plus logical layout metadata; exact payload recording/replay, consumer-only sample view and Qt grayscale conversion; RAW8 unchanged |
 | Dual observation | Immutable FrameSet with native sequences, timestamps/clocks, host arrival, role/identity, raw mode, sync and calibration metadata |
 | Failure detection | Deterministic pairing, gaps/repeats/mismatch, backward timestamps, lag/stall/disconnect; failures are explicit |
 | Raw QoS | Capacity-32 LOSSLESS writer queue, timed saturation failure, depth/high water; clean stop drains already acquired observations |
@@ -55,19 +57,24 @@ dark QML shell. Architecture v1 remains frozen; ADRs 021–023 document extensio
 | Replay | Generic ImageStream source, real-time/ASAP, two-pass canonical verification; no physical device required |
 | Clients | Additive protocol, CLI/C++/Python capture status, diagnostics, preview/replay/recovery; existing Virtual Scanner workflow passes |
 | Compatibility | Project/SQLite schema stays 1; RawCapture schema 2 and MANTIS02 are explicit additions; v0.1 packet/capture path remains readable |
-| Validation | Nine suites; local Studio/headless/sanitizers and native x86_64/ARM64 CI; hardware status separate |
+| Validation | Thirteen suites; local Studio/headless/sanitizers and native x86_64/ARM64 CI; hardware status separate |
 
-**IMPLEMENTED BUT REQUIRES Q6A VALIDATION:** native ioctls, actual RAW8 modes,
-installed media topology, reconnect behavior on the kernel, receive rate,
-sustained storage and physical synchronization configuration. All real Q6A
-acceptance results are **PENDING USER EXECUTION**.
+**USER-REPORTED HARDWARE PASS:** Q6A ARM64 build and automated tests, X1 plugin
+loading, real CAMSS graph traversal, stable LEFT/RIGHT sensor identities and
+dynamic capture-node identification. The initial GREY 1280×800 STREAMON failed
+EPIPE against an upstream Y10_1X10 1280×720 graph.
 
-**DEFERRED:** DMABUF/external-buffer zero-copy, RAW10 recording, automatic
-board-specific media-pad programming, physical trigger programming and true
-exposure-skew measurement. Sophisticated replay seek/pause, remote data transport
-and isolated device streaming remain future work. No laser, calibration,
-triangulation, tracking, fusion, meshing or metrology algorithms are introduced.
-The existing example algorithm remains image-only; a FrameSet-aware native
+**IMPLEMENTED BUT REQUIRES Q6A VALIDATION:** plugin-owned media setup and Y10P
+STREAMON, actual dual FrameSets/receive rate, sustained recording on suitable
+storage, real replay/crash recovery and physical synchronization. These remain
+**PENDING USER EXECUTION**. The reference is 1280×720 Y10P / Y10_1X10 / VBLANK=196;
+1280×800 crop bounds are not evidence of a validated acquisition mode.
+
+**DEFERRED:** DMABUF/external-buffer zero-copy, physical trigger programming and
+true exposure-skew measurement, investigation of 1280×800 Y10P, sophisticated
+replay seek/pause, remote data transport and isolated device streaming. No laser,
+calibration, triangulation, tracking, fusion, meshing or metrology algorithms are
+introduced. The example algorithm remains image-only; a FrameSet-aware native
 processing ABI is deferred to the algorithm milestone.
 
 One MMAP-to-owned-buffer acquisition copy is explicit. Hardware sync configured

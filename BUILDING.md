@@ -3,7 +3,7 @@
 ## Linux reference environment
 
 Tested in this delivery: Ubuntu 24.04 x86_64, GCC 13.3, CMake 3.28, Qt 6.4.2, Protobuf 3.21.12, SQLite 3.45.1 and Python 3.12.
-The native ARM64 CI definition installs the same packages and runs the same tests. No ARM64 execution is claimed by this document.
+The native ARM64 CI definition installs the same packages and runs the same tests. Native ARM64 CI and user-reported Q6A build/tests have passed; see the dated validation record for current evidence.
 
 ```bash
 sudo apt update
@@ -111,7 +111,7 @@ These remain architecture targets, not verified releases. The platform layer inc
 ## v0.2 native acquisition
 
 The X1 plugin builds only on Linux and uses kernel media/V4L2 headers and the
-existing nlohmann-json dependency. No OpenCV, libcamera, udev library or new
+existing nlohmann-json dependency. No media-ctl/v4l2-ctl executable is required at runtime. No OpenCV, libcamera, udev library or new
 third-party dependency is added. Generic headers remain Qt/kernel independent.
 The versioned example profile is `profiles/x1-q6a.json`; set MANTIS_X1_PROFILE in
 the daemon environment. Discovery refreshes while acquisition is idle. Restart
@@ -123,7 +123,8 @@ For sustained recording and informational benchmarks use Release:
 cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DMANTIS_BUILD_STUDIO=OFF -DPython3_EXECUTABLE=/usr/bin/python3
 cmake --build build/release --parallel 4
-./build/release/bin/mantis-acquisition-benchmark /tmp 64
+./build/release/bin/mantis-acquisition-benchmark /tmp 64 Y10P
+./build/release/bin/mantis-acquisition-benchmark /tmp 64 GREY
 ```
 
 Replace `/tmp` with a directory on the actual capture filesystem for storage
@@ -131,4 +132,18 @@ measurements. The benchmark creates/removes its own temporary project and report
 construction, bounded queue, append, finalization, validated replay/index and peak
 RSS observations. Cache-backed short results do not certify sustained media speed.
 See docs/hardware/x1-q6a-acquisition-validation.md for the real ten-second and
-process-kill acceptance procedures. All physical results are pending user execution.
+process-kill acceptance procedures. User-reported Q6A build and discovery results are recorded separately; plugin-owned
+setup/streaming and recording remain pending user execution.
+
+The reference profile is version 2: explicit sensor/bus/entity routes, 1280×720
+Y10P / Y10_1X10 and VBLANK=196. Existing version-1 profiles remain externally
+configured and RAW8 remains supported. Changing a profile to version 2 requires
+explicit routes and setup ownership; it is not an implicit migration. Do not run
+an external camera setup service concurrently with plugin-owned setup.
+`v4l-utils` is optional for hardware inspection only. Kernel, DTBO/driver, boot
+camera enablement and permissions must already be provisioned on the Q6A.
+The requested target FPS, driver interval, VBLANK read-back and measured receive
+FPS are different diagnostics. VBLANK=196 does not certify exactly 120 FPS.
+A full-rate 720-line Y10P capture requires 276.48 MB/s payload before overhead;
+the user's 32.04 MB/s microSD observation is not a recorder throughput limit.
+NVMe or equivalent storage will be evaluated later.
