@@ -1,0 +1,13 @@
+{
+  "format_version": 1,
+  "measurement_cameras": {
+    "left": {"sensor_identity": "ov9281 18-0060"},
+    "right": {"sensor_identity": "ov9281 20-0060"}
+  },
+  "mode": {"width": 1280, "height": 800, "fourcc": "GREY", "fps": 120},
+  "hardware_sync_configured": false,
+  "stall_timeout_ms": 1000,
+  "max_v4l2_delta_ns": 4000000,
+  "calibration_id": "",
+  "calibration_revision": 0
+}

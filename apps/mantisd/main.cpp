@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
             binary / "mantis-plugin-host",
             std::filesystem::current_path() / "Example.mantis",
             binary.parent_path() / "recipes",
-            {"org.mantis.virtual-scanner", "org.mantis.example-points", "org.mantis.ply"}};
+            {"org.mantis.virtual-scanner", "org.mantis.example-points", "org.mantis.ply", "org.mantis.x1"}};
 #ifdef _WIN32
         config.plugin_host += ".exe";
 #endif
