@@ -42,6 +42,25 @@ headless Debug, headless Release and leak-enabled ASan/UBSan results in
 exported both X1 variables; the generic acceptance CTest additionally injects a
 discoverable fixture to prevent an environment-isolation regression. Twelve
 hardware-free harness checks cover scoped cleanup and failure reporting. The
-pairing algorithm and reference profile are unchanged. ShellCheck was unavailable;
+pairing algorithm and reference profile were unchanged at that checkpoint.
+ShellCheck was unavailable;
 Bash syntax and Python compilation checks passed. Real Q6A harness execution and
 sustained NVMe/equivalent storage acceptance remain pending.
+
+
+The later real harness follow-up qualifies the favorable 4 ms successes: smoke
+passed 123/123 FrameSets at +1.686 ms (+7 native offset), while full passed both
+17-suite software runs and disabled-link discovery but failed cold acquisition's
+4 ms criterion. Thus 4 ms is not robust for arbitrary free-running startup phase.
+The new 5 ms period-derived software bound and counted steady-state re-alignment
+are candidates awaiting Q6A evidence; see revised ADR-026 and the latest validation
+section. The earlier logs/evidence are preserved as historical results.
+
+
+`v0.2-free-running-{debug,headless,release,sanitizers}-ctest.log` retain the
+17-suite phase/drift correction runs. Debug is console output; the others are
+CTest's detailed LastTest logs. Sanitizers include leak detection. The tests
+add arbitrary/half-period phases, 4.0–4.3 ms distances, 25 ppm drift, counted
+boundary crossings, strict native-gap/budget failures, bounded recording with
+no hidden loss, and exact RAW8/Y10P replay. These are software fixture results;
+5 ms/counted realignment on real Q6A remains pending.

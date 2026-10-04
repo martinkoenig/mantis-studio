@@ -163,11 +163,14 @@ Timestamped reports are in `validation-output/x1-q6a-*/`. Capture projects remai
 on the selected storage; `/dev/shm` data lasts until reboot/removal. Failed runs
 retain logs and data. See [the Q6A validation guide](docs/hardware/x1-q6a-acquisition-validation.md)
 for the harness contract and lower-level manual diagnostics, ten-second storage
-criteria and process-kill procedure. Corrected 4 ms software pairing is now
-**USER-VALIDATED PASS** on the real Q6A (140 produced/committed FrameSets, zero raw
-loss/saturation, -2.861 ms selected delta, finalized and verified replay).
-Sustained NVMe recording and real crash recovery after corrected pairing remain
-pending user execution.
+criteria and process-kill procedure. Real 4 ms starts passed (including the new
+harness smoke: 123/123 FrameSets, +1.686 ms, native offset +7), but a later full
+cold disabled-link start failed the 4 ms criterion after both software suites
+and discovery passed. Therefore 4 ms is not robust for arbitrary free-running
+phase. The candidate reference now uses **5 ms software correspondence** and
+explicitly counted, bounded steady-state re-alignment; a real Q6A run of this
+new policy remains pending. Neither timestamp tolerance measures optical skew.
+Sustained NVMe recording and real crash recovery remain pending.
 
 The reference profile is version 2: explicit sensor/bus/entity routes, 1280×720
 Y10P / Y10_1X10 and VBLANK=196. Existing version-1 profiles remain externally
@@ -182,10 +185,23 @@ A full-rate 720-line Y10P capture requires 276.48 MB/s payload before overhead;
 the user's 32.04 MB/s microSD observation is not a recorder throughput limit.
 NVMe or equivalent storage will be evaluated later.
 
-Software pairing uses two pending observations per camera and at most 32 startup
-exclusions total, bounded by the profile stall timeout. Keep the reference
-`max_v4l2_delta_ns` at 4,000,000; 100 ms was diagnostic only. The daemon must be
-restarted after changing its profile. Camera-native counters are independent;
-inspect `pairing_mode`, `native_sequence_offset`, `startup_unmatched_left/right`
-and `paired_v4l2_delta_ns`. Zero recorder drops covers published FrameSets, not
-startup exclusions or shutdown lookahead. No build/runtime dependency changed.
+Software correspondence uses two pending observations per camera, at most 32
+startup exclusions and at most two steady-state exclusions between published
+pairs, all bounded by the profile stall timeout. The default software tolerance
+is `ceil(600000000 / requested_fps)` ns: half a nominal period plus 20% headroom,
+**5,000,000 ns at 120 FPS**. At measured ~119.27 FPS, half-period is ~4.192 ms.
+The plugin rejects software bounds below nominal half-period and fails if any
+observed half-period exceeds the configured bound. It never widens a bound or
+retries for a favorable startup phase. Review old explicit 4 ms profiles and
+restart the daemon after an intentional profile update. The harness validates
+5 ms and preserves the user's profile.
+
+Inspect `pairing_mode`, `native_sequence_offset`, `startup_unmatched_left/right`,
+`steady_state_unmatched_left/right`, `pairing_exclusions`, observed periods and
+`paired_v4l2_delta_ns`. Zero recorder drops covers published FrameSets; every
+excluded observation is counted separately. The exact decisions and pixels are
+persisted and replayed without pairing again. Hardware-configured mode retains
+strict equal-counter checks, its configured timestamp limit and a 4 ms default;
+it permits no re-alignment. SyncQuality remains software and exposure skew is
+unavailable. See [ADR-026](docs/adr/026-bounded-software-observation-pairing.md).
+No build/runtime dependency changed.

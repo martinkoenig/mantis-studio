@@ -1,0 +1,369 @@
+Start testing: Oct 04 22:45 CEST
+----------------------------------------------------------
+1/17 Testing: legacy-abi
+1/17 Test: legacy-abi
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-legacy-abi-tests" "<SOURCE_ROOT>/build/sanitizers/plugins/libmantis-legacy-device.so"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"legacy-abi" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+Frozen-header C ABI v1 DSO, callbacks and retained buffers passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"legacy-abi" end time: Oct 04 22:45 CEST
+"legacy-abi" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/17 Testing: x1-pairing
+2/17 Test: x1-pairing
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-x1-pairing-tests"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"x1-pairing" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+bounded timestamp-nearest pairing passed
+<end of output>
+Test time =   1.26 sec
+----------------------------------------------------------
+Test Passed.
+"x1-pairing" end time: Oct 04 22:45 CEST
+"x1-pairing" time elapsed: 00:00:01
+----------------------------------------------------------
+
+3/17 Testing: x1-pairing-stream
+3/17 Test: x1-pairing-stream
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-x1-pairing-stream-tests" "<SOURCE_ROOT>/build/sanitizers/plugins"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"x1-pairing-stream" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+GREY normal hardware=0
+GREY close-timestamps hardware=0
+GREY startup-left hardware=0
+GREY startup-right hardware=0
+GREY unequal-origins hardware=0
+GREY phase-out-of-bound hardware=0
+Expected failure: right.observed half-period exceeds software pairing tolerance
+GREY startup-limit hardware=0
+Expected failure: Startup timestamp alignment exceeded unmatched-observation limit
+GREY incomparable hardware=0
+Expected failure: Camera timestamp clocks are not comparable
+GREY unknown-clock hardware=0
+Expected failure: Camera timestamp clocks are not comparable
+GREY startup-left-gap hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+GREY startup-left-repeat hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+GREY startup-left-reverse hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+GREY startup-left-timestamp-jump hardware=0
+Expected failure: right.timestamp discontinuity
+GREY startup-left-clock-change hardware=0
+Expected failure: right.timestamp clock discontinuity
+GREY startup-left-steady-delta hardware=0
+Expected failure: right.observed half-period exceeds software pairing tolerance
+GREY normal hardware=1
+GREY close-timestamps hardware=1
+GREY startup-left hardware=1
+Expected failure: Camera timestamp delta exceeds profile pairing limit
+GREY unequal-origins hardware=1
+Expected failure: Hardware-mode native camera counters disagree
+Y10P normal hardware=0
+Y10P close-timestamps hardware=0
+Y10P startup-left hardware=0
+Y10P startup-right hardware=0
+Y10P unequal-origins hardware=0
+Y10P phase-out-of-bound hardware=0
+Expected failure: right.observed half-period exceeds software pairing tolerance
+Y10P startup-limit hardware=0
+Expected failure: Startup timestamp alignment exceeded unmatched-observation limit
+Y10P incomparable hardware=0
+Expected failure: Camera timestamp clocks are not comparable
+Y10P unknown-clock hardware=0
+Expected failure: Camera timestamp clocks are not comparable
+Y10P startup-left-gap hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+Y10P startup-left-repeat hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+Y10P startup-left-reverse hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+Y10P startup-left-timestamp-jump hardware=0
+Expected failure: right.timestamp discontinuity
+Y10P startup-left-clock-change hardware=0
+Expected failure: right.timestamp clock discontinuity
+Y10P startup-left-steady-delta hardware=0
+Expected failure: right.observed half-period exceeds software pairing tolerance
+Y10P normal hardware=1
+Y10P close-timestamps hardware=1
+Y10P startup-left hardware=1
+Expected failure: Camera timestamp delta exceeds profile pairing limit
+Y10P unequal-origins hardware=1
+Expected failure: Hardware-mode native camera counters disagree
+GREY phase-4000 counted exclusions, zero recorder loss and exact replay passed
+GREY phase-half counted exclusions, zero recorder loss and exact replay passed
+GREY phase-4300 counted exclusions, zero recorder loss and exact replay passed
+GREY phase-drift-left counted exclusions, zero recorder loss and exact replay passed
+GREY phase-drift-right counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-4000 counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-half counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-4300 counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-drift-left counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-drift-right counted exclusions, zero recorder loss and exact replay passed
+<end of output>
+Test time =  14.53 sec
+----------------------------------------------------------
+Test Passed.
+"x1-pairing-stream" end time: Oct 04 22:45 CEST
+"x1-pairing-stream" time elapsed: 00:00:14
+----------------------------------------------------------
+
+4/17 Testing: x1-media
+4/17 Test: x1-media
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-x1-media-tests"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"x1-media" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+Disabled-link route discovery and explicit ambiguity checks passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"x1-media" end time: Oct 04 22:45 CEST
+"x1-media" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/17 Testing: acquisition
+5/17 Test: acquisition
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-acquisition-tests" "<SOURCE_ROOT>/build/sanitizers/plugins" "<SOURCE_ROOT>/profiles/x1-q6a.json"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"acquisition" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+normal passed
+y10p passed
+renumber passed
+eagain passed
+drop-left passed
+drop-right passed
+disconnect passed
+mismatch passed
+repeat passed
+timestamp-jump passed
+phase-out-of-bound passed
+stall-left passed
+stall-right passed
+stop-right passed
+stream-mismatch passed
+<end of output>
+Test time =   1.42 sec
+----------------------------------------------------------
+Test Passed.
+"acquisition" end time: Oct 04 22:45 CEST
+"acquisition" time elapsed: 00:00:01
+----------------------------------------------------------
+
+6/17 Testing: acquisition-integration
+6/17 Test: acquisition-integration
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/integration/acquisition.py" "<SOURCE_ROOT>/build/sanitizers"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"acquisition-integration" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+C++ acquisition client passed
+Fake X1 CLI/Python/C++ controls, dual preview, immutable references, kill/recovery and hardware-free replay passed
+<end of output>
+Test time =   3.61 sec
+----------------------------------------------------------
+Test Passed.
+"acquisition-integration" end time: Oct 04 22:45 CEST
+"acquisition-integration" time elapsed: 00:00:03
+----------------------------------------------------------
+
+7/17 Testing: acquisition-y10p-integration
+7/17 Test: acquisition-y10p-integration
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/integration/acquisition.py" "<SOURCE_ROOT>/build/sanitizers" "Y10P"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"acquisition-y10p-integration" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+C++ acquisition client passed
+Fake X1 CLI/Python/C++ controls, dual preview, immutable references, kill/recovery and hardware-free replay passed
+<end of output>
+Test time =   3.66 sec
+----------------------------------------------------------
+Test Passed.
+"acquisition-y10p-integration" end time: Oct 04 22:45 CEST
+"acquisition-y10p-integration" time elapsed: 00:00:03
+----------------------------------------------------------
+
+8/17 Testing: control-listener
+8/17 Test: control-listener
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/integration/control_listener.py" "<SOURCE_ROOT>/build/sanitizers"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"control-listener" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+Blocking idle listener remains quiet and handles requests/shutdown after six seconds
+<end of output>
+Test time =   6.31 sec
+----------------------------------------------------------
+Test Passed.
+"control-listener" end time: Oct 04 22:45 CEST
+"control-listener" time elapsed: 00:00:06
+----------------------------------------------------------
+
+9/17 Testing: acquisition-qos
+9/17 Test: acquisition-qos
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-acquisition-qos-tests"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"acquisition-qos" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+Bounded raw saturation/failure, preview isolation and cooperative shutdown passed
+<end of output>
+Test time =   0.07 sec
+----------------------------------------------------------
+Test Passed.
+"acquisition-qos" end time: Oct 04 22:45 CEST
+"acquisition-qos" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/17 Testing: raw-capture
+10/17 Test: raw-capture
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-raw-tests"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"raw-capture" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+Segment storage, prefix recovery, legacy compatibility and two byte-identical replays passed
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"raw-capture" end time: Oct 04 22:45 CEST
+"raw-capture" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/17 Testing: packed-image
+11/17 Test: packed-image
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-packed-image-tests"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"packed-image" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+Y10P known vectors, padding, display reduction and raw preservation passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"packed-image" end time: Oct 04 22:45 CEST
+"packed-image" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/17 Testing: core
+12/17 Test: core
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-core-tests" "<SOURCE_ROOT>/build/sanitizers/plugins"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"core" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+2113 architecture assertions passed
+<end of output>
+Test time =   0.22 sec
+----------------------------------------------------------
+Test Passed.
+"core" end time: Oct 04 22:45 CEST
+"core" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/17 Testing: c-abi
+13/17 Test: c-abi
+Command: "<SOURCE_ROOT>/build/sanitizers/bin/mantis-c-contract"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"c-abi" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"c-abi" end time: Oct 04 22:45 CEST
+"c-abi" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/17 Testing: boundaries
+14/17 Test: boundaries
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/contract/boundaries.py" "<SOURCE_ROOT>"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"boundaries" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+Foundation, frontend, plugin and Linux media implementation boundaries passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"boundaries" end time: Oct 04 22:45 CEST
+"boundaries" time elapsed: 00:00:00
+----------------------------------------------------------
+
+15/17 Testing: python-capture
+15/17 Test: python-capture
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/unit/python_capture.py" "<SOURCE_ROOT>/build/sanitizers"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"python-capture" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+OK
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"python-capture" end time: Oct 04 22:45 CEST
+"python-capture" time elapsed: 00:00:00
+----------------------------------------------------------
+
+16/17 Testing: acceptance
+16/17 Test: acceptance
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/integration/acceptance.py" "<SOURCE_ROOT>/build/sanitizers"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"acceptance" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+PASS: Python, CLI, headless client reconnect, deterministic replay, isolated crash, capture continuity, daemon crash recovery
+<end of output>
+Test time =   1.70 sec
+----------------------------------------------------------
+Test Passed.
+"acceptance" end time: Oct 04 22:45 CEST
+"acceptance" time elapsed: 00:00:01
+----------------------------------------------------------
+
+17/17 Testing: q6a-validation-harness
+17/17 Test: q6a-validation-harness
+Command: "/usr/bin/python3" "<SOURCE_ROOT>/tests/integration/q6a_validation_harness.py"
+Directory: <SOURCE_ROOT>/build/sanitizers
+"q6a-validation-harness" start time: Oct 04 22:45 CEST
+Output:
+----------------------------------------------------------
+............
+----------------------------------------------------------------------
+Ran 12 tests in 0.829s
+
+OK
+<end of output>
+Test time =   0.91 sec
+----------------------------------------------------------
+Test Passed.
+"q6a-validation-harness" end time: Oct 04 22:45 CEST
+"q6a-validation-harness" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 04 22:45 CEST

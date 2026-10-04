@@ -1,58 +1,122 @@
-# ADR-026: Bounded timestamp pairing for independent camera streams
+# ADR-026: Bounded software correspondence for independent camera streams
 
-Status: Accepted for v0.2 development
+Status: Accepted for v0.2 development; revised after real Q6A cold-start evidence
 
-## Evidence and decision
+## Evidence
 
-User Q6A testing found a persistent approximately 51.8 ms V4L2 timestamp offset
-between equal native counters on independently started OV9281 streams. Native
-counters identify observations within each camera; they are not cross-camera
-exposure identifiers. Raising the pairing tolerance to 100 ms is rejected.
+Equal independently started native counters had ~51.8 ms timestamp separation.
+The timestamp-nearest implementation subsequently passed real 4 ms starts:
+140 paired FrameSets at -2.861 ms, and the official smoke harness at +1.686 ms,
+native offset +7, startup unmatched 7/0, 123/123 FrameSets, no pairing/raw failures,
+FINALIZED and deterministic replay/integrity PASS. Full validation then passed
+Debug and Release 17/17 and disabled-link discovery, reached plugin-owned cold
+acquisition, and failed with `Camera timestamp delta exceeds profile pairing limit`.
+These favorable starts do not robustly validate 4 ms for arbitrary free-running phase.
 
-The X1 plugin pairs software observations in a shared, known clock domain by
-nearest timestamps. Each camera has a fixed two-slot pending queue (front plus
-one lookahead). Compare the two fronts. Exact timestamps pair immediately.
-Otherwise read one successor on the older side to establish the closest
-candidate; monotonic timestamps mean no later candidate can beat a successor
-that has passed the newer front. Advance toward a strictly closer successor;
-ties select the earlier observation. The selected pair must satisfy the profile
-tolerance, which remains 4 ms in the reference profile. Incomparable clocks,
-backward timestamps and camera-native discontinuities fail explicitly.
+At measured ~119.27 FPS, T = 1/FPS ≈ 8.384 ms. Two healthy independent periodic
+streams can have nearest timestamp distance T/2 ≈ 4.192 ms. Independent oscillators
+also drift across the nearest-neighbor boundary, requiring an occasional unmatched
+observation to maintain one-to-one correspondence. The former prohibition on any
+steady-state exclusion wrongly treated healthy phase drift as acquisition loss.
+Neither changing startup phase nor retrying a failed start is an acceptable fix.
 
-Before the first pair only, advancing an older observation increments the
-corresponding `startup_unmatched_left/right` count. Startup permits at most 32
-exclusions total and is limited by the profile stall timeout. After the first
-pair, any required advancement/exclusion fails capture; software pairing never
-hides steady-state loss. Each `next` call reads at most two observations and
-respects the caller timeout. Pending saturation fails instead of overwriting.
+## Software tolerance
 
-Hardware-configured mode additionally requires equal native counters and checks
-the same timestamp tolerance without startup counter realignment. This is a
-strict driver-counter policy, not proof of trigger or exposure synchronization.
-SyncQuality remains software and exposure skew remains unavailable in both modes.
+The software baseline is half the requested frame period, rounded upward:
+`ceil(500000000 / requested_fps)` ns. Recommend 20% headroom on that half-period:
+`ceil(600000000 / requested_fps)` ns. At requested 120 FPS these are 4,166,667 ns
+and **5,000,000 ns**. At measured 119.27 FPS, 5 ms leaves approximately 0.808 ms
+for timestamp/cadence variation beyond the half-period. This is an explicit
+engineering margin, not a measured jitter distribution or hardware guarantee.
 
-## Diagnostics and compatibility
+The reference software profile and Q6A harness now require 5 ms. Missing software
+tolerance defaults to the period-derived recommendation; an explicitly smaller
+than nominal half-period bound is rejected, never silently enlarged. Old explicit
+4 ms/120 FPS profiles require operator review. Every observed interval from
+consecutive native frames is also checked: `ceil(interval_ns / 2) <= tolerance`.
+Latest/max observed periods are reported. Thus slower-than-assumed or excessive
+cadence variation fails explicitly rather than automatically widening the bound.
+This observed-interval check is conservative; requested FPS and finite observed
+intervals do not prove all future cadence or physical sensor timing.
 
-FrameSet metadata persists pairing mode, selected native counters, signed modular
-LEFT−RIGHT counter offset, paired RIGHT−LEFT V4L2 delta, host delta, startup
-counts, tolerance and bounds. Native counter equality is explicitly named
-`native_counter_equality`; it is not the software pairing success indicator.
-`v4l2_delta_ns` remains an alias for the selected pair delta. Stop/failure accounts
-for retained lookahead in `shutdown_unmatched_left/right`. Received observations
-excluded at startup or retained at shutdown are not recorded; zero recorder
-drops does not mean every camera observation was included. All published
-FrameSets continue through the unchanged bounded LOSSLESS recording branch.
+5 ms bounds **software timestamp correspondence**, not optical exposure skew.
+Timestamp clock/source, sensor timestamp semantics, shutter timing and physical
+triggering require independent evidence. Host arrival remains diagnostic only.
+No synchronized exposure or trigger accuracy is inferred from nearest timestamps.
 
-The change uses existing plugin and immutable metadata extension points. C ABI
-v1, native camera setup, RAW8/Y10P layouts, RawCapture schema 2, replay semantics,
-SQLite/project schema 1 and historical artifacts are unchanged. Replay returns
-the recorded associations and metadata and never re-pairs observations.
+## Deterministic correspondence and re-alignment
 
-## Alternatives
+Each camera retains two owned observations: front plus one successor. Compare
+fronts in a shared known timestamp clock. Exact timestamps pair immediately.
+Otherwise read one successor on the older side. Advance only when that successor
+is strictly closer to the newer front; exact ties select the earlier observation.
+Reject a bracket when neither candidate is within tolerance. Published pairs use
+each observation at most once. This is a causal greedy nearest rule over unused
+observations, not a global assignment optimizer or a promise of every exposure.
 
-Equal counters and host-arrival ordering are rejected as software correspondence
-rules. Unbounded timestamp search and steady-state silent drops violate bounded,
-loss-aware acquisition. A larger tolerance conceals incorrect correspondence.
-Clock mapping, physical trigger programming and optical skew instrumentation
-require separate evidence and are outside this fix. The corrected 4 ms pairing
-requires user execution on Q6A before any hardware success claim.
+Startup permits at most 32 exclusions total within the profile stall timeout.
+After first publication, permit **at most two exclusions total between published
+pairs**, across both cameras. The exclusion budget survives across `next()` calls;
+it resets only after successful publication. Every call still reads at most two
+observations. Re-alignment must publish within the profile stall timeout measured
+from the last publication; bounds also apply across calls. No overwritten pending
+slots, unbounded searches, automatic retries or favorable-phase waits are used.
+Two exclusions is a conservative bound for nearby rates, not permission to
+conceal arbitrary clock jumps/rate mismatch; exceeding it fails capture.
+
+Each advancement increments `startup_unmatched_left/right` before first publication
+or **`steady_state_unmatched_left/right`** thereafter. Native per-camera counter
+continuity is checked on every received observation **before** the pairing rule:
+gaps, repeats/reversals, changed clocks and backward timestamps still fail.
+Intentional pairing exclusions never increment recorder-drop counters. The
+existing LOSSLESS recorder records every published FrameSet or fails explicitly.
+
+## Strict hardware path
+
+`hardware_sync_configured=true` retains equal native counters and its explicitly
+configured timestamp limit, with no startup or steady-state re-alignment. Its
+missing-tolerance default remains **4 ms**, independent of requested FPS. The
+software half-period recommendation/check does not widen hardware bounds.
+An operator assertion alone does not prove physical synchronization; SyncQuality
+remains `software` and optical exposure skew remains `unavailable` in both paths.
+Future verified hardware-sync semantics must be established separately.
+
+## Persistence, accounting and compatibility
+
+FrameSet metadata stores policy version 2, mode, exact selected native counters,
+signed LEFT−RIGHT offset, selected RIGHT−LEFT timestamp delta, candidates/lookahead,
+configured tolerance, nominal/recommended bounds, observed periods and cumulative
+startup/steady-state counts. `pairing_exclusions` records each excluded observation
+since the preceding publication (role, startup/steady phase, native sequence,
+timestamp and clock), bounded to 32 at startup or two in steady state. The list is
+reset at publication and never carried into another pair's exclusion list.
+
+Stop/failure counts retained lookahead as `shutdown_unmatched_left/right`.
+Exclusions after the last published pair are exposed separately as
+`unpublished_pairing_exclusions` in final diagnostics; they cannot be associated
+with a FrameSet that was never published. For each healthy camera:
+
+`received = published_pairs + startup_unmatched + steady_state_unmatched + shutdown_unmatched`.
+
+A zero recorder-drop count covers published FrameSets. It does not claim all
+camera observations are recorded. Replay's continuous sequence claim refers to
+FrameSets; recorded child native counters can skip **explicitly excluded** frames,
+while native acquisition gap detection still uses the full received sequence.
+
+RawCapture persists each published association, pixels and decision metadata
+exactly; replay never discovers cameras, re-pairs or fabricates an observation.
+ABI v1, RAW8/Y10P layouts, RawCapture schema 2, project schema 1 and old recordings
+remain unchanged. This change adds metadata using existing extension points.
+
+## Validation and remaining evidence
+
+Deterministic tests sweep both signs of arbitrary phase, exact ties and 4.0–4.3 ms
+nearest distances. Long traces at 25 ppm in either direction cross multiple
+neighbor boundaries. Loaded RAW8/Y10P acquisition through the real bounded
+recorder checks exclusion identities, complete accounting, zero recorder loss,
+strict counter/gap failures, the two-exclusion bound and exact two-pass replay.
+
+The new 5 ms policy and counted steady-state re-alignment require real Q6A
+execution. The 4 ms smoke pass and cold full failure remain recorded honestly.
+Sustained-storage acceptance, physical synchronization and optical timing are
+still pending; changing this software bound does not establish any of them.

@@ -261,7 +261,7 @@ The raw recorder/durability design is unchanged. Process crash tests do not cert
 power-loss behavior of an untested storage device.
 
 
-## Timestamp-pairing continuation — 2026-10-04
+## Timestamp-pairing continuation — 2026-10-04 (historical 4 ms policy)
 
 This section supersedes historical pending setup/streaming results above.
 **USER-VALIDATED PASS:** Q6A ARM64 build/tests, discovery with four mutable routes
@@ -350,9 +350,9 @@ is additive; old recordings replay without re-pairing or fabricated metadata.
 The reference profile remains 1280×720 Y10P, Y10_1X10, VBLANK=196 and 4 ms.
 
 
-## Official Q6A validation harness continuation — 2026-10-04
+## Official Q6A validation harness continuation — 2026-10-04 (historical favorable start)
 
-**USER-VALIDATED PASS: corrected 4 ms software pairing on real Q6A.** The user
+**USER-VALIDATED successful 4 ms start; later cold-start failure limits its scope.** The user
 supplied a Linux V4L2 result for the v2 reference profile, 1280×720 Y10P,
 Y10_1X10, VBLANK=196, `hardware_sync_configured=false`,
 `max_v4l2_delta_ns=4000000`. Produced/committed FrameSets: **140/140**;
@@ -380,7 +380,8 @@ The previous sixteen suites plus harness regressions now total seventeen on Linu
 See [the hardware guide](../hardware/x1-q6a-acquisition-validation.md) for CLI,
 resource behavior, artifacts, and lower-level manual procedures.
 
-**PENDING:** a real Q6A execution of the new harness, sustained NVMe/equivalent
+**PENDING at this checkpoint (later smoke/full evidence below):** a real Q6A
+execution of the new harness, sustained NVMe/equivalent
 storage acceptance, real process-crash recovery after corrected pairing,
 physical trigger synchronization, optical exposure skew and 1280×800 acquisition.
 No duration or reported short-run writer speed upgrades sustained storage to PASS.
@@ -419,3 +420,81 @@ HEAD must be checked separately from the historical bc3e93f run above.
 Focused implementation checkpoints: `ac64ec4` isolates generic acceptance,
 `002a019` adds the official harness and twelve-case regression suite,
 `9af1aab` handles media-ctl entity headers that include route counts.
+
+
+## Free-running phase/drift correction after real harness evidence
+
+The user has now run the official harness on real Q6A. **SMOKE PASS** under the
+former 4 ms criterion: native offset +7, startup unmatched 7/0, selected V4L2 delta
++1.686 ms, 123/123 FrameSets, zero pairing/raw failures, FINALIZED and deterministic
+replay/integrity PASS. **FULL:** Debug 17/17 PASS, Release 17/17 PASS, disabled-link
+discovery PASS and plugin-owned cold setup reached acquisition. Capture then
+**FAILED** with `Camera timestamp delta exceeds profile pairing limit`.
+
+The earlier 140-FrameSet -2.861 ms success and this smoke success establish
+favorable starts only. **4 ms is not robustly validated for arbitrary free-running
+startup phase.** At measured ~119.27 FPS, T ≈ 8.384 ms, T/2 ≈ 4.192 ms. A healthy
+pair of independent periodic streams can exceed 4 ms without native gaps/errors.
+No automatic retries or favorable-phase waits address this limitation.
+
+[ADR-026](../adr/026-bounded-software-observation-pairing.md) now separates
+software timestamp correspondence from hardware synchronization. The candidate
+software reference is **5 ms**, nominal half-period plus 20% headroom at requested
+120 FPS, approximately 0.808 ms over measured half-period. Software defaults are
+period-derived; explicit bounds below nominal half-period are rejected and
+observed intervals must fit the configured half-period bound. This margin is an
+engineering policy, not a measured optical exposure skew or future cadence proof.
+
+Steady-state re-alignment permits at most two explicitly identified exclusions
+between published pairs, two pending observations per camera and two reads per
+call, bounded by the stall timeout since the last publication. Counts and budgets
+survive across calls. Every native received counter is checked before pairing;
+loss/repeat/reversal, clock/time discontinuity and exceeded bounds still fail.
+`steady_state_unmatched_left/right` remain separate from raw recorder drops.
+Per-pair exclusion identities/timestamps and exact published associations persist
+in RawCapture metadata; exact replay never re-pairs. A terminal un-published
+exclusion remains explicitly in final diagnostics. Hardware mode keeps equal
+counters, its configured bound, a 4 ms default and no re-alignment. SyncQuality
+remains software and optical exposure skew remains unavailable.
+
+**PENDING real evidence:** the new 5 ms policy and counted steady-state
+re-alignment on Q6A, sustained NVMe/equivalent storage, process-crash recovery,
+physical trigger synchronization, optical timing and 1280×800 mode. The harness's
+operational smoke/software/discovery success is now user-validated; its cold
+capture failure is retained rather than upgraded to PASS.
+
+
+### Automated correspondence validation
+
+| Local configuration | Result |
+| --- | --- |
+| Debug Studio ON | 17/17 PASS, 32.41 s |
+| Debug Studio OFF | 17/17 PASS, 21.33 s |
+| Release Studio OFF | 17/17 PASS, 19.43 s |
+| ASan + UBSan Studio OFF | 17/17 PASS, 33.96 s; leak detection enabled |
+
+Logs: `docs/validation/v0.2-free-running-{debug,headless,release,sanitizers}-ctest.log`.
+Debug retains console output; the other three retain CTest's detailed `LastTest.log`.
+All used `TMPDIR=/dev/shm` and an exported X1 profile; the final full Debug run
+also exported `MANTIS_X1_FAKE=normal`. The focused Debug pairing suites passed
+again after ordering clock-change validation ahead of observed-period validation.
+Bash syntax/Python compilation passed. ShellCheck is still unavailable.
+
+Coverage includes 16,769 phase values across both signs at 1 µs spacing, exact
+half-period ties, nearest distances 4.0/4.1/4.192/4.2/4.3 ms, repeatable 90,000-pair
+traces at 25 ppm mismatch in either direction, multiple neighbor-boundary
+crossings, strict hardware counter/timestamp rejection and independent hardware
+4 ms/default behavior. Fourteen additional loaded RAW8/Y10P scenarios use the
+actual bounded recorder to check zero loss/saturation, produced=committed,
+explicit native identity/timestamp accounting, an injected gap after re-alignment,
+the two-exclusion bound across calls and exact canonical replay twice with X1
+configuration removed. CLI/Python daemon integration also verifies the public
+validator accepts counted drift exclusions without relaxing raw loss/integrity.
+RawCapture schema/ABI, physical media setup, VBLANK and pixel layouts are unchanged.
+
+Implementation checkpoint: `b079f5e` (free-running correspondence and its tests).
+The preceding harness checkpoint `325690cec86658917f0f220a7c500beb6e296648` was
+inspected in [run 37231208917](https://github.com/martinkoenig/mantis-studio/actions/runs/37231208917):
+all five native x86_64/ARM64 Studio ON/OFF and sanitizer jobs passed 17/17.
+That earlier CI is not evidence for this later policy; its pushed final HEAD
+requires separate CI inspection.
