@@ -131,10 +131,43 @@ Replace `/tmp` with a directory on the actual capture filesystem for storage
 measurements. The benchmark creates/removes its own temporary project and reports
 construction, bounded queue, append, finalization, validated replay/index and peak
 RSS observations. Cache-backed short results do not certify sustained media speed.
-See docs/hardware/x1-q6a-acquisition-validation.md for the real ten-second and
-process-kill acceptance procedures. User-validated Q6A setup, dual Y10P streaming (~119.22 receive FPS) and short
-recording/replay are recorded separately. Corrected 4 ms software pairing,
-sustained NVMe recording and real crash recovery remain pending user execution.
+The preferred Q6A validation workflow is the repository-owned harness:
+
+```bash
+./scripts/validate-x1-q6a.sh --smoke
+./scripts/validate-x1-q6a.sh --full
+# Later storage candidate (still a smoke check, not sustained acceptance):
+./scripts/validate-x1-q6a.sh --full --storage /mnt/mantis-nvme --duration 10
+```
+
+Smoke configures/builds the matching headless Release tree, discovers the real X1,
+captures for one second, finalizes and verifies deterministic replay and raw
+integrity. Full first builds Debug with Studio and runs all Debug tests, then
+builds/tests Release with `TMPDIR=/dev/shm`; it also checks discovery with only
+the four mutable measurement links disabled. There are now 17 Linux CTest suites
+(the previous 16 plus harness regression coverage); exit status decides success.
+The generic acceptance test isolates the caller's X1 environment.
+
+The harness requires `v4l-utils` for independent hardware read-backs, and defaults
+to `/dev/shm` only after a capacity check. Kernel, cameras and permissions must
+already be provisioned. It stops an active `mantis-cameras.service` for the run
+using a specific `sudo systemctl` action, then restores its prior running state.
+The source profile is preserved. A printed, saved runtime snapshot sets
+`disable_conflicting_links=false` so conflicts fail without changing other routes.
+No root shell or global media reset is used. `--profile`, `--port`, `--build-dir`,
+`--debug-build-dir`, `--output-root`, `--jobs` and `--disable-measurement-links`
+provide explicit controls; use `--help` for details. The interpreter defaults to
+`/usr/bin/python3` and can be selected with `MANTIS_VALIDATION_PYTHON`.
+
+Timestamped reports are in `validation-output/x1-q6a-*/`. Capture projects remain
+on the selected storage; `/dev/shm` data lasts until reboot/removal. Failed runs
+retain logs and data. See [the Q6A validation guide](docs/hardware/x1-q6a-acquisition-validation.md)
+for the harness contract and lower-level manual diagnostics, ten-second storage
+criteria and process-kill procedure. Corrected 4 ms software pairing is now
+**USER-VALIDATED PASS** on the real Q6A (140 produced/committed FrameSets, zero raw
+loss/saturation, -2.861 ms selected delta, finalized and verified replay).
+Sustained NVMe recording and real crash recovery after corrected pairing remain
+pending user execution.
 
 The reference profile is version 2: explicit sensor/bus/entity routes, 1280×720
 Y10P / Y10_1X10 and VBLANK=196. Existing version-1 profiles remain externally

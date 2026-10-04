@@ -6,7 +6,8 @@ plugin-owned CAMSS setup, Y10_1X10 pads, VBLANK=196 set/read-back, Y10P 1280×72
 dual STREAMON, real packed RAW10 acquisition and ~119.223 receive FPS per camera.
 A short capture finalized and passed deterministic replay. The original GREY
 1280×800/upstream Y10_1X10 1280×720 EPIPE is historical; the validated native setup
-must be preserved.
+must be preserved. Corrected 4 ms software pairing is also **USER-VALIDATED PASS**
+with the 140-FrameSet evidence below.
 
 The validated development reference is `/usr/local/sbin/mantis-camera-setup`,
 SHA-256 `ae03e77305f1342eb2227cf3a62041c542e8ce94c309db6ad56e898e487e66e4`.
@@ -15,7 +16,7 @@ stride 1600, sizeimage 1,152,000 and sensor **VBLANK=196**. Requested target is
 120 FPS; VBLANK does not mathematically prove 120.000 FPS. Crop bounds 1280×800
 are not a validated acquisition mode. RAW8 remains optional/debug support.
 
-The successful user capture used a **temporary 100 ms** tolerance for diagnosis:
+The earlier historical user capture used a **temporary 100 ms** tolerance for diagnosis:
 
 | Real hardware observation | User result |
 | --- | --- |
@@ -42,11 +43,138 @@ counts startup exclusions and fails on steady-state unmatched observations.
 Hardware-configured mode keeps stricter native-counter checks. Host arrival is
 diagnostic only; SyncQuality stays software and exposure skew is unavailable.
 
-**PENDING USER EXECUTION:** corrected 4 ms software pairing on Q6A, sustained
-ten-second/full-rate recording on NVMe or equivalent storage, real process-crash
+**PENDING USER EXECUTION:** sustained ten-second/full-rate recording on NVMe or
+equivalent storage, real process-crash
 recovery after corrected pairing, hardware trigger/synchronization, optical
 exposure skew and 1280×800 mode. Codex has no Q6A attached; it does not claim the
-new pairing implementation is hardware-validated.
+new validation harness has been executed on hardware. The corrected pairing itself
+is now user-validated as recorded above.
+
+## Preferred one-command validation
+
+```bash
+./scripts/validate-x1-q6a.sh --smoke
+```
+
+Run from this feature branch after provisioning the kernel/cameras and device
+permissions. Install `v4l-utils` for the harness's independent read-backs. Smoke
+configures/builds `build/release` (Release, Studio OFF) and performs discovery,
+plugin-owned setup, capture, finalization and two deterministic verification calls
+through `tools/validate_x1_pairing.py`. The one-second default uses `/dev/shm`
+after checking free capacity. It rejects a nonempty `MANTIS_X1_FAKE` and validates
+the source profile without overwriting it. `--profile PATH` overrides
+`MANTIS_X1_PROFILE`, which otherwise overrides `profiles/x1-q6a.json`.
+
+```bash
+./scripts/validate-x1-q6a.sh --full
+./scripts/validate-x1-q6a.sh --smoke --disable-measurement-links
+./scripts/validate-x1-q6a.sh --full --storage /mnt/mantis-nvme --duration 10
+```
+
+Full configures/builds Debug with Studio ON and Release with Studio OFF and runs
+all CTest suites in each with `TMPDIR=/dev/shm`. CTest exit status and individual
+results determine PASS, with skipped tests rejected. The previous sixteen suites
+are retained; harness regression tests bring the Linux total to seventeen.
+The generic acceptance baseline isolates X1 configuration, with deliberately
+injected fixture variables to guard against regression. Build trees can be
+selected with `--build-dir` (Release) and `--debug-build-dir`. `--jobs` defaults
+to four. `MANTIS_VALIDATION_PYTHON` selects the interpreter (default `/usr/bin/python3`),
+which must have Protobuf. Both modes configure/build Release so its daemon,
+plugins and generated Python SDK match.
+
+Pre-flight reports branch, exact HEAD, clean/dirty state, architecture, kernel,
+build trees, source profile and hash, storage/free capacity and fake state.
+Dirty state is recorded, without an invented clean PASS. Capacity reserve is
+1.25 × 276.48 MB/s × (duration + one startup second) plus 64 MiB; this is a space
+estimate, not a storage performance measurement. Duration must be in (0,60]
+seconds, consistent with the public-client smoke validator. The chosen storage
+directory must already exist. Each run creates its own project and retains it.
+
+The harness detects `mantis-cameras.service`. An absent, inactive or failed
+service stays in that state. An active service is visibly stopped and restarted
+on cleanup using only the necessary `sudo systemctl` calls; it is never disabled,
+masked or deleted. Unreadable/transitional service states fail. Service state is
+checked again before capture and after capture. Other camera users must be stopped
+by their owner before validation.
+
+The controller is selected uniquely by `platform:acb3000.isp`. Full mode (or the
+explicit smoke flag) records the graph and disables only the four mutable links
+listed in the manual procedure below. Discovery must expose one real X1 parent
+and both children while those links remain disabled. Their original states are
+restored at cleanup, including partial setup failures. Other graph links are
+compared before/after. A saved, printed `validation-profile.json` snapshot sets
+`runtime_setup.disable_conflicting_links=false` for this run so the plugin cannot
+disable unrelated incoming/fan-out routes on conflict. The user's source profile
+is unchanged. An EBUSY fails with diagnostics. Successful setup leaves selected
+pad/capture formats in place, consistent with the plugin's existing contract;
+the harness restores the temporary link changes it made. It never resets the graph.
+
+The harness creates a temporary token, picks a free loopback port by default
+(or checks `--port PORT`), starts its matching Release daemon and waits for an
+actual authenticated snapshot. It records the daemon PID and stdout/stderr.
+EXIT/INT/TERM traps invoke the runner's bounded cleanup: stop only that daemon
+and its owned children, restore temporary measurement links, then restore the
+previously active service. Cleanup failures turn a successful validation into
+FAIL and are recorded alongside an earlier failure. Signals and failed stages
+retain all diagnostics and capture data; a forced daemon termination may leave
+its recording RECOVERABLE. No unrelated daemon is killed.
+
+Post-capture checks resolve the sensor and video nodes through media entities,
+compare them to discovery, and read back Y10P 1280×720, stride 1600, sizeimage
+1,152,000, both VBLANK=196 and Y10_1X10/1280×720 on the selected upstream pads.
+Pairing checks accept any native startup offset and explicitly account for
+startup exclusions and shutdown lookahead. The selected timestamp delta must
+stay within 4 ms, with zero pairing failures, pending saturation, timestamp
+discontinuities, native sequence gaps/capture errors and raw loss/saturation.
+Produced/committed counts must agree and exceed zero; RawCapture must be
+FINALIZED and deterministic replay/raw integrity must PASS.
+
+Reports default to `validation-output/x1-q6a-YYYYMMDD-HHMMSS-microseconds/` in UTC
+(select `--output-root PATH` to change this). They include `summary.txt`,
+`summary.json`, `daemon.log`, `devices.json`, `pairing.json`, `media-before.txt`,
+`media-after.txt`, `validation-profile.json`, command/service/build logs and
+per-camera read-back logs. Full adds `ctest-debug.log`, `ctest-release.log` and
+JUnit XML; disabled-link runs add disabled/discovery/cleanup graphs. On early
+failure, required artifacts contain explicit NOT REACHED markers. The console
+ends with RESULT, and a failing stage, reason and log directory on failure.
+
+A ten-second run remains a hardware smoke validation. It **does not establish
+sustained-storage acceptance**, even when the writer reports high throughput.
+NVMe/equivalent capacity, sustained duration and throughput criteria below must
+be evaluated separately. No new harness run on Q6A is claimed by the developer;
+the corrected pairing evidence below was supplied and validated by the user.
+
+## Corrected 4 ms real Q6A evidence — USER-VALIDATED PASS
+
+The user validated the unchanged reference: profile v2, software synchronization,
+4,000,000 ns tolerance, Y10P 1280×720 / Y10_1X10 and VBLANK=196.
+
+| Observation | Real Q6A result |
+| --- | --- |
+| Backend / setup | Linux V4L2 / plugin-owned selected routes verified |
+| FrameSets produced / committed | 140 / 140 |
+| Raw bytes / writer | 323,488,370 / 240.798 MB/s |
+| Queue high water / capacity | 11 / 32 |
+| Raw drops / queue saturation | 0 / 0 |
+| Pairing mode / native sequence offset | timestamp-nearest / +8 |
+| Startup unmatched LEFT / RIGHT | 8 / 0 |
+| Shutdown unmatched LEFT / RIGHT | 0 / 1 |
+| Selected V4L2 delta / absolute delta | -2,861,000 ns / 2.861 ms < 4 ms |
+| Pairing failures / pending saturation / timestamp discontinuities | 0 / 0 / 0 |
+| LEFT / RIGHT native gaps and capture errors | All zero |
+| LEFT / RIGHT VBLANK / stride / buffer size | 196 / 1600 / 1,152,000 each |
+| Replay FrameSets / LEFT / RIGHT / passes | 140 / 140 / 140 / 2 |
+| Raw integrity / replay / sequences / short pairing check | PASS / PASS / continuous / PASS |
+
+This establishes **USER-VALIDATED PASS for corrected 4 ms software pairing on
+real Q6A**. Startup timing can change the native offset; +8 is an observation,
+not an acceptance requirement. The historical 100 ms result below remains
+separate evidence. Sustained storage acceptance is pending.
+
+## Manual diagnostics and reference procedure
+
+The remaining steps are lower-level diagnostics and separate storage/crash
+acceptance procedures; use the harness above for routine hardware smoke checks.
 
 ## Inspect the target
 
@@ -181,7 +309,7 @@ with `bus_identity: fixture`;
 never enable it for hardware acceptance.
 
 
-## Corrected 4 ms software pairing acceptance — PENDING USER EXECUTION
+## Manual corrected 4 ms software pairing check — USER-VALIDATED PASS
 
 Build the current feature branch, copy/review the unchanged reference profile
 again and restart `mantisd` using that profile. Keep
@@ -198,8 +326,8 @@ The tool uses only the public Python client API. It rejects a fake backend,
 a widened tolerance or a different reference mode, records briefly, stops and
 waits for finalization, then runs verification twice and compares the reports.
 A capture error is raised at stop instead of proceeding to a misleading replay
-failure. Save the result and daemon log; do not classify the corrected pairing as
-hardware PASS until this command passes on Q6A. A short buffered/cache-backed
+failure. Save the result and daemon log. This command has now passed on real Q6A
+with the 140-FrameSet evidence recorded above. A short buffered/cache-backed
 capture does not establish sustained microSD/NVMe throughput.
 
 Require timestamp-nearest pairing, both clocks comparable, the actually selected
@@ -382,7 +510,9 @@ A process kill validates process recovery, not device power-loss certification.
   discovery, stable roles/nodes, plugin-owned CAMSS setup, Y10_1X10 pads,
   VBLANK=196 read-back, 720-line Y10P dual STREAMON and ~119.22 receive FPS, zero
   native gaps/capture errors, short lossless recording/finalization and two-pass
-  real replay. The 141-FrameSet results above used the diagnostic 100 ms tolerance.
+  real replay, plus corrected 4 ms timestamp-nearest pairing. The historical
+  141-FrameSet results used 100 ms; the new 140-FrameSet result used the reference
+  4 ms and selected -2.861 ms with native offset +8.
 - **OBSERVED PAIRING FAILURE:** equal native counters had ~51.8 ms timestamp
   offset, so the old 4 ms equality-based pairing failed. Independent sequence
   origins require software timestamp correspondence; the tolerance is not widened.
@@ -391,8 +521,8 @@ A process kill validates process recovery, not device power-loss certification.
   gap/repeat/reversal/clock/tolerance failures after alignment, strict hardware
   mode, explicit accounting and packed-byte replay. Existing native route setup,
   RAW8, Y10P, preview/QoS, recovery, clients and frozen ABI remain tested.
-- **PENDING USER EXECUTION:** corrected 4 ms pairing, sustained ten-second/full-rate
-  NVMe recording, corrected-pairing process-crash recovery, physical hardware
+- **PENDING USER EXECUTION:** sustained ten-second/full-rate NVMe recording,
+  corrected-pairing process-crash recovery, physical hardware
   synchronization, optical exposure skew and 1280×800 mode. No fixture result
   changes these to PASS.
 - **DEFERRED:** DMABUF/external-buffer zero-copy, physical trigger programming,

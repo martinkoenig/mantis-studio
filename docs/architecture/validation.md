@@ -278,8 +278,8 @@ showed ~51.5–51.9 ms V4L2 offset (final 51,786,000 ns), host delta 5–8 ms,
 `linux.monotonic` clocks and flags 8193. Independent counter origins are not
 exposure correspondence. The profile stays at 4 ms; [ADR-026](../adr/026-bounded-software-observation-pairing.md)
 replaces software counter equality with bounded timestamp-nearest pairing.
-**PENDING USER EXECUTION:** corrected 4 ms pairing, sustained ten-second/full-rate
-NVMe recording, real process-crash recovery after correction, hardware trigger
+**PENDING USER EXECUTION:** sustained ten-second/full-rate NVMe recording,
+real process-crash recovery after correction, hardware trigger
 synchronization, optical exposure skew and 1280×800 mode. The short successful
 recording does not certify sustained microSD throughput. No new performance
 benchmark or physical timing measurement is claimed for this pairing change.
@@ -335,10 +335,12 @@ separate from the existing driver, recorder and preview bounds).
 | cf752a2 | [37207910251](https://github.com/martinkoenig/mantis-studio/actions/runs/37207910251) | all five jobs PASS |
 | 3a287a2 | [37211493832](https://github.com/martinkoenig/mantis-studio/actions/runs/37211493832) | all five jobs PASS |
 | a64c2d1 | [37213924718](https://github.com/martinkoenig/mantis-studio/actions/runs/37213924718) | all five jobs PASS |
+| bc3e93f9886d741a946293da7d69f96e25f93bff | [37221849934](https://github.com/martinkoenig/mantis-studio/actions/runs/37221849934) | all five jobs PASS, inspected |
 
 The unchanged matrix covers native Ubuntu x86_64/ARM64 Studio ON/OFF and
-sanitizers. The final documentation/handoff checkpoint requires its own CI
-inspection after push; this table does not invent its conclusion.
+sanitizers. The final `bc3e93f` documentation/handoff checkpoint has now been
+inspected: run 37221849934 passed sanitizers and all four Ubuntu 24.04
+x86_64/ARM64 Studio ON/OFF jobs. Later checkpoints require their own inspection.
 
 Review against origin/main and the preceding hardware-gap HEAD found no new
 native media/backend or profile change, kernel/Qt leakage, raw-path unpacking,
@@ -346,3 +348,74 @@ unbounded queue, frame payload in Protobuf, per-frame storage transaction,
 ABI/layout/schema modification or synchronization overclaim. Pairing metadata
 is additive; old recordings replay without re-pairing or fabricated metadata.
 The reference profile remains 1280×720 Y10P, Y10_1X10, VBLANK=196 and 4 ms.
+
+
+## Official Q6A validation harness continuation — 2026-10-04
+
+**USER-VALIDATED PASS: corrected 4 ms software pairing on real Q6A.** The user
+supplied a Linux V4L2 result for the v2 reference profile, 1280×720 Y10P,
+Y10_1X10, VBLANK=196, `hardware_sync_configured=false`,
+`max_v4l2_delta_ns=4000000`. Produced/committed FrameSets: **140/140**;
+queue high water **11/32**, raw drops/saturation **0/0**;
+raw bytes **323,488,370**, writer **240.798 MB/s**.
+Timestamp-nearest pairing selected **-2,861,000 ns** (absolute **2.861 ms < 4 ms**),
+native offset **+8**, startup unmatched LEFT/RIGHT **8/0**, shutdown unmatched
+**0/1**. Pairing failures, pending saturation, timestamp discontinuities, both
+native sequence gaps and both capture errors were all **zero**. Plugin-owned
+selected routes were verified; both VBLANK read-backs were **196**, strides
+**1600**, buffer sizes **1,152,000**. Replay verified **140 FrameSets, 140 LEFT,
+140 RIGHT, two passes**, continuous sequences, **raw integrity PASS, replay PASS,
+short_pairing_check PASS**. These are user-provided hardware results, separate
+from the developer's automated tests. They supersede the earlier pending
+corrected-pairing status; the diagnostic 100 ms result remains historical.
+
+The official entry point is `scripts/validate-x1-q6a.sh --smoke`; `--full` adds
+Debug/Release software tests and discovery with the four mutable measurement
+links disabled. It retains reports/captures, dynamically resolves controller and
+sensor/video nodes, protects unrelated media links with an explicit runtime
+profile snapshot, restores the prior active service and temporary links, and
+stops only its own daemon. Generic acceptance removes both caller X1 variables;
+CTest deliberately injects a discoverable X1 fixture to exercise that isolation.
+The previous sixteen suites plus harness regressions now total seventeen on Linux.
+See [the hardware guide](../hardware/x1-q6a-acquisition-validation.md) for CLI,
+resource behavior, artifacts, and lower-level manual procedures.
+
+**PENDING:** a real Q6A execution of the new harness, sustained NVMe/equivalent
+storage acceptance, real process-crash recovery after corrected pairing,
+physical trigger synchronization, optical exposure skew and 1280×800 acquisition.
+No duration or reported short-run writer speed upgrades sustained storage to PASS.
+
+
+### Harness software verification and checkpoints
+
+| Configuration | Result | Retained log |
+| --- | --- | --- |
+| Debug, Studio ON | 17/17 PASS, 27.79 s | `v0.2-q6a-harness-debug-ctest.log` |
+| Debug, Studio OFF | 17/17 PASS, 18.15 s | `v0.2-q6a-harness-headless-ctest.log` |
+| Release, Studio OFF | 17/17 PASS, 17.12 s | `v0.2-q6a-harness-release-ctest.log` |
+| ASan + UBSan, Studio OFF | 17/17 PASS, 22.36 s | `v0.2-q6a-harness-sanitizers-ctest.log` |
+
+All four runs used `TMPDIR=/dev/shm` and exported `MANTIS_X1_PROFILE` and
+`MANTIS_X1_FAKE=normal` in the invoking shell. The sanitizer run enabled
+`ASAN_OPTIONS=detect_leaks=1` and `UBSAN_OPTIONS=halt_on_error=1`.
+Removing the acceptance isolation in a temporary copy reproduced the exact
+one-Virtual-Scanner assertion failure with the discoverable fixture profile.
+The harness suite contains twelve hardware-free tests, including real shell
+EXIT/INT/TERM supervision, owned daemon termination, unrelated-process survival,
+service restoration, partial measurement-link restoration, storage/fake/profile
+rejection, runtime-profile preservation, dynamic sensor/video/pad read-back,
+CTest-failure reporting and explicit absence of sustained-storage certification.
+The final media header parser accepts optional route counts; its focused suite
+passed after that adjustment. The actual `--full` wrapper also built and passed
+17/17 Debug and Release tests on the workstation, then correctly returned FAIL
+at `media-controller` because `platform:acb3000.isp` was absent. Reports were
+retained, no daemon started, and no service or media links changed. This is a
+software orchestration/failure check, not a Q6A hardware result. `bash -n` and Python compilation passed.
+`shellcheck` was unavailable in the development environment; no ShellCheck pass
+is claimed. The unchanged architecture workflow runs the seventeen-suite matrix
+on native Ubuntu 24.04 x86_64/ARM64 Studio ON/OFF plus sanitizers; its final pushed
+HEAD must be checked separately from the historical bc3e93f run above.
+
+Focused implementation checkpoints: `ac64ec4` isolates generic acceptance,
+`002a019` adds the official harness and twelve-case regression suite,
+`9af1aab` handles media-ctl entity headers that include route counts.

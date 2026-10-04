@@ -31,4 +31,17 @@ six-frame startup offsets in both directions, bounded nearest timestamp pairing,
 late-readiness deadline rejection, RAW8/Y10P exact replay, explicit observation
 accounting, Python stop errors and the public-client Q6A handoff command. ASan,
 UBSan and leak detection are enabled. The user-validated earlier real capture is
-recorded separately from the corrected 4 ms pairing still pending on Q6A.
+recorded separately from the new user-validated corrected 4 ms Q6A result
+(140 FrameSets, -2.861 ms selected delta, zero loss/errors and verified replay).
+See the current continuation in [the validation report](../architecture/validation.md).
+
+
+The official harness continuation preserves seventeen-suite Debug Studio ON,
+headless Debug, headless Release and leak-enabled ASan/UBSan results in
+`v0.2-q6a-harness-{debug,headless,release,sanitizers}-ctest.log`. Runs deliberately
+exported both X1 variables; the generic acceptance CTest additionally injects a
+discoverable fixture to prevent an environment-isolation regression. Twelve
+hardware-free harness checks cover scoped cleanup and failure reporting. The
+pairing algorithm and reference profile are unchanged. ShellCheck was unavailable;
+Bash syntax and Python compilation checks passed. Real Q6A harness execution and
+sustained NVMe/equivalent storage acceptance remain pending.
