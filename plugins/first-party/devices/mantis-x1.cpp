@@ -24,7 +24,7 @@ int enumerate(MantisDiscoverEmitV1 emit, void *ctx) noexcept {
         // No implicit role assignment, nor fake fallback on a machine without hardware.
         if (!std::getenv("MANTIS_X1_PROFILE")) return;
         auto config = configuration();
-        auto cameras = x1::assign(config.profile, config.backend->discover());
+        auto cameras = x1::assign(config.profile, config.backend->discover(config.profile));
         auto parent = parent_id(cameras);
         const char *parent_caps[]{MANTIS_FRAMESET_STREAM_V1};
         x1::Metadata info{{"profile", config.profile.json}, {"buffer_mode", "V4L2 MMAP + one acquisition copy"},
@@ -59,6 +59,7 @@ struct Device {
     Configuration config;
     std::array<x1::CameraInfo, 2> cameras;
     std::array<std::unique_ptr<x1::Camera>, 2> streams;
+    std::unique_ptr<x1::Setup> setup;
     std::array<std::optional<Pending>, 2> pending;
     std::array<std::optional<uint32_t>, 2> last_sequence;
     std::array<std::optional<int64_t>, 2> last_timestamp;
@@ -71,6 +72,12 @@ struct Device {
         pending = {};
         for (auto &stream : streams) if (stream) stream->stop();
         streams = {}; running = false;
+        if (setup) {
+            try { setup->rollback(); } catch (const std::exception &e) {
+                try { metrics["setup_rollback_error"] = e.what(); } catch (...) {}
+            }
+            setup.reset();
+        }
     }
     ~Device() { stop(); }
     void increment(const std::string &key, uint64_t n = 1) {
@@ -86,7 +93,7 @@ int open_device(const MantisHostV1 *host, const char *id, void **out) noexcept {
     return mantis::sdk::boundary([&] {
         if (!mantis::sdk::compatible(host) || !id || !out) throw std::runtime_error("Invalid acquisition open");
         auto config = configuration();
-        auto cameras = x1::assign(config.profile, config.backend->discover());
+        auto cameras = x1::assign(config.profile, config.backend->discover(config.profile));
         if (id != parent_id(cameras)) throw std::runtime_error("Selected acquisition identity no longer available");
         auto device = std::make_unique<Device>(); device->host = host;
         device->config = std::move(config); device->cameras = std::move(cameras);
@@ -98,8 +105,12 @@ int start(void *p) noexcept {
     auto &d = *static_cast<Device *>(p);
     return d.guard([&] {
         d.stop(); d.metrics.clear(); d.sequence = 0; d.last_sequence = {}; d.last_timestamp = {};
+        d.setup = d.config.backend->prepare(d.config.profile, d.cameras);
+        if (d.config.profile.format_version == 2 && !d.setup)
+            throw std::runtime_error("Profile v2 requires plugin-owned media setup; backend does not provide it");
         for (size_t i = 0; i < 2; ++i) d.streams[i] = d.config.backend->open(d.cameras[i], d.config.profile.mode);
         for (auto &stream : d.streams) stream->start();
+        if (d.setup) { d.metrics = d.setup->diagnostics(); d.setup->commit(); }
         d.started = x1::monotonic_ns(); d.last_receive.fill(d.started); d.running = true;
         d.metrics["sync_configuration"] = d.config.profile.hardware_sync_configured ? "hardware sync configured" : "hardware sync not configured";
         d.metrics["sync_quality"] = "software";
@@ -119,6 +130,11 @@ MantisObservationV1 observation(const Device &d, size_t i, MantisAttributeV1 &a)
     const auto &p = *d.pending[i]; const auto &f = p.frame;
     a = {sizeof(a), 1, "org.mantis.pixels", "intensity", 1, 2,
         {f.height, f.width}, {f.stride, 1}, p.buffer->get(), 0, p.bytes};
+    if (f.fourcc == "Y10P") {
+        a.name = "org.mantis.image.packed_bytes"; a.unit = "byte";
+        a.rank = 1; a.shape[0] = p.bytes; a.shape[1] = 0;
+        a.stride[0] = 1; a.stride[1] = 0;
+    }
     MantisPacketV1 packet{sizeof(packet), 1, MANTIS_IMAGE, 1, f.sequence, f.timestamp_ns,
         f.clock.c_str(), d.config.profile.calibration_id.c_str(), d.config.profile.calibration_revision,
         i ? "org.mantis.camera.right.optical" : "org.mantis.camera.left.optical", &a, 1};
@@ -153,6 +169,13 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
                         info.insert({{"role", i ? "right" : "left"}, {"identity", identity(d.cameras[i])},
                             {"video_node", d.cameras[i].video}, {"fourcc", frame.fourcc},
                             {"v4l2_flags", std::to_string(frame.flags)}, {"buffer_size", std::to_string(frame.buffer_size)}});
+                        info["org.mantis.image.width"] = std::to_string(frame.width);
+                        info["org.mantis.image.height"] = std::to_string(frame.height);
+                        info["org.mantis.image.row_stride_bytes"] = std::to_string(frame.stride);
+                        if (frame.fourcc == "Y10P") {
+                            info["org.mantis.image.layout"] = "mipi-raw10-v1";
+                            info["org.mantis.image.bits_per_sample"] = "10";
+                        }
                         value.metadata = Json(info).dump();
                         // Keep only extent, never dereference the expired driver view.
                         value.frame.bytes = {};
@@ -208,7 +231,7 @@ int diagnostics(void *p, MantisTextEmitV1 emit, void *ctx) noexcept {
         x1::Metadata info;
         if (p) info = static_cast<Device *>(p)->metrics;
         else {
-            try { auto c = configuration(); (void)x1::assign(c.profile, c.backend->discover()); }
+            try { auto c = configuration(); (void)x1::assign(c.profile, c.backend->discover(c.profile)); }
             catch (const std::exception &e) { info["error"] = e.what(); }
         }
         auto json = Json(info).dump(); mantis::sdk::check(emit(ctx, json.c_str()));

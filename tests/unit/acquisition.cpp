@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <mantis/plugin_runtime.hpp>
+#include <mantis/image_layout.hpp>
 #include <nlohmann/json.hpp>
 using namespace mantis;
 #define CHECK(x) do { if (!(x)) throw std::runtime_error(std::string("Check failed: ") + #x); } while (false)
@@ -27,7 +28,9 @@ int main(int argc, char **argv) {
         fixture["calibration_id"] = "test.calibration"; fixture["calibration_revision"] = 7;
         { std::ofstream out(dir / "profile.json"); out << fixture; }
         setenv("MANTIS_X1_PROFILE", (dir / "profile.json").c_str(), 1);
-        for (const auto *scenario : {"normal", "renumber", "eagain", "drop-left", "drop-right", "disconnect", "mismatch", "repeat", "timestamp-jump", "lag", "stall-left", "stall-right", "stop-right", "stream-mismatch"}) {
+        for (const auto *scenario : {"normal", "y10p", "renumber", "eagain", "drop-left", "drop-right", "disconnect", "mismatch", "repeat", "timestamp-jump", "lag", "stall-left", "stall-right", "stop-right", "stream-mismatch"}) {
+            fixture["mode"]["fourcc"] = std::string(scenario) == "y10p" ? "Y10P" : "GREY";
+            { std::ofstream out(dir / "profile.json"); out << fixture; }
             setenv("MANTIS_X1_FAKE", scenario, 1);
             plugins::Registry registry(std::filesystem::path(argv[1]).parent_path() / "bin/mantis-plugin-host", dir / "hosts", {});
             registry.discover(argv[1], {"org.mantis.virtual-scanner", "org.mantis.x1", "org.mantis.example-points", "org.mantis.ply"});
@@ -63,12 +66,18 @@ int main(int argc, char **argv) {
                     CHECK(f.header.timestamp.nanoseconds == int64_t(count) * (1000000000 / 120));
                     CHECK(f.header.calibration.id.value == "test.calibration" && f.header.calibration.revision == 7);
                     auto bytes = f.attributes[0].buffer.map_read(); CHECK(bytes);
+                    if (std::string(scenario) == "y10p") {
+                        CHECK(f.attributes[0].descriptor.name == data::packed_image_bytes);
+                        CHECK(f.attributes[0].descriptor.shape == std::vector<uint64_t>{3840});
+                        auto layout = data::image_layout(f);
+                        CHECK(layout.packing == data::ImagePacking::mipi_raw10 && layout.width == 64 && layout.height == 48 && layout.row_stride == 80);
+                    }
                     CHECK((*bytes)[0] == static_cast<std::byte>((count * 7u + (i ? 97u : 0u)) & 255u));
                 }
                 if (!retained) retained = p;
                 ++count;
             }
-            bool valid = std::string(scenario) == "normal" || std::string(scenario) == "renumber" || std::string(scenario) == "eagain";
+            bool valid = std::string(scenario) == "normal" || std::string(scenario) == "y10p" || std::string(scenario) == "renumber" || std::string(scenario) == "eagain";
             CHECK(failed != valid);
             if (failed) CHECK(!stream->diagnostics().at("error").empty());
             CHECK(stream->stop());

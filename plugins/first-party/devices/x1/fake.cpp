@@ -42,10 +42,11 @@ class FakeCamera final : public Camera {
         auto timestamp = int64_t(native) * (1000000000 / mode_.fps);
         if (scenario_ == "timestamp-jump" && sequence_ == 4 && right_) timestamp = -1;
         if (scenario_ == "lag" && right_) timestamp += 100000000;
-        std::vector<std::byte> pixels(size_t(mode_.width) * mode_.height);
+        uint32_t stride = mode_.fourcc == "Y10P" ? mode_.width / 4 * 5 : mode_.width;
+        std::vector<std::byte> pixels(size_t(stride) * mode_.height);
         for (size_t i = 0; i < pixels.size(); ++i)
             pixels[i] = static_cast<std::byte>((i + native * 7u + (right_ ? 97u : 0u)) & 255u);
-        FrameView view{pixels, native, mode_.width, mode_.height, mode_.width,
+        FrameView view{pixels, native, mode_.width, mode_.height, stride,
                        static_cast<uint32_t>(pixels.size()), 0, timestamp,
                        timestamp + 1000 + (right_ ? 100 : 0), "org.mantis.fake.monotonic", mode_.fourcc, {}};
         emit(view);

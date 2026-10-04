@@ -2,6 +2,7 @@
 #include <iostream>
 #include <mantis/artifact_store.hpp>
 #include <mantis/data_io.hpp>
+#include <mantis/image_layout.hpp>
 #include <mantis/platform.hpp>
 #include <nlohmann/json.hpp>
 #include <sqlite3.h>
@@ -25,6 +26,21 @@ data::Published frame_set(uint64_t n) {
         parent.frames.push_back(data::publish(std::move(image)));
     }
     return data::publish(std::move(parent));
+}
+data::Published packed_set(uint64_t n) {
+    auto original_set = frame_set(n);
+    auto set = *original_set; set.frames.clear();
+    for (const auto &original : original_set->frames) {
+        auto frame = *original;
+        frame.header.metadata.insert({{"org.mantis.image.layout", "mipi-raw10-v1"}, {"org.mantis.image.bits_per_sample", "10"},
+            {"org.mantis.image.width", "8"}, {"org.mantis.image.height", "8"}, {"org.mantis.image.row_stride_bytes", "12"}});
+        frame.header.metadata["fourcc"] = "Y10P";
+        memory::BufferBuilder buffer(96);
+        for (size_t i = 0; i < 96; ++i) buffer.writable()[i] = static_cast<std::byte>((i * 17 + n) & 255);
+        frame.attributes = {{{std::string(data::packed_image_bytes), schema::ScalarType::u8, {96}, {1}, "byte"}, std::move(buffer).publish()}};
+        set.frames.push_back(data::publish(std::move(frame)));
+    }
+    return data::publish(std::move(set));
 }
 void equal(const data::Packet &a, const data::Packet &b) {
     CHECK(a.type == b.type); CHECK(a.header.sequence.value == b.header.sequence.value);
@@ -71,6 +87,14 @@ int main() {
                 CHECK(sequence == 20);
             }
             equal(*store.packet(finalized, 7), *frame_set(7));
+            auto packed = store.begin({"org.mantis.RawCapture", 2}, provenance);
+            for (uint64_t i = 0; i < 8; ++i) store.append(packed, *packed_set(i));
+            store.finalize(packed);
+            for (unsigned pass = 0; pass < 2; ++pass) {
+                uint64_t n{};
+                store.replay(packed, [&](data::Published p) { equal(*p, *packed_set(n++)); });
+                CHECK(n == 8);
+            }
             rejects([&] { store.append(finalized, *frame_set(20)); });
             interrupted = store.begin({"org.mantis.RawCapture", 2}, {});
             for (uint64_t i = 0; i < 4; ++i) store.append(interrupted, *frame_set(i));
