@@ -185,6 +185,9 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
         if (!d.running || !emit || timeout > 1000) throw std::runtime_error("Invalid next call/stopped stream");
         unsigned reads{};
         while (true) {
+            if (!d.aligned && x1::monotonic_ns() - d.started > int64_t(d.config.profile.stall_ms) * 1000000) {
+                d.increment("pairing_failures"); throw std::runtime_error("Startup timestamp alignment timed out");
+            }
             std::array<std::array<x1::PairingObservation, x1::pairing_capacity>, 2> observations{};
             for (size_t i = 0; i < 2; ++i) for (size_t j = 0; j < d.pending[i].size(); ++j) {
                 const auto &f = d.pending[i][j].frame;
@@ -194,6 +197,8 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
                 const auto suffix = i ? "right" : "left";
                 d.metrics[std::string("pairing_candidate_sequence_") + suffix] = d.pending[i].empty()
                     ? "unavailable" : std::to_string(d.pending[i][0].frame.sequence);
+                d.metrics[std::string("pairing_candidate_timestamp_ns_") + suffix] = d.pending[i].empty()
+                    ? "unavailable" : std::to_string(d.pending[i][0].frame.timestamp_ns);
                 d.metrics[std::string("pairing_lookahead_timestamp_ns_") + suffix] = d.pending[i].size() < 2
                     ? "unavailable" : std::to_string(d.pending[i][1].frame.timestamp_ns);
             }
@@ -212,9 +217,6 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
                 d.pending[i].pop(); ++d.startup_discarded;
                 d.increment(i ? "startup_unmatched_right" : "startup_unmatched_left");
                 d.pending_depth(); continue;
-            }
-            if (!d.aligned && x1::monotonic_ns() - d.started > int64_t(d.config.profile.stall_ms) * 1000000) {
-                d.increment("pairing_failures"); throw std::runtime_error("Startup timestamp alignment timed out");
             }
             if (reads == 2) return; // bounded work and caller timeout, even while aligning
             ++reads;

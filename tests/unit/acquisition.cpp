@@ -31,6 +31,28 @@ int main(int argc, char **argv) {
         fixture["calibration_id"] = "test.calibration"; fixture["calibration_revision"] = 7;
         { std::ofstream out(dir / "profile.json"); out << fixture; }
         setenv("MANTIS_X1_PROFILE", (dir / "profile.json").c_str(), 1);
+        // Readiness occurs after the 100ms startup deadline, inside the caller's
+        // 1000ms timeout. A late exact-timestamp pair must never be published.
+        {
+            setenv("MANTIS_X1_FAKE", "startup-delayed-right", 1);
+            plugins::Loaded loaded(std::filesystem::path(argv[1]) / "mantis-x1.so");
+            const auto *api = loaded.query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1);
+            std::string id;
+            sdk::enumerate(api, [&](const MantisDiscoveredDeviceV1 &d) { if (!*d.parent_id) id = d.id; });
+            void *instance{}; sdk::check(api->open(plugins::host_api(), id.c_str(), &instance));
+            struct Instance { const MantisAcquisitionV1 *api; void *value; ~Instance() { api->stop(value); api->destroy(value); } } owner{api, instance};
+            sdk::check(api->start(instance));
+            unsigned frames{};
+            auto emit = [](void *ctx, const MantisFrameSetV1 *set) { *static_cast<unsigned *>(ctx) = set->frame_count; return 0; };
+            CHECK(api->next(instance, 1000, emit, &frames) == 1 && frames == 0);
+            std::string diagnostics;
+            auto text = [](void *ctx, const char *json) noexcept { return sdk::boundary([&] { *static_cast<std::string *>(ctx) = json; }); };
+            sdk::check(api->diagnostics(instance, text, &diagnostics));
+            auto info = nlohmann::json::parse(diagnostics);
+            CHECK(info.at("error") == "Startup timestamp alignment timed out");
+            CHECK(info.at("pairing_failures") == "1");
+            CHECK(info.at("shutdown_unmatched_left") == "1" && info.at("shutdown_unmatched_right") == "1");
+        }
         for (const auto *scenario : {"normal", "y10p", "renumber", "eagain", "drop-left", "drop-right", "disconnect", "mismatch", "repeat", "timestamp-jump", "lag", "stall-left", "stall-right", "stop-right", "stream-mismatch"}) {
             fixture["hardware_sync_configured"] = std::string(scenario) == "mismatch";
             fixture["mode"]["fourcc"] = std::string(scenario) == "y10p" ? "Y10P" : "GREY";
