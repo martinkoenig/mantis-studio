@@ -80,3 +80,14 @@ The real 5 ms Q6A run at `4ec71d9` passed Debug/Release 17/17 and disabled-link
 discovery but was blocked by the now-removed observed-period guard before actual
 correspondence could be validated. The 5 ms pairing policy itself has not failed
 on Q6A; real execution after guard removal and sustained storage remain pending.
+
+
+Final v0.2 Q6A acquisition evidence: the user ran
+`./scripts/validate-x1-q6a.sh --full` on real hardware at
+`fad4df6439e88c7ba4f265c532343c3317e93da4`. Debug and Release were 17/17 PASS;
+disabled-link discovery and plugin-owned Y10P 1280×720 setup passed; software
+timestamp correspondence used the 5 ms reference with -3.652 ms final selected
+delta, +8 native offset, 8/0 startup exclusions, 0/0 steady-state exclusions and
+zero pairing failures. The run recorded 123/123 FrameSets with zero raw
+drops/saturation, FINALIZED RawCapture and deterministic replay/raw-integrity PASS.
+Sustained storage and physical synchronization remain outside this acceptance.
