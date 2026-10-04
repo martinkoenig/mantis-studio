@@ -1,7 +1,7 @@
-[OUTPUT] 
+[OUTPUT]
 Internal ctest changing into directory: <SOURCE_ROOT>/build/headless
 
-[HANDLER_OUTPUT] 
+[HANDLER_OUTPUT]
 Test project <SOURCE_ROOT>/build/headless
 
     Start 1: legacy-abi
