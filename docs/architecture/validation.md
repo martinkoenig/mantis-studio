@@ -441,8 +441,8 @@ No automatic retries or favorable-phase waits address this limitation.
 software timestamp correspondence from hardware synchronization. The candidate
 software reference is **5 ms**, nominal half-period plus 20% headroom at requested
 120 FPS, approximately 0.808 ms over measured half-period. Software defaults are
-period-derived; explicit bounds below nominal half-period are rejected and
-observed intervals must fit the configured half-period bound. This margin is an
+period-derived; explicit bounds below nominal half-period are rejected.
+Observed intervals are diagnostics, not correspondence vetoes. This margin is an
 engineering policy, not a measured optical exposure skew or future cadence proof.
 
 Steady-state re-alignment permits at most two explicitly identified exclusions
@@ -476,8 +476,9 @@ capture failure is retained rather than upgraded to PASS.
 Logs: `docs/validation/v0.2-free-running-{debug,headless,release,sanitizers}-ctest.log`.
 Debug retains console output; the other three retain CTest's detailed `LastTest.log`.
 All used `TMPDIR=/dev/shm` and an exported X1 profile; the final full Debug run
-also exported `MANTIS_X1_FAKE=normal`. The focused Debug pairing suites passed
-again after ordering clock-change validation ahead of observed-period validation.
+also exported `MANTIS_X1_FAKE=normal`. At that historical checkpoint the focused
+Debug pairing suites passed after ordering clock-change validation ahead of the
+observed-period guard; the later Q6A evidence below invalidates that guard.
 Bash syntax/Python compilation passed. ShellCheck is still unavailable.
 
 Coverage includes 16,769 phase values across both signs at 1 µs spacing, exact
@@ -496,5 +497,71 @@ Implementation checkpoint: `b079f5e` (free-running correspondence and its tests)
 The preceding harness checkpoint `325690cec86658917f0f220a7c500beb6e296648` was
 inspected in [run 37231208917](https://github.com/martinkoenig/mantis-studio/actions/runs/37231208917):
 all five native x86_64/ARM64 Studio ON/OFF and sanitizer jobs passed 17/17.
-That earlier CI is not evidence for this later policy; its pushed final HEAD
-requires separate CI inspection.
+The subsequent policy HEAD `4ec71d9d1553216b6a69f942802760e299150567` was
+inspected in [run 37233671646](https://github.com/martinkoenig/mantis-studio/actions/runs/37233671646):
+all five jobs passed 17/17. Those results precede the guard removal below.
+
+
+## Observed-period guard removal after real 5 ms Q6A evidence
+
+The user's full validation of `4ec71d9d1553216b6a69f942802760e299150567`
+used 1280×720 Y10P, requested 120 FPS, VBLANK=196, hardware sync false and a
+5,000,000 ns bound. Debug/Release both passed 17/17; disabled-link discovery
+passed and plugin-owned setup reached real acquisition. LEFT resolved to
+`/dev/video8`, RIGHT to `/dev/video11` on this run. Capture start failed with
+`left.observed half-period exceeds software pairing tolerance`.
+
+This over-conservative guard compared each native interval's rounded-up half
+against the correspondence bound. A long interval alone cannot prove the absence
+of a valid opposite-camera timestamp. The guard blocked validation before actual
+cross-camera correspondence: **the 5 ms pairing policy itself has not failed on
+Q6A**. The guard is removed while latest native period, half-period and maximum
+remain structured diagnostics, including on failure. The reference bound stays
+5 ms. Requested FPS is a nominal engineering input, not exact sensor timing.
+Actual nearest/bracketing distances alone enforce software correspondence.
+Native continuity, exclusion budgets, strict hardware mode and exact recorded
+associations remain unchanged. Candidate timestamps/distances and native periods
+survive rejection in diagnostic metadata; an initial failure without a capture
+handle also emits a durable JSON `capture.diagnostics` event. The harness copies
+that event into its failure reports.
+
+New regression fixtures inject a single 12.384 ms native interval on either
+camera while retaining a valid ≤5 ms pair. RAW8/Y10P use the bounded recorder,
+complete observation accounting, zero published-pair loss and exact two-pass
+replay. A 6 ms nearest bracket still rejects with structured distances and period
+evidence, including before any FrameSet is published. Public-client integration
+checks both acceptance of the long interval and persistence of initial rejection.
+Existing strict gap/repeat/reversal/clock tests, 25 ppm phase-boundary crossings,
+startup/steady-state limits and hardware strictness continue to apply.
+
+**PENDING USER EXECUTION:** `./scripts/validate-x1-q6a.sh --full` after guard
+removal. The historical favorable 4 ms starts do not establish arbitrary-phase
+robustness. Sustained NVMe/equivalent storage and optical/hardware synchronization
+remain pending.
+
+
+### Guard-removal software checkpoint
+
+Implementation checkpoint: `69fd7dfff59dd03572f4d30efc1cf0832881510b`.
+
+| Local configuration | Result |
+| --- | --- |
+| Debug Studio ON | 17/17 PASS, 35.02 sec |
+| Debug Studio OFF | 17/17 PASS, 23.60 sec |
+| Release Studio OFF | 17/17 PASS, 22.21 sec |
+| ASan + UBSan Studio OFF, leak detection | 17/17 PASS, 39.49 sec |
+
+All four runs used `TMPDIR=/dev/shm`, exported `MANTIS_X1_PROFILE` pointing to the
+reference profile, and exported `MANTIS_X1_FAKE=normal`. The generic acceptance
+baseline remains hermetic. Logs are preserved in
+`docs/validation/v0.2-observed-period-{debug,headless,release,sanitizers}-ctest.log`.
+All thirteen hardware-free harness tests passed, including failure-snapshot
+preservation and the existing service/link/daemon cleanup checks. Bash syntax
+and Python compilation passed; ShellCheck was unavailable.
+
+An initial Release run exposed a scheduling assumption in an accelerated invalid
+fixture: acquisition could fail before the first writer commit and return no
+Session handle. The test now validates the same exact native/budget rejection
+and healthy-observation accounting through either API outcome. Production
+acquisition semantics were not changed for that test issue. The final four
+full-suite runs above passed after the correction.

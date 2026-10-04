@@ -43,7 +43,8 @@ The reference software profile now uses **5,000,000 ns**: half the requested
 120 FPS period plus 20% headroom. At measured ~119.27 FPS, half-period is ~4.192 ms,
 already beyond 4 ms. Software correspondence selects nearest unused comparable
 V4L2 timestamps with bounded lookahead and explicitly counts startup and
-steady-state exclusions. The observed half-period must also fit the bound.
+steady-state exclusions. Observed native periods and half-periods are diagnostics;
+only actual cross-camera candidate timestamps establish correspondence failure.
 See [ADR-026](../adr/026-bounded-software-observation-pairing.md) for its derivation,
 limits and interpretation.
 Hardware-configured mode keeps stricter native-counter checks. Host arrival is
@@ -133,7 +134,9 @@ compare them to discovery, and read back Y10P 1280×720, stride 1600, sizeimage
 Correspondence checks accept any native startup offset and explicitly account for
 startup exclusions, counted steady-state exclusions and shutdown lookahead. Zero
 steady-state exclusions is not required; their deterministic per-pair bound is two.
-Per-camera observed max half-period must fit 5 ms. The selected timestamp delta must
+Per-camera observed periods, half-periods and maxima are reported, with no
+cadence-derived PASS/FAIL threshold or automatic widening. Requested FPS is a
+nominal target rather than exact sensor timing. The selected timestamp delta must
 stay within 5 ms, with zero pairing failures, pending saturation, timestamp
 discontinuities, native sequence gaps/capture errors and raw loss/saturation.
 Produced/committed counts must agree and exceed zero; RawCapture must be
@@ -206,6 +209,41 @@ stays software; optical skew is unavailable. Hardware mode remains strict.
 **PENDING USER EXECUTION:** the new 5 ms candidate and counted steady-state
 re-alignment, especially cold disabled-link acquisition and longer drift runs.
 The existing harness is user-validated operationally; sustained storage is pending.
+
+## Real 5 ms full follow-up: observed-period guard blocked acquisition
+
+The user ran `./scripts/validate-x1-q6a.sh --full` on
+`4ec71d9d1553216b6a69f942802760e299150567` with 1280×720 Y10P, requested
+120 FPS, VBLANK=196, hardware sync false and **5,000,000 ns** correspondence bound.
+
+| Stage | User-provided Q6A evidence |
+| --- | --- |
+| Software | Debug 17/17 PASS; Release 17/17 PASS |
+| Discovery/setup | Disabled-link discovery PASS; plugin-owned setup reached real acquisition |
+| Resolved devices in this run | LEFT `/dev/video8`; RIGHT `/dev/video11` (observations, never hard-coded) |
+| Capture start | FAIL: `left.observed half-period exceeds software pairing tolerance` |
+
+The observed-period veto rejected acquisition before actual cross-camera
+correspondence could be validated. An individual native interval above 10 ms
+with a 5 ms bound does not prove that no opposite-camera timestamp is within
+5 ms. This is a separate failure from the former 4 ms nearest-pair rejection:
+**the 5 ms pairing policy itself has not failed on Q6A**. Its nominal half-period
+plus margin derivation remains defensible; observed periods are now diagnostics.
+The bound remains fixed at 5 ms and still does not represent optical exposure skew.
+
+**PENDING USER EXECUTION:** real Q6A acquisition after removal of the guard, using:
+
+```bash
+./scripts/validate-x1-q6a.sh --full
+```
+
+On a genuine nearest-pair failure, `pairing.json` retains the configured bound,
+LEFT/RIGHT front timestamps, available lookahead timestamps and distances,
+nearest available distance, latest/max native periods and failure reason.
+The JSON `capture.diagnostics` event in the retained project's `diagnostics.log`
+also survives a failure before `capture.start()` returns a capture handle.
+Native continuity, bounded exclusions, recorder integrity and replay checks remain
+strict. No retry or tolerance increase is used; sustained storage remains pending.
 
 ## Manual diagnostics and reference procedure
 

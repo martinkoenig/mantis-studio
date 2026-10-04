@@ -64,3 +64,19 @@ add arbitrary/half-period phases, 4.0–4.3 ms distances, 25 ppm drift, counted
 boundary crossings, strict native-gap/budget failures, bounded recording with
 no hidden loss, and exact RAW8/Y10P replay. These are software fixture results;
 5 ms/counted realignment on real Q6A remains pending.
+
+
+`v0.2-observed-period-{debug,headless,release,sanitizers}-ctest.log` preserve all
+four 17/17 guard-removal runs at implementation checkpoint `69fd7df`. They use
+`TMPDIR=/dev/shm` with both caller X1 variables exported; sanitizers enable leak
+detection. Isolated 12.384 ms intervals remain diagnostic when valid ≤5 ms
+correspondence exists. Real 6 ms brackets still reject with structured evidence,
+including an initial failure without a capture handle. RAW8/Y10P recording,
+complete accounting and exact two-pass replay remain covered. Thirteen harness
+checks pass, including preservation of failure diagnostics. Bash syntax and
+Python compilation pass; ShellCheck was unavailable.
+
+The real 5 ms Q6A run at `4ec71d9` passed Debug/Release 17/17 and disabled-link
+discovery but was blocked by the now-removed observed-period guard before actual
+correspondence could be validated. The 5 ms pairing policy itself has not failed
+on Q6A; real execution after guard removal and sustained storage remain pending.

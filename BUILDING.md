@@ -190,8 +190,10 @@ startup exclusions and at most two steady-state exclusions between published
 pairs, all bounded by the profile stall timeout. The default software tolerance
 is `ceil(600000000 / requested_fps)` ns: half a nominal period plus 20% headroom,
 **5,000,000 ns at 120 FPS**. At measured ~119.27 FPS, half-period is ~4.192 ms.
-The plugin rejects software bounds below nominal half-period and fails if any
-observed half-period exceeds the configured bound. It never widens a bound or
+The plugin rejects software bounds below nominal half-period. Observed native
+periods, half-periods and maxima are diagnostics; an isolated long interval does
+not veto a valid cross-camera pair. Actual nearest/bracketing timestamps enforce
+the configured correspondence bound. The plugin never widens a bound or
 retries for a favorable startup phase. Review old explicit 4 ms profiles and
 restart the daemon after an intentional profile update. The harness validates
 5 ms and preserves the user's profile.
@@ -205,3 +207,12 @@ strict equal-counter checks, its configured timestamp limit and a 4 ms default;
 it permits no re-alignment. SyncQuality remains software and exposure skew is
 unavailable. See [ADR-026](docs/adr/026-bounded-software-observation-pairing.md).
 No build/runtime dependency changed.
+
+The real 5 ms Q6A full run at `4ec71d9` passed both 17-suite software builds and
+disabled-link discovery, but a conservative observed-period guard blocked
+`capture.start()` before correspondence could be validated. That guard is now
+removed; real execution of the 5 ms pairing policy remains pending. Re-run
+`./scripts/validate-x1-q6a.sh --full` on the Q6A. Pairing failures retain candidate
+distances and period diagnostics in `pairing.json`; a startup failure without a
+capture handle also preserves a JSON `capture.diagnostics` event in the retained
+project's `diagnostics.log`. Sustained-storage acceptance remains pending.

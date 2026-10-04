@@ -32,12 +32,19 @@ engineering margin, not a measured jitter distribution or hardware guarantee.
 The reference software profile and Q6A harness now require 5 ms. Missing software
 tolerance defaults to the period-derived recommendation; an explicitly smaller
 than nominal half-period bound is rejected, never silently enlarged. Old explicit
-4 ms/120 FPS profiles require operator review. Every observed interval from
-consecutive native frames is also checked: `ceil(interval_ns / 2) <= tolerance`.
-Latest/max observed periods are reported. Thus slower-than-assumed or excessive
-cadence variation fails explicitly rather than automatically widening the bound.
-This observed-interval check is conservative; requested FPS and finite observed
-intervals do not prove all future cadence or physical sensor timing.
+4 ms/120 FPS profiles require operator review.
+
+Half the nominal period plus margin is the engineering basis for choosing the
+configured bound, not a per-observation acquisition invariant. Requested FPS is
+a nominal mode target, not exact sensor timing evidence. Consecutive native
+intervals, their rounded-up half-periods and maximum intervals remain diagnostics:
+`left/right.observed_period_ns`, `observed_half_period_ns` and
+`observed_max_period_ns`. A temporary interval above twice the tolerance can still
+have a valid opposite-camera observation. It does not establish invalid
+correspondence and must not fail capture by itself or automatically widen the
+bound. Only the actual two-stream nearest/bracketing decision rejects invalid
+correspondence; every selected pair must satisfy `abs(RIGHT - LEFT) <= 5 ms` in
+the reference mode.
 
 5 ms bounds **software timestamp correspondence**, not optical exposure skew.
 Timestamp clock/source, sensor timestamp semantics, shutter timing and physical
@@ -76,7 +83,7 @@ existing LOSSLESS recorder records every published FrameSet or fails explicitly.
 `hardware_sync_configured=true` retains equal native counters and its explicitly
 configured timestamp limit, with no startup or steady-state re-alignment. Its
 missing-tolerance default remains **4 ms**, independent of requested FPS. The
-software half-period recommendation/check does not widen hardware bounds.
+software half-period recommendation does not widen hardware bounds.
 An operator assertion alone does not prove physical synchronization; SyncQuality
 remains `software` and optical exposure skew remains `unavailable` in both paths.
 Future verified hardware-sync semantics must be established separately.
@@ -90,6 +97,16 @@ startup/steady-state counts. `pairing_exclusions` records each excluded observat
 since the preceding publication (role, startup/steady phase, native sequence,
 timestamp and clock), bounded to 32 at startup or two in steady state. The list is
 reset at publication and never carried into another pair's exclusion list.
+
+Failure diagnostics also retain the candidate LEFT/RIGHT timestamps, available
+lookahead timestamps, front and lookahead distances, the nearest available
+candidate distance, whether candidates bracket the newer front, configured
+bound, failure reason and latest/max observed native intervals. Missing
+observations remain `unavailable`; an unavailable bracket is not proof of a
+nearest candidate. If acquisition fails before the first FrameSet and
+`capture.start()` cannot return a handle, the JSON `capture.diagnostics` event
+preserves this snapshot in the project's `diagnostics.log`. The harness copies
+that failure snapshot to `pairing.json` and `summary.json`.
 
 Stop/failure counts retained lookahead as `shutdown_unmatched_left/right`.
 Exclusions after the last published pair are exposed separately as
@@ -115,8 +132,18 @@ nearest distances. Long traces at 25 ppm in either direction cross multiple
 neighbor boundaries. Loaded RAW8/Y10P acquisition through the real bounded
 recorder checks exclusion identities, complete accounting, zero recorder loss,
 strict counter/gap failures, the two-exclusion bound and exact two-pass replay.
+Isolated 12.384 ms intervals on either camera remain accepted when the actual
+pair is within 5 ms, including zero-loss RAW8/Y10P recording and replay. Brackets
+with both nearest distances at 6 ms still fail and preserve structured evidence.
 
-The new 5 ms policy and counted steady-state re-alignment require real Q6A
-execution. The 4 ms smoke pass and cold full failure remain recorded honestly.
+The real Q6A full run on `4ec71d9d1553216b6a69f942802760e299150567`
+used the 5 ms reference, passed Debug/Release 17/17 and disabled-link discovery,
+and reached plugin-owned acquisition. `capture.start()` failed with
+`left.observed half-period exceeds software pairing tolerance`. This newly
+introduced conservative guard blocked acquisition before actual cross-camera
+correspondence could be validated; it is different from the earlier 4 ms nearest
+pair rejection. Therefore the **5 ms pairing policy itself has not failed on
+Q6A**. Real Q6A execution after removing this guard remains pending. The favorable
+4 ms starts and later cold 4 ms pairing failure remain recorded honestly.
 Sustained-storage acceptance, physical synchronization and optical timing are
 still pending; changing this software bound does not establish any of them.
