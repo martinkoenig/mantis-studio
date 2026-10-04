@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -50,6 +51,14 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert {d.metadata["role"] for d in children} == {"left", "right"}
         assert client.devices.info(parent.id).id == parent.id
         assert cli("devices", "info", parent.id)["devices"][0]["id"] == parent.id
+        # Idle discovery can become unavailable and reconnect without rebuilding
+        # the runtime or silently switching logical identities.
+        profile_path = root / "profile.json"
+        unavailable_profile = root / "profile.disconnected"
+        profile_path.rename(unavailable_profile)
+        assert not any(d.plugin_id == "org.mantis.x1" for d in client.devices.list())
+        unavailable_profile.rename(profile_path)
+        assert next(d.id for d in client.devices.list() if d.plugin_id == "org.mantis.x1" and not d.parent) == parent.id
         # CLI creates the capture through the same protocol used by both SDKs.
         started = cli("capture", "start", parent.id)["captures"][0]
         capture = mantis.Capture(client, started["id"], started["raw_artifact"])
@@ -87,6 +96,20 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         artifacts = client.capture.list().artifacts
         recorded = next(a for a in artifacts if a.id == capture.raw_artifact)
         assert recorded.schema_version == 2 and recorded.state == "FINALIZED"
+        # Persisted provenance is self-contained and uses the loaded producer
+        # version plus generic component descriptors, independently of preview.
+        with sqlite3.connect(root / "Project.mantis/project.sqlite") as database:
+            provenance = json.loads(database.execute("SELECT provenance FROM artifacts WHERE id=?", (capture.raw_artifact,)).fetchone()[0])
+        assert provenance["version"] == [0, 2, 0]
+        parameters = provenance["parameters"]
+        assert parameters["producer_plugin_version"] == "0.2.0"
+        components = json.loads(parameters["components"])
+        assert {d["id"] for d in components} == set(parent.children)
+        assert {d["metadata"]["role"] for d in components} == {"left", "right"}
+        assert parameters["host_receive_clock"] == "linux.monotonic"
+        observations = json.loads(parameters["initial_observations"])
+        assert observations[0]["calibration"]["id"] == "fixture.calibration"
+        assert observations[1]["calibration"]["revision"] == 7
         try:
             client._call(artifact_data=mantis.wire.Id(id=capture.raw_artifact))
             raise AssertionError("Segment advertised as standalone packet")

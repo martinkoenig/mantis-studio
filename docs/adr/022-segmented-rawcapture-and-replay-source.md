@@ -9,6 +9,11 @@ manifest and metadata schema remain version 1. Existing RawCapture schema 1
 uses its unchanged packet/chunk path. No project migration or pixel rewrite is
 needed: only a separately versioned artifact representation is added.
 
+Capture provenance stores generic component descriptors and the actual producer
+manifest version. One initial observation metadata update records active modes,
+clock domains and calibration references. Repeated FrameSets do not transact
+against SQLite until a segment boundary.
+
 Records carry magic, bounded payload length, checksum, complemented length,
 canonical FrameSet encoding and a completion footer. Segment boundary sync and
 one SQLite transaction publish a segment. A rename-before-index interruption

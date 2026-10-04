@@ -122,10 +122,30 @@ struct Store::Impl {
         ++writer.index; writer.records = 0;
     }
     void append_raw(const Id &id, const data::Packet &packet) {
+        if (packet.type != schema::frameset) fail(Status::incompatible, "RawCapture v2 requires FrameSet");
         auto found = writers.find(id);
         if (found == writers.end()) {
             auto artifact = get(id);
             if (artifact.state != ArtifactState::open) fail(Status::invalid_argument, "Only OPEN captures accept records");
+            // Capture-level observed clocks/calibrations/modes are initialized
+            // once, before the first record. Subsequent records do not touch
+            // SQLite until their segment is sealed.
+            artifact.provenance.calibration = packet.header.calibration;
+            Json observations = Json::array();
+            for (const auto &frame : packet.frames) {
+                Json attributes = Json::array();
+                for (const auto &attribute : frame->attributes)
+                    attributes.push_back({{"name", attribute.descriptor.name}, {"shape", attribute.descriptor.shape}, {"stride", attribute.descriptor.stride}});
+                observations.push_back({{"metadata", frame->header.metadata},
+                    {"clock_domain", {{"id", frame->header.timestamp.domain.id.value}, {"name", frame->header.timestamp.domain.name}}},
+                    {"calibration", {{"id", frame->header.calibration.id.value}, {"schema_version", frame->header.calibration.schema_version}, {"revision", frame->header.calibration.revision}}},
+                    {"attributes", attributes}});
+            }
+            artifact.provenance.parameters["initial_observations"] = observations.dump();
+            {
+                Statement update(db, "UPDATE artifacts SET provenance=? WHERE id=?");
+                update.text(1, provenance_json(artifact.provenance)); update.text(2, id.value); update.row();
+            }
             auto writer = std::make_unique<Writer>(); writer->index = artifact.chunks;
             if (auto limit = artifact.provenance.parameters.find("segment_max_bytes"); limit != artifact.provenance.parameters.end()) {
                 writer->limit = std::stoull(limit->second);
@@ -135,7 +155,6 @@ struct Store::Impl {
             found = writers.emplace(id, std::move(writer)).first;
         }
         auto &writer = *found->second;
-        if (packet.type != schema::frameset) fail(Status::incompatible, "RawCapture v2 requires FrameSet");
         if (writer.last_sequence && packet.header.sequence.value != *writer.last_sequence + 1)
             fail(Status::corrupt, "RawCapture FrameSet sequence discontinuity");
         if (!writer.output.is_open()) {

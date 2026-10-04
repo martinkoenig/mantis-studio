@@ -1,0 +1,28 @@
+[OUTPUT] 
+Internal ctest changing into directory: <SOURCE_ROOT>/build/headless
+
+[HANDLER_OUTPUT] 
+Test project <SOURCE_ROOT>/build/headless
+
+    Start 1: legacy-abi
+1/9 Test #1: legacy-abi .......................   Passed    0.00 sec
+    Start 2: acquisition
+2/9 Test #2: acquisition ......................   Passed    0.78 sec
+    Start 3: acquisition-integration
+3/9 Test #3: acquisition-integration ..........   Passed    1.15 sec
+    Start 4: acquisition-qos
+4/9 Test #4: acquisition-qos ..................   Passed    0.05 sec
+    Start 5: raw-capture
+5/9 Test #5: raw-capture ......................   Passed    0.03 sec
+    Start 6: core
+6/9 Test #6: core .............................   Passed    0.10 sec
+    Start 7: c-abi
+7/9 Test #7: c-abi ............................   Passed    0.00 sec
+    Start 8: boundaries
+8/9 Test #8: boundaries .......................   Passed    0.03 sec
+    Start 9: acceptance
+9/9 Test #9: acceptance .......................   Passed    1.54 sec
+
+100% tests passed, 0 tests failed out of 9
+
+Total Test time (real) =   3.67 sec

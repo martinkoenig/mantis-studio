@@ -28,7 +28,10 @@ int enumerate(MantisDiscoverEmitV1 emit, void *ctx) noexcept {
         auto parent = parent_id(cameras);
         const char *parent_caps[]{MANTIS_FRAMESET_STREAM_V1};
         x1::Metadata info{{"profile", config.profile.json}, {"buffer_mode", "V4L2 MMAP + one acquisition copy"},
-            {"copy_count", "1"}, {"profile_status", "configured"}, {"producer_version", "0.2.0"}};
+            {"copy_count", "1"}, {"profile_status", "configured"}, {"producer_version", "0.2.0"},
+            {"host_receive_clock", "linux.monotonic"},
+            {"device_timestamp_clock", "V4L2 clock/source flags preserved per observation"},
+            {"sync_configuration", config.profile.hardware_sync_configured ? "hardware sync configured" : "hardware sync not configured"}};
         info["backend"] = std::getenv("MANTIS_X1_FAKE") ? "deterministic fixture" : "Linux V4L2";
         auto metadata = Json(info).dump();
         MantisDiscoveredDeviceV1 d{sizeof(d), 1, parent.c_str(), "", "Mantis X1", parent_caps, 1, metadata.c_str()};

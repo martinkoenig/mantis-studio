@@ -76,3 +76,8 @@ MantisDeviceV1 and Virtual Scanner remain usable; a fixture compiled against the
 frozen v0.1 C header is loaded by the current host. See the Linux
 [X1 example](../../plugins/first-party/devices/mantis-x1.cpp) and
 [ADR-021](../adr/021-enumerated-acquisition-and-frameset-contract.md).
+
+MantisProcessorV1 retains its v0.1 single-packet attribute contract. FrameSet-aware
+native processing plugins will need a future queried processing interface; no
+scanner algorithm is added here. The v0.2 source and C++ semantic pipeline carry
+the complete FrameSet unchanged through acquisition/replay.

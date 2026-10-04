@@ -70,8 +70,21 @@ plugin/version, full profile, logical device ID, physical identities and modes,
 storage parameters. Clock/calibration/sync metadata is preserved in each record
 and in the profile. An absent calibration/control stays unavailable.
 
+The first FrameSet initializes capture-level `initial_observations`: actual
+image metadata, clock domains, calibration references, shapes and strides. This
+is one capture-initialization metadata update, never a recurring frame
+transaction. Later driver/control changes remain explicit in each observation.
+Component descriptors and the loaded producer version are recorded generically;
+storage does not require two cameras or LEFT/RIGHT metadata keys.
+
 The generic CaptureReader and RecordedSource return the same immutable Published
 FrameSet values as acquisition. Replay mappings retain ownership in returned
 packets. Sequential iteration holds one segment index at a time. Real-time
 replay follows recorded host-arrival deltas, preserving original timestamps;
 ASAP replay changes delivery speed only.
+
+Finalization and explicit asynchronous recovery run as daemon jobs. The client
+can continue polling control snapshots while immutable segments are validated;
+only metadata updates briefly hold the SQLite mutex. Cancellation checks between
+segments/records leave the artifact RECOVERABLE and retryable. CLI/SDK helpers
+wait for completion; a disconnected client does not cancel these operations.

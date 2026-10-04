@@ -83,7 +83,7 @@ The frame-zero reference is intentional: client timing does not change the demon
 | Platform | Architectural target | Validation in this delivery | Support commitment |
 | --- | --- | --- | --- |
 | Linux x86_64 | Yes | Ubuntu 24.04; GCC 13; Qt 6.4; native build and process tests | Skeleton development reference |
-| Linux ARM64 | Tier 1 | Native ARM64 GitHub Actions job configured; not executed in this workspace | Must pass CI before binary support is claimed |
+| Linux ARM64 | Tier 1 | Native GitHub Actions Studio ON/OFF passed for v0.2; physical Q6A pending | Linux build and fixture tests validated |
 | Windows x86_64 | Yes | Platform implementation present; not built/tested here | Not yet supported |
 | macOS ARM64 | Yes | POSIX implementation used; not built/tested here | Not yet supported |
 

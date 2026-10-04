@@ -19,7 +19,7 @@ class RecordedSource final : public ImageStream {
         : store_(std::move(store)), artifact_(std::move(id)), real_time_(realtime) {
         descriptor_.id = {"recorded:" + artifact_.value}; descriptor_.name = "Recorded Scanner";
         descriptor_.plugin_id = "org.mantis.recorded-source";
-        descriptor_.capabilities = {std::string(frameset_stream)};
+        descriptor_.capabilities = {std::string(store_->get(artifact_).type.schema_version == 2 ? frameset_stream : image_stream)};
     }
     const Descriptor &descriptor() const override { return descriptor_; }
     bool finished() const override { return !running_; }

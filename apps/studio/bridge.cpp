@@ -196,6 +196,8 @@ void StudioBridge::refreshPreview() {
                     a.descriptor.stride.size() != 2 || a.descriptor.stride[1] != 1 || a.descriptor.shape[0] > 8192 ||
                     a.descriptor.shape[1] > 8192 || a.descriptor.stride[0] > 65536) throw std::runtime_error("Unsupported grayscale preview layout");
                 auto bytes = a.buffer.map_read(); if (!bytes) throw mantis::Failure(bytes.error());
+                if (bytes->size() < a.descriptor.shape[0] * a.descriptor.stride[0])
+                    throw std::runtime_error("Preview requires complete row padding for Qt image copying");
                 QImage borrowed(reinterpret_cast<const uchar *>(bytes->data()), static_cast<int>(a.descriptor.shape[1]),
                     static_cast<int>(a.descriptor.shape[0]), static_cast<qsizetype>(a.descriptor.stride[0]), QImage::Format_Grayscale8);
                 auto role = frame->header.metadata.at("role");

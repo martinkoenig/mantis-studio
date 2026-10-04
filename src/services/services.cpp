@@ -7,6 +7,7 @@
 #include <mantis/pipeline_runtime.hpp>
 #include <mantis/services.hpp>
 #include <set>
+#include <sstream>
 namespace mantis::services {
 namespace {
 class ReplayDigest : public std::streambuf {
@@ -103,10 +104,8 @@ struct Runtime::Impl {
         // Loss count is only known for observed sequence gaps / produced uncommitted packets.
         // A disconnect cannot reveal how many physical exposures were never delivered.
         out.dropped = out.queue_saturation;
-        for (const char *role : {"left.", "right."}) {
-            auto gaps = out.diagnostics.find(std::string(role) + "sequence_gaps");
-            if (gaps != out.diagnostics.end()) out.dropped += std::stoull(gaps->second);
-        }
+        for (const auto &[key, value] : out.diagnostics)
+            if (key.ends_with(".sequence_gaps")) out.dropped += std::stoull(value);
         out.total_bytes = store->get(c.raw).bytes; out.finalization_job = c.finalization_job;
         if (out.duration > 0) {
             out.writer_mb_s = double(c.session->payload_bytes()) / out.duration / 1e6;
@@ -163,15 +162,26 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
     provenance.parameters["capture_id"] = id.value;
     if (composite) {
         const auto &descriptor = streams.front()->descriptor();
-        provenance.producer = descriptor.plugin_id; provenance.version = {0, 2, 0};
+        provenance.producer = descriptor.plugin_id;
+        std::string producer_version;
+        for (const auto &plugin : impl_->registry->statuses())
+            if (plugin.manifest.id == descriptor.plugin_id) producer_version = plugin.manifest.version;
+        SemanticVersion parsed{}; char first{}, second{};
+        std::istringstream version(producer_version);
+        provenance.version = {};
+        if (version >> parsed.major >> first >> parsed.minor >> second >> parsed.patch && first == '.' && second == '.')
+            provenance.version = parsed;
         provenance.parameters = descriptor.metadata;
+        provenance.parameters["producer_plugin_version"] = producer_version.empty() ? "unavailable" : producer_version;
         provenance.parameters["capture_id"] = id.value;
         provenance.parameters["logical_device_id"] = descriptor.id.value;
         provenance.parameters["format_version"] = "2";
         provenance.parameters["segment_max_bytes"] = "67108864";
         provenance.parameters["started_unix_ns"] = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+        auto components = nlohmann::json::array();
         for (const auto &child : streams.front()->components())
-            for (const auto &[key, value] : child.metadata) provenance.parameters[child.metadata.at("role") + "." + key] = value;
+            components.push_back({{"id", child.id.value}, {"name", child.name}, {"capabilities", child.capabilities}, {"metadata", child.metadata}});
+        provenance.parameters["components"] = components.dump();
     }
     auto raw = impl_->store->begin({"org.mantis.RawCapture", composite ? 2u : 1u}, provenance);
     auto store = impl_->store;

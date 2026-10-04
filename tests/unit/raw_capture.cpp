@@ -58,6 +58,12 @@ int main() {
             for (uint64_t i = 0; i < 20; ++i) store.append(finalized, *frame_set(i));
             auto a = store.finalize(finalized);
             CHECK(a.chunks < 20 && a.chunks > 1); CHECK(a.provenance.parameters.at("profile") == "fixture");
+            CHECK(a.provenance.calibration.id == Id{"calibration.test"});
+            CHECK(a.provenance.calibration.revision == 9);
+            auto observations = nlohmann::json::parse(a.provenance.parameters.at("initial_observations"));
+            CHECK(observations.size() == 2);
+            CHECK(observations[0]["clock_domain"]["id"] == "clock.test");
+            CHECK(observations[1]["metadata"]["identity"] == "sensor-b");
             CHECK(store.record_count(finalized) == 20);
             for (unsigned pass = 0; pass < 2; ++pass) {
                 uint64_t sequence{};
