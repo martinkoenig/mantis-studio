@@ -219,10 +219,33 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
                 d.metrics[std::string("pairing_lookahead_timestamp_ns_") + suffix] = d.pending[i].size() < 2
                     ? "unavailable" : std::to_string(d.pending[i][1].frame.timestamp_ns);
             }
+            d.metrics["pairing_candidate_distance_ns"] = "unavailable";
+            d.metrics["pairing_lookahead_distance_ns"] = "unavailable";
+            d.metrics["pairing_nearest_candidate_distance_ns"] = "unavailable";
+            d.metrics["pairing_candidates_bracketed"] = "false";
+            if (!d.pending[0].empty() && !d.pending[1].empty()) {
+                auto left = observations[0][0].timestamp, right = observations[1][0].timestamp;
+                auto distance = x1::timestamp_distance(left, right);
+                d.metrics["pairing_candidate_distance_ns"] = std::to_string(distance);
+                auto older = left < right ? 0u : 1u;
+                if (d.pending[older].size() == 2) {
+                    auto successor = observations[older][1].timestamp;
+                    auto newer = std::max(left, right);
+                    auto lookahead_distance = x1::timestamp_distance(successor, newer);
+                    d.metrics["pairing_lookahead_distance_ns"] = std::to_string(lookahead_distance);
+                    distance = std::min(distance, lookahead_distance);
+                    d.metrics["pairing_candidates_bracketed"] = successor >= newer ? "true" : "false";
+                }
+                // Available candidates only; choose_pair still decides clock
+                // comparability, whether lookahead is needed, and correspondence.
+                d.metrics["pairing_nearest_candidate_distance_ns"] = std::to_string(distance);
+            }
             auto decision = x1::choose_pair({observations[0].data(), d.pending[0].size()},
                 {observations[1].data(), d.pending[1].size()}, d.config.profile.hardware_sync_configured,
                 static_cast<uint64_t>(d.config.profile.max_timestamp_delta_ns));
             if (decision.action == x1::PairAction::fail) {
+                d.metrics["pairing_state"] = "failed";
+                d.metrics["pairing_failure_reason"] = decision.error;
                 d.increment("pairing_failures"); throw std::runtime_error(decision.error);
             }
             if (decision.action == x1::PairAction::pair) break;
@@ -279,10 +302,8 @@ int next(void *p, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) noexce
                         d.metrics[role + "observed_half_period_ns"] = std::to_string(half_period);
                         auto &maximum = d.metrics[role + "observed_max_period_ns"];
                         maximum = std::to_string(std::max(interval, maximum.empty() ? uint64_t{} : uint64_t(std::stoull(maximum))));
-                        if (!d.config.profile.hardware_sync_configured && half_period > static_cast<uint64_t>(d.config.profile.max_timestamp_delta_ns)) {
-                            d.increment("pairing_failures");
-                            throw std::runtime_error(role + "observed half-period exceeds software pairing tolerance");
-                        }
+                        // Cadence is diagnostic. Only actual cross-camera
+                        // candidates can establish a correspondence failure.
                     }
                     d.last_clock[i] = frame.clock;
                     d.last_sequence[i] = frame.sequence; d.last_timestamp[i] = frame.timestamp_ns;

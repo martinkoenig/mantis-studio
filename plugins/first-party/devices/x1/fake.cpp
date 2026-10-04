@@ -89,7 +89,13 @@ class FakeCamera final : public Camera {
                 timestamp = sequence_ < 4 ? int64_t(sequence_) * camera_period
                     : 3 * camera_period + int64_t(sequence_ - 3) * (right_ ? 8384000 : 1000000);
             } else timestamp = int64_t(sequence_) * camera_period + (right_ ? phase : 0);
-            if (scenario_ == "phase-out-of-bound") timestamp = int64_t(sequence_) * (right_ ? 11000000 : 8384000);
+            if (scenario_ == "phase-out-of-bound")
+                timestamp = int64_t(sequence_) * 12000000 + (right_ && sequence_ ? 6000000 : 0);
+            if (scenario_ == "phase-initial-out-of-bound")
+                timestamp = int64_t(sequence_) * 12000000 + (right_ ? 6000000 : 0);
+            if (scenario_ == "phase-jitter-left" || scenario_ == "phase-jitter-right")
+                timestamp = int64_t(sequence_) * 8384000 + (sequence_ == 2 &&
+                    right_ == (scenario_ == "phase-jitter-right") ? 4000000 : 0);
             if (scenario_ == "phase-drift-gap" && right_ && sequence_ >= 40) ++native;
         }
         uint32_t stride = mode_.fourcc == "Y10P" ? mode_.width / 4 * 5 : mode_.width;

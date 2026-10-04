@@ -343,9 +343,23 @@ class Validation:
         self.enter("capture-finalization-replay")
         self.assert_service_stopped()
         # No pairing algorithm is duplicated here; the public-client validator owns it.
-        text, _ = self.command([sys.executable, ROOT / "tools/validate_x1_pairing.py",
-                                "--duration", self.args.duration], log="pairing-validator.log",
-                               timeout=self.args.duration + 180)
+        after = max((event.sequence for event in self.client.events()), default=0)
+        try:
+            text, _ = self.command([sys.executable, ROOT / "tools/validate_x1_pairing.py",
+                                    "--duration", self.args.duration], log="pairing-validator.log",
+                                   timeout=self.args.duration + 180)
+        except Exception as error:
+            failure = {"short_pairing_check": "FAIL", "reason": str(error)}
+            try:
+                events = self.client.events(after=after)
+                snapshots = [json.loads(event.message) for event in events if event.component == "capture.diagnostics"]
+                if snapshots:
+                    failure["failure_diagnostics"] = snapshots[-1]
+            except Exception as diagnostic_error:
+                failure["diagnostic_error"] = str(diagnostic_error)
+            self.write_json("pairing.json", failure)
+            self.report["pairing"] = failure
+            raise
         result = json.loads(text)
         self.write_json("pairing.json", result)
         self.report["pairing"] = result
@@ -467,7 +481,7 @@ class Validation:
                   "  VBLANK: " + " / ".join(str(hardware.get(r, {}).get("vblank", "?")) for r in ("left", "right"))]
         pairing = self.report.get("pairing", {})
         capture = pairing.get("capture", {})
-        metrics = capture.get("diagnostics", {})
+        metrics = capture.get("diagnostics", pairing.get("failure_diagnostics", {}))
         lines += ["", "Software correspondence (exposure skew unavailable)",
                   f"  Tolerance: {metrics.get('max_v4l2_delta_ns', '?')} ns", f"  Mode: {metrics.get('pairing_mode', 'NOT REACHED')}",
                   f"  Native offset: {int(metrics['native_sequence_offset']):+d}" if "native_sequence_offset" in metrics else "  Native offset: ?",
@@ -476,6 +490,9 @@ class Validation:
                   f"  Shutdown unmatched: {metrics.get('shutdown_unmatched_left', '?')} / {metrics.get('shutdown_unmatched_right', '?')}",
                   f"  Paired timestamp delta: {int(metrics['paired_v4l2_delta_ns']) / 1e6:+.3f} ms" if "paired_v4l2_delta_ns" in metrics else "  Paired timestamp delta: ?",
                   f"  Failures: {metrics.get('pairing_failures', '?')}"]
+        for role in ("left", "right"):
+            values = [metrics.get(f"{role}.observed_{name}_ns", "?") for name in ("period", "half_period", "max_period")]
+            lines.append(f"  {role.upper()} period / half / max (diagnostic ns): " + " / ".join(values))
         lines += ["", "Capture", f"  FrameSets: {capture.get('framesets_produced', '?')} / {capture.get('framesets_committed', '?')}",
                   f"  Raw drops: {capture.get('dropped', 0) if capture else '?'}",
                   f"  Queue saturation: {capture.get('queue_saturation', 0) if capture else '?'}"]

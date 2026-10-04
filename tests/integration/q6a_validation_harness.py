@@ -79,6 +79,20 @@ class HarnessTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "bytesperline=1600"):
             q6a.validate_capture_format(text.replace("1600", "1280"), "left")
 
+    def test_initial_pairing_failure_snapshot_is_preserved(self):
+        metrics = {"max_v4l2_delta_ns": "5000000", "pairing_nearest_candidate_distance_ns": "6000000",
+                   "left.observed_max_period_ns": "12000000"}
+        events = [SimpleNamespace(sequence=5, component="capture.diagnostics", message=json.dumps(metrics))]
+        self.validation.client = SimpleNamespace(events=lambda **kwargs: events if kwargs.get("after") == 4 else [SimpleNamespace(sequence=4)])
+        with patch.object(self.validation, "assert_service_stopped"), \
+             patch.object(self.validation, "command", side_effect=RuntimeError("Nearest camera timestamps exceed profile pairing limit")), \
+             contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "Nearest camera timestamps"):
+                self.validation.capture()
+        result = json.loads((self.validation.output / "pairing.json").read_text())
+        self.assertEqual(result["short_pairing_check"], "FAIL")
+        self.assertEqual(result["failure_diagnostics"], metrics)
+
     def test_service_absent_inactive_and_active_restore(self):
         for load, state in (("not-found", "inactive"), ("loaded", "inactive"), ("loaded", "active")):
             v = q6a.Validation(self.args)

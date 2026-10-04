@@ -13,7 +13,7 @@ inline constexpr size_t pairing_capacity = 2; // front + one bracketing observat
 inline constexpr uint64_t startup_discard_limit = 32; // total across both cameras
 inline constexpr uint64_t steady_state_discard_limit = 2; // total between published pairs
 // Worst arbitrary phase is half a period. Recommend 20% headroom on that
-// timestamp bound; requested FPS is only a baseline, checked against observations.
+// timestamp bound; requested FPS is a nominal baseline, not exact sensor timing.
 inline uint64_t nominal_half_period_ns(uint32_t fps) { return (500000000ull + fps - 1) / fps; }
 inline uint64_t recommended_software_tolerance_ns(uint32_t fps) { return (600000000ull + fps - 1) / fps; }
 template<class T, size_t Capacity = pairing_capacity> class PendingQueue {

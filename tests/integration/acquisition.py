@@ -171,6 +171,37 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert int(drifting["capture"]["diagnostics"]["steady_state_unmatched_left"]) > 0
         assert drifting["short_pairing_check"] == "PASS"
         assert drifting["verification"]["raw_integrity"] == drifting["verification"]["replay"] == "PASS"
+        # A single-camera 12.384 ms interval is diagnostic, while its actual
+        # cross-camera pair remains within 5 ms. Exercise the public validator.
+        env["MANTIS_X1_FAKE"] = "phase-jitter-left"
+        client.shutdown(); assert daemon.wait(timeout=5) == 0
+        daemon = start()
+        jittering = json.loads(subprocess.check_output([sys.executable,
+            str(Path(__file__).resolve().parents[2] / "tools/validate_x1_pairing.py"),
+            "--allow-fixture", "--duration", "0.2"], env=dict(env, PYTHONPATH=str(build / "python")), text=True))
+        assert jittering["capture"]["diagnostics"]["left.observed_max_period_ns"] == "12384000"
+        assert jittering["short_pairing_check"] == "PASS"
+        assert jittering["verification"]["raw_integrity"] == jittering["verification"]["replay"] == "PASS"
+        # Even when no capture handle can be returned, initial correspondence
+        # rejection preserves a structured snapshot through the event/log API.
+        env["MANTIS_X1_FAKE"] = "phase-initial-out-of-bound"
+        client.shutdown(); assert daemon.wait(timeout=5) == 0
+        daemon = start()
+        try:
+            client.capture.start(parent.id)
+            raise AssertionError("An out-of-bound initial bracket was accepted")
+        except mantis.MantisError as error:
+            assert "Nearest camera timestamps" in str(error)
+        event = next(e for e in reversed(client.events()) if e.component == "capture.diagnostics")
+        evidence = json.loads(event.message)
+        assert evidence["max_v4l2_delta_ns"] == "5000000"
+        assert evidence["pairing_candidate_timestamp_ns_left"] == "0"
+        assert evidence["pairing_candidate_timestamp_ns_right"] == "6000000"
+        assert evidence["pairing_lookahead_timestamp_ns_left"] == "12000000"
+        assert evidence["pairing_nearest_candidate_distance_ns"] == "6000000"
+        assert evidence["left.observed_max_period_ns"] == "12000000"
+        assert evidence["pairing_failures"] == "1"
+        assert 'capture.diagnostics\t' + event.message in (root / "Project.mantis/diagnostics.log").read_text()
         # A cleanup ioctl failure must be visible and keep raw data recoverable.
         env["MANTIS_X1_FAKE"] = "streamoff-right"
         client.shutdown(); assert daemon.wait(timeout=5) == 0

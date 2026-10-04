@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <mantis/device_runtime.hpp>
+#include <nlohmann/json.hpp>
 namespace mantis::device {
 std::vector<Descriptor> Runtime::list() const {
     std::vector<Descriptor> out;
@@ -98,8 +99,15 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                     std::lock_guard lock(mutex_);
                     if (error_.empty()) error_ = e.what();
                 }
-                if (logger_)
+                if (logger_) {
+                    const auto snapshot = diagnostics();
+                    // A failure before the first FrameSet can abort construction
+                    // without a capture handle. Keep pairing evidence as a JSON
+                    // event in the project's durable diagnostic log as well.
+                    if (snapshot.contains("pairing_mode"))
+                        logger_({"error", "capture.diagnostics", nlohmann::json(snapshot).dump()});
                     logger_({"error", "capture", e.what()});
+                }
             }
             active_ = false;
             recorder_.close();

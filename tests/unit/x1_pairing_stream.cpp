@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
         for (const char *format : {"GREY", "Y10P"}) for (const Scenario scenario : {
             Scenario{"normal"}, Scenario{"close-timestamps"}, Scenario{"startup-left", false, true, 6, 0, 6},
             Scenario{"startup-right", false, true, 0, 6, -6}, Scenario{"unequal-origins", false, true, 0, 0, -100},
-            Scenario{"phase-out-of-bound", false, false, 0, 0, 0, "half-period", "pairing_failures"},
+            Scenario{"phase-out-of-bound", false, false, 0, 0, 0, "Nearest camera timestamps", "pairing_failures"},
             Scenario{"startup-limit", false, false, 32, 0, 0, "unmatched-observation limit", "pairing_failures"},
             Scenario{"incomparable", false, false, 0, 0, 0, "not comparable", "pairing_failures"},
             Scenario{"unknown-clock", false, false, 0, 0, 0, "not comparable", "pairing_failures"},
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
             Scenario{"startup-left-reverse", false, false, 6, 0, 6, "native sequence", "right.repeated_or_reversed_sequences"},
             Scenario{"startup-left-timestamp-jump", false, false, 6, 0, 6, "timestamp discontinuity", "timestamp_discontinuities"},
             Scenario{"startup-left-clock-change", false, false, 6, 0, 6, "clock discontinuity", "timestamp_discontinuities"},
-            Scenario{"startup-left-steady-delta", false, false, 6, 0, 6, "half-period", "pairing_failures"},
+            Scenario{"startup-left-steady-delta", false, true, 6, 0, 6},
             Scenario{"normal", true}, Scenario{"close-timestamps", true},
             Scenario{"startup-left", true, false, 0, 0, 0, "pairing limit", "pairing_failures"},
             Scenario{"unequal-origins", true, false, 0, 0, 0, "counters disagree", "pairing_failures"}
@@ -71,10 +71,11 @@ int main(int argc, char **argv) {
                 if (!result) { failed = true; break; }
                 if (!*result) continue;
                 auto p = *result; auto n = live.size();
+                const bool shifted = std::string_view(scenario.name) == "startup-left-steady-delta" && n >= 4;
                 CHECK(p->header.sequence.value == n && p->frames.size() == 2);
                 const auto &meta = p->header.metadata;
                 CHECK(meta.at("pairing_mode") == (scenario.hardware ? "native-sequence-and-timestamp" : "timestamp-nearest"));
-                CHECK(meta.at("native_sequence_offset") == std::to_string(scenario.offset));
+                CHECK(meta.at("native_sequence_offset") == std::to_string(scenario.offset + (shifted ? 1 : 0)));
                 CHECK(meta.at("sync_quality") == "software" && meta.at("exposure_skew") == "unavailable");
                 CHECK(meta.at("startup_unmatched_left") == std::to_string(scenario.startup_left));
                 CHECK(meta.at("startup_unmatched_right") == std::to_string(scenario.startup_right));
@@ -83,6 +84,7 @@ int main(int argc, char **argv) {
                 for (size_t i = 0; i < 2; ++i) {
                     const auto &f = *p->frames[i];
                     auto native = n + (i ? scenario.startup_right : scenario.startup_left);
+                    if (shifted && !i) ++native;
                     if (std::string_view(scenario.name) == "unequal-origins" && i) native += 100;
                     CHECK(f.header.sequence.value == native);
                     CHECK(meta.at(i ? "right.native_sequence" : "left.native_sequence") == std::to_string(native));
@@ -93,6 +95,8 @@ int main(int argc, char **argv) {
                     if (scenario.startup_left || scenario.startup_right) timestamp += 6 * period;
                     if ((scenario.startup_left && i) || (scenario.startup_right && !i) ||
                         (std::string_view(scenario.name) == "close-timestamps" && i)) timestamp += 1800000;
+                    if (std::string_view(scenario.name) == "startup-left-steady-delta")
+                        timestamp = int64_t(native) * period + (i ? 6 * period + 1800000 + (native >= 4 ? period / 2 : 0) : 0);
                     CHECK(f.header.timestamp.nanoseconds == timestamp);
                     CHECK(f.header.timestamp.domain.id.value == "org.mantis.fake.monotonic");
                     CHECK(f.header.received.nanoseconds == timestamp + 1000 + (i ? 100 : 0));
@@ -116,6 +120,26 @@ int main(int argc, char **argv) {
                 std::cout << "Expected failure: " << metrics.at("error") << '\n';
                 CHECK(metrics.at("error").find(scenario.error) != std::string::npos);
                 CHECK(std::stoull(metrics.at(scenario.counter)) > 0);
+                if (std::string_view(scenario.name) == "phase-out-of-bound") {
+                    CHECK(metrics.at("max_v4l2_delta_ns") == "5000000");
+                    CHECK(metrics.at("pairing_candidate_timestamp_ns_left") == "12000000");
+                    CHECK(metrics.at("pairing_candidate_timestamp_ns_right") == "18000000");
+                    CHECK(metrics.at("pairing_lookahead_timestamp_ns_left") == "24000000");
+                    CHECK(metrics.at("pairing_candidate_distance_ns") == "6000000");
+                    CHECK(metrics.at("pairing_lookahead_distance_ns") == "6000000");
+                    CHECK(metrics.at("pairing_nearest_candidate_distance_ns") == "6000000");
+                    CHECK(metrics.at("pairing_candidates_bracketed") == "true");
+                    CHECK(metrics.at("pairing_state") == "failed");
+                    CHECK(metrics.at("pairing_failure_reason").find("Nearest camera timestamps") != std::string::npos);
+                    for (const char *role : {"left", "right"}) {
+                        auto prefix = std::string(role) + ".";
+                        const auto interval = std::string_view(role) == "left" ? 12000000 : 18000000;
+                        CHECK(metrics.at(prefix + "observed_period_ns") == std::to_string(interval));
+                        CHECK(metrics.at(prefix + "observed_half_period_ns") == std::to_string(interval / 2));
+                        CHECK(metrics.at(prefix + "observed_max_period_ns") == std::to_string(interval));
+                        CHECK(metrics.at(prefix + "capture_errors") == "0" && metrics.at(prefix + "sequence_gaps") == "0");
+                    }
+                }
                 if (std::string_view(scenario.name).starts_with("startup-left-") && scenario.startup_left) CHECK(live.size() >= 3);
                 continue;
             }
@@ -145,7 +169,7 @@ int main(int argc, char **argv) {
         // Real loaded plugin -> bounded recorder -> RawCapture -> exact replay.
         for (const char *format : {"GREY", "Y10P"}) for (const char *name : {
             "phase-4000", "phase-half", "phase-4300", "phase-drift-left", "phase-drift-right",
-            "phase-drift-gap", "phase-limit"}) {
+            "phase-drift-gap", "phase-limit", "phase-jitter-left", "phase-jitter-right"}) {
             const std::string_view scenario = name;
             const bool valid = scenario != "phase-drift-gap" && scenario != "phase-limit";
             nlohmann::json profile{{"format_version", 1}, {"measurement_cameras", {
@@ -161,21 +185,32 @@ int main(int argc, char **argv) {
             std::vector<data::Published> live;
             std::promise<void> ready; auto reached = ready.get_future();
             std::atomic_bool signalled{};
-            device::Session session({Id::random(), {devices[0]->descriptor().id}, {}}, {devices[0].get()},
-                [&](data::Published packet) {
-                    store->append(id, *packet); live.push_back(packet);
-                    if (valid && live.size() == 96 && !signalled.exchange(true)) ready.set_value();
-                }, [&](const LogRecord &) { if (!valid && !signalled.exchange(true)) ready.set_value(); });
-            CHECK(reached.wait_for(std::chrono::seconds(3)) == std::future_status::ready);
-            session.stop();
-            auto metrics = session.diagnostics();
-            CHECK(session.metrics().dropped == 0 && session.saturation() == 0);
-            CHECK(session.produced() == session.committed() && session.committed() == live.size());
+            std::unique_ptr<device::Session> session;
+            try {
+                session = std::make_unique<device::Session>(device::CaptureDescriptor{Id::random(), {devices[0]->descriptor().id}, {}},
+                    std::vector<device::ImageStream *>{devices[0].get()}, [&](data::Published packet) {
+                        store->append(id, *packet); live.push_back(packet);
+                        if (valid && live.size() == 96 && !signalled.exchange(true)) ready.set_value();
+                    }, [&](const LogRecord &) { if (!valid && !signalled.exchange(true)) ready.set_value(); });
+            } catch (const Failure &) {
+                // Accelerated invalid fixtures may fail before the first writer
+                // commit. Construction then stops/drains without returning a
+                // handle; check the same exact failure from retained diagnostics.
+                CHECK(!valid);
+            }
+            if (session) {
+                CHECK(reached.wait_for(std::chrono::seconds(3)) == std::future_status::ready);
+                session->stop();
+                CHECK(session->metrics().dropped == 0 && session->saturation() == 0);
+                CHECK(session->produced() == session->committed() && session->committed() == live.size());
+            }
+            auto metrics = session ? session->diagnostics() : devices[0]->diagnostics();
             CHECK(metrics.at("sync_quality") == "software" && metrics.at("exposure_skew") == "unavailable");
             CHECK(metrics.at("pairing_pending_saturation") == "0");
             for (const char *role : {"left", "right"}) CHECK(std::stoull(metrics.at(std::string("pending_high_water_") + role)) <= 2);
             if (!valid) {
-                CHECK(!session.error().empty());
+                CHECK(!metrics.at("error").empty());
+                if (session) CHECK(!session->error().empty());
                 if (scenario == "phase-drift-gap") {
                     CHECK(std::stoull(metrics.at("steady_state_unmatched_left")) > 0);
                     CHECK(metrics.at("right.sequence_gaps") == "1");
@@ -184,12 +219,25 @@ int main(int argc, char **argv) {
                     CHECK(metrics.at("steady_state_unmatched_left") == "2");
                     CHECK(metrics.at("error").find("unmatched-observation limit") != std::string::npos);
                 }
+                for (size_t n = 0; n < live.size(); ++n) CHECK(live[n]->header.sequence.value == n);
+                for (const char *role : {"left", "right"}) {
+                    // The deliberately discontinuous observation is rejected at
+                    // receipt; all healthy observations still have exact accounting.
+                    if (scenario == "phase-drift-gap" && std::string_view(role) == "right") continue;
+                    CHECK(std::stoull(metrics.at(std::string(role) + ".frames")) == live.size() +
+                        std::stoull(metrics.at(std::string("startup_unmatched_") + role)) +
+                        std::stoull(metrics.at(std::string("steady_state_unmatched_") + role)) +
+                        std::stoull(metrics.at(std::string("shutdown_unmatched_") + role)));
+                }
                 continue;
             }
-            CHECK(session.error().empty() && metrics.at("pairing_failures") == "0");
+            CHECK(session && session->error().empty() && metrics.at("pairing_failures") == "0");
             std::array<std::set<uint64_t>, 2> accounted;
             std::array<uint64_t, 2> exclusions{};
             auto timestamp = [&](size_t i, uint64_t native) {
+                if (scenario == "phase-jitter-left" || scenario == "phase-jitter-right")
+                    return int64_t(native) * 8384000 + (native == 2 &&
+                        i == (scenario == "phase-jitter-right" ? 1u : 0u) ? 4000000 : 0);
                 int64_t camera_period = scenario == "phase-4300" ? 8600000 : 8384000;
                 int64_t phase = scenario == "phase-4300" ? 4300000 : scenario == "phase-4000" ? 4000000 : 4192000;
                 if (scenario == "phase-drift-left") { if (i) camera_period += 210; phase -= 5000; }
@@ -249,6 +297,14 @@ int main(int argc, char **argv) {
             }
             if (scenario == "phase-drift-left") CHECK(std::stoull(metrics.at("steady_state_unmatched_left")) > 0);
             if (scenario == "phase-drift-right") CHECK(std::stoull(metrics.at("steady_state_unmatched_right")) > 0);
+            if (scenario == "phase-jitter-left" || scenario == "phase-jitter-right") {
+                const std::string role = scenario == "phase-jitter-left" ? "left." : "right.";
+                CHECK(metrics.at(role + "observed_max_period_ns") == "12384000");
+                CHECK(metrics.at(role + "observed_period_ns") == "8384000");
+                CHECK(metrics.at(role + "observed_half_period_ns") == "4192000");
+                CHECK(live[2]->header.metadata.at(role + "observed_half_period_ns") == "6192000");
+                CHECK(metrics.at("max_v4l2_delta_ns") == "5000000");
+            }
             CHECK(store->finalize(id).state == artifact::ArtifactState::finalized);
             unsetenv("MANTIS_X1_PROFILE"); unsetenv("MANTIS_X1_FAKE");
             for (unsigned pass = 0; pass < 2; ++pass) {
