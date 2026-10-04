@@ -26,6 +26,9 @@ class Capture:
     raw_artifact: str
     def stop(self):
         result = self.client._call(capture_stop=wire.Id(id=self.id))
+        for capture in result.captures:
+            if capture.error:
+                raise MantisError(capture.error, component="capture")
         if result.captures and result.captures[0].finalization_job_id:
             Job(self.client, result.captures[0].finalization_job_id).wait(timeout=3600)
         return result

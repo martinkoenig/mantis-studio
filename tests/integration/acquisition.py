@@ -158,8 +158,9 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         until(lambda: failing.status().framesets_committed >= 4)
         try:
             failing.stop()
-        except mantis.MantisError:
-            pass
+            raise AssertionError("Capture.stop did not surface capture cleanup error")
+        except mantis.MantisError as error:
+            assert error.component == "capture" and "STREAMOFF" in str(error) and "RIGHT" in str(error)
         assert "STREAMOFF" in failing.status().error and "RIGHT" in failing.status().error
         assert next(a for a in client.artifacts.list() if a.id == failing.raw_artifact).state == "RECOVERABLE"
         env["MANTIS_X1_FAKE"] = "normal"
