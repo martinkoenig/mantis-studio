@@ -17,6 +17,9 @@ extern "C" {
 #define MANTIS_IMAGE_STREAM_V1 "org.mantis.camera.image-stream.v1"
 #define MANTIS_IMAGE "org.mantis.ImageFrame"
 #define MANTIS_POINTS "org.mantis.PointCloud"
+#define MANTIS_ACQUISITION_V1 "org.mantis.acquisition.v1"
+#define MANTIS_FRAMESET_STREAM_V1 "org.mantis.camera.frameset-stream.v1"
+#define MANTIS_FRAMESET "org.mantis.FrameSet"
 /* All strings UTF-8. All borrowed pointers valid only during the call.
  * Functions return zero on success, nonzero on failure. No exception may cross this boundary.
  * Tables live until shutdown. The plugin root is borrowed; device instances are owned and destroyed via their
@@ -73,6 +76,49 @@ typedef struct MantisDeviceV1 {
     int (*next)(void *, MantisEmitV1, void *);
     int (*stop)(void *);
 } MantisDeviceV1;
+/* Additive queried interface: no v1 layout changes. All callbacks are synchronous.
+ * Metadata is UTF-8 JSON, an object of string values, at most 64 KiB.
+ * Enumeration descriptors are borrowed during emit only. IDs are stable physical
+ * identities, never transient OS node numbers. Empty parent_id denotes a root.
+ */
+typedef struct MantisDiscoveredDeviceV1 {
+    uint32_t struct_size, abi_version;
+    const char *id, *parent_id, *name;
+    const char *const *capabilities;
+    uint32_t capability_count;
+    const char *metadata_json;
+} MantisDiscoveredDeviceV1;
+typedef int (*MantisDiscoverEmitV1)(void *, const MantisDiscoveredDeviceV1 *);
+typedef struct MantisObservationV1 {
+    uint32_t struct_size, abi_version;
+    MantisPacketV1 packet;
+    int64_t host_receive_ns;
+    const char *sync_group;
+    uint64_t sync_trigger;
+    uint32_t sync_quality; /* 0 unknown, 1 software, 2 hardware; not exposure skew */
+    const char *metadata_json;
+} MantisObservationV1;
+typedef struct MantisFrameSetV1 {
+    uint32_t struct_size, abi_version;
+    MantisObservationV1 observation;
+    const MantisObservationV1 *frames;
+    uint32_t frame_count; /* 1..16 immutable ImageFrames */
+} MantisFrameSetV1;
+typedef int (*MantisFrameSetEmitV1)(void *, const MantisFrameSetV1 *);
+typedef int (*MantisTextEmitV1)(void *, const char *);
+typedef struct MantisAcquisitionV1 {
+    uint32_t struct_size, abi_version;
+    int (*enumerate)(MantisDiscoverEmitV1, void *);
+    int (*open)(const MantisHostV1 *, const char *device_id, void **instance);
+    void (*destroy)(void *);
+    int (*start)(void *);
+    /* next must return within timeout_ms, including non-ready/disconnect paths.
+     * Return 0 with exactly one emit, 2 for not ready, nonzero otherwise.
+     * Called serially; stop/destroy only after next returns. */
+    int (*next)(void *, uint32_t timeout_ms, MantisFrameSetEmitV1, void *);
+    int (*stop)(void *);
+    int (*diagnostics)(void *, MantisTextEmitV1, void *);
+} MantisAcquisitionV1;
 typedef struct MantisNodeDescriptorV1 {
     uint32_t struct_size, abi_version;
     const char *id;

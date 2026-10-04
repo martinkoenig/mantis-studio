@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+- [ADR-021: Enumerated acquisition and FrameSet transport](021-enumerated-acquisition-and-frameset-contract.md)
+
 Status: accepted frozen Architecture v1 baseline. These records summarize the supplied decisions; they do not redefine them.
 
 - [ADR-001: Daemon-centric runtime using mantisd](001-daemon-centric-runtime-using-mantisd.md)

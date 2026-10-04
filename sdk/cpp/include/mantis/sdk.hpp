@@ -4,6 +4,9 @@
 #include <stdexcept>
 #include <utility>
 namespace mantis::sdk {
+template <class T> inline bool compatible_table(const T *p) {
+    return p && p->struct_size >= sizeof(T) && p->abi_version == MANTIS_ABI_V1;
+}
 inline void check(int status) {
     if (status)
         throw std::runtime_error("Plugin host operation failed");

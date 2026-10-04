@@ -23,7 +23,7 @@ struct DataTypeId {
     auto operator<=>(const DataTypeId &) const = default;
 };
 inline const DataTypeId image{"org.mantis.ImageFrame", 1}, points{"org.mantis.PointCloud", 1},
-    mesh{"org.mantis.Mesh", 1}, tensor{"org.mantis.Tensor", 1};
+    mesh{"org.mantis.Mesh", 1}, tensor{"org.mantis.Tensor", 1}, frameset{"org.mantis.FrameSet", 1};
 struct AttributeDescriptor {
     std::string name;
     ScalarType scalar{ScalarType::u8};

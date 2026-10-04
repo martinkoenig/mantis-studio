@@ -3,8 +3,10 @@
 namespace mantis::device {
 std::vector<Descriptor> Runtime::list() const {
     std::vector<Descriptor> out;
-    for (auto &p : streams_)
+    for (auto &p : streams_) {
         out.push_back(p->descriptor());
+        for (auto &child : p->components()) out.push_back(child);
+    }
     return out;
 }
 ImageStream &Runtime::find(const Id &id) {
