@@ -26,6 +26,11 @@ are finite/non-negative provenance, alongside instrument/note; they define no
 confidence model. Identity/revision allocation and artifact encoding are later
 persistence concerns; M1 retains supplied values without generating them.
 
+Measured active width/height may exist without detailed provenance. Measurement
+provenance may only exist when both measured active extents exist. An empty/default
+provenance object still means provenance was supplied and requires both measured
+extents; nominal-only targets must have no provenance.
+
 Derive independent global scales:
 
 ```text

@@ -27,7 +27,8 @@ struct MeasurementProvenance {
 };
 struct PhysicalMeasurement {
     // Outer active-grid edge to opposite outer edge; never paper/margin/substrate.
-    // Both dimensions are present or both absent. Provenance never changes scale.
+    // Both dimensions are present or both absent. Optional provenance requires both.
+    // Provenance never changes scale, even when its fields are empty.
     std::optional<double> active_width_mm, active_height_mm;
     std::optional<MeasurementProvenance> provenance;
 };
@@ -89,6 +90,9 @@ inline Result<TargetGeometry> derive_target_geometry(const CalibrationTarget &ta
     const auto &measurement = target.measurement;
     if (measurement.active_width_mm.has_value() != measurement.active_height_mm.has_value())
         return detail::target_error("Measured active_width_mm and active_height_mm must be present together or absent together");
+    if (measurement.provenance.has_value() &&
+        !measurement.active_width_mm.has_value() && !measurement.active_height_mm.has_value())
+        return detail::target_error("Measurement provenance requires measured active extents");
     if (measurement.active_width_mm) {
         if (!detail::positive_finite(*measurement.active_width_mm) || !detail::positive_finite(*measurement.active_height_mm))
             return detail::target_error("Measured active extents must be finite and positive");

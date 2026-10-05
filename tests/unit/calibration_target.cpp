@@ -82,6 +82,38 @@ void geometry_examples() {
         CHECK(validate_target(value));
     }
 }
+void measurement_provenance() {
+    for (bool charuco : {false, true}) {
+        auto value = target(charuco);
+        auto nominal = derive_target_geometry(value);
+        CHECK(nominal && validate_target(value)); // No extents and no provenance.
+        CHECK(nominal->source == GeometrySource::nominal && nominal->scale_x == 1 && nominal->scale_y == 1);
+
+        value.measurement.active_width_mm = 8 * 41.3;
+        value.measurement.active_height_mm = 6 * 40.6;
+        auto measured = derive_target_geometry(value);
+        CHECK(measured && validate_target(value)); // Measured extents do not require provenance.
+        CHECK(measured->source == GeometrySource::measured);
+        CHECK(near(measured->scale_x, 1.0325) && near(measured->scale_y, 1.015));
+
+        for (const auto &provenance : {
+                 MeasurementProvenance{0.1, 0.2, {}, {}},
+                 MeasurementProvenance{{}, {}, "digital_caliper", {}},
+                 MeasurementProvenance{{}, {}, {}, "measured between outer active-grid edges"},
+                 MeasurementProvenance{}}) {
+            value.measurement.provenance = provenance;
+            auto with_provenance = derive_target_geometry(value);
+            CHECK(with_provenance && validate_target(value));
+            CHECK(with_provenance->source == GeometrySource::measured);
+            CHECK(with_provenance->scale_x == measured->scale_x && with_provenance->scale_y == measured->scale_y);
+
+            auto orphan = target(charuco);
+            orphan.measurement.provenance = provenance;
+            rejects(orphan); // Presence requires extents, even if all provenance fields are empty.
+            CHECK(derive_target_geometry(orphan).error().message == "Measurement provenance requires measured active extents");
+        }
+    }
+}
 void invalid_structure() {
     const auto nan = std::numeric_limits<double>::quiet_NaN();
     const auto inf = std::numeric_limits<double>::infinity();
@@ -118,12 +150,10 @@ void invalid_structure() {
             rejects(value);
         }
         auto value = target(charuco);
-        value.measurement.provenance = MeasurementProvenance{0.0, {}, {}, {}};
-        CHECK(validate_target(value)); // Optional provenance is not a confidence model.
-        auto nominal = derive_target_geometry(value);
-        CHECK(nominal && nominal->source == GeometrySource::nominal && nominal->scale_x == 1 && nominal->scale_y == 1);
         value.measurement.active_width_mm = 320;
         value.measurement.active_height_mm = 240;
+        value.measurement.provenance = MeasurementProvenance{0.0, {}, {}, {}};
+        CHECK(validate_target(value)); // Zero uncertainty is valid with measured extents.
         value.measurement.provenance->height_uncertainty_mm = 0;
         CHECK(validate_target(value));
     }
@@ -178,7 +208,7 @@ void arithmetic_limits() {
 }
 int main() {
     try {
-        geometry_examples(); invalid_structure(); arithmetic_limits();
+        geometry_examples(); measurement_provenance(); invalid_structure(); arithmetic_limits();
         std::cout << "Calibration targets: nominal/measured scale, anisotropy, marker dimensions, points and structural validation passed\n";
         return 0;
     } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
