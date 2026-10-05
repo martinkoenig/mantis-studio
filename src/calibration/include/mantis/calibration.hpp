@@ -1,6 +1,7 @@
 #pragma once
 #include <mantis/calibration_target.hpp>
 #include <mantis/calibration_observation.hpp>
+#include <mantis/calibration_dataset.hpp>
 #include <mantis/spatial.hpp>
 #include <mantis/time.hpp>
 namespace mantis::calibration {
