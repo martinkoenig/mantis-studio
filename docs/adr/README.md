@@ -1,5 +1,12 @@
 # Architecture Decision Records
 
+- [ADR-034: Open-core Pro modules and signed entitlement licensing](034-open-core-pro-modules-and-licensing.md)
+
+ADR-034 defines the product/architecture boundary between the open Mantis platform
+and future separately distributed Mantis Studio Pro modules. See the
+[edition policy](../product/editions.md) and
+[commercial module/licensing architecture](../architecture/commercial-modules-and-licensing.md).
+
 - [ADR-033: Reliability, data integrity and measured performance are release-gating requirements](033-reliability-performance-release-gates.md)
 - [ADR-032: Distributed execution is many-to-many and scanner runtimes retain capture authority](032-distributed-runtime-and-worker-pools.md)
 - [ADR-031: X1 remote operation publishes measurement observations at the scanner boundary](031-x1-remote-observation-boundary.md)
