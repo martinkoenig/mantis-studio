@@ -1,4 +1,5 @@
 #include <fstream>
+#include <limits>
 #include <iomanip>
 #include <sstream>
 #include "segments.hpp"
@@ -75,6 +76,7 @@ std::string provenance_json(const Provenance &p) {
                 {"inputs", ids},
                 {"parameters", p.parameters},
                 {"calibration_id", p.calibration.id.value},
+                {"calibration_schema_version", p.calibration.schema_version},
                 {"calibration_revision", p.calibration.revision}}
         .dump();
 }
@@ -87,6 +89,7 @@ Provenance provenance_parse(const std::string &s) {
         p.inputs.push_back({id});
     p.parameters = j.at("parameters").get<data::Metadata>();
     p.calibration.id = {j.at("calibration_id")};
+    p.calibration.schema_version = j.value("calibration_schema_version", uint32_t{1});
     p.calibration.revision = j.at("calibration_revision");
     return p;
 }
@@ -261,16 +264,41 @@ struct Store::Impl {
             {
                 Statement schema_version(db, "PRAGMA user_version");
                 schema_version.row();
-                if (schema_version.integer(0) > 1)
+                if (schema_version.integer(0) > 2)
                     fail(Status::incompatible, "Unsupported project metadata schema");
             }
             exec(db, "PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA foreign_keys=ON;");
-            exec(db, "CREATE TABLE IF NOT EXISTS artifacts(id TEXT PRIMARY KEY,type TEXT NOT NULL,version "
-                     "INTEGER NOT NULL,state INTEGER NOT NULL,provenance TEXT NOT NULL,hash TEXT NOT NULL "
-                     "DEFAULT '',bytes INTEGER NOT NULL DEFAULT 0,chunks INTEGER NOT NULL DEFAULT 0);CREATE "
-                     "TABLE IF NOT EXISTS chunks(artifact TEXT NOT NULL REFERENCES artifacts(id),idx INTEGER "
-                     "NOT NULL,path TEXT NOT NULL,hash TEXT NOT NULL,bytes INTEGER NOT NULL,PRIMARY "
-                     "KEY(artifact,idx));PRAGMA user_version=1;");
+            uint64_t metadata_version{};
+            {
+                Statement version(db, "PRAGMA user_version");
+                version.row();
+                metadata_version = version.integer(0);
+            }
+            if (metadata_version < 2) {
+                Transaction migration(db);
+                if (metadata_version == 0)
+                    exec(db,
+                         "CREATE TABLE artifacts(id TEXT PRIMARY KEY,type TEXT NOT NULL,version INTEGER NOT NULL,"
+                         "state INTEGER NOT NULL,provenance TEXT NOT NULL,hash TEXT NOT NULL DEFAULT '',"
+                         "bytes INTEGER NOT NULL DEFAULT 0,chunks INTEGER NOT NULL DEFAULT 0);"
+                         "CREATE TABLE chunks(artifact TEXT NOT NULL REFERENCES artifacts(id),idx INTEGER NOT NULL,"
+                         "path TEXT NOT NULL,hash TEXT NOT NULL,bytes INTEGER NOT NULL,PRIMARY KEY(artifact,idx));");
+                exec(db,
+                     "CREATE TABLE calibration_revisions("
+                     "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),"
+                     "artifact_id TEXT NOT NULL UNIQUE REFERENCES artifacts(id),kind TEXT NOT NULL,"
+                     "PRIMARY KEY(calibration_id,revision),UNIQUE(calibration_id,revision,artifact_id));"
+                     "CREATE TABLE active_calibrations(logical_device_id TEXT PRIMARY KEY NOT NULL,"
+                     "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL,artifact_id TEXT NOT NULL,"
+                     "FOREIGN KEY(calibration_id,revision,artifact_id) "
+                     "REFERENCES calibration_revisions(calibration_id,revision,artifact_id));"
+                     "CREATE TRIGGER calibration_revision_immutable_update BEFORE UPDATE ON calibration_revisions "
+                     "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
+                     "CREATE TRIGGER calibration_revision_immutable_delete BEFORE DELETE ON calibration_revisions "
+                     "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
+                     "PRAGMA user_version=2;");
+                migration.commit();
+            }
             replay_journal();
             exec(db, "UPDATE artifacts SET state=3 WHERE state IN (0,1)");
         } catch (...) {
@@ -374,6 +402,126 @@ ArtifactId Store::begin(ArtifactType type, Provenance provenance) {
     s.text(5, provenance_json(provenance));
     s.row();
     return id;
+}
+CalibrationRevision Store::begin_calibration(ArtifactType type, Provenance provenance,
+                                             std::optional<Id> series) {
+    std::lock_guard guard(impl_->mutex);
+    if (type.schema_version != 1 ||
+        (type.name != "org.mantis.CalibrationTarget" && type.name != "org.mantis.CalibrationDataset" &&
+         type.name != "org.mantis.CameraCalibration" && type.name != "org.mantis.RigCalibration"))
+        fail(Status::incompatible, "Unsupported calibration artifact type/schema", "store");
+    Transaction transaction(impl_->db);
+    Id logical = series.value_or(Id::random());
+    uint64_t revision = 1;
+    if (series) {
+        Statement previous(impl_->db, "SELECT revision,kind FROM calibration_revisions WHERE "
+                                      "calibration_id=? ORDER BY revision DESC LIMIT 1");
+        previous.text(1, logical.value);
+        if (!previous.row())
+            fail(Status::not_found, "Calibration series not found", "store");
+        if (previous.text(1) != type.name)
+            fail(Status::incompatible, "Calibration revision series must remain type-stable", "store");
+        if (previous.integer(0) >= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+            fail(Status::invalid_argument, "Calibration revision exhausted", "store");
+        revision = previous.integer(0) + 1;
+    }
+    provenance.calibration = {logical, type.schema_version, revision};
+    auto artifact_id = begin(type, std::move(provenance));
+    Statement add(
+        impl_->db,
+        "INSERT INTO calibration_revisions(calibration_id,revision,artifact_id,kind) VALUES(?,?,?,?)");
+    add.text(1, logical.value);
+    add.integer(2, revision);
+    add.text(3, artifact_id.value);
+    add.text(4, type.name);
+    add.row();
+    transaction.commit();
+    return {{logical, type.schema_version, revision}, artifact_id, type.name};
+}
+CalibrationRevision Store::calibration_revision(const Id &id, uint64_t revision) const {
+    std::lock_guard guard(impl_->mutex);
+    if (!revision || revision > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+        fail(Status::invalid_argument, "Invalid calibration revision", "store");
+    Statement find(
+        impl_->db,
+        "SELECT artifact_id,kind FROM calibration_revisions WHERE calibration_id=? AND revision=?");
+    find.text(1, id.value);
+    find.integer(2, revision);
+    if (!find.row())
+        fail(Status::not_found, "Calibration revision not found", "store");
+    auto artifact = impl_->get({find.text(0)});
+    if (artifact.type.name != find.text(1))
+        fail(Status::corrupt, "Calibration registry kind mismatch", "store");
+    return {{id, artifact.type.schema_version, revision}, artifact.id, find.text(1)};
+}
+CalibrationRevision Store::artifact_revision(const ArtifactId &id) const {
+    std::lock_guard guard(impl_->mutex);
+    Statement find(impl_->db,
+                   "SELECT calibration_id,revision FROM calibration_revisions WHERE artifact_id=?");
+    find.text(1, id.value);
+    if (!find.row())
+        fail(Status::not_found, "Artifact has no calibration revision", "store");
+    return calibration_revision({find.text(0)}, find.integer(1));
+}
+std::optional<ActiveCalibration> Store::active_calibration(const Id &device) const {
+    std::lock_guard guard(impl_->mutex);
+    if (device.value.empty())
+        fail(Status::invalid_argument, "Logical device identity is required", "store");
+    Statement find(
+        impl_->db,
+        "SELECT calibration_id,revision,artifact_id FROM active_calibrations WHERE logical_device_id=?");
+    find.text(1, device.value);
+    if (!find.row())
+        return {};
+    auto revision = calibration_revision({find.text(0)}, find.integer(1));
+    auto artifact = impl_->get({find.text(2)});
+    if (revision.artifact_id != artifact.id || artifact.state != ArtifactState::finalized ||
+        artifact.type.name != "org.mantis.RigCalibration" || artifact.type.schema_version != 1 ||
+        artifact.hash.hex.empty())
+        fail(Status::corrupt, "Invalid active calibration mapping", "store");
+    return ActiveCalibration{revision.reference, {artifact.id, artifact.hash}};
+}
+void Store::activate_calibration(const Id &device, const ArtifactId &id) {
+    std::lock_guard guard(impl_->mutex);
+    if (device.value.empty())
+        fail(Status::invalid_argument, "Logical device identity is required", "store");
+    auto artifact = impl_->get(id);
+    if (artifact.state != ArtifactState::finalized || artifact.type.name != "org.mantis.RigCalibration" ||
+        artifact.type.schema_version != 1 || artifact.hash.hex.empty())
+        fail(Status::incompatible, "Activation requires finalized RigCalibration schema 1", "store");
+    auto revision = artifact_revision(id);
+    Transaction transaction(impl_->db);
+    Statement update(
+        impl_->db,
+        "INSERT INTO active_calibrations(logical_device_id,calibration_id,revision,artifact_id) "
+        "VALUES(?,?,?,?) ON CONFLICT(logical_device_id) DO UPDATE SET calibration_id=excluded.calibration_id,"
+        "revision=excluded.revision,artifact_id=excluded.artifact_id");
+    update.text(1, device.value);
+    update.text(2, revision.reference.id.value);
+    update.integer(3, revision.reference.revision);
+    update.text(4, id.value);
+    update.row();
+    transaction.commit();
+}
+void Store::clear_active_calibration(const Id &device) {
+    std::lock_guard guard(impl_->mutex);
+    if (device.value.empty())
+        fail(Status::invalid_argument, "Logical device identity is required", "store");
+    Transaction transaction(impl_->db);
+    Statement erase(impl_->db, "DELETE FROM active_calibrations WHERE logical_device_id=?");
+    erase.text(1, device.value);
+    erase.row();
+    transaction.commit();
+}
+void Store::initialize_provenance(const ArtifactId &id, Provenance provenance) {
+    std::lock_guard guard(impl_->mutex);
+    auto artifact = impl_->get(id);
+    if (artifact.state != ArtifactState::open || artifact.chunks || impl_->writers.contains(id))
+        fail(Status::invalid_argument, "Provenance initialization requires an empty OPEN artifact", "store");
+    Statement update(impl_->db, "UPDATE artifacts SET provenance=? WHERE id=?");
+    update.text(1, provenance_json(provenance));
+    update.text(2, id.value);
+    update.row();
 }
 void Store::append(const Id &id, const data::Packet &packet) {
     std::lock_guard guard(impl_->mutex);
