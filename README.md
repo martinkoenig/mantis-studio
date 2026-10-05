@@ -106,6 +106,8 @@ No x86 intrinsics or pointer-width assumptions are used in public structures. Th
 - [C++ / Python Client SDK](docs/client-sdk/README.md)
 - [Protocol and local data plane](docs/protocol/README.md)
 - [Storage and recovery](docs/architecture/storage.md)
+- [Mantis Studio Free / Pro product boundary](docs/product/editions.md)
+- [Commercial modules and licensing architecture](docs/architecture/commercial-modules-and-licensing.md)
 - [Architecture Decision Records](docs/adr/README.md)
 - [Contributing](CONTRIBUTING.md), [security model](SECURITY.md)
 
