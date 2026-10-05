@@ -49,29 +49,47 @@ dark QML shell. Architecture v1 remains frozen; ADRs 021–026 document additive
 | Scoped native setup | Explicit disabled-link route discovery, necessary conflict handling, ACTIVE pad formats, VBLANK set/read-back, verified setup with rollback; no global reset |
 | Packed RAW10 | Y10P byte-oriented attribute plus logical layout metadata; exact payload recording/replay, consumer-only sample view and Qt grayscale conversion; RAW8 unchanged |
 | Dual observation | Immutable FrameSet with native sequences, timestamps/clocks, host arrival, role/identity, raw mode, sync and calibration metadata |
-| Pairing and failures | Timestamp-nearest software pairing, fixed two-slot camera queues, bounded/counted startup exclusions; strict hardware-mode counters, native gaps/repeats/reversals, backward timestamps, incomparable clocks and steady-state unmatched observations fail explicitly |
-| Raw QoS | Capacity-32 LOSSLESS writer queue, timed saturation failure, depth/high water; clean stop drains published FrameSets; startup exclusions and terminal lookahead are counted separately |
+| Pairing and failures | Timestamp-nearest software pairing, fixed two-slot camera queues, at most 32 counted startup exclusions and at most two counted steady-state exclusions between published pairs; strict hardware-mode counters, native continuity and clock checks; cadence is diagnostic-only |
+| Raw QoS | Capacity-32 LOSSLESS writer queue, timed saturation failure, depth/high water; clean stop drains published FrameSets; startup/steady-state pairing exclusions and terminal lookahead are counted separately |
 | Preview | Independent capacity-one LATEST_ONLY branch; bounded immutable local leases, client-only grayscale conversion, actual dual Studio views tested |
 | RawCapture v2 | Sequential segments, record checksums/boundaries, segment durability/index transactions, bounded replay mappings |
 | Recovery | Process-kill/restart exposes RECOVERABLE; explicit job scans/validates complete records, truncates only incomplete tail, rejects corruption/index mismatch |
 | Replay | Generic ImageStream source, real-time/ASAP, two-pass canonical verification; no physical device required |
 | Clients | Additive protocol, CLI/C++/Python capture status, diagnostics, preview/replay/recovery; existing Virtual Scanner workflow passes |
 | Compatibility | Project/SQLite schema stays 1; RawCapture schema 2 and MANTIS02 are explicit additions; v0.1 packet/capture path remains readable |
-| Validation | Sixteen suites; local Studio/headless/sanitizers and native x86_64/ARM64 CI; hardware status separate |
+| Validation | Seventeen suites; local Studio/headless/sanitizers and native x86_64/ARM64 CI; official real-Q6A full harness PASS |
 
-**USER-VALIDATED HARDWARE PASS:** Q6A ARM64 build/tests, real discovery with the
-four mutable measurement links disabled, stable roles/nodes, plugin-owned CAMSS
-setup, Y10_1X10 pads, VBLANK=196 read-back, Y10P 1280×720 dual STREAMON and
-~119.223 receive FPS on both cameras. A short 141-FrameSet capture had zero native
-gaps/capture errors, recorder drops or saturation, finalized and passed two-pass
-replay verification. This used a temporary 100 ms pairing tolerance; equal native
-counters had ~51.8 ms timestamp offset and did not establish exposure association.
+**COMPLETE AND MERGED:** accepted real Q6A full-harness evidence was produced on
+`fad4df6439e88c7ba4f265c532343c3317e93da4`; v0.2 was merged to main as
+`f0030515d01f547e8a922fa392d2b1296185da41`.
 
-**PENDING USER EXECUTION:** corrected timestamp-nearest pairing at the restored
-4 ms tolerance, sustained ten-second/full-rate NVMe recording, real process-crash
-recovery after this correction, hardware trigger synchronization and optical
-exposure skew. The validated native mode remains 1280×720 Y10P / Y10_1X10 /
-VBLANK=196. 1280×800 mode remains unvalidated.
+| Accepted real Q6A check | Result |
+| --- | --- |
+| Debug / Release tests | 17/17 PASS / 17/17 PASS |
+| Disabled-link discovery / plugin-owned media setup | PASS / PASS |
+| Media-bus / capture format | Y10_1X10 / Y10P, 1280×720 |
+| Stride / sizeimage / LEFT and RIGHT VBLANK | 1600 / 1,152,000 / 196 and 196 |
+| Software correspondence | timestamp-nearest; 5,000,000 ns tolerance |
+| Native offset | +8 |
+| Startup / steady-state / shutdown unmatched LEFT and RIGHT | 8/0 / 0/0 / 0/1 |
+| Final selected timestamp delta / pairing failures | -3.652 ms / 0 |
+| Produced / committed FrameSets | 123 / 123 |
+| Raw drops / queue saturation | 0 / 0 |
+| RawCapture / replay / raw integrity | FINALIZED / PASS / PASS |
+| LEFT observed latest / half / max period | 8,327,000 / 4,163,500 / 8,514,000 ns |
+| RIGHT observed latest / half / max period | 8,252,000 / 4,126,000 / 9,252,000 ns |
+
+Observed cadence is diagnostic-only; actual cross-camera timestamps enforce the
+5 ms software correspondence bound. This is not hardware synchronization or
+optical exposure-skew validation. The temporary 100 ms / ~51.8 ms equal-counter
+offset and favorable 4 ms starts are **historical diagnostic evidence**. A later
+cold 4 ms start failed; those historical successes are not current acceptance.
+See the detailed [validation record](validation.md#final-v02-real-q6a-acquisition-acceptance--2026-10-05).
+
+**SEPARATE PENDING WORK:** sustained NVMe/equivalent recording, real hardware
+process-crash recovery after the final policy, physical hardware trigger
+synchronization, optical exposure-skew measurement and 1280×800 investigation.
+No sustained-storage acceptance or 1280×800 validation is claimed.
 
 **DEFERRED:** DMABUF/external-buffer zero-copy, physical trigger programming and
 true exposure-skew measurement, investigation of 1280×800 Y10P, sophisticated
@@ -85,3 +103,17 @@ is an operator assertion, separate from camera-local counter equality, selected
 V4L2 timestamp delta and host arrival delta. SyncQuality remains software; no optical timing accuracy is claimed.
 See the [review](v0.2-acquisition-review.md), [storage format](storage.md),
 [validation](validation.md), and [Q6A procedure](../hardware/x1-q6a-acquisition-validation.md).
+
+
+## v0.3 — Geometric Calibration Foundation
+
+The [v0.3 architecture baseline](v0.3-geometric-calibration.md) defines the full
+milestone intent and deferred work. The current package is **M0 + M1 only**:
+architecture/accepted-state housekeeping and a pure header-only calibration
+target/physical geometry foundation. [ADR-027](../adr/027-calibration-target-geometry-and-physical-scale.md)
+defines nominal/measured target scale; [ADR-028](../adr/028-target-observations-and-deterministic-calibration-datasets.md)
+prepares the common observation/dataset contract for later work.
+
+Detector integration, calibration solves, artifacts/persistence, activation and
+capture binding, service/client controls and Studio workspace are later packages.
+Architecture v1 remains frozen; these are additive extensions.

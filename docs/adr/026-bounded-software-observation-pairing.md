@@ -143,7 +143,13 @@ and reached plugin-owned acquisition. `capture.start()` failed with
 introduced conservative guard blocked acquisition before actual cross-camera
 correspondence could be validated; it is different from the earlier 4 ms nearest
 pair rejection. Therefore the **5 ms pairing policy itself has not failed on
-Q6A**. Real Q6A execution after removing this guard remains pending. The favorable
-4 ms starts and later cold 4 ms pairing failure remain recorded honestly.
+Q6A** at that historical checkpoint. The subsequent guard-removal HEAD
+`fad4df6439e88c7ba4f265c532343c3317e93da4` passed the official real Q6A full
+harness: Debug/Release 17/17, disabled-link discovery, plugin-owned setup,
+123/123 finalized FrameSets, -3.652 ms final selected delta, zero pairing/raw
+failures and replay/integrity PASS. This is the accepted v0.2 state merged as
+`f0030515d01f547e8a922fa392d2b1296185da41`; see the
+[milestone record](../architecture/milestone.md#v02--real-acquisition-foundation).
+The favorable 4 ms starts and later cold 4 ms failure remain historical evidence.
 Sustained-storage acceptance, physical synchronization and optical timing are
 still pending; changing this software bound does not establish any of them.
