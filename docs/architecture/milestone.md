@@ -117,3 +117,38 @@ prepares the common observation/dataset contract for later work.
 Detector integration, calibration solves, artifacts/persistence, activation and
 capture binding, service/client controls and Studio workspace are later packages.
 Architecture v1 remains frozen; these are additive extensions.
+
+
+## Accepted cross-milestone future architecture
+
+ADRs [031](../adr/031-x1-remote-observation-boundary.md),
+[032](../adr/032-distributed-runtime-and-worker-pools.md) and
+[033](../adr/033-reliability-performance-release-gates.md) freeze requirements for
+future scanning/reconstruction/distributed work without changing v0.3 scope or
+claiming implementation.
+
+- Normal X1 remote/tethered deployment keeps `mantisd` and hardware/capture
+  authority on the Q6A. The reference semantic remote boundary is
+  `LaserObservation`: source-proximal preprocessing/extraction on Q6A,
+  triangulation/reconstruction downstream by default.
+- USB, network/Wi-Fi and X1 Pro local IPC are transports of the same typed
+  observation semantics, not distinct scanner algorithms.
+- Distributed execution is many-to-many: independent scanner runtimes may use a
+  shared resource-aware `mantis-worker` pool. Thin UI clients are not mandatory
+  data proxies and central workers do not become owners of physical capture.
+- Stateless failover may be reassigned with explicit authority fencing; stateful
+  failover requires compatible checkpoint/replay/restart semantics. No transparent
+  HA claim exists until split-brain, recovery and failure tests pass.
+- Reliability, no-silent-corruption/no-silent-loss, bounded resources, fault
+  containment and measured performance are release-gating engineering requirements.
+  Production/industrial maturity is evidence-based and separate from feature
+  implementation.
+
+Detailed references:
+[X1 processing partition](../hardware/x1-processing-partition.md),
+[distributed runtime](distributed-runtime.md), and
+[reliability/performance/validation](reliability-performance-and-validation.md).
+
+**CURRENT STATUS:** architecture only for these additions. v0.3 does not implement
+laser extraction, remote observation transport, worker discovery/scheduling,
+distributed failover, checkpointing or industrial HA.

@@ -1,5 +1,18 @@
 # Architecture Decision Records
 
+- [ADR-033: Reliability, data integrity and measured performance are release-gating requirements](033-reliability-performance-release-gates.md)
+- [ADR-032: Distributed execution is many-to-many and scanner runtimes retain capture authority](032-distributed-runtime-and-worker-pools.md)
+- [ADR-031: X1 remote operation publishes measurement observations at the scanner boundary](031-x1-remote-observation-boundary.md)
+
+ADRs 031–033 are accepted cross-milestone requirements for the future X1
+processing partition, distributed worker pools and engineering/release quality.
+They define contracts and acceptance expectations; they do **not** claim remote
+transport, worker scheduling, laser extraction, reconstruction or HA are already
+implemented. See the [X1 processing partition](../hardware/x1-processing-partition.md),
+[distributed runtime](../architecture/distributed-runtime.md) and
+[reliability/performance standard](../architecture/reliability-performance-and-validation.md).
+
+
 - [ADR-030: Calibration artifacts, revisioning and active binding](030-calibration-artifacts-revisioning-and-active-binding.md)
 
 - [ADR-029: Calibration solve, validation and stereo policy](029-calibration-solve-validation-and-stereo-policy.md)

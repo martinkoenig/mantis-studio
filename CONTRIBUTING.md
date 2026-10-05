@@ -2,6 +2,12 @@
 
 Read the frozen architecture and relevant ADR before changing a public contract. Preserve the distinction between the Plugin SDK and the Client SDK.
 
+For all new work, also follow the binding
+[reliability, performance and validation standard](docs/architecture/reliability-performance-and-validation.md).
+Measurement-critical and hot-path code is not accepted on happy-path functionality
+alone: failure semantics, bounded resources, diagnostics and relevant performance
+evidence are part of the feature contract.
+
 ## Required checks
 
 1. Build Studio and run `ctest --preset linux-debug`.
@@ -10,6 +16,8 @@ Read the frozen architecture and relevant ADR before changing a public contract.
 4. Keep Linux ARM64 in the native CI matrix; avoid CPU-specific dependencies in public headers.
 5. Run `clang-format -i` on changed C/C++ files using the repository style.
 6. Add a focused regression test for a bug or architectural behavior. Do not add tests that merely repeat implementation constants.
+7. For changes to critical streaming/hot paths, document or update the relevant throughput/latency/memory/copy/queue evidence and reject material unexplained regressions.
+8. For changes to recovery, distributed ownership or persistent state, test negative paths and interrupted transitions; never infer production/HA readiness from a happy-path fixture.
 
 Foundation headers must not expose Qt, SQLite, OpenCV, Eigen, CUDA or Vulkan types. First-party plugins may include only the public SDK plus their own dependencies. Studio and CLI must not link to runtime implementation libraries. The boundary contract test checks includes, while the Qt-disabled build proves dependency separation.
 
