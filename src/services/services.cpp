@@ -1,5 +1,7 @@
 #include <fstream>
 #include <mantis/artifact_store.hpp>
+#include <mantis/calibration_artifacts.hpp>
+#include <mantis/capture_calibration.hpp>
 #include <mantis/device_runtime.hpp>
 #include <mantis/replay.hpp>
 #include <mantis/data_io.hpp>
@@ -41,6 +43,7 @@ struct Runtime::Impl {
     struct Capture {
         Id raw;
         std::unique_ptr<device::Session> session;
+        std::shared_ptr<CaptureCalibrationBinding> binding;
         Id finalization_job;
     };
     std::map<Id, Capture> captures;
@@ -119,6 +122,7 @@ struct Runtime::Impl {
 };
 Runtime::Runtime(Configuration c) : impl_(std::make_unique<Impl>(c)) {}
 Runtime::~Runtime() = default;
+std::shared_ptr<artifact::Store> Runtime::project_store() const { return impl_->store; }
 std::vector<device::Descriptor> Runtime::devices() const {
     bool active = false;
     for (auto &[id, capture] : impl_->captures) active |= capture.session->active();
@@ -183,14 +187,57 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
             components.push_back({{"id", child.id.value}, {"name", child.name}, {"capabilities", child.capabilities}, {"metadata", child.metadata}});
         provenance.parameters["components"] = components.dump();
     }
+    std::optional<artifact::ActiveCalibration> active;
+    if (ids.size() == 1)
+        active = impl_->store->active_calibration(ids.front());
+    if (active) {
+        if (!composite)
+            fail(Status::incompatible,
+                 "Project RigCalibration binding requires composite FrameSet acquisition", "capture");
+        auto rig = calibration::artifacts::load_rig_calibration(*impl_->store, active->artifact.id);
+        if (!rig)
+            throw Failure(rig.error());
+        if (impl_->store->get(active->artifact.id).hash != active->artifact.hash)
+            fail(Status::corrupt, "Active RigCalibration hash mismatch", "capture");
+        std::vector<calibration::artifacts::CameraComponent> components;
+        for (const auto &child : streams.front()->components()) {
+            const auto role = child.metadata.find("role"), identity = child.metadata.find("identity");
+            if (role == child.metadata.end() || identity == child.metadata.end())
+                fail(Status::incompatible, "Discovered calibration component lacks role/physical identity",
+                     "capture");
+            components.push_back({role->second, {identity->second}});
+        }
+        auto compatible = calibration::artifacts::validate_rig_device(*rig, ids.front(), components);
+        if (!compatible)
+            throw Failure(compatible.error());
+        provenance.calibration = active->reference;
+        provenance.inputs.push_back(active->artifact.id);
+        provenance.parameters["active_calibration_id"] = active->reference.id.value;
+        provenance.parameters["active_calibration_schema_version"] =
+            std::to_string(active->reference.schema_version);
+        provenance.parameters["active_calibration_revision"] = std::to_string(active->reference.revision);
+        provenance.parameters["active_rig_artifact_id"] = active->artifact.id.value;
+        provenance.parameters["active_rig_artifact_hash_algorithm"] = active->artifact.hash.algorithm;
+        provenance.parameters["active_rig_artifact_hash"] = active->artifact.hash.hex;
+    }
     auto raw = impl_->store->begin({"org.mantis.RawCapture", composite ? 2u : 1u}, provenance);
     auto store = impl_->store;
+    auto binding = std::make_shared<CaptureCalibrationBinding>(store, raw, active);
     std::unique_ptr<device::Session> session;
-    try { session = std::make_unique<device::Session>(
-        device::CaptureDescriptor{id, ids, {}}, std::move(streams),
-        [store, raw](data::Published p) { store->append(raw, *p); }, impl_->logger());
-    } catch (...) { store->abandon(raw); throw; }
-    auto [it, inserted] = impl_->captures.emplace(id, Impl::Capture{raw, std::move(session), {}});
+    try {
+        session = std::make_unique<device::Session>(
+            device::CaptureDescriptor{id, ids, active ? active->reference : calibration::Reference{}},
+            std::move(streams),
+            [store, raw, binding](data::Published p) {
+                auto bound = binding->stamp(std::move(p));
+                store->append(raw, *bound);
+            },
+            impl_->logger());
+    } catch (...) {
+        store->abandon(raw);
+        throw;
+    }
+    auto [it, inserted] = impl_->captures.emplace(id, Impl::Capture{raw, std::move(session), binding, {}});
     (void)inserted;
     impl_->event("capture.started", "capture", id.value);
     return impl_->info(id, it->second);
@@ -233,7 +280,10 @@ PreviewReference Runtime::preview(const Id &id) {
     }
     if (impl_->previews.size() >= 8) fail(Status::busy, "Preview lease capacity reached; release references or wait 60 seconds");
     data::Published packet;
-    if (auto live = impl_->captures.find(id); live != impl_->captures.end()) packet = live->second.session->preview();
+    if (auto live = impl_->captures.find(id); live != impl_->captures.end()) {
+        packet = live->second.session->preview();
+        if(packet) packet=live->second.binding->stamp(std::move(packet));
+    }
     else if (auto replay = impl_->replays.find(id); replay != impl_->replays.end()) {
         auto latest = replay->second->preview.try_pop(); if (latest) packet = *latest;
     } else fail(Status::not_found, "Capture/replay source not found");
@@ -316,7 +366,7 @@ Id Runtime::run_pipeline(const Id &capture, const std::string &recipe, const Id 
         auto it = impl_->captures.find(capture);
         if (it == impl_->captures.end())
             fail(Status::not_found, "Capture not found");
-        input = it->second.session->first();
+        input = it->second.binding->stamp(it->second.session->first());
         raw = it->second.raw;
     }
     auto config = pipeline::load_recipe(impl_->recipes / (recipe + ".json"),

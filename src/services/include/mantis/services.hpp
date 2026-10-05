@@ -3,6 +3,7 @@
 #include <mantis/artifact_api.hpp>
 #include <mantis/device_api.hpp>
 #include <mantis/jobs.hpp>
+namespace mantis::artifact { class Store; }
 namespace mantis::services {
 struct CaptureInfo {
     Id id;
@@ -91,6 +92,8 @@ class Runtime final : public DeviceService,
   public:
     explicit Runtime(Configuration);
     ~Runtime();
+    // Internal persistence seam; intentionally absent from service/protocol/client APIs.
+    std::shared_ptr<artifact::Store> project_store() const;
     std::vector<device::Descriptor> devices() const override;
     CaptureInfo start_capture(const std::vector<Id> &) override;
     CaptureInfo stop_capture(const Id &) override;
