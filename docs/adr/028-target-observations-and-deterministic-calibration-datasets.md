@@ -1,7 +1,8 @@
 # ADR-028: Target observations and deterministic calibration datasets
 
 Status: Accepted; observations, RawCapture ingestion, in-memory dataset model and
-deterministic per-camera selection implemented through v0.3 M3; solving deferred to M4
+deterministic per-camera selection implemented through v0.3 M3; M4 solve/split/stereo
+policy implemented under [ADR-029](029-calibration-solve-validation-and-stereo-policy.md)
 
 ## Context
 
@@ -86,7 +87,9 @@ M3 selection supplies diverse per-camera mono observations, not final stereo
 training samples. Checkerboard grid IDs are not promoted to absolute physical IDs;
 joining them still does not prove stereo correspondence. M4 owns mono training/
 held-out sets, shared-FrameSet stereo candidates, ChArUco physical-ID joins,
-explicit Checkerboard orientation policy and intrinsic/stereo solves.
+explicit Checkerboard mono-only policy and intrinsic/stereo solves. The exact
+selected-population split, final mono refit, fixed-intrinsic stereo candidate union
+and three-stage evidence are frozen by [ADR-029](029-calibration-solve-validation-and-stereo-policy.md).
 
 ## Consequences
 

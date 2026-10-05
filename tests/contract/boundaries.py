@@ -12,8 +12,14 @@ for module in foundation:
         assert "QColor" not in text
         assert not re.search(r'#include\s*[<"]linux/', text), path
         if module == "calibration":
-            assert not re.search(r'#include\s*[<"](?:filesystem|nlohmann|google/protobuf|mantis/(?:artifact|data|memory|calibration_opencv|calibration_dataset_builder))', text), path
+            assert not re.search(r'#include\s*[<"](?:filesystem|nlohmann|google/protobuf|mantis/(?:artifact|data|memory|calibration_opencv|calibration_dataset_builder|calibration_solver_opencv))', text), path
             assert "BufferView" not in text, path
+
+for path in (root / "src" / "calibration-solver-opencv").rglob("*"):
+    if path.suffix not in (".cpp", ".hpp"):
+        continue
+    assert not re.search(r'#include\s*[<"](?:opencv2/(?:aruco|objdetect)|mantis/(?:artifact|data|memory|calibration_opencv|calibration_dataset_builder))', path.read_text()), path
+
 for folder in ["apps/studio", "apps/cli", "src/client"]:
     for path in (root / folder).rglob("*"):
         if path.suffix not in (".cpp", ".hpp"): continue
