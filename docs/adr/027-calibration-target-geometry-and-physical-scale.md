@@ -19,6 +19,27 @@ dictionary and finite positive marker size strictly smaller than the square.
 Preferred dictionary/reference board dimensions remain unfrozen; supported
 OpenCV dictionaries and corner IDs are verified by the M2 adapter.
 
+ChArUco physical identity also includes `CharucoPatternLayout`, stored as
+`CharucoDefinition::pattern_layout`. Dimensions, dictionary and marker size alone
+do not distinguish historically manufactured boards with different checkerboard/
+marker parity:
+
+- `black_square_at_origin` (default): the active-grid square at the Mantis
+  target-local origin is black, matching the current OpenCV >=4.6 pattern.
+- `white_square_at_origin_even_rows`: that square is white, with the historical
+  pre-4.6-compatible marker/checkerboard parity; `squares_y` must be even.
+
+Unknown layout values and white-origin targets with odd rows are structurally
+invalid. Layout does not change target-local coordinates, physical scale, square
+pitch or marker dimensions. Existing two-field aggregate definitions retain the
+black-origin default. This default preserves implemented behavior; the preferred
+layout for future Mantis-owned reference boards remains a separate decision.
+
+Physical target validity is independent of detector-backend capability. A valid
+white-origin even-row target may be unsupported by the linked OpenCV; the adapter
+must report incompatibility rather than substitute another layout. See the
+[detector support contract](../architecture/calibration-detection.md).
+
 Measured active width/height are optional and must be a pair. They measure outer
 active-grid edge to opposite outer active-grid edge, not paper, margin, substrate
 or mounting plate. Each must be finite and positive. Optional uncertainty values

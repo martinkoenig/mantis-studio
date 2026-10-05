@@ -228,7 +228,8 @@ cv::Mat charuco_image(const cv::Ptr<cv::aruco::CharucoBoard> &board) {
     return image;
 }
 void charuco_native_contract(const TargetObservation &observation, const cv::Mat &image,
-                             const cv::Ptr<cv::aruco::CharucoBoard> &board, DictionaryName name) {
+                             const cv::Ptr<cv::aruco::CharucoBoard> &board, DictionaryName name,
+                             const CalibrationTarget &value = target(true)) {
     std::vector<int> ids, marker_ids;
     std::vector<cv::Point2f> corners;
     std::vector<std::vector<cv::Point2f>> markers;
@@ -255,7 +256,7 @@ void charuco_native_contract(const TargetObservation &observation, const cv::Mat
         CHECK(std::abs(observation.image_points_px[i].x_px - corners[index].x) < 1e-5);
         CHECK(std::abs(observation.image_points_px[i].y_px - corners[index].y) < 1e-5);
         CHECK(points[id].x == float(id % 7 + 1) * 40 && points[id].y == float(id / 7 + 1) * 40 && points[id].z == 0);
-        const auto physical = scale_target_point(target(true), {double(points[id].x), double(points[id].y), double(points[id].z)});
+        const auto physical = scale_target_point(value, {double(points[id].x), double(points[id].y), double(points[id].z)});
         CHECK(physical && physical->x_mm == observation.object_points_mm[i].x_mm && physical->y_mm == observation.object_points_mm[i].y_mm);
     }
 }
@@ -274,7 +275,7 @@ void charuco_contract() {
     same_detection(full, detection(value, image));
     measured_scale(value, image, full);
     const auto mapping = physical_corner_ids(full, cv::Mat::eye(3, 3, CV_64F));
-    CHECK(mapping == all); // Pixels verify that the native origin/axes match Mantis.
+    CHECK(mapping == all); // Verify these chessboard indices at their declared planar pixel locations.
     for (int rotation : {cv::ROTATE_180, cv::ROTATE_90_CLOCKWISE, cv::ROTATE_90_COUNTERCLOCKWISE}) {
         cv::Mat rotated; cv::rotate(image, rotated, rotation);
         auto rotated_detection = detection(value, rotated);
@@ -330,6 +331,70 @@ void charuco_contract() {
     fractional.measurement.active_height_mm = 6 * 40.6;
     geometry(detection(fractional, fractional_image), 41.3, 40.6); // No float geometry round trip.
     std::cout << "ChArUco contract: 35 full corners, 20/20 partial corners, common IDs 3 10 17 24 31; native board indexing and physical scaling verified\n";
+}
+template<class Board>
+void charuco_layout_contract(const cv::Ptr<Board> &board) {
+    const auto black = target(true);
+    auto white = black;
+    std::get<CharucoDefinition>(white.pattern).pattern_layout = CharucoPatternLayout::white_square_at_origin_even_rows;
+    const auto &a = std::get<CharucoDefinition>(black.pattern), &b = std::get<CharucoDefinition>(white.pattern);
+    CHECK(a.dictionary == b.dictionary && a.nominal_marker_size_mm == b.nominal_marker_size_mm);
+    CHECK(a.pattern_layout != b.pattern_layout && validate_target(black) && validate_target(white));
+    const cv::Mat modern_image = charuco_image(board);
+    CHECK(modern_image.at<uint8_t>(border_px + 2, border_px + 2) == 0);
+    if constexpr (requires { board->setLegacyPattern(true); }) {
+        board->setLegacyPattern(true);
+        const cv::Mat image = charuco_image(board);
+        CHECK(image.at<uint8_t>(border_px + 2, border_px + 2) == 255);
+        CHECK(cv::norm(image, modern_image, cv::NORM_INF) > 0);
+        const auto full = detection(white, image);
+        std::vector<uint32_t> all(35); std::iota(all.begin(), all.end(), 0u);
+        CHECK(full.point_ids == all && !full.evidence.partial && full.evidence.detected_markers == 24);
+        geometry(full);
+        charuco_native_contract(full, image, board, cv::aruco::DICT_6X6_250, white);
+        CHECK(physical_corner_ids(full, cv::Mat::eye(3, 3, CV_64F)) == all);
+        same_detection(full, detection(white, image));
+        measured_scale(white, image, full);
+        auto measured = white;
+        measured.measurement.active_width_mm = 8 * 41.3;
+        measured.measurement.active_height_mm = 6 * 40.6;
+        charuco_native_contract(detection(measured, image), image, board, cv::aruco::DICT_6X6_250, measured);
+        const int offset = border_px + 3 * pitch_px;
+        const auto crop = image(cv::Rect(offset, 0, image.cols - offset, image.rows));
+        const auto partial = detection(white, crop);
+        std::vector<uint32_t> expected;
+        for (uint32_t row = 0; row < 5; ++row)
+            for (uint32_t col = 3; col < 7; ++col) expected.push_back(row * 7 + col);
+        CHECK(partial.evidence.partial && partial.point_ids == expected);
+        charuco_native_contract(partial, crop, board, cv::aruco::DICT_6X6_250, white);
+        same_detection(partial, detection(white, crop));
+        measured_scale(white, crop, partial);
+        // Both images have 24 detectable markers with the same dictionary. A
+        // wrong parity model must not yield authoritative corner correspondences.
+        const auto wrong_black = detect_target(black, view(image), source);
+        const auto wrong_white = detect_target(white, view(modern_image), source);
+        CHECK(wrong_black && !wrong_black->has_value());
+        CHECK(wrong_white && !wrong_white->has_value());
+        const auto wrong_partial = detect_target(black, view(crop), source);
+        CHECK(wrong_partial && !wrong_partial->has_value());
+        std::cout << "ChArUco white-origin even-row layout: full/partial IDs, planar mapping, scale and opposite-layout rejection verified\n";
+    } else {
+        const cv::Mat blank(modern_image.size(), CV_8UC1, cv::Scalar(255));
+        for (const auto &image : {modern_image, blank}) {
+            const auto result = detect_target(white, view(image), source);
+            CHECK(!result && result.error().code == Status::incompatible && result.error().component == "calibration");
+            CHECK(result.error().message == "ChArUco white_square_at_origin_even_rows requires OpenCV legacy-pattern support; linked OpenCV "
+                  CV_VERSION " cannot represent this physical board layout");
+            const auto again = detect_target(white, view(image), source);
+            CHECK(!again && again.error().message == result.error().message);
+        }
+        std::cout << "ChArUco white-origin even-row layout: valid target, deterministic incompatible backend error verified\n";
+    }
+    auto invalid = white; invalid.grid.squares_y = 5;
+    error(invalid, view(modern_image));
+    invalid = black;
+    std::get<CharucoDefinition>(invalid.pattern).pattern_layout = static_cast<CharucoPatternLayout>(99);
+    error(invalid, view(modern_image));
 }
 void dictionary_contract() {
     const std::pair<std::string_view, DictionaryName> expected[] = {
@@ -421,7 +486,8 @@ int main() {
         std::cout << "OpenCV " << CV_VERSION << ": 4.6-generation SB/ArUco/ChArUco contracts\n";
         // Keep synthetic tests economical on CI; the adapter does not change global OpenCV settings.
         cv::setNumThreads(1);
-        checkerboard_contract(); charuco_contract(); dictionary_contract(); invalid_inputs_and_no_target();
+        checkerboard_contract(); charuco_contract(); charuco_layout_contract(native_board(cv::aruco::DICT_6X6_250));
+        dictionary_contract(); invalid_inputs_and_no_target();
         std::cout << "Calibration OpenCV: synthetic detection, identity, partial visibility, scale, dictionaries and input validation passed\n";
         return 0;
     } catch (const std::exception &failure) { std::cerr << failure.what() << '\n'; return 1; }

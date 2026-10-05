@@ -99,7 +99,48 @@ There is no fallback or preferred production dictionary. Dictionary marker
 capacity and float representability of nominal board geometry are adapter
 constraints; M1 retains its double-precision physical model.
 
-The nominal board uses M1 square counts, square/marker size and dictionary.
+### Physical pattern layout and backend support
+
+`CharucoDefinition::pattern_layout` is physical target geometry:
+`black_square_at_origin` means a black square at the active-grid origin and is the
+source-compatible default. `white_square_at_origin_even_rows` means a white square
+there, with the historical pre-4.6-compatible checkerboard/marker parity, and is
+valid only with even `squares_y`. Unknown enum values are invalid. Both layouts
+retain Mantis's active-grid origin, increasing-column +X, increasing-row +Y and
+planar Z=0 corner coordinates. Layout is required to distinguish boards that
+otherwise share dimensions, dictionary and square/marker sizes.
+
+The incompatible even-row pattern-generation change occurred in OpenCV 4.6.0;
+see the [upstream compatibility issue](https://github.com/opencv/opencv/issues/23152).
+The public [4.7.0 header](https://raw.githubusercontent.com/opencv/opencv/4.7.0/modules/objdetect/include/opencv2/objdetect/aruco_board.hpp)
+lacks `setLegacyPattern()`, while the
+[4.8.0 header](https://raw.githubusercontent.com/opencv/opencv/4.8.0/modules/objdetect/include/opencv2/objdetect/aruco_board.hpp)
+first exposes it. Its documented even-row white-origin semantics match the
+physical layout above. The adapter uses compile-time API detection rather than
+assuming support from a version number, accommodating backports.
+
+| Backend | Black-origin layout | White-origin even-row layout |
+| --- | --- | --- |
+| Upstream OpenCV 4.6 / 4.7, without the API | Default board representation | `Status::incompatible` |
+| Upstream OpenCV 4.8+, with the API | Explicit `setLegacyPattern(false)` | Explicit `setLegacyPattern(true)` |
+
+The layout is configured before detection/interpolation and before reading native
+corner indexing. An unsupported backend reports the requested physical layout and
+linked OpenCV version, even on a blank image. Target validity is unchanged. There
+is no silent fallback, heuristic ID flipping or replacement interpolation.
+Local executable contracts exercise the unsupported path on **4.6.0** and the
+supported path on **4.10.0**, including full/partial legacy-compatible detection,
+ID preservation, physical scaling and opposite-layout rejection despite detectable
+markers. The Ubuntu CI baseline uses its packaged **4.6.0** backend. The adapter
+continues using `detectMarkers()` / `interpolateCornersCharuco()`; it does not call
+`CharucoDetector` directly. A newer OpenCV may implement those free functions using
+its internal detector and board-consistency checks.
+
+Preferred dictionary, board dimensions and the preferred physical layout for
+future Mantis-owned boards remain separate product/reference-board decisions.
+
+The nominal board uses M1 square counts, square/marker size, dictionary and physical
+pattern layout.
 `detectMarkers()` uses `CORNER_REFINE_NONE`; `interpolateCornersCharuco()` uses
 explicit `minMarkers = 2`, empty camera matrix and empty distortion coefficients.
 This is the local homography path. Marker corners are not separately refined;
@@ -113,11 +154,14 @@ valid; `partial` means fewer than that total. Marker count records markers detec
 in the image using the configured dictionary.
 
 Executable contracts check each ID against the native board chessboard-point
-index, its known synthetic image location and Mantis coordinates. OpenCV >=4.6
-uses increasing columns/rows from the active-grid outer corner: the transform to
-Mantis is identity, with board Z=0. Pre-4.6 legacy patterns are not this contract.
-The adapter verifies the native indexing, reconstructs nominal points in double
-and calls M1 scaling. OpenCV float board points are not authoritative physical
+index, its known synthetic image location and corresponding planar X/Y positions.
+The verified mapping is `id = row * (squares_x - 1) + column`, with native
+chessboard-corner positions `((column + 1) * square, (row + 1) * square, 0)` for
+the tested layouts/backends. This is a corner-index contract, not a universal
+claim about every OpenCV board coordinate-frame convention. Mantis owns the
+physical target-local convention. The adapter verifies that mapping, reconstructs
+nominal Mantis points in double and calls M1 scaling. OpenCV float board points
+are not authoritative physical
 output. Measured scale metadata changes object points without changing pixel
 detection or IDs; X/Y pitch 41.3/40.6 mm is tested independently.
 

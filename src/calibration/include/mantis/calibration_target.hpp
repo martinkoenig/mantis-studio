@@ -15,9 +15,16 @@ struct TargetGrid {
     double nominal_square_size_mm{};
 };
 struct CheckerboardDefinition {};
+enum class CharucoPatternLayout {
+    black_square_at_origin,
+    white_square_at_origin_even_rows
+};
 struct CharucoDefinition {
     std::string dictionary; // Explicit, nonempty; supported dictionaries are validated by M2.
     double nominal_marker_size_mm{};
+    // Color of the active-grid square at the target-local origin; parity also
+    // determines marker placement. White-origin is defined only for even rows.
+    CharucoPatternLayout pattern_layout{CharucoPatternLayout::black_square_at_origin};
 };
 using TargetPattern = std::variant<CheckerboardDefinition, CharucoDefinition>;
 enum class TargetType { checkerboard, charuco };
@@ -82,6 +89,14 @@ inline Result<TargetGeometry> derive_target_geometry(const CalibrationTarget &ta
     if (target.pattern.valueless_by_exception())
         return detail::target_error("Target pattern is unavailable");
     if (charuco) {
+        switch (charuco->pattern_layout) {
+        case CharucoPatternLayout::black_square_at_origin: break;
+        case CharucoPatternLayout::white_square_at_origin_even_rows:
+            if (grid.squares_y % 2 != 0)
+                return detail::target_error("ChArUco white-origin even-row layout requires even squares_y");
+            break;
+        default: return detail::target_error("Unknown ChArUco physical pattern layout");
+        }
         if (charuco->dictionary.empty()) return detail::target_error("ChArUco dictionary must not be empty");
         if (!detail::positive_finite(charuco->nominal_marker_size_mm) ||
             charuco->nominal_marker_size_mm >= grid.nominal_square_size_mm)

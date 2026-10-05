@@ -41,6 +41,20 @@ Result<cv::Ptr<cv::aruco::Dictionary>> dictionary_for(std::string_view name) {
 std::unexpected<Error> detector_error(std::string message) {
     return std::unexpected(Error{Status::corrupt, std::move(message), "calibration"});
 }
+template<class Board>
+Result<void> configure_pattern_layout(Board &board, CharucoPatternLayout layout) {
+    const bool white_origin = layout == CharucoPatternLayout::white_square_at_origin_even_rows;
+    // Detect the actual API, including vendor backports. Upstream first exposes
+    // setLegacyPattern in 4.8.0; the Tier-1 4.6 headers do not provide it.
+    if constexpr (requires { board.setLegacyPattern(true); }) {
+        board.setLegacyPattern(white_origin);
+    } else if (white_origin) {
+        return std::unexpected(Error{Status::incompatible,
+            "ChArUco white_square_at_origin_even_rows requires OpenCV legacy-pattern support; linked OpenCV "
+            CV_VERSION " cannot represent this physical board layout", "calibration"});
+    }
+    return {};
+}
 TargetObservation observation_for(const CalibrationTarget &target, GrayImageView image, const ObservationSource &source) {
     TargetObservation observation;
     observation.source = source;
@@ -104,13 +118,18 @@ Result<std::optional<TargetObservation>> charuco(
 #if CV_VERSION_MAJOR == 4 && CV_VERSION_MINOR < 7
     auto board = cv::aruco::CharucoBoard::create(static_cast<int>(grid.squares_x), static_cast<int>(grid.squares_y),
                                                square, marker, *dictionary);
-    const auto &board_points = board->chessboardCorners;
     auto parameters = cv::aruco::DetectorParameters::create();
 #else
     auto board = cv::makePtr<cv::aruco::CharucoBoard>(
         cv::Size(static_cast<int>(grid.squares_x), static_cast<int>(grid.squares_y)), square, marker, **dictionary);
-    const auto board_points = board->getChessboardCorners();
     auto parameters = cv::makePtr<cv::aruco::DetectorParameters>();
+#endif
+    auto configured = configure_pattern_layout(*board, definition.pattern_layout);
+    if (!configured) return std::unexpected(configured.error());
+#if CV_VERSION_MAJOR == 4 && CV_VERSION_MINOR < 7
+    const auto &board_points = board->chessboardCorners;
+#else
+    const auto board_points = board->getChessboardCorners();
 #endif
     if (board_points.size() != corner_count) return detector_error("OpenCV ChArUco board corner count differs from target grid");
     parameters->cornerRefinementMethod = cv::aruco::CORNER_REFINE_NONE;
@@ -137,8 +156,9 @@ Result<std::optional<TargetObservation>> charuco(
             return detector_error("OpenCV ChArUco returned duplicate corner IDs");
         const auto &native = board_points[id];
         const auto columns = grid.squares_x - 1;
-        // OpenCV >=4.6 uses the same origin and increasing X/Y as Mantis: identity
-        // transform. Fail explicitly if a backend changes this indexing contract.
+        // Verify only the chessboard-corner ID/index and planar X/Y contract.
+        // append_point converts this index into Mantis-owned double coordinates;
+        // this asserts no general equivalence of OpenCV coordinate frames.
         if (native.x != float(id % columns + 1) * square || native.y != float(id / columns + 1) * square || native.z != 0)
             return detector_error("OpenCV ChArUco corner indexing differs from the target-local grid contract");
         auto appended = append_point(observation, target, id, corners[i]);

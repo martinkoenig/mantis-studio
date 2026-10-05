@@ -82,6 +82,38 @@ void geometry_examples() {
         CHECK(validate_target(value));
     }
 }
+void charuco_pattern_layout() {
+    const CharucoDefinition aggregate{"dictionary-validated-by-M2", 25};
+    CHECK(aggregate.pattern_layout == CharucoPatternLayout::black_square_at_origin);
+    for (bool measured : {false, true}) {
+        auto black = target(true);
+        std::get<CharucoDefinition>(black.pattern).pattern_layout = CharucoPatternLayout::black_square_at_origin;
+        if (measured) {
+            black.measurement.active_width_mm = 8 * 41.3;
+            black.measurement.active_height_mm = 6 * 40.6;
+        }
+        auto white = black;
+        std::get<CharucoDefinition>(white.pattern).pattern_layout = CharucoPatternLayout::white_square_at_origin_even_rows;
+        CHECK(validate_target(black) && validate_target(white));
+        const auto a = derive_target_geometry(black), b = derive_target_geometry(white);
+        CHECK(a && b && a->source == b->source);
+        CHECK(a->nominal_active_width_mm == b->nominal_active_width_mm && a->nominal_active_height_mm == b->nominal_active_height_mm);
+        CHECK(a->scale_x == b->scale_x && a->scale_y == b->scale_y);
+        CHECK(a->effective_square_pitch_x_mm == b->effective_square_pitch_x_mm && a->effective_square_pitch_y_mm == b->effective_square_pitch_y_mm);
+        CHECK(a->effective_marker->width_mm == b->effective_marker->width_mm && a->effective_marker->height_mm == b->effective_marker->height_mm);
+        const auto p = scale_target_point(black, {80, 120, 0}), q = scale_target_point(white, {80, 120, 0});
+        CHECK(p && q && p->x_mm == q->x_mm && p->y_mm == q->y_mm && p->z_mm == q->z_mm);
+        white.grid.squares_y = 5;
+        rejects(white);
+        CHECK(derive_target_geometry(white).error().message == "ChArUco white-origin even-row layout requires even squares_y");
+        black.grid.squares_y = 5;
+        CHECK(validate_target(black)); // Black-origin has no even-row restriction.
+    }
+    auto unknown = target(true);
+    std::get<CharucoDefinition>(unknown.pattern).pattern_layout = static_cast<CharucoPatternLayout>(99);
+    rejects(unknown);
+    CHECK(derive_target_geometry(unknown).error().message == "Unknown ChArUco physical pattern layout");
+}
 void measurement_provenance() {
     for (bool charuco : {false, true}) {
         auto value = target(charuco);
@@ -208,7 +240,7 @@ void arithmetic_limits() {
 }
 int main() {
     try {
-        geometry_examples(); measurement_provenance(); invalid_structure(); arithmetic_limits();
+        geometry_examples(); charuco_pattern_layout(); measurement_provenance(); invalid_structure(); arithmetic_limits();
         std::cout << "Calibration targets: nominal/measured scale, anisotropy, marker dimensions, points and structural validation passed\n";
         return 0;
     } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
