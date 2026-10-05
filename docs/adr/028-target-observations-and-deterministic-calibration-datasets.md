@@ -1,6 +1,7 @@
 # ADR-028: Target observations and deterministic calibration datasets
 
-Status: Accepted architectural preparation for v0.3 M2/M3; not implemented in M1
+Status: Accepted; observations and detector contracts implemented in v0.3 M2;
+datasets and selection deferred to M3
 
 ## Context
 
@@ -10,19 +11,34 @@ explicit point correspondence and reproducible, geometrically diverse selection.
 
 ## Decision
 
-A future common TargetObservation associates source FrameSet sequence, camera
+A common TargetObservation associates source FrameSet sequence, camera
 role/identity, stable target point IDs, 2D image points in pixels, corresponding
 3D/object target points in millimeters and detection-quality metadata. Source
 RawCapture identity must disambiguate FrameSet sequences across recordings.
 Object points use the target's effective physical geometry from [ADR-027](027-calibration-target-geometry-and-physical-scale.md).
 
-M2 defines deterministic stable Checkerboard IDs and retains detector-provided
-stable ChArUco corner IDs. It verifies those IDs and canonical coordinates against
-the OpenCV 4.6 contract; M1 does not invent their ordering. Partial ChArUco
-visibility is valid. LEFT and RIGHT can see different ID sets. Stereo uses the
+M2 defines deterministic **detector-grid** Checkerboard IDs and retains
+detector-provided **physical-board** ChArUco corner IDs. Executable synthetic
+contracts verify their indexing and coordinates against OpenCV 4.6. An unmarked
+symmetric Checkerboard does not encode an absolute physical origin: rotating an
+even-by-even board by 180 degrees produces identical pixels but exchanges physical
+corners. Its grid IDs therefore cannot guarantee physical identity across arbitrary
+board orientations. No origin marker is assumed or enabled. Plain Checkerboard
+correspondence across views requires independently established consistent physical
+orientation; joining its grid IDs alone cannot establish that orientation.
+
+Partial ChArUco visibility is valid. LEFT and RIGHT can see different ID sets. Stereo uses the
 intersection of visible IDs for that FrameSet, joined by ID rather than vector
 position. Mono intrinsic calibration may use all accepted points visible to that
 camera, including points absent from the opposite camera.
+
+M2's pure `intersect_observations()` validates both observations, checks target
+identity/revision/type and shared object geometry, and joins by ID in increasing
+order while preserving both image points. It does not pair frames, certify a
+Checkerboard origin or solve stereo geometry. Successful observations have equal,
+nonempty correspondence arrays, unique IDs, finite points, nonzero image dimensions
+and a matching detected-point count. No-target detection is a successful absence,
+not an empty observation or a runtime failure.
 
 A CalibrationDataset may reference multiple RawCapture artifacts. The same
 RawCapture inputs + target + analysis configuration must produce the same
@@ -34,10 +50,13 @@ are not frozen; they must be based on real data.
 
 ## Consequences
 
-The observation/dataset system, detector adapters and selector are later M2/M3
-work. This ADR freezes semantics without adding implementations, artifact codecs,
-project migrations, services or jobs to M1. Training/held-out/final-fit evidence
-and independent-dataset repeatability will be reported separately; reprojection
+M2 implements the pure observation model and a separate compiled OpenCV detector
+adapter; the pure calibration foundation remains independent of OpenCV. Dataset
+selection, codecs, project migrations, services and jobs remain later work.
+The [M2 implementation contract](../architecture/calibration-detection.md) records
+dictionary support, homography interpolation, physical scale and orientation tests.
+Training/held-out/final-fit evidence and independent-dataset repeatability will be
+reported separately; reprojection
 error is not scanner accuracy. See the [v0.3 baseline](../architecture/v0.3-geometric-calibration.md).
 
 ## Alternatives considered
