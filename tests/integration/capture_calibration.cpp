@@ -51,7 +51,8 @@ void wait_frames(services::Runtime &runtime, const Id &id, uint64_t count) {
     for (unsigned i = 0; i < 1000; ++i) {
         for (auto &capture : runtime.captures())
             if (capture.id == id) {
-                CHECK(capture.error.empty());
+                if (!capture.error.empty())
+                    throw std::runtime_error("Capture " + id.value + ": " + capture.error);
                 if (capture.committed >= count)
                     return;
             }
@@ -62,7 +63,8 @@ void wait_frames(services::Runtime &runtime, const Id &id, uint64_t count) {
 artifact::ArtifactDescriptor finish(services::Runtime &runtime, services::CaptureInfo capture) {
     wait_frames(runtime, capture.id, 3);
     auto stopped = runtime.stop_capture(capture.id);
-    CHECK(stopped.error.empty());
+    if (!stopped.error.empty())
+        throw std::runtime_error("Capture shutdown: " + stopped.error);
     wait_job(runtime, stopped.finalization_job);
     return runtime.project_store()->get(stopped.raw_artifact);
 }
@@ -152,12 +154,13 @@ int main(int argc, char **argv) {
             std::ifstream input(argv[2]);
             input >> profile;
         }
-        profile["mode"] = {{"width", 1280}, {"height", 960}, {"fourcc", "GREY"}, {"fps", 30}};
+        profile["mode"] = {{"width", 1280}, {"height", 960}, {"fourcc", "GREY"}, {"fps", 5}};
         profile["calibration_id"] = "device.original";
         profile["calibration_revision"] = 7;
         profile["hardware_sync_configured"] = false;
-        // Isolate binding correctness from high-throughput acquisition benchmarks.
-        profile["max_v4l2_delta_ns"] = 20000000;
+        // Keep full-size geometry while limiting fixture throughput under sanitizers.
+        // Software pairing requires tolerance above half the requested frame period.
+        profile["max_v4l2_delta_ns"] = 110000000;
         profile["stall_timeout_ms"] = 1000;
         auto profile_path = tmp.path / "profile.json";
         std::ofstream(profile_path) << profile;
