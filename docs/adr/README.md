@@ -1,10 +1,12 @@
 # Architecture Decision Records
 
+- [ADR-029: Calibration solve, validation and stereo policy](029-calibration-solve-validation-and-stereo-policy.md)
+
 - [ADR-028: Target observations and deterministic calibration datasets](028-target-observations-and-deterministic-calibration-datasets.md)
 - [ADR-027: Calibration target geometry and physical scale](027-calibration-target-geometry-and-physical-scale.md)
 
-ADRs 027–028 define additive v0.3 geometry and future observation/dataset semantics;
-M0/M1 implements only the pure target/physical geometry foundation. See the
+ADRs 027–029 define additive v0.3 target geometry, observations/datasets and
+calibration solve/validation policy. See the
 [v0.3 architectural baseline](../architecture/v0.3-geometric-calibration.md).
 
 - [ADR-026: Bounded software observation pairing](026-bounded-software-observation-pairing.md)
