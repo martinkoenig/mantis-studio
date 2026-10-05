@@ -2,7 +2,8 @@
 
 M2 implements detection and correspondences. It produces no camera calibration,
 pose, dataset selection, artifact, project migration or calibration workflow.
-RawCapture/Y10P ingestion remains M3 work; live acquisition is unchanged.
+RawCapture/Y10P ingestion is implemented in the separate [M3 dataset layer](calibration-dataset.md);
+live acquisition is unchanged.
 
 ## Dependency and API boundary
 
@@ -179,5 +180,6 @@ Pixel-contract comparisons use tolerances; ID sets/order are exact. Repetition o
 one backend checks exact floating output. Tests print the actual OpenCV version
 and orientation results and run on x86_64, ARM64 and under ASan/UBSan.
 
-Dataset construction, RawCapture ingestion, sample diversity and solver decisions
-are deferred. Detection evidence is not a calibrated camera solution.
+M3 implements dataset construction, RawCapture ingestion and per-camera sample
+diversity. Solver decisions remain deferred. Detection evidence is not a calibrated
+camera solution.
