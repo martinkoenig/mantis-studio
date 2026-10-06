@@ -289,4 +289,8 @@ add_executable(mantis-benchmark benchmarks/queue.cpp)
 target_link_libraries(mantis-benchmark PRIVATE mantis-pipeline-api)
 add_executable(mantis-acquisition-benchmark benchmarks/acquisition.cpp)
 target_link_libraries(mantis-acquisition-benchmark PRIVATE mantis-artifact-store mantis-pipeline-api nlohmann_json::nlohmann_json)
+# M8 internal offline/control-plane validation; never a production client dependency.
+add_executable(mantis-x1-calibration-validation tools/x1_calibration_validation.cpp)
+target_include_directories(mantis-x1-calibration-validation SYSTEM PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(mantis-x1-calibration-validation PRIVATE mantis-calibration-artifacts mantis-calibration-solver-opencv mantis-calibration-opencv opencv_core opencv_calib3d opencv_aruco opencv_imgcodecs nlohmann_json::nlohmann_json)
 include(cmake/ArchitectureBoundaries.cmake)
