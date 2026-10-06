@@ -49,3 +49,17 @@ tag 22 retains synchronous v0.1 recovery semantics. SDK/CLI helpers handle these
 waits. Interrupted/failed validation remains recoverable, never silently valid.
 
 See [ADR-023](../adr/023-acquisition-preview-leases-and-storage-jobs.md).
+
+## v0.3 calibration operations (M6)
+
+Presence-capable target fields require Protobuf/protoc 3.15 or newer.
+Protocol v1 adds Request tags 32–40 and Response fields 13–15, preserving all old
+numbers. Calibration target/pattern/measurement requests and compact inspection
+are typed; provenance message presence distinguishes absence from present empty.
+Dataset/camera/rig commands return normal daemon Job IDs in `result_id`, with one
+artifact in `Job.result_artifact`. Current active query uses optional binding
+presence and describes future capture only; historical recorded references remain
+authoritative. No observations, pixel buffers or residual vectors enter responses.
+The 4 MiB frame limit remains; oversized responses produce a structured busy error.
+See [Calibration API](../architecture/calibration-api.md) for all DTOs, numeric
+ordering, tags, input bounds, examples and cancellation/activation semantics.

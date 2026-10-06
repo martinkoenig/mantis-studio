@@ -119,11 +119,13 @@ milestone intent and deferred work. Current implementation state:
 | M4 | Camera/stereo solving with separate training, held-out and final-fit evidence; [ADR-029](../adr/029-calibration-solve-validation-and-stereo-policy.md) |
 | M5 | Immutable artifacts, revisions, persistence/migration, active binding and capture snapshots, including capture-start physical identity and image-geometry compatibility; [ADR-030](../adr/030-calibration-artifacts-revisioning-and-active-binding.md) |
 
-M0–M5 are implemented after the M5 image-geometry correction. Implementation does
-not claim full v0.3 acceptance. M6 service/protocol/CLI/SDK calibration operations,
+| M6 | Implemented: CalibrationService, compact additive protocol v1 controls, C++/Python SDKs and CLI; [ADR-035](../adr/035-calibration-control-api-and-job-orchestration.md) and [API contract](calibration-api.md) |
+| M7 | Pending: Studio calibration workspace |
+| M8 | Pending: real-hardware calibration acceptance |
+
+M0–M6 are implemented. This does not claim full v0.3 hardware acceptance.
 M7 Studio calibration workspace and M8 real-hardware calibration acceptance remain
-pending/deferred according to the baseline. Architecture v1 remains frozen; these
-are additive extensions.
+pending. Architecture v1 remains frozen; these are additive extensions.
 
 
 ## Accepted cross-milestone future architecture

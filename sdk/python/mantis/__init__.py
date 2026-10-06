@@ -122,6 +122,7 @@ class Client:
         self.devices, self.capture = _Devices(self), _Capture(self)
         self.pipeline, self.artifacts = _Pipeline(self), _Artifacts(self)
         self.replay = _Replay(self)
+        self.calibration = Calibration(self)
     @staticmethod
     def _receive(sock, count):
         result = bytearray()
@@ -169,3 +170,6 @@ class Client:
 
 def connect(*, port=None, token=None):
     return Client(port, token)
+
+from .calibration import (Calibration, TargetSpecification, CheckerboardPattern, CharucoPattern,
+                          PhysicalMeasurement, MeasurementProvenance)

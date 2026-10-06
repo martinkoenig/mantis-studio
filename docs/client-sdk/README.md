@@ -91,3 +91,22 @@ reported as `native_counter_equality`; it is not exposure synchronization.
 by host elapsed time since acquisition started. It includes startup buffer drain
 and exclusions, so short-run rates can differ between cameras and from their
 steady cadence. It is separate from driver intervals and exposure timing.
+
+## Calibration (M6)
+
+C++ adds `create_calibration_target`, `build_calibration_dataset`,
+`solve_camera_calibration`, `solve_rig_calibration`, `calibrations`,
+`calibration_info`, `active_calibration`, `activate_calibration` and `clear_calibration`.
+Python exposes these stages through `client.calibration`, including typed target
+and measurement dataclasses. `MeasurementProvenance()` preserves present empty
+provenance; `None` preserves absence. Artifact inputs accept IDs or references.
+
+Dataset/camera/rig operations return Job IDs (C++) or `Job` (Python), without
+implicit waits. Camera solves operate on one role; rigs consume two exact camera
+artifacts with explicit left/right slots. Checkerboard supports mono; rig solving
+requires ChArUco and rejects Checkerboard as incompatible. Active query means
+current configuration for future capture, never the calibration of historical
+RawCapture/replay data. Calibration belongs to the open/free platform.
+
+See the complete [C++/Python/CLI workflow and API](../architecture/calibration-api.md).
+Studio calibration UI remains M7; hardware acceptance remains M8.

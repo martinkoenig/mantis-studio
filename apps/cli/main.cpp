@@ -1,6 +1,7 @@
 #include <google/protobuf/util/json_util.h>
 #include <iostream>
 #include <mantis/client.hpp>
+#include "calibration_commands.hpp"
 namespace {
 void print(const google::protobuf::Message &message) {
     google::protobuf::util::JsonPrintOptions options;
@@ -25,6 +26,15 @@ void usage() {
                  "mantis-cli plugin enable|disable PLUGIN\n"
                  "mantis-cli export ARTIFACT OUTPUT.ply\n"
                  "mantis-cli workflow OUTPUT.ply\n"
+                 "mantis-cli calibration list | info ARTIFACT | active DEVICE | activate DEVICE RIG | clear DEVICE\n"
+                 "mantis-cli calibration target create checkerboard|charuco --squares-x N --squares-y N --square-mm X [options]\n"
+                 "mantis-cli calibration dataset build TARGET RAW [RAW...] --role ROLE [--role ROLE...] --max-samples N [--series ID]\n"
+                 "mantis-cli calibration camera solve DATASET ROLE --heldout N [--series ID]\n"
+                 "mantis-cli calibration rig solve DATASET LEFT RIGHT --heldout N --rig-frame-id ID --rig-frame-name NAME [--series ID]\n"
+                 "Target charuco: --marker-mm X --dictionary NAME --layout black_square_at_origin|white_square_at_origin_even_rows\n"
+                 "Target measurement: --measured-width-mm X --measured-height-mm X; provenance: --measurement-provenance,\n"
+                 "--width-uncertainty-mm X --height-uncertainty-mm X --instrument TEXT --note TEXT; revision: --series ID\n"
+                 "Calibration jobs return result_id without waiting; use mantis-cli job wait JOB.\n"
                  "mantis-cli shutdown\nEnvironment: MANTIS_TOKEN, optional MANTIS_PORT (47321).\n";
 }
 } // namespace
@@ -42,6 +52,12 @@ int main(int argc, char **argv) {
                 throw std::runtime_error("Missing argument; see --help");
             return argv[n];
         };
+        if (command == "calibration") {
+            std::vector<std::string> args;
+            if (argc > 1302) throw std::runtime_error("Calibration argument count exceeds bound");
+            for (int i = 2; i < argc; ++i) args.emplace_back(argv[i]);
+            print(client.call(calibration_command(args))); return 0;
+        }
         if (command == "snapshot") {
             print(client.snapshot());
             return 0;

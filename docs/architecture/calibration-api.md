@@ -300,3 +300,28 @@ provenance presence, bounds, artifact arguments, Job/current-binding/error seman
 and C++ SDKs, runs CLI subprocesses and checks local strict parser failures.
 Fixtures are generated, with small RawCapture images and M4 synthetic datasets;
 no binary capture is committed. Prior M1–M5/capture suites remain release gates.
+
+### Local validation, 2026-10-06
+
+All 35 tests passed in each configuration, including every prior v0.3, acquisition,
+raw-capture, ABI/boundary, Python, acceptance and Q6A validation-harness suite:
+
+| Build | Studio | Tests | Wall time |
+| --- | --- | --- | --- |
+| Debug | ON | 35/35 | 102.35 s |
+| Debug | OFF | 35/35 | 91.42 s |
+| Release | ON | 35/35 | 67.76 s |
+| Release | OFF | 35/35 | 47.94 s |
+| ASan + UBSan, Debug | OFF | 35/35 | 145.96 s |
+
+Local environment: Ubuntu 25.10 x86_64, GCC 15.2, Protobuf 3.21.12, OpenCV 4.10.0
+and Qt 6.9.2. Missing OpenCV development dependencies were extracted into the
+worktree's ignored `build/deps` directory, without changing other worktrees.
+ASan used `detect_leaks=1`, UBSan used `halt_on_error=1`. The local sanitizer run
+also used `OPENCV_OPENCL_RUNTIME=disabled` because this machine's installed CUDA
+OpenCL loader leaked during its initialization; no leak suppression or disabled
+leak detection was used. Calibration/detection execute on their ordinary CPU path.
+
+The final branch HEAD must also pass the existing five Ubuntu 24.04 CI jobs
+(x86_64 and ARM64 with Studio OFF/ON, plus sanitizers) before M6 completion is
+reported. Synthetic/software tests do not establish real Q6A calibration acceptance.
