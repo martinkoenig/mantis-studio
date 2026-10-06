@@ -23,6 +23,115 @@ message PluginEnable { string id = 1; bool enabled = 2; }
 message EventsSince { uint64 after = 1; }
 message Replay { string artifact_id = 1; bool real_time = 2; bool verify = 3; }
 message DataReference { string artifact_id = 1; string transport = 2; string locator = 3; uint32 format_version = 4; string lease_id = 5; uint32 lease_seconds = 6; }
+// M6: typed, compact control DTOs; artifact documents/evidence stay on the data plane.
+message CalibrationReference { string id = 1; uint32 schema_version = 2; uint64 revision = 3; }
+message CalibrationArtifactReference { string id = 1; string hash_algorithm = 2; string hash = 3; }
+message CalibrationEntry { Artifact artifact = 1; CalibrationReference reference = 2; }
+message MeasurementProvenance {
+ optional double width_uncertainty_mm = 1; optional double height_uncertainty_mm = 2;
+ optional string instrument = 3; optional string note = 4;
+}
+message PhysicalMeasurement {
+ optional double active_width_mm = 1; optional double active_height_mm = 2;
+ // Message presence distinguishes absent provenance from a present empty object.
+ MeasurementProvenance provenance = 3;
+}
+message CheckerboardPattern {}
+message CharucoPattern {
+ string dictionary = 1; double nominal_marker_size_mm = 2;
+ // Exact physical layout: black_square_at_origin or white_square_at_origin_even_rows.
+ string pattern_layout = 3;
+}
+message CalibrationTargetSpecification {
+ uint32 squares_x = 1; uint32 squares_y = 2; double nominal_square_size_mm = 3;
+ oneof pattern { CheckerboardPattern checkerboard = 4; CharucoPattern charuco = 5; }
+ PhysicalMeasurement measurement = 6;
+}
+message CalibrationTargetCreate { CalibrationTargetSpecification target = 1; string series_id = 2; }
+message CalibrationDatasetBuild {
+ string target_artifact_id = 1; repeated string raw_capture_artifact_ids = 2;
+ repeated string camera_roles = 3; uint32 max_selected_per_camera = 4; string series_id = 5;
+}
+message CalibrationCameraSolve {
+ string dataset_artifact_id = 1; string camera_role = 2; uint32 heldout_per_camera = 3; string series_id = 4;
+}
+message CalibrationRigSolve {
+ string dataset_artifact_id = 1; string left_camera_artifact_id = 2; string right_camera_artifact_id = 3;
+ uint32 heldout_pairs = 4; string rig_frame_id = 5; string rig_frame_name = 6; string series_id = 7;
+}
+message CalibrationActivate { string logical_device_id = 1; string rig_artifact_id = 2; }
+message PinholeBrown5 {
+ // Explicit model, always pinhole-brown5. No OpenCV vector-size inference.
+ string model = 1; double fx = 2; double fy = 3; double cx = 4; double cy = 5;
+ double k1 = 6; double k2 = 7; double p1 = 8; double p2 = 9; double k3 = 10;
+}
+message ResidualSummary {
+ uint64 point_count = 1; double rms_px = 2; double mean_px = 3; double median_px = 4;
+ double p95_px = 5; double max_px = 6;
+}
+message CoverageEvidence { double min_x = 1; double min_y = 2; double max_x = 3; double max_y = 4; double bounding_box_area = 5; }
+message CoordinateFrame { string id = 1; string name = 2; }
+message Transform {
+ CoordinateFrame source = 1; CoordinateFrame target = 2;
+ repeated double matrix = 3; // Exactly 16 row-major doubles, T_target_from_source, mm.
+}
+message StereoModel {
+ // Row-major 3x3 R/E/F (9 doubles each), T is XYZ mm (3 doubles).
+ repeated double r_right_from_left = 1; repeated double t_right_from_left = 2;
+ repeated double e = 3; repeated double f = 4;
+}
+message CalibrationCamera {
+ string role = 1; string physical_camera_id = 2; uint32 image_width = 3; uint32 image_height = 4;
+ CoordinateFrame optical_frame = 5;
+}
+message CalibrationTargetInfo { CalibrationTargetSpecification target = 1; }
+message CalibrationDatasetCameraInfo {
+ CalibrationCamera camera = 1; uint64 analyzed = 2; uint64 detected = 3; uint64 no_target = 4; uint64 selected = 5;
+}
+message CalibrationDatasetInfo {
+ CalibrationArtifactReference target = 1; repeated string raw_capture_ids = 2;
+ repeated string requested_roles = 3; uint32 max_selected_per_camera = 4; uint32 selection_policy_version = 5;
+ repeated CalibrationDatasetCameraInfo cameras = 6; uint64 total_records = 7; uint32 analysis_schema_version = 8;
+ uint64 raw_capture_count = 9;
+}
+message MonoStageInfo {
+ uint64 sample_count = 1; ResidualSummary residuals = 2; CoverageEvidence coverage = 3;
+ optional double opencv_solver_rms_px = 4;
+}
+message StereoStageInfo { uint64 pair_count = 1; ResidualSummary residuals = 2; optional double opencv_solver_rms_px = 3; }
+message CalibrationSolverImplementation {
+ string opencv_version = 1; string mantis_version = 2; string mantis_build = 3;
+}
+message CalibrationCameraInfo {
+ CalibrationArtifactReference dataset = 1; CalibrationArtifactReference target = 2;
+ CalibrationCamera camera = 3; PinholeBrown5 training_model = 4; PinholeBrown5 final_model = 5;
+ MonoStageInfo training = 6; MonoStageInfo heldout = 7; MonoStageInfo final = 8;
+ uint32 heldout_per_camera = 9; uint32 schema_version = 10; uint32 solver_policy_version = 11;
+ uint32 split_policy_version = 12; CalibrationSolverImplementation implementation = 13;
+}
+message CalibrationRigInfo {
+ CalibrationArtifactReference dataset = 1; CalibrationArtifactReference target = 2;
+ CalibrationArtifactReference left_camera = 3; CalibrationArtifactReference right_camera = 4;
+ CalibrationCamera left = 5; CalibrationCamera right = 6;
+ PinholeBrown5 left_final_model = 7; PinholeBrown5 right_final_model = 8; StereoModel final_model = 9;
+ Transform t_right_from_left = 10; Transform t_rig_from_left = 11; Transform t_rig_from_right = 12;
+ double baseline_mm = 13; double relative_rotation_angle_rad = 14;
+ StereoStageInfo training = 15; StereoStageInfo heldout = 16; StereoStageInfo final = 17;
+ CoordinateFrame rig_frame = 18; uint32 heldout_pairs = 19; uint32 schema_version = 20;
+ uint32 solver_policy_version = 21; uint32 split_policy_version = 22; CalibrationSolverImplementation implementation = 23;
+}
+message CalibrationInfo {
+ CalibrationEntry entry = 1;
+ oneof detail {
+  CalibrationTargetInfo target_info = 2; CalibrationDatasetInfo dataset_info = 3;
+  CalibrationCameraInfo camera_info = 4; CalibrationRigInfo rig_info = 5;
+ }
+}
+// Response message is present even when binding is absent; absent binding explicitly means none.
+message ActiveCalibrationBinding {
+ string logical_device_id = 1; CalibrationReference reference = 2; CalibrationArtifactReference artifact = 3;
+}
+message ActiveCalibration { ActiveCalibrationBinding binding = 1; }
 message Request {
  uint32 protocol_version = 1; string request_id = 2; string token = 3;
  oneof command {
@@ -33,6 +142,12 @@ message Request {
   Id capture_status = 25; Empty captures_list = 26; Id devices_info = 27;
   Id preview = 28; Id preview_release = 29; Replay replay = 30;
   Id artifact_recover_async = 31;
+  CalibrationTargetCreate calibration_target_create = 32;
+  CalibrationDatasetBuild calibration_dataset_build = 33;
+  CalibrationCameraSolve calibration_camera_solve = 34;
+  CalibrationRigSolve calibration_rig_solve = 35;
+  Empty calibrations_list = 36; Id calibration_info = 37; Id calibration_active = 38;
+  CalibrationActivate calibration_activate = 39; Id calibration_clear = 40;
  }
 }
 message Response {
@@ -40,4 +155,6 @@ message Response {
  repeated Device devices = 4; repeated Capture captures = 5; repeated Artifact artifacts = 6;
  repeated Job jobs = 7; repeated Plugin plugins = 8; repeated Event events = 9;
  string project_path = 10; string result_id = 11; DataReference data = 12;
+ repeated CalibrationEntry calibrations = 13; CalibrationInfo calibration_info = 14;
+ ActiveCalibration active_calibration = 15;
 }

@@ -38,6 +38,24 @@ discovered_calibration_component(const device::Descriptor &child) {
         return std::unexpected(e.error);
     }
 }
+Result<std::vector<calibration::artifacts::CameraComponent>> discovered_activation_components(
+    const device::Descriptor &parent, std::span<const device::Descriptor> current) {
+    std::vector<calibration::artifacts::CameraComponent> components;
+    for (const auto &child : parent.children) {
+        auto descriptor = std::find_if(current.begin(), current.end(), [&](const auto &d) { return d.id == child; });
+        if (descriptor == current.end())
+            return std::unexpected(Error{Status::incompatible, "Discovered calibration component descriptor is missing", "calibration"});
+        auto component = discovered_calibration_component(*descriptor);
+        if (!component) return std::unexpected(component.error());
+        components.push_back(std::move(*component));
+    }
+    if (parent.children.empty() && parent.metadata.contains("role")) {
+        auto component = discovered_calibration_component(parent);
+        if (!component) return std::unexpected(component.error());
+        components.push_back(std::move(*component));
+    }
+    return components;
+}
 CaptureCalibrationBinding::CaptureCalibrationBinding(std::shared_ptr<artifact::Store> store, Id raw,
                                                      std::optional<artifact::ActiveCalibration> snapshot)
     : store_(std::move(store)), raw_(std::move(raw)), snapshot_(std::move(snapshot)) {}

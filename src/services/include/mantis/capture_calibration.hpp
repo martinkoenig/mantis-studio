@@ -7,6 +7,10 @@
 namespace mantis::services {
 // Internal capture-start seam; strict discovery parsing, never called by the frame writer.
 Result<calibration::artifacts::CameraComponent> discovered_calibration_component(const device::Descriptor &);
+// Control-plane activation seam. A present parent with malformed component metadata
+// must fail explicitly; only the caller decides whether the parent is discovered.
+Result<std::vector<calibration::artifacts::CameraComponent>> discovered_activation_components(
+    const device::Descriptor &parent, std::span<const device::Descriptor> current);
 // Writer-side capture seam. Snapshot supplied before Session starts; no active lookup in stamp().
 class CaptureCalibrationBinding {
     std::shared_ptr<artifact::Store> store_;

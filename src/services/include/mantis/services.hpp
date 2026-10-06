@@ -3,6 +3,7 @@
 #include <mantis/artifact_api.hpp>
 #include <mantis/device_api.hpp>
 #include <mantis/jobs.hpp>
+#include <mantis/calibration_service.hpp>
 namespace mantis::artifact { class Store; }
 namespace mantis::services {
 struct CaptureInfo {
@@ -85,7 +86,8 @@ class Runtime final : public DeviceService,
                       public ArtifactService,
                       public JobService,
                       public PluginService,
-                      public DiagnosticsService {
+                      public DiagnosticsService,
+                      public CalibrationService {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
@@ -114,5 +116,15 @@ class Runtime final : public DeviceService,
     std::vector<PluginInfo> plugins() const override;
     void enable_plugin(const std::string &, bool) override;
     std::vector<Event> events(uint64_t) const override;
+    CalibrationInfo create_calibration_target(const TargetCreate &) override;
+    Id build_calibration_dataset(const DatasetBuild &) override;
+    Id solve_camera_calibration(const CameraSolve &) override;
+    Id solve_rig_calibration(const RigSolve &) override;
+    std::vector<CalibrationEntry> calibrations() const override;
+    CalibrationInfo calibration_info(const Id &) const override;
+    std::optional<ActiveCalibrationInfo> active_calibration(const Id &) const override;
+    void activate_calibration(const Id &, const Id &) override;
+    void clear_calibration(const Id &) override;
+
 };
 } // namespace mantis::services

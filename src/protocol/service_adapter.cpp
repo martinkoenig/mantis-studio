@@ -1,4 +1,5 @@
 #include <mantis/service_adapter.hpp>
+#include "calibration_adapter.hpp"
 namespace mantis::protocol {
 namespace {
 void device(wire::v1::Response &r, const device::Descriptor &d) {
@@ -32,17 +33,7 @@ void capture(wire::v1::Response &r, const services::CaptureInfo &c) {
     for (const auto &[key, value] : c.diagnostics) (*o->mutable_diagnostics())[key] = value;
 }
 void artifact(wire::v1::Response &r, const artifact::ArtifactDescriptor &a) {
-    auto *o = r.add_artifacts();
-    o->set_id(a.id.value);
-    o->set_type(a.type.name);
-    o->set_schema_version(a.type.schema_version);
-    o->set_state(artifact::state_name(a.state));
-    o->set_producer(a.provenance.producer);
-    for (auto &id : a.provenance.inputs)
-        o->add_inputs(id.value);
-    o->set_hash(a.hash.algorithm + ":" + a.hash.hex);
-    o->set_bytes(a.bytes);
-    o->set_chunks(a.chunks);
+    write_artifact(r.add_artifacts(), a);
 }
 void plugin(wire::v1::Response &r, const services::PluginInfo &p) {
     auto *o = r.add_plugins();
@@ -76,6 +67,18 @@ void events(wire::v1::Response &r, const std::vector<services::Event> &log) {
     }
 }
 } // namespace
+void write_artifact(wire::v1::Artifact *o, const artifact::ArtifactDescriptor &a) {
+    o->set_id(a.id.value);
+    o->set_type(a.type.name);
+    o->set_schema_version(a.type.schema_version);
+    o->set_state(artifact::state_name(a.state));
+    o->set_producer(a.provenance.producer);
+    for (auto &id : a.provenance.inputs)
+        o->add_inputs(id.value);
+    o->set_hash(a.hash.algorithm + ":" + a.hash.hex);
+    o->set_bytes(a.bytes);
+    o->set_chunks(a.chunks);
+}
 wire::v1::Response dispatch(services::Runtime &runtime, const wire::v1::Request &request) {
     wire::v1::Response out;
     out.set_protocol_version(version);
@@ -193,7 +196,8 @@ wire::v1::Response dispatch(services::Runtime &runtime, const wire::v1::Request 
         case R::kShutdown:
             break;
         default:
-            fail(Status::invalid_argument, "Missing or unknown command");
+            if (!dispatch_calibration(runtime, request, out))
+                fail(Status::invalid_argument, "Missing or unknown command");
         }
     } catch (const Failure &e) {
         out.mutable_error()->set_code(static_cast<uint32_t>(e.error.code));
@@ -202,6 +206,11 @@ wire::v1::Response dispatch(services::Runtime &runtime, const wire::v1::Request 
     } catch (const std::exception &e) {
         out.mutable_error()->set_code(static_cast<uint32_t>(Status::io));
         out.mutable_error()->set_message(e.what());
+    }
+    if (out.ByteSizeLong() > max_control_bytes) {
+        out.Clear(); out.set_protocol_version(version); out.set_request_id(request.request_id());
+        out.mutable_error()->set_code(static_cast<uint32_t>(Status::busy));
+        out.mutable_error()->set_message("Control response exceeds 4 MiB; inspect individual artifacts");
     }
     return out;
 }
