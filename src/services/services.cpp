@@ -201,12 +201,14 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
             fail(Status::corrupt, "Active RigCalibration hash mismatch", "capture");
         std::vector<calibration::artifacts::CameraComponent> components;
         for (const auto &child : streams.front()->components()) {
-            const auto role = child.metadata.find("role"), identity = child.metadata.find("identity");
-            if (role == child.metadata.end() || identity == child.metadata.end())
-                fail(Status::incompatible, "Discovered calibration component lacks role/physical identity",
-                     "capture");
-            components.push_back({role->second, {identity->second}});
+            auto component = discovered_calibration_component(child);
+            if (!component)
+                throw Failure(component.error());
+            components.push_back(std::move(*component));
         }
+        if (components.empty())
+            fail(Status::incompatible, "Active RigCalibration requires discovered measurement components",
+                 "capture");
         auto compatible = calibration::artifacts::validate_rig_device(*rig, ids.front(), components);
         if (!compatible)
             throw Failure(compatible.error());

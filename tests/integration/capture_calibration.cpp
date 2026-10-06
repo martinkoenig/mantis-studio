@@ -34,6 +34,54 @@ struct Temp {
 bool same(const Reference &a, const Reference &b) {
     return a.id == b.id && a.schema_version == b.schema_version && a.revision == b.revision;
 }
+void discovery_geometry(const device::Descriptor &child) {
+    const auto parsed = get(services::discovered_calibration_component(child));
+    CHECK(parsed.role == child.metadata.at("role"));
+    CHECK(parsed.camera_id.value == child.metadata.at("identity"));
+    CHECK(parsed.image_width == 1280 && parsed.image_height == 960);
+    for (const auto *field : {"width", "height"}) {
+        auto missing = child;
+        missing.metadata.erase(field);
+        auto result = services::discovered_calibration_component(missing);
+        CHECK(!result && result.error().code == Status::incompatible);
+        CHECK(result.error().component == "capture");
+        CHECK(result.error().message.find(std::string("missing required ") + field) != std::string::npos);
+        for (const auto *invalid : {"", "not-a-number", "1280px", "-1", "0", "4294967296",
+                                    "999999999999999999999", " 1280", "1280 ", "+1280", "1.5"}) {
+            auto malformed = child;
+            malformed.metadata[field] = invalid;
+            result = services::discovered_calibration_component(malformed);
+            CHECK(!result && result.error().code == Status::incompatible);
+            CHECK(result.error().message.find(std::string("invalid ") + field + " '" + invalid + "'") !=
+                  std::string::npos);
+            CHECK(result.error().message.find(child.metadata.at("role")) != std::string::npos);
+        }
+    }
+    auto packing = child;
+    packing.metadata["fourcc"] = "Y10P";
+    packing.metadata["target_fps"] = "120";
+    packing.metadata["video_node"] = "/dev/video999";
+    const auto unchanged = get(services::discovered_calibration_component(packing));
+    CHECK(unchanged.camera_id == parsed.camera_id && unchanged.image_width == parsed.image_width &&
+          unchanged.image_height == parsed.image_height);
+}
+void rejected_capture(services::Runtime &runtime, const Id &device, const std::string &diagnostic) {
+    const auto captures_before = runtime.captures().size(), artifacts_before = runtime.artifacts().size();
+    const auto events_before = runtime.events(0).size();
+    bool rejected = false;
+    try {
+        runtime.start_capture({device});
+    } catch (const Failure &error) {
+        CHECK(error.error.code == Status::incompatible);
+        CHECK(error.error.message.find(diagnostic) != std::string::npos);
+        rejected = true;
+    }
+    CHECK(rejected && runtime.captures().size() == captures_before);
+    CHECK(runtime.artifacts().size() == artifacts_before);
+    CHECK(runtime.events(0).size() == events_before);
+    for (const auto &capture : runtime.captures())
+        CHECK(!capture.active);
+}
 void wait_job(services::Runtime &runtime, const Id &id) {
     for (unsigned i = 0; i < 3000; ++i) {
         for (auto &job : runtime.jobs())
@@ -184,7 +232,8 @@ int main(int argc, char **argv) {
             if (child.parent == parent.id) {
                 auto role = child.metadata.at("role");
                 Id identity{child.metadata.at("identity")};
-                components.push_back({role, identity});
+                discovery_geometry(child);
+                components.push_back(get(services::discovered_calibration_component(child)));
                 cameras.push_back({role,
                                    identity,
                                    1280,
@@ -288,6 +337,38 @@ int main(int argc, char **argv) {
         wait_job(runtime, runtime.replay_capture(b.id, false, true));
         CHECK(store->active_calibration(parent.id)->reference.revision == 2);
         CHECK(store->get(rev1.descriptor.id).hash == rev1.descriptor.hash);
+        // Re-discover the SAME physical cameras with another capture geometry. Each rejection
+        // must precede both RawCapture creation and acquisition Session ownership/start.
+        for (const auto &[width, height] : {std::pair{1024, 960}, std::pair{1280, 800}}) {
+            profile["mode"]["width"] = width;
+            profile["mode"]["height"] = height;
+            std::ofstream(profile_path) << profile;
+            const auto changed = runtime.devices();
+            size_t measurement_cameras = 0;
+            for (const auto &child : changed)
+                if (child.parent == parent.id) {
+                    ++measurement_cameras;
+                    const auto found = get(services::discovered_calibration_component(child));
+                    const auto original = std::find_if(components.begin(), components.end(),
+                                                       [&](const auto &c) { return c.role == found.role; });
+                    CHECK(original != components.end() && found.camera_id == original->camera_id);
+                    CHECK(found.image_width == uint32_t(width) && found.image_height == uint32_t(height));
+                }
+            CHECK(measurement_cameras == 2);
+            rejected_capture(runtime, parent.id, "image geometry");
+        }
+        // Packing and FPS alone do not change geometry: actual packed fake-X1 capture succeeds.
+        profile["mode"] = {{"width", 1280}, {"height", 960}, {"fourcc", "Y10P"}, {"fps", 10}};
+        std::ofstream(profile_path) << profile;
+        runtime.devices();
+        auto packed = finish(runtime, runtime.start_capture({parent.id}));
+        CHECK(same(packed.provenance.calibration, rev2.value.revision));
+        check_replay(store, packed.id, rev2.value.revision);
+        profile["mode"] = {{"width", 1280}, {"height", 960}, {"fourcc", "GREY"}, {"fps", 5}};
+        std::ofstream(profile_path) << profile;
+        runtime.devices();
+        auto matching = finish(runtime, runtime.start_capture({parent.id}));
+        CHECK(same(matching.provenance.calibration, rev2.value.revision));
         // Generic metadata can contain a binding for the wrong device; capture validates it before starting
         // Session.
         store->activate_calibration(parent.id, rev2.descriptor.id);
@@ -324,21 +405,14 @@ int main(int argc, char **argv) {
                                                         persisted_target.reference(), other_l.reference(),
                                                         other_r.reference(), implementation));
         store->activate_calibration(parent.id, other_rig.descriptor.id);
-        auto capture_count = runtime.captures().size();
-        bool incompatible = false;
-        try {
-            runtime.start_capture({parent.id});
-        } catch (const Failure &error) {
-            CHECK(error.error.code == Status::incompatible);
-            incompatible = true;
-        }
-        CHECK(incompatible && runtime.captures().size() == capture_count);
+        rejected_capture(runtime, parent.id, "physical cameras");
         store->clear_active_calibration(parent.id);
         auto after_clear = finish(runtime, runtime.start_capture({parent.id}));
         CHECK(same(after_clear.provenance.calibration, source_ref));
         check_replay(store, after_clear.id, source_ref);
         std::cout << "Real Runtime/fake-X1: no-active, snapshot rev1 while active changes, future rev2, "
-                     "historical replay, identical pixel hashes and BufferView identities passed\n";
+                     "historical replay, identical pixel hashes and BufferView identities, strict discovery "
+                     "geometry, capture-start geometry rejection and packing/FPS compatibility passed\n";
         return 0;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

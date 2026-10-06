@@ -33,4 +33,4 @@ Architectural changes require a new ADR describing the problem, inadequate exten
 
 Explain the problem, behavior change and verification. Include a reproducible fixture for storage or plugin crashes. State which platforms were actually tested. Keep dependency updates separate from semantic changes where practical.
 
-No repository license has been selected in the supplied requirements. The project owner should choose a license before accepting external contributions or advertising open-source redistribution terms; this delivery does not invent a licensing decision.
+The repository is licensed under Apache-2.0; see [LICENSE](LICENSE).

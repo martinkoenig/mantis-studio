@@ -74,6 +74,8 @@ Result<std::string> encode_document(const RigArtifact &);
 struct CameraComponent {
     std::string role;
     Id camera_id;
+    uint32_t image_width{};
+    uint32_t image_height{};
 };
 Result<void> validate_rig_device(const RigArtifact &, const Id &logical_device_id,
                                  std::span<const CameraComponent> components = {});

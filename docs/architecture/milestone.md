@@ -108,15 +108,22 @@ See the [review](v0.2-acquisition-review.md), [storage format](storage.md),
 ## v0.3 — Geometric Calibration Foundation
 
 The [v0.3 architecture baseline](v0.3-geometric-calibration.md) defines the full
-milestone intent and deferred work. The current package is **M0 + M1 only**:
-architecture/accepted-state housekeeping and a pure header-only calibration
-target/physical geometry foundation. [ADR-027](../adr/027-calibration-target-geometry-and-physical-scale.md)
-defines nominal/measured target scale; [ADR-028](../adr/028-target-observations-and-deterministic-calibration-datasets.md)
-prepares the common observation/dataset contract for later work.
+milestone intent and deferred work. Current implementation state:
 
-Detector integration, calibration solves, artifacts/persistence, activation and
-capture binding, service/client controls and Studio workspace are later packages.
-Architecture v1 remains frozen; these are additive extensions.
+| Package | Implemented evidence / boundary |
+| --- | --- |
+| M0 | Architecture and accepted-state housekeeping |
+| M1 | Typed target definitions, validation and measured physical geometry; [ADR-027](../adr/027-calibration-target-geometry-and-physical-scale.md) |
+| M2 | OpenCV target detection and common observations |
+| M3 | Deterministic calibration datasets and finalized RawCapture ingestion; [ADR-028](../adr/028-target-observations-and-deterministic-calibration-datasets.md) |
+| M4 | Camera/stereo solving with separate training, held-out and final-fit evidence; [ADR-029](../adr/029-calibration-solve-validation-and-stereo-policy.md) |
+| M5 | Immutable artifacts, revisions, persistence/migration, active binding and capture snapshots, including capture-start physical identity and image-geometry compatibility; [ADR-030](../adr/030-calibration-artifacts-revisioning-and-active-binding.md) |
+
+M0–M5 are implemented after the M5 image-geometry correction. Implementation does
+not claim full v0.3 acceptance. M6 service/protocol/CLI/SDK calibration operations,
+M7 Studio calibration workspace and M8 real-hardware calibration acceptance remain
+pending/deferred according to the baseline. Architecture v1 remains frozen; these
+are additive extensions.
 
 
 ## Accepted cross-milestone future architecture

@@ -33,6 +33,15 @@ it must never reinterpret a past capture.
 6. Active binding is project-local and keyed by the exact logical acquisition
    device ID, including stable physical component identities for X1. The binding
    identifies one finalized RigCalibration artifact and logical revision.
+   Before X1 acquisition Session ownership/start, each measurement component must
+   match its calibrated DatasetCamera in role, physical LEFT/RIGHT camera identity,
+   image width and image height. Calibrated dimensions must equal discovered capture
+   dimensions. Mismatches and missing/invalid required discovery geometry return
+   `Status::incompatible` before creating a RawCapture. `/dev/video` paths are not
+   calibration identity; FPS is not part of geometric compatibility. Pixel packing
+   or bit depth alone is not a geometry change. Richer crop/binning/sensor-mode
+   identity may be added when justified by real hardware evidence. This software
+   rule claims no 1280×800 hardware validation and adds no calibration-quality threshold.
 7. Runtime snapshots active binding once before Session starts. The writer stamps
    that reference into parent and image-child headers, sharing their existing
    immutable pixel BufferViews. No acquisition-thread database lookup or plugin

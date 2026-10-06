@@ -197,8 +197,9 @@ as 1; no migration rewrite is required.
 transactional metadata-only activation. Store also exposes generic revision resolution,
 active_calibration, activate_calibration and clear_active_calibration seams. Activation
 requires a finalized RigCalibration schema 1. Multiple logical devices may reference
-one artifact. X1's exact key is `org.mantis.x1:<left physical identity>:<right physical identity>`;
-component role/identity metadata is validated where available. X1 identity ordering uses
+one artifact. X1's exact key is `org.mantis.x1:<left physical identity>:<right physical identity>`.
+Supplied typed components include role, physical camera identity, image_width and
+image_height; all four must match the calibrated DatasetCamera. X1 identity ordering uses
 recorded `left`/`right` component roles; it is independent of configured stereo-role
 order and rig handedness. Video node paths are
 never calibration identity. Clearing a binding deletes no artifacts.
@@ -206,7 +207,22 @@ never calibration identity. Clearing a binding deletes no artifacts.
 Runtime samples active binding exactly once before Session begins. Its internal
 project_store seam permits persistence tests/internal callers without a public service,
 protocol, CLI or SDK operation. Before capture it loads/verifies the rig and validates
-current discovered component identities. A mismatch is incompatible before acquisition.
+current discovered measurement components. For X1, each physical LEFT/RIGHT identity
+and role must match, and calibrated width/height must equal discovered capture
+width/height. Every calibrated role requires exactly one discovered component.
+A mismatch returns `Status::incompatible` before RawCapture creation and acquisition
+Session ownership/start.
+
+Required discovery width/height are parsed as positive decimal uint32 values with
+complete-string consumption. Missing, empty, malformed, negative, zero or overflowed
+values fail with a structured `Status::incompatible` error identifying the component,
+field and offending value (or missing field). No default resolution is assumed.
+`/dev/video` paths are not calibration identity. FPS is not part of the geometric
+compatibility contract; pixel packing/bit depth alone (for example RAW8 versus Y10P)
+is not treated as a geometry change when dimensions match. Richer crop/binning/sensor-mode
+identity may be added later when justified by real hardware evidence of distinct
+geometry at identical dimensions. This is compatibility validation, not a new
+calibration-quality threshold, and claims no 1280×800 hardware validation.
 
 The capture writer stamps the snapshot into every FrameSet and image child using new
 packet/header containers and the same BufferView storage. No pixels are copied/modified,

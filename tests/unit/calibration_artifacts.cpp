@@ -407,8 +407,29 @@ void binding() {
     CHECK(s.get(g.rig.descriptor.id).hash == g.rig.descriptor.hash);
     rejects(ca::activate_rig_calibration(s, {"org.mantis.x1:other:camera.right"}, v2.descriptor.id),
             Status::incompatible);
-    std::vector<ca::CameraComponent> components{{"left", {"wrong"}}, {"right", {"camera.right"}}};
+    std::vector<ca::CameraComponent> matching{{"left", {"camera.left"}, 1280, 960},
+                                              {"right", {"camera.right"}, 1280, 960}};
+    get(ca::validate_rig_device(v2.value, device, matching));
+    auto components = matching;
+    components[0].camera_id = {"wrong"};
     rejects(ca::activate_rig_calibration(s, device, v2.descriptor.id, components), Status::incompatible);
+    components = matching;
+    components[0].image_width = 1024;
+    auto width_mismatch = ca::validate_rig_device(v2.value, device, components);
+    rejects(width_mismatch, Status::incompatible);
+    CHECK(width_mismatch.error().message.find("left component: calibrated 1280x960, discovered 1024x960") !=
+          std::string::npos);
+    rejects(ca::activate_rig_calibration(s, device, v2.descriptor.id, components), Status::incompatible);
+    components = matching;
+    components[1].image_height = 800;
+    auto height_mismatch = ca::validate_rig_device(v2.value, device, components);
+    rejects(height_mismatch, Status::incompatible);
+    CHECK(height_mismatch.error().message.find("right component: calibrated 1280x960, discovered 1280x800") !=
+          std::string::npos);
+    components = matching;
+    components[0].role = "unknown";
+    rejects(ca::validate_rig_device(v2.value, device, components), Status::incompatible);
+    CHECK(s.active_calibration(device)->artifact.id == v2.descriptor.id);
     auto reversed_config = g.rig.value.solution.config;
     reversed_config.left_role = "right";
     reversed_config.right_role = "left";
@@ -418,7 +439,6 @@ void binding() {
     auto reversed =
         get(ca::create_rig_calibration(s, reversed_solution, g.dataset.reference(), g.target.reference(),
                                        g.right.reference(), g.left.reference(), g.rig.value.implementation));
-    std::vector<ca::CameraComponent> matching{{"left", {"camera.left"}}, {"right", {"camera.right"}}};
     get(ca::activate_rig_calibration(s, device, reversed.descriptor.id, matching));
     CHECK(s.active_calibration(device)->artifact.id == reversed.descriptor.id);
     s.clear_active_calibration(device);

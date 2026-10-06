@@ -1,3 +1,4 @@
+#include <charconv>
 #include <mantis/capture_calibration.hpp>
 
 namespace mantis::services {
@@ -6,6 +7,37 @@ bool same(const calibration::Reference &a, const calibration::Reference &b) {
     return a.id == b.id && a.schema_version == b.schema_version && a.revision == b.revision;
 }
 } // namespace
+Result<calibration::artifacts::CameraComponent>
+discovered_calibration_component(const device::Descriptor &child) {
+    try {
+        const auto role = child.metadata.find("role"), identity = child.metadata.find("identity");
+        if (role == child.metadata.end() || role->second.empty() || identity == child.metadata.end() ||
+            identity->second.empty())
+            fail(Status::incompatible,
+                 "Discovered calibration component '" + child.id.value + "' lacks role/physical identity",
+                 "capture");
+        auto dimension = [&](const char *field) {
+            const auto it = child.metadata.find(field);
+            const std::string context = "Discovered " + role->second + " component '" + child.id.value + "' ";
+            if (it == child.metadata.end())
+                fail(Status::incompatible, context + "is missing required " + field, "capture");
+            const auto &value = it->second;
+            uint32_t parsed{};
+            const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed, 10);
+            if (value.empty() || result.ec != std::errc{} || result.ptr != value.data() + value.size() ||
+                !parsed)
+                fail(Status::incompatible,
+                     context + "has invalid " + field + " '" + value +
+                         "': expected a positive uint32 decimal",
+                     "capture");
+            return parsed;
+        };
+        return calibration::artifacts::CameraComponent{
+            role->second, {identity->second}, dimension("width"), dimension("height")};
+    } catch (const Failure &e) {
+        return std::unexpected(e.error);
+    }
+}
 CaptureCalibrationBinding::CaptureCalibrationBinding(std::shared_ptr<artifact::Store> store, Id raw,
                                                      std::optional<artifact::ActiveCalibration> snapshot)
     : store_(std::move(store)), raw_(std::move(raw)), snapshot_(std::move(snapshot)) {}

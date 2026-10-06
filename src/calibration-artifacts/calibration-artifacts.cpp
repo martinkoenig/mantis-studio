@@ -377,7 +377,16 @@ Result<void> validate_rig_device(const RigArtifact &v, const Id &device,
                         ++count;
                         if (c.camera_id != camera->camera_id)
                             fail(Status::incompatible,
-                                 "RigCalibration camera identity does not match discovered component",
+                                 "RigCalibration camera identity does not match discovered " + camera->role +
+                                     " component: calibrated '" + camera->camera_id.value +
+                                     "', discovered '" + c.camera_id.value + "'",
+                                 "calibration-artifacts");
+                        if (c.image_width != camera->image_width || c.image_height != camera->image_height)
+                            fail(Status::incompatible,
+                                 "RigCalibration image geometry does not match discovered " + camera->role +
+                                     " component: calibrated " + std::to_string(camera->image_width) + "x" +
+                                     std::to_string(camera->image_height) + ", discovered " +
+                                     std::to_string(c.image_width) + "x" + std::to_string(c.image_height),
                                  "calibration-artifacts");
                     }
                 if (count != 1)
