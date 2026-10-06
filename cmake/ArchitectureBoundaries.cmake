@@ -33,9 +33,9 @@ foreach(module base memory schema data time spatial calibration device-api pipel
 endforeach()
 mantis_assert_dependency_boundary(mantis-calibration "^opencv_|^nlohmann_json::|^protobuf::|^mantis-(data|artifact-store|calibration-opencv|calibration-dataset|calibration-solver-opencv|calibration-artifacts)$")
 mantis_assert_dependency_boundary(mantis-calibration-solver-opencv "^opencv_(aruco|objdetect)$|^mantis-(data|artifact-store|calibration-opencv|calibration-dataset)$|^Qt[0-9]::|^SQLite::|^protobuf::|^nlohmann_json::")
-foreach(frontend mantis-cli mantis-client mantis-studio)
+foreach(frontend mantis-cli mantis-client mantis-studio mantis-studio-calibration)
     if(TARGET ${frontend})
-        mantis_assert_dependency_boundary(${frontend} "^mantis-(services|service-adapter|device-runtime|pipeline-runtime|plugin-runtime|artifact-store|jobs|calibration-artifacts|calibration-dataset|calibration-opencv|calibration-solver-opencv)$")
+        mantis_assert_dependency_boundary(${frontend} "^mantis-(services|service-adapter|device-runtime|pipeline-runtime|plugin-runtime|artifact-store|jobs|calibration-artifacts|calibration-dataset|calibration-opencv|calibration-solver-opencv)$|^SQLite::|^opencv_|^OpenCV::")
     endif()
 endforeach()
 

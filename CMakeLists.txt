@@ -132,10 +132,28 @@ if(MANTIS_BUILD_STUDIO)
  target_sources(mantis-render PRIVATE src/render/include/mantis/render.hpp)
  set_target_properties(mantis-render PROPERTIES AUTOMOC ON)
  target_link_libraries(mantis-render PUBLIC Qt6::Quick)
+ add_library(mantis-studio-calibration STATIC apps/studio/calibration_controller.cpp apps/studio/calibration_controller.hpp apps/studio/calibration_client.hpp)
+ set_target_properties(mantis-studio-calibration PROPERTIES AUTOMOC ON)
+ target_include_directories(mantis-studio-calibration PUBLIC apps/studio)
+ target_link_libraries(mantis-studio-calibration PUBLIC mantis-client Qt6::Core Qt6::Concurrent)
  add_executable(mantis-studio apps/studio/main.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
  set_target_properties(mantis-studio PROPERTIES AUTOMOC ON)
- target_link_libraries(mantis-studio PRIVATE mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
- qt_add_resources(mantis-studio studio-ui PREFIX / FILES ui/shell/Main.qml)
+ target_link_libraries(mantis-studio PRIVATE mantis-studio-calibration mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
+ set(MANTIS_STUDIO_QML_FILES
+  ui/calibration/ArtifactSelector.qml
+  ui/calibration/CamerasStage.qml
+  ui/calibration/CapturesStage.qml
+  ui/calibration/DatasetStage.qml
+  ui/calibration/JobStatus.qml
+  ui/calibration/ReviewStage.qml
+  ui/calibration/RigStage.qml
+  ui/calibration/SolveEvidence.qml
+  ui/calibration/StageError.qml
+  ui/calibration/TargetStage.qml
+  ui/shell/Main.qml
+  ui/workspaces/CalibrationWorkspace.qml
+  ui/workspaces/DevicesWorkspace.qml)
+ qt_add_resources(mantis-studio studio-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
 endif()
 if(BUILD_TESTING)
  add_executable(mantis-calibration-service-tests tests/unit/calibration_service.cpp)

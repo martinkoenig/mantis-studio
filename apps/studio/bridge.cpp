@@ -12,6 +12,7 @@ StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
             return;
         }
         connected_ = true;
+        emit snapshotReady(result.snapshot);
         if (!result.newest_id.empty())
             newest_ = QString::fromStdString(result.newest_id);
         error_.clear();

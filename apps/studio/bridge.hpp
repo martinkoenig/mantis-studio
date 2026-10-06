@@ -94,4 +94,5 @@ class StudioBridge : public QObject {
     }
   signals:
     void changed();
+    void snapshotReady(const mantis::wire::v1::Response &);
 };
