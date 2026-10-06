@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+- [ADR-036: Studio calibration workspace uses the public calibration API](036-studio-calibration-workspace-uses-public-calibration-api.md)
+
 - [ADR-035: Calibration control API and job orchestration](035-calibration-control-api-and-job-orchestration.md)
 
 - [ADR-034: Open-core Pro modules and signed entitlement licensing](034-open-core-pro-modules-and-licensing.md)

@@ -4,7 +4,8 @@ M6 exposes the accepted [M1–M5 contracts](v0.3-geometric-calibration.md) throu
 `mantisd`. It introduces orchestration, not calibration mathematics. Ordinary
 calibration is Free/open-platform functionality, without registration, licensing
 or entitlements. [ADR-035](../adr/035-calibration-control-api-and-job-orchestration.md)
-records this boundary. M7 UI and M8 physical calibration acceptance remain pending.
+records this boundary. The [M7 Studio workspace](calibration-workspace.md) composes
+this API; M8 physical calibration acceptance remains pending.
 
 ## Service contract and ownership
 
