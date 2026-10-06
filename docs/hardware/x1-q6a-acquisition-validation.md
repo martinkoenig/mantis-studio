@@ -386,7 +386,7 @@ with `bus_identity: fixture`;
 never enable it for hardware acceptance.
 
 
-## Manual 5 ms software correspondence check — candidate awaiting hardware validation
+## Manual 5 ms software correspondence check — accepted full-harness policy
 
 Build the current feature branch, copy/review the unchanged reference profile
 again and restart `mantisd` using that profile. Keep
@@ -404,7 +404,8 @@ a widened tolerance or a different reference mode, records briefly, stops and
 waits for finalization, then runs verification twice and compares the reports.
 A capture error is raised at stop instead of proceeding to a misleading replay
 failure. Save the result and daemon log. The previous 4 ms version passed the
-favorable starts above; this 5 ms policy still requires real Q6A execution.
+favorable starts above; the final 5 ms policy passed the full real-Q6A harness
+recorded below.
 A short buffered/cache-backed
 capture does not establish sustained microSD/NVMe throughput.
 
@@ -608,7 +609,7 @@ A process kill validates process recovery, not device power-loss certification.
   mode, explicit accounting and packed-byte replay. Existing native route setup,
   RAW8, Y10P, preview/QoS, recovery, clients and frozen ABI remain tested.
 - **PENDING USER EXECUTION:** sustained ten-second/full-rate NVMe recording,
-  real 5 ms/counted re-alignment validation, process-crash recovery, physical hardware
+  process-crash recovery, physical hardware
   synchronization, optical exposure skew and 1280×800 mode. No fixture result
   changes these to PASS.
 - **DEFERRED:** DMABUF/external-buffer zero-copy, physical trigger programming,

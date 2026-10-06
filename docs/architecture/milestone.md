@@ -120,7 +120,7 @@ milestone intent and deferred work. Current implementation state:
 | M5 | Immutable artifacts, revisions, persistence/migration, active binding and capture snapshots, including capture-start physical identity and image-geometry compatibility; [ADR-030](../adr/030-calibration-artifacts-revisioning-and-active-binding.md) |
 | M6 | Implemented: CalibrationService, compact additive protocol v1 controls, C++/Python SDKs and CLI; [ADR-035](../adr/035-calibration-control-api-and-job-orchestration.md) and [API contract](calibration-api.md) |
 | M7 | Implemented: Devices/System guided Calibration workspace, focused client-only Qt controller, immutable-artifact resume, independent daemon Jobs, evidence review and explicit activation; [ADR-036](../adr/036-studio-calibration-workspace-uses-public-calibration-api.md) and [workspace contract](calibration-workspace.md) |
-| M8 | Pending: real-hardware calibration acceptance |
+| M8 | Pending: real-hardware calibration acceptance. M8a acceptance tooling implemented; real characterization pending user execution/review. [ADR-037](../adr/037-real-hardware-calibration-acceptance-is-evidence-driven.md), [operator procedure](../hardware/x1-geometric-calibration-validation.md) |
 
 M0–M7 are implemented. This does not claim full v0.3 hardware acceptance.
 M8 real-hardware calibration acceptance remains pending. Architecture v1 remains frozen; these are additive extensions.
