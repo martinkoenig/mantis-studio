@@ -53,7 +53,13 @@ references/hashes, measurement, camera parameters, all stage residual/coverage
 summaries, partitions and per-observation evidence. Dataset records permit exact
 analyzed/detected/selected count derivation; no pixels are embedded. Session
 boundary descriptions distinguish the automatic daemon restart from the
-operator's mechanically unchanged rig assertion.
+operator's mechanically unchanged rig assertion. Real X1 RigCalibration content
+requires `payload.solution.config.rig_frame` and the target frames of
+`payload.solution.rig.T_rig_from_left` / `T_rig_from_right` to equal
+`{"id": {"value": "org.mantis.x1.rig"}, "name": "Mantis X1 rig"}`.
+Session, retained-analysis and activation input validation check Store-loaded
+immutable content; filenames and solve arguments are not evidence of compliance.
+The existing right-handed +X right, +Y forward, +Z up derivation is unchanged.
 
 `session-NAME-captures.json` is an incremental per-burst journal, including normal
 SDK capture status/diagnostics and two-pass integrity/replay result. Failed runs
@@ -74,6 +80,13 @@ translation_difference_norm_mm and relative_rotation_difference angle_rad/
 angle_deg derived from `R_B * R_A^T` (validated rotations, clamped trace and
 robust atan2 extraction). Statistics include min/max/mean/sample_stddev for camera
 coefficients, baseline_mm, relative_rotation_angle_rad and translation axes in mm.
+Independent sessions require pairwise disjoint source RawCapture content hashes,
+in addition to existing project/artifact identity checks. Descriptor `hash` is
+the existing `algorithm:digest` representation of Store Hash; both components
+form content identity. Different projects/IDs cannot make identical source
+content independent. Analysis reloads descriptors from retained Store; the C++
+fixed evaluator queries Store descriptors directly, ignoring session JSON hashes.
+Missing/empty finalized source hashes are structural failures.
 Sample standard deviation uses n−1. No matrix-entry delta is presented as the
 primary rotation metric.
 

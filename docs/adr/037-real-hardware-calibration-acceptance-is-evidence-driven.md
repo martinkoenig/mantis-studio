@@ -18,7 +18,9 @@ remain unfrozen until real physical observations justify an envelope.
    Structural and accepted acquisition contracts retain hard failure semantics.
 4. Use at least three independent ChArUco datasets, separately captured and
    solved with an unchanged rig. Restart the validation daemon between sessions;
-   do not create independence by re-solving one dataset.
+   do not create independence by re-solving one dataset. Authoritative RawCapture
+   content-hash sets (algorithm plus digest) must be disjoint across sessions,
+   including copied/imported sources with different project paths and IDs.
 5. Compare session intrinsics, distortion and rig geometry. Use relative rotation
    angle, translation difference norm and scalar sample statistics with units.
 6. Evaluate each fixed calibration on each other independent dataset, estimating
@@ -37,7 +39,11 @@ remain unfrozen until real physical observations justify an envelope.
     matching or Checkerboard Rig solve is introduced; it is initially optional.
 11. Activation and historical capture binding retain exact M5 ID/schema/revision
     semantics. Real future capture parent/children, source provenance and replay
-    must preserve the bound revision after active state changes.
+    must preserve the bound revision after active state changes. Real X1 M8 rigs
+    use exactly `org.mantis.x1.rig` / `Mantis X1 rig`; the immutable configured frame
+    and both rig-transform targets are checked in session, analysis and activation
+    input validation. The existing M4 right-handed +X right/+Y forward/+Z up
+    derivation is unchanged.
 12. Geometric camera/rig calibration implies no scanner-mm accuracy or metrology
     claim. Laser calibration/extraction, triangulation, tracking/fusion/meshing,
     texture and hardware trigger implementation are outside M8.

@@ -23,7 +23,8 @@ sys.path.insert(0,str(ROOT/'scripts'))
 from validate_x1_q6a import validate_profile
 from generate_calibration_target import generate, load_metadata, verify_metadata, DEFAULT
 from x1_calibration_report import (summary, validate_summary, fail, require, finite,
-                                   repeatability, activation_report, COEFFICIENTS)
+                                   repeatability, activation_report, COEFFICIENTS,
+                                   validate_x1_rig, X1_RIG_FRAME_ID, X1_RIG_FRAME_NAME)
 
 
 def write(path,value):
@@ -259,7 +260,7 @@ class Harness:
         rig=None
         if self.target['specification']['target_type']=='charuco':
             self.record_command(['SDK','calibration.solve_rig',dataset,left,right])
-            rig=self.job(c.solve_rig(dataset,left,right,heldout_pairs=self.args.heldout,rig_frame_id='org.mantis.validation.rig',rig_frame_name='M8 validation rig, millimeters'))
+            rig=self.job(c.solve_rig(dataset,left,right,heldout_pairs=self.args.heldout,rig_frame_id=X1_RIG_FRAME_ID,rig_frame_name=X1_RIG_FRAME_NAME))
         return dict(project=str(self.project),target=self.target_id,dataset=dataset,left=left,right=right,rig=rig)
 
     def target_contract(self,evidence,metadata,m):
@@ -303,6 +304,7 @@ class Harness:
         finally: self.stop()
         evidence=self.internal('export',ids)
         if self.args.evidence_mode=='real':
+            if ids['rig']: validate_x1_rig(evidence)
             for role,sensor in [('left','ov9281 18-0060'),('right','ov9281 20-0060')]:
                 camera=evidence[role]['payload']['solution']['camera']
                 require(camera['camera_id']['value']=='platform:acb3000.isp/'+sensor and (camera['image_width'],camera['image_height'])==(1280,720),'Nonreference physical dataset camera')
@@ -337,6 +339,7 @@ class Harness:
             s['project']=str(Path(s['project']).resolve())
             # Reload immutable evidence rather than trusting edited summary geometry.
             s['evidence']=self.internal('export',s)
+            if self.args.evidence_mode=='real': validate_x1_rig(s['evidence'])
             if s.get('target_metadata'):
                 verify_metadata(s['target_metadata'],self.tool)
                 self.target_contract(s['evidence'],s['target_metadata'],s['measurement'])
@@ -379,6 +382,7 @@ class Harness:
         self.stage='activation_binding'
         require(self.args.evidence_mode=='real' and s['evidence_mode']=='real' and s['rig'],'Activation requires a real rig session')
         require(str(self.project)==s['project'],'Activation must use retained session project')
+        validate_x1_rig(self.internal('export',s))
         self.start('activation')
         prior=None; parent=None; active_changed=False
         try:

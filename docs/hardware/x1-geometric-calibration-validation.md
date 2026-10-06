@@ -156,8 +156,13 @@ hundreds of near-identical images or try to hit exact physical coordinates.
 There is no invented live quality score or coverage PASS threshold.
 
 Sessions must use separately captured sources. Re-solving one Dataset three
-times is not repeatability. Finalize all captures and finish calibration before
-the next daemon start. `--cold-boundary` additionally pauses after daemon stop
+times is not repeatability. Source RawCapture content hashes must be disjoint
+across sessions, using the complete Store hash identity (algorithm and digest).
+Copied/imported identical captures remain shared content even with different
+artifact IDs or projects and are rejected by repeatability and fixed-calibration
+cross-validation. Missing/empty finalized source hashes are structural failures.
+Finalize all captures and finish calibration before the next daemon start.
+`--cold-boundary` additionally pauses after daemon stop
 for an operator-selected stronger boundary; it never reboots/power-cycles the Q6A.
 Keep the rig unchanged and the target measurements valid across that boundary.
 
@@ -250,7 +255,14 @@ source captures, camera identities/dimensions, analyzed/detected/selected record
 and counts, fx/fy/cx/cy and Brown5 k1/k2/p1/p2/k3, training/held-out/final residual
 summaries and image coverage/sample counts. Rig evidence includes R/T right from
 left, both rig transforms, baseline/relative angle, epipolar residual summaries
-and pair counts. Full canonical immutable documents retain finer evidence.
+and pair counts. Real X1 rig solves supply exactly `org.mantis.x1.rig` /
+`Mantis X1 rig`, with the existing right-handed +X right, +Y forward, +Z up
+M4 derivation. Session validation, retained-session analysis and activation input
+validation inspect the actual immutable solution: its configured rig frame and
+both `T_rig_from_left` / `T_rig_from_right` targets must have that exact ID and
+name. Other frame identities are incompatible with real X1 M8 evidence; old
+immutable artifacts are never retargeted. Full canonical immutable documents
+retain finer evidence.
 
 `repeatability.json` reports every unordered pair's B−A coefficient/baseline
 deltas, absolute/relative focal changes, translation difference norm in mm and

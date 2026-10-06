@@ -7,6 +7,8 @@ SCHEMA_VERSION = 1
 STATES = ('acquisition_integrity', 'calibration_pipeline_execution', 'activation_binding',
           'deterministic_replay', 'characterization', 'final_m8_acceptance')
 COEFFICIENTS = ('fx','fy','cx','cy','k1','k2','p1','p2','k3')
+X1_RIG_FRAME_ID = 'org.mantis.x1.rig'
+X1_RIG_FRAME_NAME = 'Mantis X1 rig'
 
 
 def require(condition, reason):
@@ -99,14 +101,38 @@ def comparison(a,b):
     finite(out); return out
 
 
+def validate_x1_rig(evidence):
+    """Check the Store-loaded immutable solution, not orchestration/report labels."""
+    require(evidence['rig'] is not None, 'Real X1 evidence requires RigCalibration')
+    solution=evidence['rig']['payload']['solution']
+    expected=dict(id=dict(value=X1_RIG_FRAME_ID),name=X1_RIG_FRAME_NAME)
+    require(solution['config']['rig_frame']==expected,
+            'Real X1 RigCalibration requires the canonical X1 rig frame ID/name')
+    for transform in ('T_rig_from_left','T_rig_from_right'):
+        require(solution['rig'][transform]['target']==expected,
+                f'Real X1 {transform} must target the canonical X1 rig frame ID/name')
+
+
+def raw_content_hash(descriptor):
+    # Validation descriptor schema preserves Store Hash as "algorithm:digest".
+    value=descriptor.get('hash')
+    require(isinstance(value,str), 'Finalized RawCapture content hash is missing')
+    algorithm,separator,digest=value.partition(':')
+    require(separator and algorithm and digest, 'Finalized RawCapture content hash is empty/invalid')
+    return algorithm,digest
+
+
 def repeatability(sessions):
     sessions=sorted(sessions,key=lambda s:s['name'])
     require(len(sessions)>=3 and len({s['name'] for s in sessions})==len(sessions),'At least three distinct sessions required')
-    used=set()
+    used=set(); used_hashes=set()
     for s in sessions:
         require(s['evidence']['rig'] is not None,'ChArUco rig required')
         sources={(s['project'],r['id']) for r in s['evidence']['raw_captures']}
         require(sources and not used & sources,'Sessions share captures'); used |= sources
+        hashes={raw_content_hash(r) for r in s['evidence']['raw_captures']}
+        require(not used_hashes & hashes,'Sessions share source RawCapture content hashes; acquisitions are not independent')
+        used_hashes |= hashes
         finite(s['evidence'])
     all_stats={}
     for role in ('left','right'):

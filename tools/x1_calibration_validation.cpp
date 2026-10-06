@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <locale>
+#include <set>
 using namespace mantis;
 using namespace mantis::calibration;
 namespace ca = mantis::calibration::artifacts;
@@ -82,6 +83,20 @@ struct Session {
         }
     }
 };
+Hash raw_content_hash(const artifact::Store &store, const Id &id) {
+    const auto source=store.get(id);
+    require(source.type.name=="org.mantis.RawCapture" && source.type.schema_version==2 &&
+            source.state==artifact::ArtifactState::finalized, "Expected finalized schema-2 source RawCapture");
+    require(!source.hash.algorithm.empty() && !source.hash.hex.empty(),
+            "Finalized source RawCapture content hash is missing/empty");
+    return source.hash;
+}
+std::set<Hash> source_hashes(const Session &session) {
+    std::set<Hash> hashes;
+    for(const auto &id:session.dataset.dataset.raw_capture_ids)
+        hashes.insert(raw_content_hash(*session.store,id));
+    return hashes;
+}
 Json export_session(const Json &s) {
     Session v(s);
     Json out{{"target", document(v.target)}, {"dataset", document(v.dataset)},
@@ -89,7 +104,10 @@ Json export_session(const Json &s) {
              {"rig", v.rig ? document(*v.rig) : Json(nullptr)}, {"artifacts", Json::object()}};
     for (auto field : {"target", "dataset", "left", "right", "rig"}) if (s.contains(field) && !s.at(field).is_null()) out["artifacts"][field] = descriptor(*v.store, {s.at(field)});
     out["raw_captures"] = Json::array();
-    for (auto &id : v.dataset.dataset.raw_capture_ids) out["raw_captures"].push_back(descriptor(*v.store,id));
+    for (auto &id : v.dataset.dataset.raw_capture_ids) {
+        (void)raw_content_hash(*v.store,id);
+        out["raw_captures"].push_back(descriptor(*v.store,id));
+    }
     return out;
 }
 // Uses the SAME fixed-model evidence helpers as M4; only target poses are estimated.
@@ -99,6 +117,9 @@ Json evaluate(const Json &s) {
     Session b(s.at("dataset_session"), destination == std::filesystem::weakly_canonical(a.store->root()) ? a.store : nullptr);
     require(a.store->root() != b.store->root() || a.dataset.dataset.raw_capture_ids != b.dataset.dataset.raw_capture_ids, "Independent dataset required");
     for (auto &id : a.dataset.dataset.raw_capture_ids) require(std::find(b.dataset.dataset.raw_capture_ids.begin(), b.dataset.dataset.raw_capture_ids.end(), id) == b.dataset.dataset.raw_capture_ids.end() || a.store->root() != b.store->root(), "Shared source capture is not independent");
+    const auto calibration_hashes=source_hashes(a), dataset_hashes=source_hashes(b);
+    for(const auto &hash:dataset_hashes)
+        require(!calibration_hashes.contains(hash), "Shared source RawCapture content hash is not independent");
     require(solve_detail::same_target(a.target.target, b.target.target), "Fixed calibration requires exact physical target revision/geometry");
     require(a.rig && b.rig, "ChArUco rig sessions required");
     Json out{{"schema_version",1},{"calibration_session",s.at("calibration_session").at("name")},{"dataset_session",s.at("dataset_session").at("name")},{"parameters_fixed",true}};

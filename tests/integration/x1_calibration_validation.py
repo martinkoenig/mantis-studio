@@ -17,7 +17,7 @@ ROOT=Path(__file__).resolve().parents[2]
 BUILD=Path(sys.argv.pop(1)).resolve()
 sys.path.insert(0,str(ROOT/'tools'))
 from generate_calibration_target import DEFAULT, backend, generate, load_metadata, svg_bytes, validate
-from x1_calibration_report import summary, validate_summary, fail, rotation_delta, stats, repeatability, activation_report
+from x1_calibration_report import summary, validate_summary, fail, rotation_delta, stats, repeatability, activation_report, validate_x1_rig
 from validate_x1_calibration import Harness, parse, measured
 TOOL=BUILD/'bin/mantis-x1-calibration-validation'
 
@@ -94,6 +94,59 @@ class Tests(unittest.TestCase):
         self.assertAlmostEqual(a['pairs'][0]['cameras']['left']['fx_relative_delta'],.002,places=6)
         sessions[1]['evidence']['raw_captures']=sessions[0]['evidence']['raw_captures']
         with self.assertRaises(ValueError): repeatability(sessions)
+
+    def test_authoritative_rig_frame_contract(self):
+        evidence=copy.deepcopy(self.sessions[0]['evidence'])
+        evidence['rig']=json.loads((self.root/'rig-canonical.json').read_text())
+        validate_x1_rig(evidence)
+        canonical=evidence['rig']['payload']['solution']
+        for name in ('wrong-id','wrong-name'):
+            other=json.loads((self.root/f'rig-{name}.json').read_text())
+            # Both are valid immutable M4/M5 artifacts with identical numerical geometry.
+            for key in ('T_rig_from_left','T_rig_from_right','T_right_from_left'):
+                self.assertEqual(other['payload']['solution']['rig'][key]['matrix'],canonical['rig'][key]['matrix'])
+            evidence['rig']=other
+            with self.assertRaisesRegex(ValueError,'canonical X1 rig frame'):
+                validate_x1_rig(evidence)
+        evidence['rig']=json.loads((self.root/'rig-canonical.json').read_text())
+        for transform in ('T_rig_from_left','T_rig_from_right'):
+            wrong=copy.deepcopy(evidence)
+            wrong['rig']['payload']['solution']['rig'][transform]['target']['name']='Wrong target name'
+            with self.assertRaisesRegex(ValueError,'canonical X1 rig frame'):
+                validate_x1_rig(wrong)
+
+    def test_real_analysis_and_activation_reject_immutable_wrong_frame(self):
+        s=copy.deepcopy(self.sessions[0]); s['evidence_mode']='real'
+        evidence=copy.deepcopy(s['evidence'])
+        evidence['rig']=json.loads((self.root/'rig-wrong-id.json').read_text())
+        for mode in ('--analyze','--activation'):
+            a=parse([mode,'--project',s['project'],'--build-dir',str(BUILD),'--output-root',str(self.root/'frame-rejection')])
+            h=Harness(a)
+            with patch.object(h,'internal',return_value=evidence),patch.object(h,'start') as start:
+                with self.assertRaisesRegex(ValueError,'canonical X1 rig frame'):
+                    if a.analyze: h.analyze([s])
+                    else: h.activation(s)
+                start.assert_not_called()
+
+    def test_repeatability_content_hashes_across_projects(self):
+        sessions=copy.deepcopy(self.sessions)
+        self.assertEqual(repeatability(sessions)['session_order'],['a','b','c'])
+        a,b=sessions[:2]
+        b['project']=str(self.root/'another-project.mantis')
+        for index,raw in enumerate(b['evidence']['raw_captures']): raw['id']=f'imported-{index}'
+        # Disjoint source hashes still pass with different projects and IDs.
+        repeatability(sessions)
+        shared=a['evidence']['raw_captures'][0]['hash']
+        # Same digest under another algorithm is not the same complete hash identity.
+        b['evidence']['raw_captures'][0]['hash']='another-algorithm:'+shared.partition(':')[2]
+        repeatability(sessions)
+        b['evidence']['raw_captures'][0]['hash']=shared
+        with self.assertRaisesRegex(ValueError,'share source RawCapture content hashes'):
+            repeatability(sessions)
+        for value in (None,'',':digest','fnv1a64:'):
+            b['evidence']['raw_captures'][0]['hash']=value
+            with self.assertRaisesRegex(ValueError,'RawCapture content hash'):
+                repeatability(sessions)
 
     def test_report_protection_failure_and_binding_parsing(self):
         for mode in ('fixture','real'):
@@ -176,6 +229,8 @@ class Tests(unittest.TestCase):
         self.assertEqual([x[0] for x in calls],['dataset','camera','camera','rig']*2)
         self.assertEqual(calls[0][3],dict(roles=['left','right'],max_selected_per_camera=48))
         self.assertEqual(calls[1][3],dict(heldout_per_camera=4))
+        for call in (calls[3],calls[7]):
+            self.assertEqual(call[4],dict(heldout_pairs=4,rig_frame_id='org.mantis.x1.rig',rig_frame_name='Mantis X1 rig'))
         self.assertEqual(result['dataset_counts']['left']['analyzed'],26)
         self.assertEqual(result['source_capture_count'],2)
         self.assertEqual(json.loads((h.output/'determinism.json').read_text())['status'],'PASS')
