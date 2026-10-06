@@ -31,6 +31,7 @@ for folder in ["apps/studio", "apps/cli", "src/client"]:
     for path in (root / folder).rglob("*"):
         if path.suffix not in (".cpp", ".hpp"): continue
         text = path.read_text()
+        assert not re.search(r'#include.*(opencv|sqlite)', text), path
         assert not re.search(r'#include.*(services|pipeline_runtime|device_runtime|artifact_store|plugin_runtime|jobs\.hpp|calibration_artifacts|calibration_dataset_builder|calibration_opencv|calibration_solver_opencv)', text), path
 for path in (root / "plugins").rglob("*.cpp"):
     includes = re.findall(r'#include\s*[<"](mantis/[^>"]+)', path.read_text())
