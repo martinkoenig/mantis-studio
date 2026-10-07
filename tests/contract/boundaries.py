@@ -11,6 +11,8 @@ for module in foundation:
             assert not re.match(r"(Q[A-Z]|Qt|cuda|vulkan|Eigen|opencv|sqlite)", include), (path, include)
         assert "QColor" not in text
         assert not re.search(r'#include\s*[<"]linux/', text), path
+        if module == "data":
+            assert not re.search(r'#include\s*[<"](?:nlohmann|google/protobuf|mantis/(?:device_api|artifact_api|plugin_runtime|services|protocol))', text), path
         if module == "calibration":
             assert not re.search(r'#include\s*[<"](?:filesystem|nlohmann|google/protobuf|mantis/(?:artifact|data|memory|calibration_opencv|calibration_dataset_builder|calibration_solver_opencv|calibration_artifacts))', text), path
             assert "BufferView" not in text, path

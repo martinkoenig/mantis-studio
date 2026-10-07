@@ -40,3 +40,6 @@ foreach(frontend mantis-cli mantis-client mantis-studio mantis-studio-calibratio
 endforeach()
 
 mantis_assert_dependency_boundary(mantis-calibration-artifacts "^opencv_|^Qt[0-9]::|^protobuf::|^mantis-(services|client|protocol|calibration-opencv|calibration-dataset|calibration-solver-opencv)$")
+
+# Canonical acquisition semantics must never acquire upward API/runtime dependencies.
+mantis_assert_dependency_boundary(mantis-data "^mantis-(device-api|artifact-api|plugin-runtime|services|protocol)$|^protobuf::|^Qt[0-9]::")

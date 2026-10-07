@@ -24,6 +24,10 @@ struct DataTypeId {
 };
 inline const DataTypeId image{"org.mantis.ImageFrame", 1}, points{"org.mantis.PointCloud", 1},
     mesh{"org.mantis.Mesh", 1}, tensor{"org.mantis.Tensor", 1}, frameset{"org.mantis.FrameSet", 1};
+inline const DataTypeId acquisition_program{"org.mantis.AcquisitionProgram", 1},
+    acquisition_bundle{"org.mantis.AcquisitionBundle", 1},
+    acquisition_evidence{"org.mantis.AcquisitionEvidence", 1}, trigger_event{"org.mantis.TriggerEvent", 1},
+    laser_observation{"org.mantis.LaserObservation", 1};
 struct AttributeDescriptor {
     std::string name;
     ScalarType scalar{ScalarType::u8};
