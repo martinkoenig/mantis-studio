@@ -2,14 +2,22 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)]()
 
-# Mantis Studio — v0.2 Acquisition Foundation (development)
+# Mantis Studio — Acquisition and Geometric Calibration Foundations
 
 Continues the validated v0.1 implementation of the frozen [Mantis Studio Architecture v1](MANTIS_STUDIO_ARCHITECTURE.md).
 The daemon owns devices, captures, projects, jobs and plugins. Qt Quick Studio, the C++ CLI and the Python SDK are independent protocol clients.
 
 ![Mantis Studio with synthetic geometry](docs/images/studio.png)
 
-**This is a development milestone, not production scanner software.** The existing Virtual Scanner workflow remains. v0.2 adds a Linux Mantis X1 plugin, explicit dual-camera FrameSets, segmented recoverable raw recording, dual grayscale preview and deterministic hardware-free replay. The user has validated Q6A ARM64 build/tests, native CAMSS setup, dual Y10P streaming near 119.22 FPS and a finalized 141-FrameSet recording with deterministic replay. Corrected 4 ms software pairing and sustained recording remain **PENDING USER EXECUTION**. No reconstruction algorithms are added.
+**This is development software, not production scanner software.** v0.2 is
+complete and accepted, including real Q6A dual-camera acquisition, RawCapture
+recording and deterministic replay. v0.3 is current: M0–M7 geometric calibration
+are implemented; M8 physical acceptance remains pending. This
+`feature/v0.4-laser-acquisition` branch adds the
+[v0.4 L0 architecture baseline](docs/architecture/v0.4-laser-acquisition.md);
+L1–L8 laser runtime implementation remains planned. The Virtual Scanner workflow
+remains available. See [milestone coverage](docs/architecture/milestone.md) and
+the [release roadmap](ROADMAP.md) for status and evidence boundaries.
 
 ## Quick start
 
@@ -44,15 +52,20 @@ Export filenames must not already exist. Exports belong outside the `.mantis` pr
 - Real-time/ASAP replay, two-pass canonical byte/metadata verification.
 - Shared service semantics in C++, Python, CLI and the existing dark Studio shell.
 
-See the [architecture gap review](docs/architecture/v0.2-acquisition-review.md),
+See the [accepted v0.2 milestone record](docs/architecture/milestone.md#v02--real-acquisition-foundation),
 [storage format](docs/architecture/storage.md) and
 [exact Q6A acceptance procedure](docs/hardware/x1-q6a-acquisition-validation.md).
 The current Q6A reference profile selects **1280×720 Y10P**, Y10_1X10 upstream
-and VBLANK=196, with requested target 120 FPS. The user has validated this plugin-owned setup and streaming mode. Independent
-V4L2 counters showed a ~51.8 ms same-counter offset; timestamp pairing now selects
-observations within the unchanged 4 ms tolerance and needs a Q6A rerun.
+and VBLANK=196, with requested target 120 FPS. The accepted full Q6A harness
+validated plugin-owned setup, 123/123 finalized FrameSets, zero recorder
+loss/saturation and deterministic replay. Software timestamp correspondence uses
+the accepted **5 ms** bound with explicitly counted exclusions under
+[ADR-026](docs/adr/026-bounded-software-observation-pairing.md).
+Independent native counters do not establish exposure association;
+hardware synchronization and optical exposure skew remain unvalidated.
 Dual packed payload is **276.48 MB/s** before overhead. The reported microSD
-benchmark was 32.04 MB/s; sustained recording awaits suitable storage testing.
+benchmark was 32.04 MB/s; sustained recording and real process-crash recovery
+after the final pairing policy remain pending separately.
 Deterministic fixtures are not physical scanner evidence.
 
 ```bash
@@ -90,7 +103,7 @@ The frame-zero reference is intentional: client timing does not change the demon
 | Platform | Architectural target | Validation in this delivery | Support commitment |
 | --- | --- | --- | --- |
 | Linux x86_64 | Yes | Ubuntu 24.04; GCC 13; Qt 6.4; native build and process tests | Skeleton development reference |
-| Linux ARM64 | Tier 1 | Native GitHub Actions Studio ON/OFF passed for v0.2; user-validated Q6A setup/streaming/replay; corrected pairing pending | Linux build and fixture tests validated |
+| Linux ARM64 | Tier 1 | Native GitHub Actions Studio ON/OFF passed for v0.2; real Q6A setup/acquisition/5 ms correspondence/replay accepted; v0.3 M8 pending | Linux build and fixture tests validated; hardware claims scoped to accepted evidence |
 | Windows x86_64 | Yes | Platform implementation present; not built/tested here | Not yet supported |
 | macOS ARM64 | Yes | POSIX implementation used; not built/tested here | Not yet supported |
 
@@ -99,6 +112,8 @@ No x86 intrinsics or pointer-width assumptions are used in public structures. Th
 ## Documentation
 
 - [Release roadmap](ROADMAP.md)
+- [v0.3 geometric calibration baseline](docs/architecture/v0.3-geometric-calibration.md)
+- [v0.4 laser acquisition architecture (L0; implementation planned)](docs/architecture/v0.4-laser-acquisition.md)
 - [Build and run](BUILDING.md)
 - [Implementation architecture and module map](docs/architecture/implementation.md)
 - [Acceptance evidence](docs/architecture/validation.md)
@@ -112,4 +127,6 @@ No x86 intrinsics or pointer-width assumptions are used in public structures. Th
 - [Architecture Decision Records](docs/adr/README.md)
 - [Contributing](CONTRIBUTING.md), [security model](SECURITY.md)
 
-The architecture specification is included unchanged. No production hardware algorithms, GPU backends, marketplace, cloud deployment or mobile application are included.
+The architecture specification is included unchanged. Production laser extraction,
+triangulation/reconstruction, GPU backends, marketplace, cloud deployment and a
+mobile application remain future work.

@@ -1,11 +1,13 @@
 # Mantis Studio Roadmap
 
 Status: living product/engineering roadmap  
-Current development line: `feature/v0.3-geometric-calibration`
+Current release line: `feature/v0.3-geometric-calibration`
+
+v0.4 planning/development branch: `feature/v0.4-laser-acquisition`
 
 This document is the canonical high-level release roadmap for the Mantis Studio / Mantis X1 scanning path. Detailed architecture, implementation contracts, ADRs and validation evidence remain authoritative for their respective releases.
 
-The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. Versions after v0.3 are planning boundaries, not frozen contracts; exact work-package and milestone splits may be refined before implementation starts.
+The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has an L0 architecture baseline; L1–L8 implementation remains planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
 
 ## Release sequence
 
@@ -14,7 +16,7 @@ The roadmap intentionally distinguishes between **implemented/accepted**, **curr
 | v0.1 | Architecture/runtime foundation | Complete | Daemon-centric runtime, typed data/pipeline model, plugins, artifacts, jobs, clients and Studio shell |
 | v0.2 | Real acquisition foundation | Complete | Real dual-OV9281 X1 acquisition, FrameSets, recording/replay and Q6A hardware acceptance |
 | v0.3 | Geometric calibration foundation | Current | Physically scaled, versioned camera/stereo calibration with Studio workflow and real-hardware acceptance |
-| v0.4 | Laser acquisition foundation | Planned | Deterministic L1/L7 control, timing and capture semantics with typed laser observations |
+| v0.4 | Laser acquisition foundation | L0 architecture frozen; implementation planned | Deterministic projected-light control, timing and capture semantics with typed LaserObservation infrastructure |
 | v0.5 | Laser geometry and triangulation | Planned | Calibrated laser geometry, subpixel line extraction and metric 3D observations |
 | v0.6 | Tracking, registration and fusion | Planned | Multi-frame pose estimation, registration and fused point-cloud reconstruction |
 | v0.7 | Surface, mesh and texture | Planned | Surface reconstruction, mesh generation and RGB texture integration |
@@ -37,7 +39,8 @@ Canonical detail:
 
 ## v0.4 — Laser Acquisition Foundation
 
-**Planned; scope boundary not yet frozen.**
+**L0 architecture frozen; L1–L8 implementation planned.** See the
+[v0.4 architecture baseline and package map](docs/architecture/v0.4-laser-acquisition.md).
 
 The purpose of v0.4 is to make projected-light acquisition a first-class, deterministic part of the same Mantis runtime instead of introducing a separate scanner-specific side path.
 
@@ -47,8 +50,8 @@ Planned scope:
 - define safe, explicit laser states and transitions;
 - implement deterministic laser/camera sequencing;
 - add hardware-trigger/timing support required for repeatable optical acquisition;
-- preserve per-frame provenance of which projector/state produced each observation;
-- represent source-proximal extracted data through the typed `LaserObservation` semantic boundary;
+- preserve commanded, acknowledged and exposure-effective projector state as distinct evidence, with unknown/unavailable values where appropriate;
+- implement the typed `LaserObservation` semantic boundary/infrastructure and synthetic/test producers; real image-to-observation extraction remains v0.5;
 - keep capture authority on `mantisd` running on the X1/Q6A;
 - keep transport independent from scanner semantics so USB, Wi-Fi/network and local IPC use the same data model;
 - add replayable evidence and validation for sequencing/timing failures, dropped observations and fault handling.
@@ -61,7 +64,12 @@ dark -> L1 -> dark -> L7 -> ...
 
 The exact sequence is configuration/pipeline policy, not a hard-coded universal scanner algorithm.
 
-Explicitly **not** the goal of v0.4: complete 3D reconstruction. v0.4 establishes the trustworthy acquisition and observation foundation on which triangulation can be built.
+Explicitly outside v0.4: production L1/L7 line extraction, subpixel localization,
+seven-line disambiguation, laser-plane/projector geometric calibration,
+triangulation and reconstructed metric point output. These remain v0.5; later
+tracking/fusion/meshing/metrology remain v0.6+. ADR-031 defines the final deployment
+partition with source-proximal extraction on Q6A, not the milestone in which the
+extractor first becomes available.
 
 Relevant frozen future architecture:
 - [X1 remote observation boundary](docs/adr/031-x1-remote-observation-boundary.md)

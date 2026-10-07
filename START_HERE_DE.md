@@ -1,5 +1,9 @@
 # Mantis Studio Skeleton v0.1 — Start
 
+> Historische v0.1-Auslieferungsanleitung. Den aktuellen Implementierungsstand
+> und die Validierungsgrenzen beschreiben [README.md](README.md) und
+> [Milestone coverage](docs/architecture/milestone.md).
+
 Dieses Paket enthält den C++23-Quellcode des Architektur-Skeletons, die unveränderte Architekturvorgabe, Tests und Entwicklungsdokumentation.
 
 1. ZIP entpacken und in `mantis-studio` wechseln.

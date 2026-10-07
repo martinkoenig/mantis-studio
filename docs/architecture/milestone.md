@@ -125,6 +125,16 @@ milestone intent and deferred work. Current implementation state:
 M0–M7 are implemented. This does not claim full v0.3 hardware acceptance.
 M8 real-hardware calibration acceptance remains pending. Architecture v1 remains frozen; these are additive extensions.
 
+## v0.4 — Laser Acquisition Foundation (planning baseline)
+
+[L0](v0.4-laser-acquisition.md) and ADRs
+[040](../adr/040-projected-light-programs-and-safe-state-ownership.md)–[043](../adr/043-versioned-projected-light-recording-and-replay.md)
+freeze projected-light program/state ownership, typed acquisition evidence and
+LaserObservation semantics, additive plugin contracts and opt-in recording/replay.
+L1–L8 implementation and real laser acceptance remain planned. Production L1/L7
+extraction, subpixel localization and laser geometry/triangulation remain v0.5;
+ADR-031 describes their final deployment partition. L0 does not complete v0.3 M8.
+
 
 ## Accepted cross-milestone future architecture
 

@@ -1,5 +1,16 @@
 # Architecture Decision Records
 
+- [ADR-043: Projected-light recording uses opt-in RawCapture schema 3 and evidence-preserving replay](043-versioned-projected-light-recording-and-replay.md)
+- [ADR-042: Projected-light device and processing contracts use additive queried interfaces](042-additive-projected-light-plugin-contract.md)
+- [ADR-041: Laser observations and acquisition evidence are typed semantic boundaries](041-laser-observations-and-acquisition-evidence.md)
+- [ADR-040: Projected-light programs and safe-state ownership](040-projected-light-programs-and-safe-state-ownership.md)
+
+ADRs 040–043 freeze the [v0.4 L0 architecture baseline](../architecture/v0.4-laser-acquisition.md).
+L1–L8 implementation and physical laser acceptance remain planned. v0.4 supplies
+acquisition semantics and LaserObservation infrastructure; production extraction,
+subpixel localization and laser geometry/triangulation remain v0.5. ADR-031 retains
+its final Q6A/host deployment partition.
+
 - [ADR-039: Constrained and external scanners use a host-side device bridge](039-constrained-and-external-scanners-use-a-host-side-device-bridge.md)
 
 ADR-039 defines how microcontroller-class, vendor-controlled and otherwise external
