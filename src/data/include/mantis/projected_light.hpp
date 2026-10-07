@@ -369,16 +369,12 @@ struct AcquisitionEvidence {
     std::vector<LossAccounting> losses;
     std::string diagnostic; // Non-authoritative, bounded human explanation only.
 };
-struct FrameSetAssociation {
-    FrameSetKey key;
-    std::vector<SourceFrameKey> frames; // Association only: unchanged image-only FrameSet lives elsewhere.
-};
 struct AcquisitionBundle {
     schema::DataTypeId type{schema::acquisition_bundle};
     BundleKey key;
-    RuntimeTimestamp published;                  // Runtime monotonic publication time, never exposure time.
-    AcquisitionEvidence evidence;                // Exactly one, by construction.
-    std::optional<FrameSetAssociation> frameset; // Zero or one, by construction.
+    RuntimeTimestamp published;   // Runtime monotonic publication time, never exposure time.
+    AcquisitionEvidence evidence; // Exactly one, by construction.
+    Published frameset; // Zero or one actual immutable FrameSet; correlation keys remain in evidence.
     std::vector<TriggerEvent> triggers;
 };
 

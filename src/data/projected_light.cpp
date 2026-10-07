@@ -80,7 +80,13 @@ void program(const ProgramReference &v) {
 void calibration_ref(const ExactCalibrationReference &v) {
     id(v.calibration.id);
     require(v.calibration.schema_version > 0, "Calibration schema must be positive");
-    present(v.content, reference);
+    present(v.content, [&](const auto &r) {
+        reference(r);
+        require(r.type.version == v.calibration.schema_version,
+                "Calibration content reference schema mismatch");
+        require(r.revision == v.calibration.revision, "Calibration content reference revision mismatch");
+        require(r.hash.get(), "Resolved calibration content reference requires an established hash");
+    });
 }
 void calibration_kind(const ExactCalibrationReference &v, std::string_view name) {
     calibration_ref(v);
@@ -613,17 +619,25 @@ void validate_bundle(const AcquisitionBundle &v) {
     require(v.triggers.size() <= max_bundle_members - 1 - (v.frameset ? 1 : 0),
             "Bundle exceeds 64 total members");
     if (v.frameset) {
-        frameset(v.frameset->key);
-        unique(v.frameset->frames, 16);
-        require(!v.frameset->frames.empty(), "FrameSet association requires 1..16 images");
-        require(v.frameset->key.run_id == v.key.run_id && v.evidence.frameset.get() &&
-                    *v.evidence.frameset.get() == v.frameset->key,
-                "Bundle FrameSet/evidence association mismatch");
+        require(v.frameset->type == schema::frameset, "Bundle attachment must be FrameSet schema 1");
+        require(!v.frameset->frames.empty() && v.frameset->frames.size() <= 16 &&
+                    v.frameset->attributes.empty(),
+                "FrameSet requires 1..16 image children and no flat attributes");
+        auto key = v.evidence.frameset.get();
+        require(key && v.frameset->header.sequence.value == key->sequence,
+                "Bundle FrameSet/evidence sequence mismatch");
         require(v.frameset->frames.size() == v.evidence.frames.size(), "Bundle source frame count mismatch");
         for (size_t i = 0; i < v.frameset->frames.size(); ++i) {
-            frame(v.frameset->frames[i]);
-            require(v.frameset->frames[i] == v.evidence.frames[i].frame,
-                    "Bundle source frame ordering mismatch");
+            const auto &image = v.frameset->frames[i];
+            require(image && image->type == schema::image && image->frames.empty(),
+                    "FrameSet child must be an ImageFrame schema 1 without children");
+            for (const auto &a : image->attributes) {
+                auto r = schema::validate(a.descriptor, a.buffer.size());
+                if (!r)
+                    throw Failure(r.error());
+            }
+            require(image->header.sequence.value == v.evidence.frames[i].frame.native_sequence,
+                    "Bundle source frame sequence/order mismatch");
         }
     }
     std::set<TriggerKey> keys;
@@ -712,6 +726,8 @@ void validate_observation(const LaserObservation &v) {
     }
     require(c.origin >= ObservationOrigin::real && c.origin <= ObservationOrigin::imported,
             "Invalid observation origin");
+    if (c.origin != ObservationOrigin::imported)
+        require(v.key.run_id.get(), "Real/synthetic observation requires an established run identity");
     present(c.producer_completed, runtime_timestamp);
     text(v.diagnostic, false);
     require(v.disposition >= ObservationDisposition::success &&
@@ -790,8 +806,8 @@ void validate_observation(const LaserObservation &v) {
             throw Failure(r.error());
         return *r;
     };
-    auto pbytes = map(pixels), ebytes = map(ei), evbytes = map(ev), lbytes = map(li), lvbytes = map(lv),
-         cbytes = map(cf), cvbytes = map(cv);
+    auto pbytes = map(pixels), fbytes = map(flags), ebytes = map(ei), evbytes = map(ev), lbytes = map(li),
+         lvbytes = map(lv), cbytes = map(cf), cvbytes = map(cv);
     auto read = []<class T>(const Attribute *a, std::span<const std::byte> b, uint64_t row,
                             uint64_t col = 0) {
         T x;
@@ -806,11 +822,14 @@ void validate_observation(const LaserObservation &v) {
                     std::isfinite(read.operator()<float>(pixels, pbytes, row, 1)),
                 "Source pixel coordinates must be finite");
         uint32_t emitter_index_ = 0, line_index_ = 0;
+        auto quality = read.operator()<uint32_t>(flags, fbytes, row);
         uint8_t emitter_valid_ = 0, line_valid_ = 0;
         if (ei) {
             emitter_valid_ = read.operator()<uint8_t>(ev, evbytes, row);
             emitter_index_ = read.operator()<uint32_t>(ei, ebytes, row);
             require(emitter_valid_ <= 1, "Emitter validity mask must be 0 or 1");
+            require(bool(quality & laser::emitter_unknown) == (emitter_valid_ == 0),
+                    "Emitter unknown quality bit contradicts validity mask");
             require(emitter_valid_ ? emitter_index_ < v.emitter_dictionary.size() : emitter_index_ == 0,
                     "Emitter index out of range or unknown placeholder is not zero");
         }
@@ -818,6 +837,8 @@ void validate_observation(const LaserObservation &v) {
             line_valid_ = read.operator()<uint8_t>(lv, lvbytes, row);
             line_index_ = read.operator()<uint32_t>(li, lbytes, row);
             require(line_valid_ <= 1, "Line validity mask must be 0 or 1");
+            require(bool(quality & laser::line_unknown) == (line_valid_ == 0),
+                    "Line unknown quality bit contradicts validity mask");
             require(line_valid_ ? line_index_ < v.line_dictionary.size() : line_index_ == 0,
                     "Line index out of range or unknown placeholder is not zero");
             if (line_valid_)
@@ -832,7 +853,7 @@ void validate_observation(const LaserObservation &v) {
             require(std::isfinite(x) && (mask ? (x >= 0 && x <= 1) : x == 0),
                     "Valid confidence must be finite in [0,1]; unknown placeholder must be finite zero");
         }
-        // All u32 quality words, including future bits, are accepted and preserved.
+        // Ambiguous/rejected and all future bits retain their L0/producer semantics unchanged.
     }
 }
 } // namespace

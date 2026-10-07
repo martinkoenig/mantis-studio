@@ -155,6 +155,27 @@ template <class T> Attribute column(std::string_view name, schema::ScalarType sc
     auto bytes = sizeof(T);
     return attr({std::string(name), scalar, {n}, {bytes}, ""}, values);
 }
+Published frameset_packet() {
+    Packet image;
+    image.type = schema::image;
+    image.header.sequence.value = frame_key().native_sequence;
+    image.attributes = {
+        attr({"org.mantis.pixels", schema::ScalarType::u8, {720, 1280}, {1280, 1}, "intensity"},
+             std::vector<uint8_t>(720 * 1280, 7))};
+    Packet fs;
+    fs.type = schema::frameset;
+    fs.header.sequence.value = 10;
+    fs.frames = {publish(std::move(image))};
+    return publish(std::move(fs));
+}
+template <class F> void rejects_frameset(AcquisitionBundle b, F edit) {
+    rejects(b, [&](auto &x) {
+        Packet packet = *x.frameset;
+        edit(packet);
+        // Deliberately bypass publish(): immutable ownership alone cannot prove packet validity.
+        x.frameset = std::make_shared<const Packet>(std::move(packet));
+    });
+}
 LaserObservation observation(uint64_t n = 1) {
     LaserObservation o;
     o.key = {run, {{"producer-stream"}}, generation, {0}};
@@ -182,6 +203,134 @@ LaserObservation observation(uint64_t n = 1) {
         o.confidence_interpretation = impl();
     }
     return o;
+}
+void resolved_calibration_references() {
+    for (bool rig : {false, true}) {
+        auto o = observation();
+        auto field = rig ? &CameraFrameEvidence::rig_calibration : &CameraFrameEvidence::camera_calibration;
+        o.context.source.*field = ExactCalibrationReference{
+            {{"logical-calibration"}, 1, 7},
+            ContentReference{{"immutable-calibration"},
+                             {rig ? "org.mantis.RigCalibration" : "org.mantis.CameraCalibration", 1},
+                             Hash{"sha256", "abcd"},
+                             7}};
+        valid(o);
+        auto invalid = [&](auto edit) {
+            rejects(o, [&](auto &x) {
+                auto exact = *(x.context.source.*field).get();
+                auto resolved = *exact.content.get();
+                edit(resolved);
+                exact.content = std::move(resolved);
+                x.context.source.*field = std::move(exact);
+            });
+        };
+        invalid([](auto &r) { ++r.revision; });
+        invalid([](auto &r) { ++r.type.version; });
+        invalid([](auto &r) { r.type.name = "org.mantis.LaserModel"; });
+        invalid([](auto &r) { r.hash = Unknown{}; });
+        invalid([](auto &r) { r.hash = Unavailable{}; });
+        for (auto unresolved :
+             {Evidence<ContentReference>{Unknown{}}, Evidence<ContentReference>{Unavailable{}}}) {
+            auto imported = o;
+            auto exact = *(imported.context.source.*field).get();
+            exact.content = unresolved;
+            imported.context.source.*field = exact;
+            imported.context.origin = ObservationOrigin::imported;
+            valid(imported);
+            CHECK((imported.context.source.*field).get()->content.presence() == unresolved.presence());
+        }
+    }
+    auto e = evidence();
+    e.rig_calibration = ExactCalibrationReference{
+        {{"rig-logical"}, 1, 7},
+        ContentReference{{"rig-immutable"}, {"org.mantis.RigCalibration", 1}, Hash{"sha256", "abcd"}, 7}};
+    valid(e);
+    rejects(e, [](auto &x) {
+        auto exact = *x.rig_calibration.get();
+        auto resolved = *exact.content.get();
+        resolved.revision = 8;
+        exact.content = resolved;
+        x.rig_calibration = exact;
+    });
+    rejects(e, [](auto &x) {
+        auto exact = *x.rig_calibration.get();
+        auto resolved = *exact.content.get();
+        resolved.hash = Unknown{};
+        exact.content = resolved;
+        x.rig_calibration = exact;
+    });
+}
+void observation_run_identity() {
+    for (auto origin : {ObservationOrigin::real, ObservationOrigin::synthetic}) {
+        for (uint64_t n : {0u, 1u}) {
+            auto o = observation(n);
+            o.context.origin = origin;
+            valid(o);
+            rejects(o, [](auto &x) { x.key.run_id = Unknown{}; }, "established run identity");
+            rejects(o, [](auto &x) { x.key.run_id = Unavailable{}; }, "established run identity");
+        }
+    }
+    for (auto absent : {Evidence<RunId>{Unknown{}}, Evidence<RunId>{Unavailable{}}}) {
+        auto imported = observation();
+        imported.context.origin = ObservationOrigin::imported;
+        imported.key.run_id = absent;
+        valid(imported);
+        CHECK(imported.key.run_id.presence() == absent.presence());
+    }
+    auto correlations = [&](auto attach) {
+        auto o = observation();
+        attach(o);
+        valid(o);
+        rejects(o, [](auto &x) { x.key.run_id = RunId{{"other-run"}}; }, "matching established run");
+        o.context.origin = ObservationOrigin::imported;
+        rejects(o, [](auto &x) { x.key.run_id = Unknown{}; }, "matching established run");
+        rejects(o, [](auto &x) { x.key.run_id = Unavailable{}; }, "matching established run");
+    };
+    correlations([](auto &o) { o.context.bundle = BundleKey{run, {0}}; });
+    correlations([](auto &o) { o.context.frameset = FrameSetKey{run, {{{"set-stream"}}, generation}, 10}; });
+    correlations([](auto &o) { o.context.correlation = ProgramCorrelation{program_ref(), {run, 0, 0}}; });
+    correlations([](auto &o) { o.context.triggers = {request().key}; });
+    correlations([](auto &o) { o.context.acquisition_evidence = EvidenceKey{run, {0}}; });
+}
+void quality_mask_consistency() {
+    auto known = observation();
+    for (auto bit : {laser::emitter_unknown, laser::line_unknown})
+        rejects(
+            known,
+            [bit](auto &o) {
+                o.attributes[1] = attr(laser::quality_flags_descriptor(1), std::vector<uint32_t>{bit});
+            },
+            "contradicts validity mask");
+    auto unknown = observation();
+    unknown.attributes[3] = column(laser::emitter_valid, schema::ScalarType::u8, std::vector<uint8_t>{0});
+    unknown.attributes[5] = column(laser::line_valid, schema::ScalarType::u8, std::vector<uint8_t>{0});
+    unknown.attributes[1] =
+        attr(laser::quality_flags_descriptor(1),
+             std::vector<uint32_t>{laser::emitter_unknown | laser::line_unknown | 0x8000000cu});
+    valid(unknown);
+    for (uint32_t flags : {0u, laser::emitter_unknown, laser::line_unknown})
+        rejects(
+            unknown,
+            [flags](auto &o) {
+                o.attributes[1] = attr(laser::quality_flags_descriptor(1), std::vector<uint32_t>{flags});
+            },
+            "contradicts validity mask");
+    auto mixed = observation(3);
+    mixed.attributes[3] = column(laser::emitter_valid, schema::ScalarType::u8, std::vector<uint8_t>{1, 1, 0});
+    mixed.attributes[5] = column(laser::line_valid, schema::ScalarType::u8, std::vector<uint8_t>{1, 0, 0});
+    const std::vector<uint32_t> flags{0x4000000c, laser::line_unknown,
+                                      laser::emitter_unknown | laser::line_unknown | 0x8000000c};
+    mixed.attributes[1] = attr(laser::quality_flags_descriptor(3), flags);
+    valid(mixed);
+    std::vector<uint32_t> preserved(3);
+    std::memcpy(preserved.data(), mixed.attributes[1].buffer.map_read()->data(), 3 * sizeof(uint32_t));
+    CHECK(preserved == flags);
+    rejects(
+        mixed,
+        [](auto &o) {
+            o.attributes[1] = attr(laser::quality_flags_descriptor(3), std::vector<uint32_t>{0, 0, 0});
+        },
+        "contradicts validity mask");
 }
 void identities() {
     CHECK(schema::acquisition_program == (schema::DataTypeId{"org.mantis.AcquisitionProgram", 1}));
@@ -525,7 +674,8 @@ void triggers_and_bundles() {
         "64 total");
     FrameSetKey fs{run, {{{"frameset-stream"}}, generation}, 10};
     auto captured = bundle();
-    captured.frameset = FrameSetAssociation{fs, {frame_key()}};
+    auto images = frameset_packet();
+    captured.frameset = images;
     captured.evidence.frameset = fs;
     captured.evidence.frames = {source_frame()};
     captured.evidence.step = StepInstance{run, 0, 0};
@@ -533,9 +683,62 @@ void triggers_and_bundles() {
     valid(captured);
     CHECK(captured.published.time.nanoseconds !=
           captured.evidence.frames[0].source_timestamp.get()->nanoseconds);
-    rejects(captured, [](auto &x) { x.frameset->frames.clear(); });
-    rejects(captured, [](auto &x) { x.frameset->frames.push_back(frame_key()); });
-    static_assert(std::is_same_v<decltype(captured.frameset), std::optional<FrameSetAssociation>>);
+    CHECK(captured.frameset == images);
+    auto retained = captured;
+    CHECK(retained.frameset->frames[0] == images->frames[0]);
+    CHECK(retained.frameset->frames[0]->attributes[0].buffer.identity() ==
+          images->frames[0]->attributes[0].buffer.identity());
+    CHECK(retained.frameset->frames[0]->attributes[0].buffer.map_read()->data() ==
+          images->frames[0]->attributes[0].buffer.map_read()->data());
+    rejects_frameset(captured, [](auto &p) { p.type = schema::image; });
+    rejects_frameset(captured, [](auto &p) { p.type.version = 2; });
+    rejects_frameset(captured, [](auto &p) { p.frames.clear(); });
+    rejects_frameset(captured, [](auto &p) { p.frames.resize(17, p.frames[0]); });
+    rejects_frameset(captured, [](auto &p) { p.attributes = p.frames[0]->attributes; });
+    rejects_frameset(captured, [](auto &p) { p.frames[0].reset(); });
+    rejects_frameset(captured, [](auto &p) {
+        Packet image = *p.frames[0];
+        image.type = schema::points;
+        p.frames[0] = std::make_shared<const Packet>(std::move(image));
+    });
+    rejects_frameset(captured, [](auto &p) {
+        Packet image = *p.frames[0];
+        image.type.version = 2;
+        p.frames[0] = std::make_shared<const Packet>(std::move(image));
+    });
+    rejects_frameset(captured, [](auto &p) {
+        Packet image = *p.frames[0];
+        image.frames = {p.frames[0]};
+        p.frames[0] = std::make_shared<const Packet>(std::move(image));
+    });
+    rejects_frameset(captured, [](auto &p) {
+        Packet image = *p.frames[0];
+        image.attributes[0].descriptor.shape[0] = 0;
+        p.frames[0] = std::make_shared<const Packet>(std::move(image));
+    });
+    rejects_frameset(captured, [](auto &p) { ++p.header.sequence.value; });
+    rejects_frameset(captured, [](auto &p) {
+        Packet image = *p.frames[0];
+        ++image.header.sequence.value;
+        p.frames[0] = std::make_shared<const Packet>(std::move(image));
+    });
+    rejects(captured, [](auto &x) { x.evidence.frameset = Unknown{}; });
+    rejects(captured, [](auto &x) { x.evidence.frames.clear(); });
+    for (uint64_t i = 0; i < 62; ++i) {
+        auto event = request(i);
+        captured.evidence.triggers.push_back(event.key);
+        captured.triggers.push_back(event);
+    }
+    valid(captured); // Evidence + actual FrameSet + 62 triggers = 64 members.
+    rejects(
+        captured,
+        [](auto &x) {
+            auto event = request(62);
+            x.evidence.triggers.push_back(event.key);
+            x.triggers.push_back(event);
+        },
+        "64 total");
+    static_assert(std::is_same_v<decltype(captured.frameset), Published>);
     auto next = bundle();
     next.key.sequence = {1};
     next.evidence.key.ordinal = {1};
@@ -584,11 +787,11 @@ void observations() {
     CHECK(laser::emitter_unknown == 1 && laser::line_unknown == 2 && laser::ambiguous == 4 &&
           laser::producer_rejected == 8);
     auto future = o;
-    future.attributes[1] = attr(laser::quality_flags_descriptor(1), std::vector<uint32_t>{0x8000000f});
+    future.attributes[1] = attr(laser::quality_flags_descriptor(1), std::vector<uint32_t>{0x8000000c});
     valid(future);
     uint32_t preserved = 0;
     std::memcpy(&preserved, future.attributes[1].buffer.map_read()->data(), 4);
-    CHECK(preserved == 0x8000000f);
+    CHECK(preserved == 0x8000000c);
     rejects(o, [](auto &x) {
         x.attributes[1] = attr(laser::quality_flags_descriptor(2), std::vector<uint32_t>{0, 0});
     });
@@ -619,6 +822,8 @@ void observations() {
     });
     rejects(o, [](auto &x) {
         x.attributes[3] = column(laser::emitter_valid, schema::ScalarType::u8, std::vector<uint8_t>{0});
+        x.attributes[1] =
+            attr(laser::quality_flags_descriptor(1), std::vector<uint32_t>{laser::emitter_unknown});
     });
     rejects(o, [](auto &x) {
         x.emitter_dictionary.push_back(emitter_b);
@@ -639,6 +844,8 @@ void observations() {
         unknown.attributes[mask] =
             column(unknown.attributes[mask].descriptor.name, schema::ScalarType::u8, std::vector<uint8_t>{0});
     unknown.attributes[6] = column(laser::confidence, schema::ScalarType::f32, std::vector<float>{0});
+    unknown.attributes[1] = attr(laser::quality_flags_descriptor(1),
+                                 std::vector<uint32_t>{laser::emitter_unknown | laser::line_unknown});
     valid(unknown);
     auto absent = o;
     absent.attributes.resize(2);
@@ -760,6 +967,9 @@ int main() {
         programs();
         evidence_states();
         triggers_and_bundles();
+        resolved_calibration_references();
+        observation_run_identity();
+        quality_mask_consistency();
         observations();
         legacy_data();
         std::cout << checks << " canonical projected-light checks passed\n";
