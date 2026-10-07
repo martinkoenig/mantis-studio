@@ -1,3 +1,4 @@
+#include "buffer_handle.hpp"
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -266,26 +267,17 @@ data::Attribute decode(const MantisAttributeV1 &v, Reader &r) {
     return out;
 }
 MantisAttributeV1 encode(const data::Attribute &v, Writer &w) {
-    require(w.host && sdk::compatible(w.host) && w.host->allocate && w.host->retain && w.host->release &&
-                w.host->write_map && w.host->read_map && w.host->publish,
+    require(w.host && sdk::compatible(w.host) && w.host->retain && w.host->release && w.host->read_map,
             "Invalid buffer host");
     auto valid = schema::validate(v.descriptor, v.buffer.size());
     require(bool(valid), "Invalid attribute layout");
-    auto bytes = v.buffer.map_read();
-    require(bool(bytes), "Unmapped semantic buffer");
-    auto *buffer = w.host->allocate(v.buffer.size(), 64);
-    require(buffer, "Buffer allocation failed");
+    auto *buffer = detail::wrap_buffer(v.buffer);
     try {
         w.buffers.push_back(buffer);
     } catch (...) {
         w.host->release(buffer);
         throw;
     }
-    void *dest{};
-    uint64_t size{};
-    require(!w.host->write_map(buffer, &dest, &size) && size == v.buffer.size(), "Buffer write failed");
-    std::memcpy(dest, bytes->data(), bytes->size());
-    require(!w.host->publish(buffer), "Buffer publish failed");
     MantisAttributeV1 out{};
     init(out);
     out.name = w.text(v.descriptor.name);
@@ -516,6 +508,9 @@ device::ProjectedGraph graph(const MantisProjectedGraphV1 *v) {
     r.prefix(*v);
     device::ProjectedGraph out;
     out.parent = decode_value<Id>(v->parent_id, r);
+    out.frameset_stream = decode_evidence<data::StreamId>(v->frameset_stream, r);
+    if (out.frameset_stream.get())
+        require(!out.frameset_stream.get()->id.value.empty(), "Empty FrameSet stream ID");
     const auto &l = v->limits;
     r.prefix(l);
     require(l.max_components > 0 && l.max_components <= 64 && l.max_steps > 0 && l.max_steps <= 256 &&
@@ -554,6 +549,18 @@ device::ProjectedGraph graph(const MantisProjectedGraphV1 *v) {
         require(!o.descriptor.name.empty() && c.participant_kind <= MANTIS_PARTICIPANT_CONTROLLER,
                 "Invalid component kind/name");
         o.kind = static_cast<device::ParticipantKind>(c.participant_kind);
+        require((o.kind == device::ParticipantKind::image) == (c.image_source != nullptr),
+                "Image source descriptor required exactly for image participants");
+        if (c.image_source) {
+            r.prefix(*c.image_source);
+            const auto &source = *c.image_source;
+            o.image_source =
+                device::ProjectedImageSource{decode_value<data::StreamId>(source.stream_id, r),
+                                             r.text(source.physical_identity), source.width, source.height};
+            require(!o.image_source->stream.id.value.empty() && !o.image_source->physical_identity.empty() &&
+                        !o.role.empty() && source.width > 0 && source.height > 0,
+                    "Incomplete image source identity/dimensions");
+        }
         o.descriptor.capabilities = decode_array<std::string>(c.capabilities, c.capability_count, r, 128);
         require(c.capability_count <= 128, "Too many capabilities");
         std::set<std::string> caps;
@@ -624,6 +631,16 @@ device::ProjectedGraph graph(const MantisProjectedGraphV1 *v) {
     require(parent.kind == device::ParticipantKind::parent && parent.descriptor.parent.value.empty() &&
                 device::has_capability(parent.descriptor, MANTIS_PROJECTED_LIGHT_ACQUISITION_V1),
             "Invalid projected-light parent");
+    require(device::has_capability(parent.descriptor, MANTIS_FRAMESET_STREAM_V1) ==
+                (out.frameset_stream.get() != nullptr),
+            "Accessible FrameSet output requires a stable stream identity");
+    std::set<data::StreamId> image_streams;
+    for (const auto &component : out.components)
+        if (component.image_source)
+            require(image_streams.insert(component.image_source->stream).second &&
+                        (!out.frameset_stream.get() ||
+                         component.image_source->stream != *out.frameset_stream.get()),
+                    "Duplicate source/output stream identity");
     const bool integrated = std::find(parent.participants.begin(), parent.participants.end(), out.parent) !=
                             parent.participants.end();
     if (integrated)

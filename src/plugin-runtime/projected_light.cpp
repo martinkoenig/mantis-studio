@@ -88,9 +88,44 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
     device::ProjectedGraph graph_;
     sdk::ProjectedLight api_;
     std::mutex context_mutex_;
+    std::mutex operation_mutex_;
     std::shared_ptr<const data::AcquisitionProgram> prepared_;
     std::optional<data::RunId> active_run_;
     std::optional<data::GenerationId> active_generation_;
+    std::optional<data::AcquisitionBundle> previous_;
+    std::unique_lock<std::mutex> ordinary() {
+        std::unique_lock lock(operation_mutex_, std::try_to_lock);
+        if (!lock.owns_lock())
+            fail(Status::busy, "Projected-light operation is already active");
+        return lock;
+    }
+    // Caller holds context_mutex_. Correlation is boundary validation, not scheduling.
+    void step_matches(const data::StepInstance &step) const {
+        if (!prepared_ || !active_run_ || step.run_id != *active_run_ ||
+            step.repetition_index >= prepared_->repetitions ||
+            std::none_of(prepared_->steps.begin(), prepared_->steps.end(),
+                         [&](const auto &s) { return s.index == step.step_index; }))
+            fail(Status::incompatible, "Step does not belong to the active prepared program");
+    }
+    void reference_matches(const data::ProgramReference &actual) const {
+        const auto &expected = prepared_->identity;
+        if (actual.id != expected.id ||
+            (expected.hash.get() && (!actual.hash.get() || *actual.hash.get() != *expected.hash.get())))
+            fail(Status::incompatible, "Program identity/hash differs from prepared program");
+        if (const auto *e = expected.content.get()) {
+            const auto *a = actual.content.get();
+            if (!a || a->id != e->id || a->type != e->type || a->revision != e->revision ||
+                a->hash != e->hash)
+                fail(Status::incompatible, "Program content provenance differs from prepared program");
+        }
+        // An enriched reference must also agree with established prepared provenance.
+        if (const auto *a = actual.content.get();
+            a && a->hash.get() && expected.hash.get() && *a->hash.get() != *expected.hash.get())
+            fail(Status::incompatible, "Program content contradicts prepared hash");
+        if (actual.hash.get() && expected.content.get() && expected.content.get()->hash.get() &&
+            *actual.hash.get() != *expected.content.get()->hash.get())
+            fail(Status::incompatible, "Program hash contradicts prepared content");
+    }
     void run_matches(const data::Evidence<data::RunId> &run,
                      const data::Evidence<data::GenerationId> &generation) {
         std::lock_guard lock(context_mutex_);
@@ -121,8 +156,12 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
                 fail(Status::invalid_argument, "Program participant is outside selected parent");
             return *it;
         };
-        for (const auto &c : p.participants.cameras)
-            (void)find(c.component, device::ParticipantKind::image);
+        for (const auto &c : p.participants.cameras) {
+            const auto &selected = find(c.component, device::ParticipantKind::image);
+            if (!selected.image_source || c.stream != selected.image_source->stream ||
+                c.role != selected.role)
+                fail(Status::invalid_argument, "Program camera stream/role differs from selected graph");
+        }
         for (const auto &e : p.participants.emitters)
             (void)find(e, device::ParticipantKind::emitter);
         for (const auto &c : p.participants.controllers)
@@ -157,6 +196,7 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
     }
     Result<device::ProgramValidation> validate(const data::AcquisitionProgram &p, uint32_t t) override {
         return checked([&] {
+            auto operation = ordinary();
             timeout(t);
             program(p);
             semantic::ProgramView view(p);
@@ -166,6 +206,11 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
     }
     Result<device::ProgramValidation> prepare(const data::AcquisitionProgram &p, uint32_t t) override {
         return checked([&] {
+            auto operation = ordinary();
+            {
+                std::lock_guard lock(context_mutex_);
+                prepared_.reset();
+            }
             timeout(t);
             program(p);
             semantic::ProgramView view(p);
@@ -181,7 +226,13 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
     }
     Result<void> start(const data::RunId &run, const data::GenerationId &generation, uint32_t t) override {
         auto r = checked([&] {
+            auto operation = ordinary();
             timeout(t);
+            {
+                std::lock_guard lock(context_mutex_);
+                if (!prepared_)
+                    fail(Status::invalid_argument, "Start requires a successfully prepared program");
+            }
             if (run.id.value.empty() || run.id.value.size() > 256 || generation.id.value.empty() ||
                 generation.id.value.size() > 256)
                 fail(Status::invalid_argument, "Invalid run/generation identity");
@@ -190,6 +241,7 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
                 std::lock_guard lock(context_mutex_);
                 active_run_ = run;
                 active_generation_ = generation;
+                previous_.reset();
             }
             return true;
         });
@@ -199,6 +251,7 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
     }
     Result<std::optional<data::AcquisitionBundle>> next(uint32_t t) override {
         return checked([&]() -> std::optional<data::AcquisitionBundle> {
+            auto operation = ordinary();
             timeout(t);
             BundleReceiver r;
             auto rc = api_.next(t, r.emit, &r);
@@ -216,6 +269,11 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
                 if (!active_run_ || r.value->key.run_id != *active_run_ || !prepared_ ||
                     r.value->evidence.program.id != prepared_->identity.id)
                     fail(Status::incompatible, "Bundle does not belong to the selected run/program");
+                reference_matches(r.value->evidence.program);
+                if (r.value->evidence.step.get())
+                    step_matches(*r.value->evidence.step.get());
+                for (const auto &trigger : r.value->triggers)
+                    step_matches(trigger.step);
                 const auto &actual = r.value->evidence.participants;
                 const auto &expected = prepared_->participants;
                 if (actual.cameras.size() != expected.cameras.size() ||
@@ -227,16 +285,27 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
                         actual.cameras[i].stream != expected.cameras[i].stream ||
                         actual.cameras[i].role != expected.cameras[i].role)
                         fail(Status::incompatible, "Bundle camera identity differs from prepared program");
+                if (previous_) {
+                    auto valid = data::validate_successor(*previous_, *r.value);
+                    if (!valid)
+                        fail(Status::incompatible, valid.error().message, "projected-light");
+                }
+                previous_ = *r.value; // immutable image storage remains shared
             }
             return std::move(r.value);
         });
     }
     Result<device::ProjectedStatus> status(uint32_t t) override {
         return checked([&] {
+            auto operation = ordinary();
             timeout(t);
             StatusReceiver r;
             auto status = r.finish(api_.status(t, r.emit, &r));
             run_matches(status.run, status.generation);
+            if (status.step.get()) {
+                std::lock_guard lock(context_mutex_);
+                step_matches(*status.step.get());
+            }
             return status;
         });
     }
@@ -248,20 +317,22 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
             AbortReceiver r;
             auto outcome = r.finish(api_.abort(static_cast<uint32_t>(reason), t, r.emit, &r));
             run_matches(outcome.run, outcome.fenced_generation);
+            std::set<data::ComponentId> expected, actual;
+            for (const auto &component : graph_.components)
+                if (component.kind == device::ParticipantKind::emitter)
+                    expected.insert(data::ComponentId{component.descriptor.id});
             for (const auto &emitter : outcome.emitters) {
-                auto found = std::find_if(graph_.components.begin(), graph_.components.end(),
-                                          [&](const auto &component) {
-                                              return component.kind == device::ParticipantKind::emitter &&
-                                                     component.descriptor.id == emitter.emitter.id;
-                                          });
-                if (found == graph_.components.end())
-                    fail(Status::incompatible, "Abort reports an unowned emitter");
+                if (!actual.insert(emitter.emitter).second)
+                    fail(Status::incompatible, "Abort reports a duplicate emitter");
             }
+            if (actual != expected)
+                fail(Status::incompatible, "Abort must report every owned emitter exactly once");
             return outcome;
         });
     }
     Result<void> stop(uint32_t t) override {
         auto r = checked([&] {
+            auto operation = ordinary();
             timeout(t);
             result(api_.stop(t));
             return true;
@@ -282,6 +353,7 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
     }
     Result<std::string> diagnostics(uint32_t t) override {
         return checked([&] {
+            auto operation = ordinary();
             timeout(t);
             struct Text {
                 uint32_t calls{};

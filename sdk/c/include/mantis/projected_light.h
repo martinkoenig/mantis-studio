@@ -59,10 +59,17 @@ typedef struct MantisProjectedLimitsV1 {
  * participants identify acquisition relationships, not presentation roles.
  * Capability advertisement describes accessible API support, never physical proof.
  */
+typedef struct MantisProjectedImageSourceV1 {
+    uint32_t struct_size, abi_version;
+    const char *stream_id, *physical_identity;
+    uint32_t width, height;
+} MantisProjectedImageSourceV1;
 typedef struct MantisProjectedComponentV1 {
     uint32_t struct_size, abi_version;
     const char *id, *parent_id, *name, *role;
     uint32_t participant_kind;
+    /* Required exactly for image participants; one selected/configured source. */
+    const MantisProjectedImageSourceV1 *image_source;
     const char *const *capabilities;
     uint32_t capability_count;
     const char *const *controls;
@@ -84,6 +91,8 @@ typedef struct MantisProjectedGraphV1 {
     const char *parent_id;
     const MantisProjectedComponentV1 *components;
     uint32_t component_count;
+    /* Typed three-state stable parent output stream, established when accessible. */
+    MantisEvidenceStreamIdV1 frameset_stream;
     MantisProjectedLimitsV1 limits;
 } MantisProjectedGraphV1;
 typedef int (*MantisProjectedGraphEmitV1)(void *, const MantisProjectedGraphV1 *);
@@ -115,11 +124,14 @@ typedef int (*MantisAbortEmitV1)(void *, const MantisAbortOutcomeV1 *);
 /* Optional under root ABI 1. open owns the selected parent and all resources;
  * no separate MantisAcquisitionV1 open is needed or implied. Duplicate ownership
  * is BUSY, including conflicting camera-only opens of those resources.
- * Ordinary calls are serial per instance. abort is thread-safe concurrently with
+ * Ordinary calls are serial per instance. Abort calls are serial with each other;
+ * the SDK rejects a second abort with BUSY. One abort may run concurrently with
  * any ordinary pending call, including next. First inhibit ON/triggers, then
  * fence stale generation work, then request all participating emitters OFF.
  * It never waits for recorder/normal callbacks/queues/UI. Software success does
  * not establish optical OFF; outcome carries actual availability/evidence.
+ * outcome contains exactly one entry per owned emitter, including when all
+ * command/readback fields are Unknown/Unavailable; ordering has no meaning.
  * stop/destroy quiesce callbacks within timeout or return BUSY/TIMEOUT; failed
  * destroy leaves the instance valid and owned. Successful destroy emits nothing,
  * releases ownership and forbids future callbacks. Unload only after success.

@@ -9,7 +9,7 @@
 using namespace mantis;
 using namespace std::chrono_literals;
 namespace {
-unsigned checks{};
+std::atomic_uint checks{};
 #define CHECK(x)                                                                                             \
     do {                                                                                                     \
         ++checks;                                                                                            \
@@ -164,6 +164,10 @@ void descriptors(const std::shared_ptr<plugins::Loaded> &loaded) {
     CHECK(graphs.size() == 1);
     CHECK(graphs[0].components.size() == 4 && graphs[0].image_participants().size() == 1);
     CHECK(graphs[0].image_participants()[0].id.value == "camera-alpha");
+    const auto &image = *graphs[0].components[1].image_source;
+    CHECK(image.stream.id.value == "image-stream" && image.physical_identity == "physical-camera-alpha" &&
+          image.width == 2 && image.height == 2);
+    CHECK(graphs[0].frameset_stream.get()->id.value == "frameset-stream");
     CHECK(graphs[0].limits.watchdog.presence() == data::Presence::unavailable &&
           graphs[0].limits.interlock.presence() == data::Presence::unknown);
     // The same generic image selection protects existing calibration discovery.
@@ -171,18 +175,171 @@ void descriptors(const std::shared_ptr<plugins::Loaded> &loaded) {
     std::vector<device::Descriptor> components;
     for (const auto &component : graphs[0].components) {
         auto descriptor = component.descriptor;
-        if (descriptor.id.value == "camera-alpha")
-            descriptor.metadata = {
-                {"role", "imaging"}, {"identity", "camera-alpha"}, {"width", "2"}, {"height", "2"}};
+        if (component.image_source)
+            descriptor.metadata = {{"role", component.role},
+                                   {"identity", component.image_source->physical_identity},
+                                   {"width", std::to_string(component.image_source->width)},
+                                   {"height", std::to_string(component.image_source->height)}};
         components.push_back(std::move(descriptor));
     }
     auto cameras = get(services::discovered_activation_components(parent, components));
     CHECK(cameras.size() == 1 && cameras[0].role == "imaging");
-    for (uint32_t f = TEST_GRAPH_NULL; f <= TEST_GRAPH_PRESENCE; ++f) {
+    for (auto f : {TEST_GRAPH_NULL, TEST_GRAPH_SIZE, TEST_GRAPH_VERSION, TEST_GRAPH_COUNT,
+                   TEST_GRAPH_DUPLICATE, TEST_GRAPH_PARENT, TEST_GRAPH_RELATION, TEST_GRAPH_PRESENCE,
+                   TEST_IMAGE_NULL, TEST_IMAGE_STREAM, TEST_IMAGE_IDENTITY, TEST_IMAGE_WIDTH,
+                   TEST_IMAGE_HEIGHT, TEST_IMAGE_PREFIX, TEST_FRAMESET_STREAM}) {
         c->fault(f);
         incompatible([&] { plugins::discover_projected_light(*loaded, 100); });
     }
     c->fault(TEST_NORMAL);
+}
+void successors(const std::shared_ptr<plugins::Loaded> &loaded) {
+    auto *c = control(*loaded);
+    for (auto f :
+         {TEST_SUCCESSOR_DUPLICATE, TEST_SUCCESSOR_BACKWARD, TEST_SUCCESSOR_ORDINAL, TEST_SUCCESSOR_CLOCK,
+          TEST_SUCCESSOR_CLOCK_GENERATION, TEST_SUCCESSOR_TIME, TEST_SUCCESSOR_TRIGGER_REUSE,
+          TEST_SUCCESSOR_TRIGGER_BACKWARD, TEST_SUCCESSOR_CONTROLLER, TEST_SUCCESSOR_STREAM}) {
+        c->fault(TEST_NORMAL);
+        c->shape(f == TEST_SUCCESSOR_STREAM ? 1u
+                 : (f == TEST_SUCCESSOR_CONTROLLER || f == TEST_SUCCESSOR_TRIGGER_REUSE ||
+                    f == TEST_SUCCESSOR_TRIGGER_BACKWARD)
+                     ? 2u
+                     : 0u);
+        auto executor = opened(loaded);
+        start(*executor);
+        c->publication(1);
+        const auto first = *get(executor->next(100));
+        c->publication(2);
+        c->fault(f);
+        auto rejected = executor->next(100);
+        CHECK(!rejected && rejected.error().code == Status::incompatible);
+        // Rejection must not advance the previous accepted publication.
+        c->fault(TEST_NORMAL);
+        c->publication(2);
+        auto second = get(executor->next(100));
+        CHECK(second && data::validate_successor(first, *second));
+        c->publication(2);
+        auto duplicate = executor->next(100);
+        CHECK(!duplicate && duplicate.error().code == Status::incompatible);
+        c->fault(TEST_NOT_READY);
+        c->publication(3);
+        CHECK(!get(executor->next(0)));
+        c->fault(TEST_NORMAL);
+        c->publication(3);
+        CHECK(get(executor->next(100))->key.sequence.value == 3);
+        get(executor->stop(100));
+        get(executor->start({{"new-run"}}, {{"new-generation"}}, 100));
+        c->publication(0);
+        CHECK(get(executor->next(100))->key.sequence.value == 0);
+        get(executor->close(100));
+        c->shape(UINT32_MAX);
+    }
+}
+void prepared_program(const std::shared_ptr<plugins::Loaded> &loaded) {
+    auto *c = control(*loaded);
+    c->fault(TEST_NORMAL);
+    auto executor = opened(loaded);
+    auto unprepared = executor->start(run, generation, 100);
+    CHECK(!unprepared && unprepared.error().code == Status::invalid_argument);
+    CHECK(get(executor->prepare(program(), 100)).accepted);
+    c->fault(TEST_REJECT_PROGRAM);
+    CHECK(!get(executor->prepare(program(), 100)).accepted);
+    c->fault(TEST_NORMAL);
+    auto stale = executor->start(run, generation, 100);
+    CHECK(!stale && stale.error().code == Status::invalid_argument);
+    CHECK(get(executor->prepare(program(), 100)).accepted);
+    c->fault(TEST_FAILURE);
+    auto failed = executor->prepare(program(), 100);
+    CHECK(!failed && failed.error().code == Status::plugin_failed);
+    c->fault(TEST_NORMAL);
+    stale = executor->start(run, generation, 100);
+    CHECK(!stale && stale.error().code == Status::invalid_argument);
+    CHECK(get(executor->prepare(program(), 100)).accepted);
+    auto invalid = program();
+    invalid.repetitions = 0;
+    CHECK(!executor->prepare(invalid, 100));
+    stale = executor->start(run, generation, 100);
+    CHECK(!stale && stale.error().code == Status::invalid_argument);
+    // Graph identity validation happens before plugin acceptance.
+    for (bool stream : {true, false}) {
+        auto wrong = program();
+        if (stream)
+            wrong.participants.cameras[0].stream = {{"wrong-stream"}};
+        else
+            wrong.participants.cameras[0].role = "wrong-role";
+        auto validated = executor->validate(wrong, 100);
+        CHECK(!validated && validated.error().code == Status::invalid_argument);
+        auto prepared = executor->prepare(wrong, 100);
+        CHECK(!prepared && prepared.error().code == Status::invalid_argument);
+    }
+    get(executor->close(100));
+    for (auto f : {TEST_HASH_MISMATCH, TEST_HASH_DOWNGRADE, TEST_CONTENT_MISMATCH, TEST_CONTENT_DOWNGRADE,
+                   TEST_CONTENT_HASH, TEST_EVIDENCE_STEP, TEST_EVIDENCE_REPETITION, TEST_TRIGGER_STEP,
+                   TEST_TRIGGER_REPETITION, TEST_STATUS_STEP, TEST_STATUS_REPETITION}) {
+        c->fault(TEST_NORMAL);
+        c->shape(f == TEST_TRIGGER_STEP || f == TEST_TRIGGER_REPETITION ? 2u : 1u);
+        executor = opened(loaded);
+        auto prepared = program();
+        prepared.steps[0].index = 42; // Declared index is deliberately not vector position.
+        prepared.repetitions = 3;
+        prepared.identity.hash = Hash{"sha256", "abcd"};
+        prepared.identity.content = data::ContentReference{
+            prepared.identity.id.id, schema::acquisition_program, Hash{"sha256", "abcd"}, 7};
+        if (f == TEST_CONTENT_HASH)
+            prepared.identity.hash = data::Unknown{};
+        CHECK(get(executor->prepare(prepared, 100)).accepted);
+        get(executor->start(run, generation, 100));
+        auto status = get(executor->status(100));
+        CHECK(status.step.get()->step_index == 42);
+        auto first = get(executor->next(100));
+        CHECK(first && first->evidence.program.content.get()->revision == 7);
+        if (f == TEST_TRIGGER_STEP || f == TEST_TRIGGER_REPETITION)
+            CHECK(first->triggers[0].step.step_index == 42);
+        else
+            CHECK(first->evidence.step.get()->step_index == 42);
+        c->fault(f);
+        if (f == TEST_STATUS_STEP || f == TEST_STATUS_REPETITION) {
+            auto output = executor->status(100);
+            CHECK(!output && output.error().code == Status::incompatible);
+        } else {
+            auto output = executor->next(100);
+            CHECK(!output && output.error().code == Status::incompatible);
+        }
+        c->fault(TEST_NORMAL);
+        c->publication(1); // Failed correlation must not advance successor state either.
+        CHECK(get(executor->next(100))->key.sequence.value == 1);
+        get(executor->close(100));
+        c->shape(UINT32_MAX);
+    }
+}
+void abort_emitters(const std::shared_ptr<plugins::Loaded> &loaded) {
+    auto *c = control(*loaded);
+    for (auto f : {TEST_ABORT_EMPTY, TEST_ABORT_MISSING, TEST_ABORT_DUPLICATE, TEST_ABORT_FOREIGN,
+                   TEST_ABORT_UNKNOWN, TEST_ABORT_REVERSE, TEST_NORMAL}) {
+        c->fault(TEST_TWO_EMITTERS);
+        auto executor = opened(loaded);
+        CHECK(executor->graph().components.size() == 5);
+        c->fault(f);
+        auto outcome = executor->abort(data::AcquisitionReason::user_cancel, 100);
+        if (f == TEST_ABORT_UNKNOWN || f == TEST_ABORT_REVERSE || f == TEST_NORMAL) {
+            CHECK(outcome && outcome->emitters.size() == 2);
+            CHECK(outcome->emitters[0].observed.presence() == data::Presence::unavailable);
+            if (f == TEST_ABORT_UNKNOWN)
+                CHECK(outcome->emitters[0].commanded.presence() == data::Presence::unknown);
+            else
+                CHECK(outcome->emitters[0].commanded.get()->state == data::EmitterState::off);
+            if (f == TEST_ABORT_UNKNOWN)
+                CHECK(outcome->emitters[1].commanded.presence() == data::Presence::unavailable);
+            else
+                CHECK(outcome->emitters[1].commanded.get()->state == data::EmitterState::off);
+            CHECK(outcome->emitters[1].observed.presence() == data::Presence::unavailable);
+            if (f == TEST_ABORT_REVERSE)
+                CHECK(outcome->emitters[0].emitter.id.value == "emitter-beta");
+        } else
+            CHECK(!outcome && outcome.error().code == Status::incompatible);
+        c->fault(TEST_NORMAL);
+        get(executor->close(100));
+    }
 }
 void lifecycle(const std::shared_ptr<plugins::Loaded> &loaded) {
     auto *c = control(*loaded);
@@ -394,8 +551,44 @@ void concurrency(const std::shared_ptr<plugins::Loaded> &loaded) {
     release.set_value();
     CHECK(!raw.get());
     CHECK(!api->destroy(instance, 100));
+
+    // The SDK admits one ordinary call and one abort, but never two aborts.
+    sdk::ProjectedLight client(api, plugins::host_api(), "parent-alpha", 100, loaded);
+    CHECK(!client.prepare(pv.get(), 100, valid, nullptr));
+    CHECK(!client.start("sdk-run", "sdk-generation", 100));
+    std::promise<void> normal_entered, normal_release, abort_entered, abort_release;
+    auto normal_released = normal_release.get_future().share();
+    auto abort_released = abort_release.get_future().share();
+    auto ordinary = std::async(std::launch::async, [&] {
+        return client.next(1000, [&](const MantisSemanticPacketV1 &) {
+            normal_entered.set_value();
+            CHECK(normal_released.wait_for(800ms) == std::future_status::ready);
+        });
+    });
+    CHECK(normal_entered.get_future().wait_for(250ms) == std::future_status::ready);
+    auto side = std::async(std::launch::async, [&] {
+        return client.abort(MANTIS_ACQUISITION_REASON_USER_CANCEL, 1000, [&](const MantisAbortOutcomeV1 &) {
+            abort_entered.set_value();
+            CHECK(abort_released.wait_for(800ms) == std::future_status::ready);
+        });
+    });
+    CHECK(abort_entered.get_future().wait_for(250ms) == std::future_status::ready);
+    unsigned second_callbacks = 0;
+    auto second_abort = [&](const MantisAbortOutcomeV1 &) { ++second_callbacks; };
+    CHECK(client.abort(MANTIS_ACQUISITION_REASON_USER_CANCEL, 0, second_abort) == MANTIS_PL_BUSY &&
+          second_callbacks == 0);
+    const auto before_destroy = c->destroyed();
+    CHECK(client.close(5) == MANTIS_PL_BUSY && c->destroyed() == before_destroy);
+    normal_release.set_value();
+    CHECK(!ordinary.get());
+    CHECK(client.close(5) == MANTIS_PL_BUSY && c->destroyed() == before_destroy);
+    auto waiting_close = std::async(std::launch::async, [&] { return client.close(1000); });
+    CHECK(waiting_close.wait_for(10ms) == std::future_status::timeout);
+    CHECK(client.abort(MANTIS_ACQUISITION_REASON_USER_CANCEL, 0, second_abort) == MANTIS_PL_BUSY);
+    abort_release.set_value();
+    CHECK(!side.get() && !waiting_close.get() && c->destroyed() == before_destroy + 1);
 }
-std::atomic_uint retains{}, releases{};
+std::atomic_uint retains{}, releases{}, allocations{};
 void buffer_ownership() {
     MantisHostV1 host = *plugins::host_api();
     host.retain = [](MantisBuffer *b) {
@@ -406,15 +599,40 @@ void buffer_ownership() {
         ++releases;
         plugins::host_api()->release(b);
     };
+    MantisHostV1 producer = *plugins::host_api();
+    producer.allocate = [](uint64_t size, uint64_t alignment) {
+        ++allocations;
+        return plugins::host_api()->allocate(size, alignment);
+    };
     data::Published retained;
+    const void *backing{};
+    std::optional<sdk::RetainedBuffer> plugin_retained;
     {
-        auto original = domain_fixture::frameset_packet();
-        plugins::semantic::PacketView view(original, plugins::host_api());
+        auto full = domain_fixture::frameset_packet();
+        auto image = *full->frames[0];
+        image.attributes[0].buffer = image.attributes[0].buffer.slice(32, 4);
+        image.attributes[0].descriptor.shape = {2, 2};
+        image.attributes[0].descriptor.stride = {2, 1};
+        auto frameset = *full;
+        frameset.frames = {data::publish(std::move(image))};
+        auto original = data::publish(std::move(frameset));
+        auto original_bytes = get(original->frames[0]->attributes[0].buffer.map_read());
+        backing = original_bytes.data();
+        plugins::semantic::PacketView view(original, &producer);
+        const auto &attribute = view.get()->data->frames[0].attributes[0];
+        const void *abi_backing{};
+        uint64_t size{};
+        CHECK(!producer.read_map(attribute.buffer, &abi_backing, &size));
+        CHECK(allocations == 0 && abi_backing == backing && size == original_bytes.size() && size == 4);
+        plugin_retained.emplace(&producer, attribute.buffer);
         retained = std::get<data::Published>(plugins::semantic::packet(view.get(), &host));
         CHECK(retains == 1 && releases == 0);
     }
     auto bytes = get(retained->frames[0]->attributes[0].buffer.map_read());
-    CHECK(bytes[0] == std::byte{7});
+    CHECK(bytes[0] == std::byte{7} && bytes.data() == backing);
+    const void *plugin_backing{};
+    uint64_t size{};
+    CHECK(!producer.read_map(plugin_retained->get(), &plugin_backing, &size) && plugin_backing == backing);
     retained.reset();
     CHECK(retains == releases);
 }
@@ -447,6 +665,9 @@ int main(int argc, char **argv) {
         descriptors(loaded);
         lifecycle(loaded);
         malformed(loaded);
+        successors(loaded);
+        prepared_program(loaded);
+        abort_emitters(loaded);
         concurrency(loaded);
         registry(argv[2]);
         // Buffer ownership has its own host retain/release counters.
@@ -460,7 +681,7 @@ int main(int argc, char **argv) {
         CHECK(caught);
         buffer_ownership();
         CHECK(control(*loaded)->live_instances() == 0);
-        std::cout << checks << " projected-light ABI/adapter checks passed\n";
+        std::cout << checks.load() << " projected-light ABI/adapter checks passed\n";
         return 0;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

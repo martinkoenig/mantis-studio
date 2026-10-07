@@ -242,6 +242,10 @@ typedef struct MantisEvidenceStepInstanceV1 {
     uint32_t struct_size, abi_version, presence;
     MantisStepInstanceV1 const *value;
 } MantisEvidenceStepInstanceV1;
+typedef struct MantisEvidenceStreamIdV1 {
+    uint32_t struct_size, abi_version, presence;
+    const char * const *value;
+} MantisEvidenceStreamIdV1;
 typedef struct MantisEvidenceSyncEvidenceV1 {
     uint32_t struct_size, abi_version, presence;
     MantisSyncEvidenceV1 const *value;

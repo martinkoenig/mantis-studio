@@ -12,10 +12,16 @@ inline bool image_participant(const Descriptor &d) {
     return has_capability(d, image_stream);
 }
 enum class ParticipantKind { parent, image, emitter, controller };
+struct ProjectedImageSource {
+    data::StreamId stream;
+    std::string physical_identity;
+    uint32_t width{}, height{};
+};
 struct ProjectedComponent {
     Descriptor descriptor;
     std::string role;
     ParticipantKind kind{};
+    std::optional<ProjectedImageSource> image_source;
     std::vector<Id> controls, participants, trigger_endpoints;
     std::vector<data::EmitterState> emitter_states;
     std::vector<data::CaptureMode> capture_modes, trigger_modes;
@@ -36,6 +42,7 @@ struct ProjectedGraph {
     Id parent;
     std::vector<ProjectedComponent> components;
     ProjectedLimits limits;
+    data::Evidence<data::StreamId> frameset_stream;
     std::vector<Descriptor> image_participants() const {
         std::vector<Descriptor> out;
         for (const auto &c : components)

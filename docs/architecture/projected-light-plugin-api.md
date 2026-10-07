@@ -73,8 +73,11 @@ Buffers must be published before emission. The producer releases its own referen
 when done. The receiver must call host `retain` for each reference it keeps, then
 `release` exactly once when finished. The host adapter retains storage in immutable
 BufferViews, without rewriting pixels or headers. SDK `RetainedBuffer` provides
-RAII retention. Host-to-C `PacketView` owns its buffer handles and copies immutable
-bulk bytes into published host buffers; it does not create serialization bytes.
+RAII retention. Host-to-C `PacketView` owns opaque host handles sharing the existing
+immutable `BufferView` storage, including slice ownership. Constructing a semantic
+view performs no bulk allocation or payload copy. Mapping a non-host-addressable
+domain requires an explicit transfer policy; view construction does not transfer it.
+No public `BufferView` pointer or serialization bytes cross the ABI.
 
 ## Descriptor graph and accessible functionality
 
@@ -90,6 +93,16 @@ parent lists all owned participating children. Nested containment is supported;
 parent references must resolve without cycles. A controller can be integrated in
 the parent by advertising its accessible controller capabilities, with optional
 parent self-participation. Resource identity is never a transient `/dev/videoX`.
+
+Each image component requires a borrowed `MantisProjectedImageSourceV1` pointer;
+other kinds require NULL. Its size/version prefix, stable `stream_id`, stable
+`physical_identity`, and positive `uint32_t width/height` describe one selected
+acquisition source. The component's existing `role` remains canonical. Internal
+`ProjectedComponent::image_source` preserves those typed fields for calibration
+compatibility without diagnostic JSON. Stream IDs are unique in the selected graph.
+`MantisProjectedGraphV1::frameset_stream` is a typed three-state stream-ID wrapper:
+an accessible parent FrameSet output requires an established, distinct stable ID.
+This adds no mode negotiation or hardware-specific object.
 
 Image participants require `image-stream`. Emitter/controller children are excluded
 from image selection and existing calibration discovery by capability/participant
@@ -125,6 +138,16 @@ against the selected graph. The plugin validates its actual accessible resources
 L3 owns scheduling/preflight policy. No acquisition program bytes, on-disk schema,
 MANTIS03 encoding or alternative JSON program model are defined here.
 
+Every camera participant's component, stream and canonical role must match the
+selected graph. Start requires a locally recorded successful preparation. Every
+admitted prepare attempt invalidates the previous prepared snapshot before validation;
+local errors, plugin failures and rejected preparations leave no startable snapshot.
+Emitted evidence must match its ProgramId and participant declarations and preserve
+established hash/content provenance exactly, without downgrade or contradiction.
+Every established evidence/status step and every TriggerEvent step must belong to
+the active run, have `repetition_index < prepared.repetitions`, and reference a
+declared step **index**, which need not equal its position in the vector.
+
 ## Full immutable semantic publication
 
 `MantisSemanticPacketV1` has a bounded discriminant and exactly one matching typed
@@ -148,6 +171,14 @@ pointer, with all other pointers NULL. Its alternatives are:
 
 There is no recursive semantic packet graph. FrameSet identity and rich headers
 survive the boundary; the adapter never replaces output headers with input headers.
+The first accepted bundle is individually validated. Each subsequent successful
+publication is checked by L1 `validate_successor(previous, next)` before acceptance:
+bundle sequence and evidence causal ordinal strictly increase; publication clock/
+generation stays fixed and time never regresses; source-local trigger sequences
+increase without reuse, and controller/source-stream generations remain stable.
+One previous immutable bundle is held through shared buffer ownership. Malformed
+outputs, failed calls, NOT_READY and abort never advance it. Successful start resets
+successor state for the new run. This is boundary validation, not L3 scheduling.
 All converted semantic values undergo L1 validation, including trigger/evidence run
 consistency, actual FrameSet validity and exposure-effective presence. Projected
 `next` accepts only the bundle alternative and binds its run/program/participants
@@ -202,6 +233,10 @@ execution-generation work, then request OFF for relevant emitters. Return struct
 inhibited/fenced/request availability, scoped run/generation, per-emitter L1 evidence,
 and structured initiating/cleanup outcome. A successful software OFF request never
 establishes optical OFF. Unknown/unavailable feedback stays unknown/unavailable.
+The outcome must contain exactly one `EmitterEvidence` for every graph-owned
+emitter: no missing, duplicate or foreign IDs. Ordering carries no semantics.
+An entry is still mandatory when all command/readback fields are Unknown or
+Unavailable; `off_requested` never substitutes for observed/effective OFF.
 An already-entered synchronous callback may finish; abort cannot wait for it, normal
 queue draining, recorder progress or UI/client activity. No new stale-generation
 ON/trigger work is permitted after the fence.
@@ -212,9 +247,11 @@ destroy guarantees no future callbacks. Callers prevent new calls during destruc
 Independent physical fail-OFF/interlocks/watchdogs remain necessary where hardware
 requires them; this software interface provides no safety certification.
 
-SDK `ProjectedLight` gates ordinary calls, lets abort bypass the data-plane gate,
-tracks all calls, and refuses close while calls/callbacks remain active. Successful
-close releases ownership. RAII destruction uses the explicit open timeout for its
+SDK `ProjectedLight` permits one ordinary call and one simultaneous abort, with a
+second abort returning BUSY without a callback. Abort bypasses the ordinary gate
+and remains available while close waits for an ordinary call. Close waits for both
+kinds of call and refuses within its deadline while either callback remains active.
+Successful close releases ownership. RAII destruction uses the explicit open timeout for its
 bounded cleanup and keeps shared instance state alive through in-flight calls.
 The runtime supplies a DSO/ownership lifetime pin. Canonical-library `Loaded`
 wrappers share a single root initialize/shutdown lifetime; destroying an alias
@@ -272,6 +309,13 @@ destroy refusal during active callbacks. Frozen v0.1 and pre-L2 acquisition C DS
 are compiled independently; portable comparisons check every frozen table field's
 size/alignment/offset. `tests/contract/v1/plugin.h` remains unchanged.
 
+Review follow-up tests additionally exercise every successor invariant, recovery
+after rejection/NOT_READY and start reset, exact prepared provenance/step correlation,
+typed image identities/dimensions, complete per-emitter abort presence, and abort-vs-
+abort gating. Semantic-view allocation counters remain zero and mapped backing
+addresses remain identical before and after view destruction/retention, proving
+that payload storage is shared rather than copied.
+
 `generate_views.py` is an explicit reviewed L2 field catalog, not a parser that
 silently tracks future domain changes. Regenerating its checked-in C declarations
 and converters must not change published ABI layouts or values without an additive
@@ -285,9 +329,9 @@ projected-light-semantics, core, acquisition, acquisition-qos and existing camer
 calibration/recording regressions. `git diff --check` and
 `python3 tests/contract/boundaries.py .` passed.
 
-ASan + UBSan with leak detection and halt-on-error passed **6/6** focused tests:
-projected-light-contract, c-abi, legacy-abi, projected-light-semantics, acquisition
-and acquisition-qos. The final fixture changes were retested under both ordinary
+ASan + UBSan with leak detection and halt-on-error passed **7/7** focused tests:
+projected-light-contract, c-abi, legacy-abi, projected-light-semantics, acquisition,
+acquisition-qos and core. The final fixture changes were retested under both ordinary
 and sanitizer builds. No use-after-free, undefined behavior or leak was reported.
 Native ARM64/cross-toolchain execution was unavailable locally; those results are
 not claimed. L2 acceptance remains pending.

@@ -12,6 +12,7 @@ namespace {
 using mantis::sdk::boundary;
 std::atomic_uint fault{}, pending_calls{}, destroyed_instances{}, live_instances{}, initializations{},
     shutdowns{};
+std::atomic_uint selected_shape{UINT32_MAX}, selected_publication{UINT32_MAX};
 std::mutex ownership;
 bool owned{};
 template <class T> T view() {
@@ -57,13 +58,6 @@ MantisSourceFrameKeyV1 source_frame() {
     out.camera = "camera-alpha";
     out.stream = stream();
     out.native_sequence = 7;
-    return out;
-}
-MantisProgramReferenceV1 program_reference(const char *id = "program-alpha") {
-    auto out = view<MantisProgramReferenceV1>();
-    out.id = id;
-    out.hash = absent<MantisEvidenceHashV1>(MANTIS_PRESENCE_UNAVAILABLE);
-    out.content = absent<MantisEvidenceContentReferenceV1>();
     return out;
 }
 MantisEvidenceSourceV1 source(uint32_t method = MANTIS_EVIDENCE_METHOD_SOFTWARE_DISPATCH) {
@@ -116,7 +110,9 @@ MantisPacketHeaderV1 packet_header(uint64_t sequence) {
     return out;
 }
 struct Graph {
-    std::array<MantisProjectedComponentV1, 4> components;
+    std::array<MantisProjectedComponentV1, 5> components;
+    MantisProjectedImageSourceV1 image_source = view<MantisProjectedImageSourceV1>();
+    const char *frameset_stream = "frameset-stream";
     MantisProjectedGraphV1 graph = view<MantisProjectedGraphV1>();
     Graph() {
         static const char *parent_caps[] = {MANTIS_PROJECTED_LIGHT_ACQUISITION_V1, MANTIS_FRAMESET_STREAM_V1};
@@ -158,6 +154,10 @@ struct Graph {
         c.capability_count = 2;
         c.capture_modes = captures;
         c.capture_mode_count = 2;
+        image_source.stream_id = "image-stream";
+        image_source.physical_identity = "physical-camera-alpha";
+        image_source.width = image_source.height = 2;
+        c.image_source = &image_source;
         auto &e = components[2];
         e.capabilities = emitter_caps;
         e.capability_count = 1;
@@ -175,6 +175,7 @@ struct Graph {
         graph.parent_id = "parent-alpha";
         graph.components = components.data();
         graph.component_count = 4;
+        graph.frameset_stream = present<MantisEvidenceStreamIdV1>(&frameset_stream);
         auto &l = graph.limits;
         l = view<MantisProjectedLimitsV1>();
         l.max_components = 4;
@@ -196,14 +197,67 @@ struct Graph {
         l.fail_off = absent<MantisEvidenceUInt32V1>(MANTIS_PRESENCE_UNAVAILABLE);
     }
 };
+// Own only semantic metadata needed to echo the prepared reference in this fixture.
+struct Reference {
+    std::string algorithm, hex, content_id, content_type, content_algorithm, content_hex;
+    MantisProgramReferenceV1 reference{};
+    MantisHashV1 hash = view<MantisHashV1>(), content_hash = view<MantisHashV1>();
+    MantisContentReferenceV1 content = view<MantisContentReferenceV1>();
+    void copy(const MantisProgramReferenceV1 &p) {
+        reference = p;
+        if (p.hash.value) {
+            algorithm = p.hash.value->algorithm;
+            hex = p.hash.value->hex;
+        }
+        if (p.content.value) {
+            content = *p.content.value;
+            content_id = content.id;
+            content_type = content.type.name;
+            if (content.hash.value) {
+                content_algorithm = content.hash.value->algorithm;
+                content_hex = content.hash.value->hex;
+            }
+        }
+        // Never keep even unused borrowed pointers after the prepare callback.
+        reference.id = nullptr;
+        reference.hash.value = nullptr;
+        reference.content.value = nullptr;
+        content.id = nullptr;
+        content.type.name = nullptr;
+        content.hash.value = nullptr;
+    }
+    MantisProgramReferenceV1 get(const char *id) {
+        auto out = reference;
+        out.id = id;
+        if (out.hash.presence == MANTIS_PRESENCE_ESTABLISHED) {
+            hash.algorithm = algorithm.c_str();
+            hash.hex = hex.c_str();
+            out.hash.value = &hash;
+        }
+        if (out.content.presence == MANTIS_PRESENCE_ESTABLISHED) {
+            content.id = content_id.c_str();
+            content.type.name = content_type.c_str();
+            if (content.hash.presence == MANTIS_PRESENCE_ESTABLISHED) {
+                content_hash.algorithm = content_algorithm.c_str();
+                content_hash.hex = content_hex.c_str();
+                content.hash.value = &content_hash;
+            }
+            out.content.value = &content;
+        }
+        return out;
+    }
+};
 struct Instance {
     const MantisHostV1 *host;
     std::mutex mutex;
     std::condition_variable wake;
-    bool prepared{}, started{}, inhibited{};
+    bool prepared{}, started{}, inhibited{}, two_emitters{};
     uint32_t active{}, publication{};
     std::string run, generation, program = "program-alpha";
-    explicit Instance(const MantisHostV1 *h) : host(h) {}
+    Reference reference;
+    uint32_t step_index{};
+    uint64_t repetitions{};
+    explicit Instance(const MantisHostV1 *h) : host(h), two_emitters(fault == TEST_TWO_EMITTERS) {}
     struct Call {
         Instance &instance;
         explicit Call(Instance &s) : instance(s) {
@@ -249,6 +303,40 @@ int enumerate(uint32_t t, MantisProjectedGraphEmitV1 emit, void *ctx) {
         case TEST_GRAPH_PRESENCE:
             g.graph.limits.watchdog.presence = 99;
             break;
+        case TEST_IMAGE_NULL:
+            g.components[1].image_source = nullptr;
+            break;
+        case TEST_IMAGE_STREAM:
+            g.image_source.stream_id = "";
+            break;
+        case TEST_IMAGE_IDENTITY:
+            g.image_source.physical_identity = "";
+            break;
+        case TEST_IMAGE_WIDTH:
+            g.image_source.width = 0;
+            break;
+        case TEST_IMAGE_HEIGHT:
+            g.image_source.height = 0;
+            break;
+        case TEST_IMAGE_PREFIX:
+            g.image_source.abi_version = 2;
+            break;
+        case TEST_FRAMESET_STREAM:
+            g.graph.frameset_stream = absent<MantisEvidenceStreamIdV1>();
+            break;
+        case TEST_TWO_EMITTERS: {
+            static const char *participants[] = {"camera-alpha", "emitter-alpha", "controller-alpha",
+                                                 "emitter-beta"};
+            static const char *controls[] = {"emitter-alpha", "emitter-beta"};
+            g.components[4] = g.components[2];
+            g.components[4].id = "emitter-beta";
+            g.components[0].participants = participants;
+            g.components[0].participant_count = 4;
+            g.components[3].controls = controls;
+            g.components[3].control_count = 2;
+            g.graph.component_count = g.graph.limits.max_components = 5;
+            break;
+        }
         default:
             break;
         }
@@ -296,6 +384,8 @@ int prepare(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisPr
     if (!ptr || !emit || t > MANTIS_MAX_TIMEOUT_MS)
         return MANTIS_PL_INVALID;
     Instance::Call active(*static_cast<Instance *>(ptr));
+    if (fault == TEST_FAILURE)
+        return MANTIS_PL_ERROR;
     struct Validation {
         MantisProgramValidationEmitV1 emit;
         void *context;
@@ -313,6 +403,9 @@ int prepare(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisPr
             std::lock_guard lock(s.mutex);
             s.prepared = true;
             s.program = p->identity.id;
+            s.reference.copy(p->identity);
+            s.step_index = p->steps[0].index;
+            s.repetitions = p->repetitions;
         });
     }
     return rc;
@@ -355,7 +448,7 @@ struct Bundle {
     uint32_t trigger_kind = MANTIS_TRIGGER_KIND_REQUESTED;
     const char *emitters[1] = {"emitter-alpha"}, *controllers[1] = {"controller-alpha"},
                *endpoints[1] = {"camera-alpha"};
-    Bundle(Instance &s, uint32_t publication) : pixels(s.host, 4) {
+    Bundle(Instance &s, uint32_t publication, uint32_t shape) : pixels(s.host, 4) {
         std::fill(pixels.writable().begin(), pixels.writable().end(), std::byte{42});
         pixels.publish();
         auto &b = bundle;
@@ -364,13 +457,14 @@ struct Bundle {
         b.key.run_id = s.run.c_str();
         b.key.sequence = publication;
         b.published = host_time();
+        b.published.time = 100 + publication;
         auto &e = b.evidence;
         e = view<MantisAcquisitionEvidenceV1>();
         e.type = type(MANTIS_ACQUISITION_EVIDENCE);
         e.key = view<MantisEvidenceKeyV1>();
         e.key.run_id = s.run.c_str();
         e.key.ordinal = publication;
-        e.program = program_reference(s.program.c_str());
+        e.program = s.reference.get(s.program.c_str());
         e.step = absent<MantisEvidenceStepInstanceV1>();
         e.frameset = absent<MantisEvidenceFrameSetKeyV1>(MANTIS_PRESENCE_UNAVAILABLE);
         e.rig_calibration = absent<MantisEvidenceExactCalibrationReferenceV1>();
@@ -395,7 +489,8 @@ struct Bundle {
         e.emitters_count = 1;
         e.disposition = present<MantisEvidenceAcquisitionDispositionV1>(&disposition);
         e.diagnostic = "fixture";
-        if (publication == 1) {
+        step.step_index = s.step_index;
+        if (shape == 1) {
             frameset_key.run_id = s.run.c_str();
             frameset_key.stream = stream();
             frameset_key.stream.id = "frameset-stream";
@@ -430,15 +525,16 @@ struct Bundle {
             frameset.frame_count = 1;
             b.frameset = &frameset;
         }
-        if (publication == 2) {
+        if (shape == 2) {
             trigger.type = type(MANTIS_TRIGGER_EVENT);
             trigger.key = view<MantisTriggerKeyV1>();
             trigger.key.run_id = s.run.c_str();
             trigger.key.source = "controller-alpha";
             trigger.key.controller_generation = s.generation.c_str();
-            trigger.key.sequence = 0;
+            trigger.key.sequence = publication;
             trigger.step = view<MantisStepInstanceV1>();
             trigger.step.run_id = s.run.c_str();
+            trigger.step.step_index = s.step_index;
             trigger.request = "trigger-request";
             trigger.kind = present<MantisEvidenceTriggerKindV1>(&trigger_kind);
             trigger.native_trigger =
@@ -477,6 +573,9 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
             return MANTIS_PL_NOT_READY;
         ++s.active;
         publication = s.publication++;
+        const auto selected = selected_publication.exchange(UINT32_MAX);
+        if (selected != UINT32_MAX)
+            publication = selected;
     }
     struct Guard {
         Instance &s;
@@ -493,7 +592,7 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
         --pending_calls;
         return MANTIS_PL_NOT_READY;
     }
-    if (f == TEST_NOT_READY || publication > 2)
+    if (f == TEST_NOT_READY || (publication > 2 && selected_shape == UINT32_MAX))
         return MANTIS_PL_NOT_READY;
     if (f == TEST_FAILURE)
         return MANTIS_PL_ERROR;
@@ -501,9 +600,18 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
         return MANTIS_PL_OK;
     int rc = MANTIS_PL_ERROR;
     auto code = boundary([&] {
-        Bundle b(s, (f == TEST_BAD_FRAMESET || f == TEST_DOUBLE_EMIT || f == TEST_EMIT_AFTER_FAILURE) ? 1u
+        auto shape = selected_shape.load();
+        if (shape == UINT32_MAX)
+            shape = (f == TEST_BAD_FRAMESET || f == TEST_DOUBLE_EMIT || f == TEST_EMIT_AFTER_FAILURE) ? 1u
                     : (f == TEST_RUN_MISMATCH) ? 2u
-                                               : publication);
+                                               : publication;
+        Bundle b(s, publication, shape);
+        MantisHashV1 wrong_hash = view<MantisHashV1>();
+        wrong_hash.algorithm = "sha256";
+        wrong_hash.hex = "dead";
+        auto wrong_content = view<MantisContentReferenceV1>();
+        if (b.bundle.evidence.program.content.value)
+            wrong_content = *b.bundle.evidence.program.content.value;
         switch (f) {
         case TEST_WRONG_MEMBER:
             b.semantic.kind = MANTIS_SEMANTIC_DATA;
@@ -528,6 +636,70 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
             break;
         case TEST_PROGRAM_MISMATCH:
             b.bundle.evidence.program.id = "unrelated-program";
+            break;
+        case TEST_SUCCESSOR_DUPLICATE:
+            b.bundle.key.sequence = publication - 1;
+            break;
+        case TEST_SUCCESSOR_BACKWARD:
+            b.bundle.key.sequence = publication - 2;
+            break;
+        case TEST_SUCCESSOR_ORDINAL:
+            b.bundle.evidence.key.ordinal = publication - 1;
+            break;
+        case TEST_SUCCESSOR_CLOCK:
+            b.bundle.published.clock.domain.id = "other-publication-clock";
+            break;
+        case TEST_SUCCESSOR_CLOCK_GENERATION:
+            b.bundle.published.clock.generation = "other-publication-generation";
+            break;
+        case TEST_SUCCESSOR_TIME:
+            b.bundle.published.time = 0;
+            break;
+        case TEST_SUCCESSOR_TRIGGER_REUSE:
+            b.trigger.key.sequence = publication - 1;
+            break;
+        case TEST_SUCCESSOR_TRIGGER_BACKWARD:
+            b.trigger.key.sequence = publication - 2;
+            break;
+        case TEST_SUCCESSOR_CONTROLLER:
+            b.trigger.key.controller_generation = "another-controller-generation";
+            break;
+        case TEST_SUCCESSOR_STREAM:
+            b.frame.frame.stream.generation = "another-camera-generation";
+            b.effective.frame.stream.generation = "another-camera-generation";
+            break;
+        case TEST_HASH_MISMATCH:
+            b.bundle.evidence.program.hash = present<MantisEvidenceHashV1>(&wrong_hash);
+            break;
+        case TEST_HASH_DOWNGRADE:
+            b.bundle.evidence.program.hash = absent<MantisEvidenceHashV1>();
+            break;
+        case TEST_CONTENT_MISMATCH:
+            ++wrong_content.revision;
+            b.bundle.evidence.program.content = present<MantisEvidenceContentReferenceV1>(&wrong_content);
+            break;
+        case TEST_CONTENT_DOWNGRADE:
+            b.bundle.evidence.program.content = absent<MantisEvidenceContentReferenceV1>();
+            break;
+        case TEST_CONTENT_HASH:
+            wrong_content.hash = present<MantisEvidenceHashV1>(&wrong_hash);
+            b.bundle.evidence.program.content = present<MantisEvidenceContentReferenceV1>(&wrong_content);
+            break;
+        case TEST_EVIDENCE_STEP:
+            b.step.step_index = s.step_index + 1;
+            b.step.run_id = s.run.c_str();
+            b.bundle.evidence.step = present<MantisEvidenceStepInstanceV1>(&b.step);
+            break;
+        case TEST_EVIDENCE_REPETITION:
+            b.step.repetition_index = s.repetitions;
+            b.step.run_id = s.run.c_str();
+            b.bundle.evidence.step = present<MantisEvidenceStepInstanceV1>(&b.step);
+            break;
+        case TEST_TRIGGER_STEP:
+            b.trigger.step.step_index = s.step_index + 1;
+            break;
+        case TEST_TRIGGER_REPETITION:
+            b.trigger.step.repetition_index = s.repetitions;
             break;
         case TEST_BUNDLE_SIZE:
             b.bundle.struct_size = 0;
@@ -558,11 +730,15 @@ int status(void *ptr, uint32_t t, MantisProjectedStatusEmitV1 emit, void *ctx) {
     Instance::Call active(s);
     std::string run_value, generation_value;
     uint32_t state;
+    uint32_t step_index;
+    uint64_t repetitions;
     {
         std::lock_guard lock(s.mutex);
         state = s.started ? MANTIS_RUN_STARTED : s.prepared ? MANTIS_RUN_PREPARED : MANTIS_RUN_OPEN;
         run_value = s.run;
         generation_value = s.generation;
+        step_index = s.step_index;
+        repetitions = s.repetitions;
     }
     auto out = view<MantisProjectedStatusV1>();
     out.state = state;
@@ -573,6 +749,16 @@ int status(void *ptr, uint32_t t, MantisProjectedStatusEmitV1 emit, void *ctx) {
                          ? absent<MantisEvidenceGenerationIdV1>(MANTIS_PRESENCE_UNAVAILABLE)
                          : present<MantisEvidenceGenerationIdV1>(&gen);
     out.step = absent<MantisEvidenceStepInstanceV1>();
+    auto step = view<MantisStepInstanceV1>();
+    if (state == MANTIS_RUN_STARTED) {
+        step.run_id = run;
+        step.step_index = step_index;
+        if (fault == TEST_STATUS_STEP)
+            ++step.step_index;
+        if (fault == TEST_STATUS_REPETITION)
+            step.repetition_index = repetitions;
+        out.step = present<MantisEvidenceStepInstanceV1>(&step);
+    }
     out.commands_available = absent<MantisEvidenceUInt32V1>();
     out.evidence_available = absent<MantisEvidenceUInt32V1>(MANTIS_PRESENCE_UNAVAILABLE);
     out.error = view<MantisContractErrorV1>();
@@ -609,18 +795,45 @@ int abort(void *ptr, uint32_t reason, uint32_t t, MantisAbortEmitV1 emit, void *
         out.inhibited = present<MantisEvidenceUInt32V1>(&yes);
         out.stale_work_fenced = present<MantisEvidenceUInt32V1>(&yes);
         out.off_requested = present<MantisEvidenceUInt32V1>(&yes);
-        auto emitter = emitter_evidence();
+        std::array<MantisEmitterEvidenceV1, 2> emitters{emitter_evidence(), emitter_evidence()};
+        emitters[1].emitter = "emitter-beta";
+        auto &emitter = emitters[0];
         auto command = view<MantisEmitterCommandV1>();
         command.request = "abort-off";
         command.target = "emitter-alpha";
         command.state = MANTIS_EMITTER_STATE_OFF;
         command.dispatched = host_time();
         emitter.commanded = present<MantisEvidenceEmitterCommandV1>(&command);
-        out.emitters = &emitter;
-        out.emitter_count = 1;
+        auto beta_command = command;
+        beta_command.request = "abort-off-beta";
+        beta_command.target = "emitter-beta";
+        emitters[1].commanded = present<MantisEvidenceEmitterCommandV1>(&beta_command);
+        out.emitters = emitters.data();
+        out.emitter_count = s.two_emitters ? 2 : 1;
         out.error = view<MantisContractErrorV1>();
         if (fault == TEST_BAD_ABORT)
             yes = 9;
+        if (fault == TEST_ABORT_EMPTY) {
+            out.emitters = nullptr;
+            out.emitter_count = 0;
+        }
+        if (fault == TEST_ABORT_MISSING)
+            out.emitter_count = 1;
+        if (fault == TEST_ABORT_DUPLICATE) {
+            emitters[1] = emitter;
+            out.emitter_count = 2;
+        }
+        if (fault == TEST_ABORT_FOREIGN) {
+            emitters[1].emitter = "foreign-emitter";
+            emitters[1].commanded = absent<MantisEvidenceEmitterCommandV1>();
+            out.emitter_count = 2;
+        }
+        if (fault == TEST_ABORT_UNKNOWN) {
+            emitter.commanded = absent<MantisEvidenceEmitterCommandV1>();
+            emitters[1].commanded = absent<MantisEvidenceEmitterCommandV1>(MANTIS_PRESENCE_UNAVAILABLE);
+        }
+        if (fault == TEST_ABORT_REVERSE)
+            std::swap(emitters[0], emitters[1]);
         rc = emit(ctx, &out);
     });
     return code ? code : rc;
@@ -768,7 +981,9 @@ const TestProjectedControl control = {[](uint32_t f) { fault = f; },
                                       [] { return destroyed_instances.load(); },
                                       [] { return live_instances.load(); },
                                       [] { return initializations.load(); },
-                                      [] { return shutdowns.load(); }};
+                                      [] { return shutdowns.load(); },
+                                      [](uint32_t shape) { selected_shape = shape; },
+                                      [](uint32_t publication) { selected_publication = publication; }};
 int initialize(const MantisHostV1 *h) {
     if (!mantis::sdk::compatible(h))
         return 1;

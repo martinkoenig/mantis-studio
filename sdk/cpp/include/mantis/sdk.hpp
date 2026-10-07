@@ -157,7 +157,7 @@ class ProjectedLight {
         std::mutex mutex;
         std::condition_variable idle;
         uint32_t active{}, cleanup_timeout{};
-        bool normal{}, closing{}, destroying{};
+        bool normal{}, aborting{}, closing{}, destroying{};
         explicit State(const MantisProjectedLightV1 *v) : api(v) {}
         ~State() {
             if (instance) {
@@ -179,10 +179,12 @@ class ProjectedLight {
         auto s = state_;
         {
             std::lock_guard lock(s->mutex);
-            if (!s->instance || s->destroying || (!side && (s->closing || s->normal)))
+            if (!s->instance || s->destroying || (side ? s->aborting : (s->closing || s->normal)))
                 return MANTIS_PL_BUSY;
             ++s->active;
-            if (!side)
+            if (side)
+                s->aborting = true;
+            else
                 s->normal = true;
         }
         struct Guard {
@@ -191,7 +193,9 @@ class ProjectedLight {
             ~Guard() {
                 std::lock_guard lock(state->mutex);
                 --state->active;
-                if (!side)
+                if (side)
+                    state->aborting = false;
+                else
                     state->normal = false;
                 state->idle.notify_all();
             }

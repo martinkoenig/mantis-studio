@@ -1,3 +1,4 @@
+#include "buffer_handle.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -14,6 +15,9 @@ struct MantisBuffer {
     explicit MantisBuffer(mantis::memory::Buffer b) : published(std::move(b)) {}
 };
 namespace mantis::plugins {
+MantisBuffer *detail::wrap_buffer(memory::Buffer buffer) {
+    return new MantisBuffer(std::move(buffer));
+}
 namespace {
 MantisBuffer *allocate(uint64_t size, uint64_t alignment) noexcept {
     try {
@@ -70,7 +74,7 @@ struct PacketView {
     explicit PacketView(const data::Packet &p) {
         try {
             for (const auto &a : p.attributes) {
-                auto *b = new MantisBuffer(a.buffer);
+                auto *b = detail::wrap_buffer(a.buffer);
                 buffers.push_back(b);
                 MantisAttributeV1 attr{};
                 attr.struct_size = sizeof(attr);

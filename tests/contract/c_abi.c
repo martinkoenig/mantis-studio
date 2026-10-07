@@ -13,6 +13,9 @@ _Static_assert(offsetof(MantisAcquisitionProgramV1, struct_size) == 0, "program 
 _Static_assert(offsetof(MantisAcquisitionBundleV1, struct_size) == 0, "bundle prefix");
 _Static_assert(offsetof(MantisSemanticPacketV1, abi_version) == sizeof(uint32_t), "semantic prefix");
 _Static_assert(offsetof(MantisProjectedComponentV1, abi_version) == sizeof(uint32_t), "component prefix");
+_Static_assert(offsetof(MantisProjectedImageSourceV1, struct_size) == 0, "image source prefix");
+_Static_assert(offsetof(MantisProjectedImageSourceV1, abi_version) == sizeof(uint32_t),
+               "image source version");
 _Static_assert(offsetof(MantisAbortOutcomeV1, abi_version) == sizeof(uint32_t), "abort prefix");
 _Static_assert(MANTIS_MAX_BUNDLE_MEMBERS == 64u, "bounded bundle");
 int main(void) {

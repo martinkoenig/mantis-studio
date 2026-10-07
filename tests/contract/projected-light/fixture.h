@@ -31,7 +31,42 @@ enum {
     TEST_REJECT_PROGRAM,
     TEST_DESTROY_REFUSE,
     TEST_ACTIVE_RUN,
-    TEST_PROGRAM_MISMATCH
+    TEST_PROGRAM_MISMATCH,
+    TEST_IMAGE_NULL,
+    TEST_IMAGE_STREAM,
+    TEST_IMAGE_IDENTITY,
+    TEST_IMAGE_WIDTH,
+    TEST_IMAGE_HEIGHT,
+    TEST_IMAGE_PREFIX,
+    TEST_FRAMESET_STREAM,
+    TEST_SUCCESSOR_DUPLICATE,
+    TEST_SUCCESSOR_BACKWARD,
+    TEST_SUCCESSOR_ORDINAL,
+    TEST_SUCCESSOR_CLOCK,
+    TEST_SUCCESSOR_CLOCK_GENERATION,
+    TEST_SUCCESSOR_TIME,
+    TEST_SUCCESSOR_TRIGGER_REUSE,
+    TEST_SUCCESSOR_TRIGGER_BACKWARD,
+    TEST_SUCCESSOR_CONTROLLER,
+    TEST_SUCCESSOR_STREAM,
+    TEST_HASH_MISMATCH,
+    TEST_HASH_DOWNGRADE,
+    TEST_CONTENT_MISMATCH,
+    TEST_CONTENT_DOWNGRADE,
+    TEST_CONTENT_HASH,
+    TEST_EVIDENCE_STEP,
+    TEST_EVIDENCE_REPETITION,
+    TEST_TRIGGER_STEP,
+    TEST_TRIGGER_REPETITION,
+    TEST_STATUS_STEP,
+    TEST_STATUS_REPETITION,
+    TEST_TWO_EMITTERS,
+    TEST_ABORT_EMPTY,
+    TEST_ABORT_MISSING,
+    TEST_ABORT_DUPLICATE,
+    TEST_ABORT_FOREIGN,
+    TEST_ABORT_UNKNOWN,
+    TEST_ABORT_REVERSE
 };
 typedef struct TestProjectedControl {
     void (*fault)(uint32_t);
@@ -40,6 +75,8 @@ typedef struct TestProjectedControl {
     uint32_t (*live_instances)(void);
     uint32_t (*initializations)(void);
     uint32_t (*shutdowns)(void);
+    void (*shape)(uint32_t);       /* 0 evidence, 1 frame, 2 trigger, UINT32_MAX script */
+    void (*publication)(uint32_t); /* next publication sequence override */
 } TestProjectedControl;
 #define TEST_PROJECTED_CONTROL "org.mantis.test.projected-control.v1"
 #endif
