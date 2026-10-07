@@ -320,21 +320,41 @@ class Stream final : public device::ImageStream {
 const MantisHostV1 *host_api() {
     return &host;
 }
-Loaded::Loaded(const std::filesystem::path &path) : library_(path) {
-    auto entry = reinterpret_cast<MantisPluginEntryV1>(library_.symbol("mantis_plugin_entry"));
-    api_ = entry(1);
-    if (!api_ || api_->struct_size < sizeof(MantisPluginV1) || api_->abi_version != 1 || !api_->id ||
-        !api_->version || !api_->initialize || !api_->shutdown || !api_->query_interface)
-        fail(Status::incompatible, "Plugin ABI incompatible");
-    if (api_->initialize(&host)) {
-        api_ = nullptr;
-        fail(Status::plugin_failed, "Plugin initialization failed");
+// One initialize/shutdown lifetime per canonical DSO, shared by all Loaded
+// wrappers and the projected-light instance pins. Root shutdown cannot race an
+// instance held by another wrapper of the same library.
+struct Loaded::SharedLibrary {
+    platform::Library library;
+    const MantisPluginV1 *api{};
+    explicit SharedLibrary(const std::filesystem::path &path) : library(path) {
+        auto entry = reinterpret_cast<MantisPluginEntryV1>(library.symbol("mantis_plugin_entry"));
+        api = entry(1);
+        if (!api || api->struct_size < sizeof(MantisPluginV1) || api->abi_version != 1 || !api->id ||
+            !api->version || !api->initialize || !api->shutdown || !api->query_interface)
+            fail(Status::incompatible, "Plugin ABI incompatible");
+        if (api->initialize(&host)) {
+            api = nullptr;
+            fail(Status::plugin_failed, "Plugin initialization failed");
+        }
     }
+    ~SharedLibrary() {
+        if (api)
+            api->shutdown();
+    }
+};
+Loaded::Loaded(const std::filesystem::path &path) : path_(std::filesystem::weakly_canonical(path)) {
+    static std::mutex mutex;
+    static std::map<std::filesystem::path, std::weak_ptr<SharedLibrary>> libraries;
+    std::lock_guard lock(mutex);
+    auto &cached = libraries[path_];
+    library_ = cached.lock();
+    if (!library_) {
+        library_ = std::make_shared<SharedLibrary>(path_);
+        cached = library_;
+    }
+    api_ = library_->api;
 }
-Loaded::~Loaded() {
-    if (api_)
-        api_->shutdown();
-}
+Loaded::~Loaded() = default;
 data::Published process(const Loaded &p, const data::Packet &input) {
     auto api = p.query<MantisProcessorV1>(MANTIS_PROCESSOR_V1);
     if (!api->process)

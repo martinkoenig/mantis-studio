@@ -20,16 +20,6 @@ extern "C" {
 #define MANTIS_ACQUISITION_V1 "org.mantis.acquisition.v1"
 #define MANTIS_FRAMESET_STREAM_V1 "org.mantis.camera.frameset-stream.v1"
 #define MANTIS_FRAMESET "org.mantis.FrameSet"
-/* Optional interface/capability identities under the unchanged root ABI. */
-#define MANTIS_PROJECTED_LIGHT_V1 "org.mantis.projected-light.v1"
-#define MANTIS_PROCESSOR_V2 "org.mantis.processor.v2"
-#define MANTIS_EXPOSURE_CONTROL_V1 "org.mantis.camera.exposure-control.v1"
-#define MANTIS_GAIN_CONTROL_V1 "org.mantis.camera.gain-control.v1"
-#define MANTIS_EMITTER_POWER_CONTROL_V1 "org.mantis.emitter.power-control.v1"
-#define MANTIS_EMITTER_STATE_FEEDBACK_V1 "org.mantis.emitter.state-feedback.v1"
-#define MANTIS_HARDWARE_TRIGGER_V1 "org.mantis.trigger.hardware.v1"
-#define MANTIS_PROJECTED_LIGHT_ACQUISITION_V1 "org.mantis.acquisition.projected-light.v1"
-
 /* All strings UTF-8. All borrowed pointers valid only during the call.
  * Functions return zero on success, nonzero on failure. No exception may cross this boundary.
  * Tables live until shutdown. The plugin root is borrowed; device instances are owned and destroyed via their

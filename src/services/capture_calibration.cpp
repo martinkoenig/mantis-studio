@@ -1,5 +1,6 @@
 #include <charconv>
 #include <mantis/capture_calibration.hpp>
+#include <mantis/projected_light_device.hpp>
 
 namespace mantis::services {
 namespace {
@@ -45,11 +46,12 @@ Result<std::vector<calibration::artifacts::CameraComponent>> discovered_activati
         auto descriptor = std::find_if(current.begin(), current.end(), [&](const auto &d) { return d.id == child; });
         if (descriptor == current.end())
             return std::unexpected(Error{Status::incompatible, "Discovered calibration component descriptor is missing", "calibration"});
+        if (!device::image_participant(*descriptor)) continue;
         auto component = discovered_calibration_component(*descriptor);
         if (!component) return std::unexpected(component.error());
         components.push_back(std::move(*component));
     }
-    if (parent.children.empty() && parent.metadata.contains("role")) {
+    if (parent.children.empty() && device::image_participant(parent) && parent.metadata.contains("role")) {
         auto component = discovered_calibration_component(parent);
         if (!component) return std::unexpected(component.error());
         components.push_back(std::move(*component));

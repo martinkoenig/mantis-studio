@@ -1,0 +1,804 @@
+// Dedicated contract DSO. Public SDK only; no runtime/domain headers or hardware.
+#include "fixture.h"
+#include <array>
+#include <atomic>
+#include <condition_variable>
+#include <cstring>
+#include <mantis/sdk.hpp>
+#include <mutex>
+#include <string>
+
+namespace {
+using mantis::sdk::boundary;
+std::atomic_uint fault{}, pending_calls{}, destroyed_instances{}, live_instances{}, initializations{},
+    shutdowns{};
+std::mutex ownership;
+bool owned{};
+template <class T> T view() {
+    T out{};
+    out.struct_size = sizeof(T);
+    out.abi_version = MANTIS_ABI_V1;
+    return out;
+}
+template <class T> T absent(uint32_t presence = MANTIS_PRESENCE_UNKNOWN) {
+    auto out = view<T>();
+    out.presence = presence;
+    return out;
+}
+template <class T, class V> T present(const V *v) {
+    auto out = absent<T>(MANTIS_PRESENCE_ESTABLISHED);
+    out.value = v;
+    return out;
+}
+MantisDataTypeV1 type(const char *name) {
+    auto out = view<MantisDataTypeV1>();
+    out.name = name;
+    out.version = 1;
+    return out;
+}
+MantisStreamIdentityV1 stream() {
+    auto out = view<MantisStreamIdentityV1>();
+    out.id = "image-stream";
+    out.generation = "camera-generation";
+    return out;
+}
+MantisRuntimeTimestampV1 host_time() {
+    auto out = view<MantisRuntimeTimestampV1>();
+    out.time = 0;
+    out.clock = view<MantisClockIdentityV1>();
+    out.clock.domain = view<MantisClockDomainV1>();
+    out.clock.domain.id = "host-monotonic";
+    out.clock.domain.name = "host";
+    out.clock.generation = "host-generation";
+    return out;
+}
+MantisSourceFrameKeyV1 source_frame() {
+    auto out = view<MantisSourceFrameKeyV1>();
+    out.camera = "camera-alpha";
+    out.stream = stream();
+    out.native_sequence = 7;
+    return out;
+}
+MantisProgramReferenceV1 program_reference(const char *id = "program-alpha") {
+    auto out = view<MantisProgramReferenceV1>();
+    out.id = id;
+    out.hash = absent<MantisEvidenceHashV1>(MANTIS_PRESENCE_UNAVAILABLE);
+    out.content = absent<MantisEvidenceContentReferenceV1>();
+    return out;
+}
+MantisEvidenceSourceV1 source(uint32_t method = MANTIS_EVIDENCE_METHOD_SOFTWARE_DISPATCH) {
+    auto out = view<MantisEvidenceSourceV1>();
+    out.source = "controller-alpha";
+    out.method = method;
+    out.reference = absent<MantisEvidenceContentReferenceV1>(MANTIS_PRESENCE_UNAVAILABLE);
+    return out;
+}
+MantisCameraFrameEvidenceV1 camera_evidence() {
+    auto out = view<MantisCameraFrameEvidenceV1>();
+    out.frame = source_frame();
+    out.camera_role = "imaging";
+    out.width = 2;
+    out.height = 2;
+    out.source_timestamp = absent<MantisEvidenceSemanticTimestampV1>();
+    out.host_received = absent<MantisEvidenceRuntimeTimestampV1>(MANTIS_PRESENCE_UNAVAILABLE);
+    out.timestamp_meaning = absent<MantisEvidenceTimestampMeaningV1>();
+    out.exposure = absent<MantisEvidenceExposureEvidenceV1>(MANTIS_PRESENCE_UNAVAILABLE);
+    out.sync = absent<MantisEvidenceSyncEvidenceV1>();
+    out.camera_calibration = absent<MantisEvidenceExactCalibrationReferenceV1>(MANTIS_PRESENCE_UNAVAILABLE);
+    out.rig_calibration = absent<MantisEvidenceExactCalibrationReferenceV1>();
+    out.original_calibration = absent<MantisEvidenceExactCalibrationReferenceV1>(MANTIS_PRESENCE_UNAVAILABLE);
+    return out;
+}
+MantisEmitterEvidenceV1 emitter_evidence() {
+    auto out = view<MantisEmitterEvidenceV1>();
+    out.emitter = "emitter-alpha";
+    out.commanded = absent<MantisEvidenceEmitterCommandV1>();
+    out.acknowledged = absent<MantisEvidenceAcknowledgementV1>(MANTIS_PRESENCE_UNAVAILABLE);
+    out.observed = absent<MantisEvidenceStateObservationV1>(MANTIS_PRESENCE_UNAVAILABLE);
+    return out;
+}
+MantisPacketHeaderV1 packet_header(uint64_t sequence) {
+    auto out = view<MantisPacketHeaderV1>();
+    out.sequence = sequence;
+    out.timestamp = view<MantisDeviceTimestampV1>();
+    out.timestamp.domain = view<MantisClockDomainV1>();
+    out.timestamp.domain.id = "camera-clock";
+    out.timestamp.domain.name = "camera";
+    out.sync = view<MantisSyncGroupV1>();
+    out.sync.id = "";
+    out.calibration = view<MantisCalibrationReferenceV1>();
+    out.calibration.id = "";
+    out.calibration.schema_version = 1;
+    out.frame = view<MantisCoordinateFrameV1>();
+    out.frame.id = "camera-optical";
+    out.frame.name = "optical";
+    out.metadata = view<MantisMetadataV1>();
+    return out;
+}
+struct Graph {
+    std::array<MantisProjectedComponentV1, 4> components;
+    MantisProjectedGraphV1 graph = view<MantisProjectedGraphV1>();
+    Graph() {
+        static const char *parent_caps[] = {MANTIS_PROJECTED_LIGHT_ACQUISITION_V1, MANTIS_FRAMESET_STREAM_V1};
+        static const char *camera_caps[] = {MANTIS_IMAGE_STREAM_V1, MANTIS_HARDWARE_TRIGGER_V1};
+        static const char *emitter_caps[] = {MANTIS_EMITTER_POWER_CONTROL_V1};
+        static const char *controller_caps[] = {MANTIS_HARDWARE_TRIGGER_V1, MANTIS_EMITTER_POWER_CONTROL_V1};
+        static const char *participants[] = {"camera-alpha", "emitter-alpha", "controller-alpha"};
+        static const char *controls[] = {"emitter-alpha"};
+        static const char *endpoints[] = {"camera-alpha"};
+        static const uint32_t states[] = {MANTIS_EMITTER_STATE_OFF, MANTIS_EMITTER_STATE_ON};
+        static const uint32_t captures[] = {MANTIS_CAPTURE_MODE_FREE_RUNNING,
+                                            MANTIS_CAPTURE_MODE_HARDWARE_TRIGGER};
+        static const uint32_t triggers[] = {MANTIS_CAPTURE_MODE_HARDWARE_TRIGGER};
+        static const uint32_t methods[] = {MANTIS_EVIDENCE_METHOD_SOFTWARE_DISPATCH};
+        static const uint32_t scopes[] = {MANTIS_EVIDENCE_SCOPE_CONTROLLER_REGISTER};
+        const char *ids[] = {"parent-alpha", "camera-alpha", "emitter-alpha", "controller-alpha"};
+        for (size_t i = 0; i < 4; ++i) {
+            auto &c = components[i];
+            c = view<MantisProjectedComponentV1>();
+            c.id = ids[i];
+            c.parent_id = i ? ids[0] : "";
+            c.name = ids[i];
+            c.role = i == 1 ? "imaging" : "presentation";
+            c.participant_kind = static_cast<uint32_t>(i);
+            c.pattern = absent<MantisEvidencePatternIdV1>(MANTIS_PRESENCE_UNAVAILABLE);
+            c.pattern_revision = absent<MantisEvidenceUInt64V1>(MANTIS_PRESENCE_UNAVAILABLE);
+            c.evidence_methods = methods;
+            c.evidence_method_count = 1;
+            c.evidence_scopes = scopes;
+            c.evidence_scope_count = 1;
+        }
+        auto &p = components[0];
+        p.capabilities = parent_caps;
+        p.capability_count = 2;
+        p.participants = participants;
+        p.participant_count = 3;
+        auto &c = components[1];
+        c.capabilities = camera_caps;
+        c.capability_count = 2;
+        c.capture_modes = captures;
+        c.capture_mode_count = 2;
+        auto &e = components[2];
+        e.capabilities = emitter_caps;
+        e.capability_count = 1;
+        e.emitter_states = states;
+        e.emitter_state_count = 2;
+        auto &t = components[3];
+        t.capabilities = controller_caps;
+        t.capability_count = 2;
+        t.controls = controls;
+        t.control_count = 1;
+        t.trigger_endpoints = endpoints;
+        t.trigger_endpoint_count = 1;
+        t.trigger_modes = triggers;
+        t.trigger_mode_count = 1;
+        graph.parent_id = "parent-alpha";
+        graph.components = components.data();
+        graph.component_count = 4;
+        auto &l = graph.limits;
+        l = view<MantisProjectedLimitsV1>();
+        l.max_components = 4;
+        l.max_steps = 256;
+        l.max_bundle_members = 64;
+        l.max_cameras = 1;
+        l.max_step_instances = 1000000;
+        l.max_commands = 1000000;
+        l.max_events = 1000000;
+        l.max_bytes = 134217728;
+        l.max_in_flight_captures = 1;
+        l.max_run_duration_ns = 10000000000;
+        l.max_on_duration_ns = 1000000000;
+        l.max_step_duration_ns = 1000000000;
+        l.max_pending_bundles = 1;
+        l.max_call_timeout_ms = 1000;
+        l.watchdog = absent<MantisEvidenceUInt32V1>(MANTIS_PRESENCE_UNAVAILABLE);
+        l.interlock = absent<MantisEvidenceUInt32V1>();
+        l.fail_off = absent<MantisEvidenceUInt32V1>(MANTIS_PRESENCE_UNAVAILABLE);
+    }
+};
+struct Instance {
+    const MantisHostV1 *host;
+    std::mutex mutex;
+    std::condition_variable wake;
+    bool prepared{}, started{}, inhibited{};
+    uint32_t active{}, publication{};
+    std::string run, generation, program = "program-alpha";
+    explicit Instance(const MantisHostV1 *h) : host(h) {}
+    struct Call {
+        Instance &instance;
+        explicit Call(Instance &s) : instance(s) {
+            std::lock_guard lock(s.mutex);
+            ++s.active;
+        }
+        ~Call() {
+            std::lock_guard lock(instance.mutex);
+            --instance.active;
+            instance.wake.notify_all();
+        }
+    };
+};
+int enumerate(uint32_t t, MantisProjectedGraphEmitV1 emit, void *ctx) {
+    if (t > MANTIS_MAX_TIMEOUT_MS || !emit)
+        return MANTIS_PL_INVALID;
+    int rc = MANTIS_PL_ERROR;
+    auto code = boundary([&] {
+        Graph g;
+        switch (fault.load()) {
+        case TEST_GRAPH_NULL:
+            g.graph.components = nullptr;
+            break;
+        case TEST_GRAPH_SIZE:
+            g.components[0].struct_size = 0;
+            break;
+        case TEST_GRAPH_VERSION:
+            g.graph.abi_version = 2;
+            break;
+        case TEST_GRAPH_COUNT:
+            g.graph.component_count = 65;
+            break;
+        case TEST_GRAPH_DUPLICATE:
+            g.components[2].id = g.components[1].id;
+            break;
+        case TEST_GRAPH_PARENT:
+            g.components[2].parent_id = "missing-parent";
+            break;
+        case TEST_GRAPH_RELATION:
+            g.components[1].controls = g.components[3].controls;
+            g.components[1].control_count = 1;
+            break;
+        case TEST_GRAPH_PRESENCE:
+            g.graph.limits.watchdog.presence = 99;
+            break;
+        default:
+            break;
+        }
+        rc = emit(ctx, &g.graph);
+    });
+    return code ? code : rc;
+}
+int open(const MantisHostV1 *host, const char *parent, uint32_t t, void **out) {
+    if (!mantis::sdk::compatible(host) || !parent || std::strcmp(parent, "parent-alpha") ||
+        t > MANTIS_MAX_TIMEOUT_MS || !out)
+        return MANTIS_PL_INVALID;
+    std::lock_guard lock(ownership);
+    *out = nullptr;
+    if (owned)
+        return MANTIS_PL_BUSY;
+    auto rc = boundary([&] { *out = new Instance(host); });
+    if (!rc) {
+        owned = true;
+        ++live_instances;
+    }
+    return rc;
+}
+int validate(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisProgramValidationEmitV1 emit,
+             void *ctx) {
+    if (!ptr || t > MANTIS_MAX_TIMEOUT_MS || !emit)
+        return MANTIS_PL_INVALID;
+    Instance::Call active(*static_cast<Instance *>(ptr));
+    auto v = view<MantisProgramValidationV1>();
+    v.error = view<MantisContractErrorV1>();
+    v.accepted = mantis::sdk::compatible_table(p) && p->type.name &&
+                 !std::strcmp(p->type.name, MANTIS_ACQUISITION_PROGRAM) && p->type.version == 1 &&
+                 p->identity.id && p->steps_count == 1 && p->steps && p->repetitions > 0 &&
+                 p->terminal_policy == MANTIS_TERMINAL_INHIBIT_AND_ALL_OFF && fault != TEST_REJECT_PROGRAM;
+    if (!v.accepted) {
+        v.error.category = MANTIS_ERROR_ARGUMENT;
+        v.error.code = 1;
+    }
+    v.diagnostic = v.accepted ? "accepted deterministic fixture program" : "unsupported fixture program";
+    int rc = MANTIS_PL_ERROR;
+    auto code = boundary([&] { rc = emit(ctx, &v); });
+    return code ? code : rc;
+}
+int prepare(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisProgramValidationEmitV1 emit,
+            void *ctx) {
+    if (!ptr || !emit || t > MANTIS_MAX_TIMEOUT_MS)
+        return MANTIS_PL_INVALID;
+    Instance::Call active(*static_cast<Instance *>(ptr));
+    struct Validation {
+        MantisProgramValidationEmitV1 emit;
+        void *context;
+        bool accepted{};
+    } validation{emit, ctx};
+    auto capture = [](void *context, const MantisProgramValidationV1 *result) {
+        auto &state = *static_cast<Validation *>(context);
+        state.accepted = result->accepted != 0;
+        return state.emit(state.context, result);
+    };
+    int rc = validate(ptr, p, t, capture, &validation);
+    if (!rc && validation.accepted) {
+        auto &s = *static_cast<Instance *>(ptr);
+        rc = boundary([&] {
+            std::lock_guard lock(s.mutex);
+            s.prepared = true;
+            s.program = p->identity.id;
+        });
+    }
+    return rc;
+}
+int start(void *ptr, const char *run, const char *generation, uint32_t t) {
+    if (!ptr || !run || !*run || !generation || !*generation || t > MANTIS_MAX_TIMEOUT_MS)
+        return MANTIS_PL_INVALID;
+    auto &s = *static_cast<Instance *>(ptr);
+    int rc = MANTIS_PL_OK;
+    auto code = boundary([&] {
+        std::lock_guard lock(s.mutex);
+        if (!s.prepared || s.started) {
+            rc = MANTIS_PL_INVALID;
+            return;
+        }
+        s.run = run;
+        s.generation = generation;
+        s.inhibited = false;
+        s.started = true;
+        s.publication = 0;
+    });
+    return code ? code : rc;
+}
+struct Bundle {
+    mantis::sdk::Buffer pixels;
+    MantisAcquisitionBundleV1 bundle = view<MantisAcquisitionBundleV1>();
+    MantisSemanticPacketV1 semantic = view<MantisSemanticPacketV1>();
+    MantisCameraParticipantV1 camera = view<MantisCameraParticipantV1>();
+    MantisEmitterEvidenceV1 emitter = emitter_evidence();
+    MantisImplementationIdentityV1 implementation = view<MantisImplementationIdentityV1>();
+    MantisCameraFrameEvidenceV1 frame = camera_evidence();
+    MantisCameraEffectiveStateV1 effective = view<MantisCameraEffectiveStateV1>();
+    MantisFrameSetKeyV1 frameset_key = view<MantisFrameSetKeyV1>();
+    MantisStepInstanceV1 step = view<MantisStepInstanceV1>();
+    MantisTriggerEventV1 trigger = view<MantisTriggerEventV1>();
+    MantisRuntimeTimestampV1 dispatched = host_time();
+    MantisDataPacketV1 frameset = view<MantisDataPacketV1>(), image = view<MantisDataPacketV1>();
+    MantisAttributeV1 attribute = view<MantisAttributeV1>();
+    uint32_t disposition = MANTIS_ACQUISITION_DISPOSITION_STARTUP;
+    uint32_t trigger_kind = MANTIS_TRIGGER_KIND_REQUESTED;
+    const char *emitters[1] = {"emitter-alpha"}, *controllers[1] = {"controller-alpha"},
+               *endpoints[1] = {"camera-alpha"};
+    Bundle(Instance &s, uint32_t publication) : pixels(s.host, 4) {
+        std::fill(pixels.writable().begin(), pixels.writable().end(), std::byte{42});
+        pixels.publish();
+        auto &b = bundle;
+        b.type = type(MANTIS_ACQUISITION_BUNDLE);
+        b.key = view<MantisBundleKeyV1>();
+        b.key.run_id = s.run.c_str();
+        b.key.sequence = publication;
+        b.published = host_time();
+        auto &e = b.evidence;
+        e = view<MantisAcquisitionEvidenceV1>();
+        e.type = type(MANTIS_ACQUISITION_EVIDENCE);
+        e.key = view<MantisEvidenceKeyV1>();
+        e.key.run_id = s.run.c_str();
+        e.key.ordinal = publication;
+        e.program = program_reference(s.program.c_str());
+        e.step = absent<MantisEvidenceStepInstanceV1>();
+        e.frameset = absent<MantisEvidenceFrameSetKeyV1>(MANTIS_PRESENCE_UNAVAILABLE);
+        e.rig_calibration = absent<MantisEvidenceExactCalibrationReferenceV1>();
+        e.participants = view<MantisParticipantsV1>();
+        camera.component = "camera-alpha";
+        camera.stream = "image-stream";
+        camera.role = "imaging";
+        e.participants.cameras = &camera;
+        e.participants.cameras_count = 1;
+        e.participants.emitters = emitters;
+        e.participants.emitters_count = 1;
+        e.participants.controllers = controllers;
+        e.participants.controllers_count = 1;
+        implementation.implementation = "org.example.contract-fixture";
+        implementation.version = view<MantisVersionV1>();
+        implementation.version.major = 1;
+        implementation.build = "test-only";
+        implementation.configuration = absent<MantisEvidenceContentReferenceV1>(MANTIS_PRESENCE_UNAVAILABLE);
+        e.implementations = &implementation;
+        e.implementations_count = 1;
+        e.emitters = &emitter;
+        e.emitters_count = 1;
+        e.disposition = present<MantisEvidenceAcquisitionDispositionV1>(&disposition);
+        e.diagnostic = "fixture";
+        if (publication == 1) {
+            frameset_key.run_id = s.run.c_str();
+            frameset_key.stream = stream();
+            frameset_key.stream.id = "frameset-stream";
+            frameset_key.sequence = 9;
+            e.frameset = present<MantisEvidenceFrameSetKeyV1>(&frameset_key);
+            e.frames = &frame;
+            e.frames_count = 1;
+            step.run_id = s.run.c_str();
+            e.step = present<MantisEvidenceStepInstanceV1>(&step);
+            disposition = MANTIS_ACQUISITION_DISPOSITION_CAPTURED;
+            effective.frame = source_frame();
+            effective.state = absent<MantisEvidenceExposureEffectiveStateV1>();
+            emitter.exposure_effective = &effective;
+            emitter.exposure_effective_count = 1;
+            image.type = type(MANTIS_IMAGE);
+            image.header = packet_header(7);
+            attribute.name = "org.mantis.pixels";
+            attribute.unit = "intensity";
+            attribute.scalar_type = 1;
+            attribute.rank = 2;
+            attribute.shape[0] = 2;
+            attribute.shape[1] = 2;
+            attribute.stride[0] = 2;
+            attribute.stride[1] = 1;
+            attribute.buffer = pixels.get();
+            attribute.bytes = 4;
+            image.attributes = &attribute;
+            image.attribute_count = 1;
+            frameset.type = type(MANTIS_FRAMESET);
+            frameset.header = packet_header(9);
+            frameset.frames = &image;
+            frameset.frame_count = 1;
+            b.frameset = &frameset;
+        }
+        if (publication == 2) {
+            trigger.type = type(MANTIS_TRIGGER_EVENT);
+            trigger.key = view<MantisTriggerKeyV1>();
+            trigger.key.run_id = s.run.c_str();
+            trigger.key.source = "controller-alpha";
+            trigger.key.controller_generation = s.generation.c_str();
+            trigger.key.sequence = 0;
+            trigger.step = view<MantisStepInstanceV1>();
+            trigger.step.run_id = s.run.c_str();
+            trigger.request = "trigger-request";
+            trigger.kind = present<MantisEvidenceTriggerKindV1>(&trigger_kind);
+            trigger.native_trigger =
+                absent<MantisEvidenceNativeTriggerIdentityV1>(MANTIS_PRESENCE_UNAVAILABLE);
+            trigger.acknowledgement = absent<MantisEvidenceAcknowledgementV1>(MANTIS_PRESENCE_UNAVAILABLE);
+            trigger.evidence = source();
+            trigger.device_time = absent<MantisEvidenceSemanticTimestampV1>();
+            trigger.host_received = absent<MantisEvidenceRuntimeTimestampV1>();
+            trigger.host_dispatched = present<MantisEvidenceRuntimeTimestampV1>(&dispatched);
+            trigger.uncertainty_ns = absent<MantisEvidenceFloat64V1>();
+            trigger.clock_mapping = absent<MantisEvidenceClockMappingEvidenceV1>();
+            trigger.actual_endpoints = absent<MantisEvidenceComponentListV1>(MANTIS_PRESENCE_UNAVAILABLE);
+            trigger.requested_exposure = absent<MantisEvidenceSourceFrameKeyV1>();
+            trigger.exposure_association = absent<MantisEvidenceExposureAssociationV1>();
+            trigger.intended_endpoints = endpoints;
+            trigger.intended_endpoints_count = 1;
+            b.triggers = &trigger;
+            b.trigger_count = 1;
+            e.triggers = &trigger.key;
+            e.triggers_count = 1;
+        }
+        b.member_count = 1 + uint32_t(b.frameset != nullptr) + b.trigger_count;
+        semantic.kind = MANTIS_SEMANTIC_BUNDLE;
+        semantic.bundle = &b;
+    }
+};
+int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
+    if (!ptr || !emit || t > MANTIS_MAX_TIMEOUT_MS)
+        return MANTIS_PL_INVALID;
+    auto &s = *static_cast<Instance *>(ptr);
+    const auto f = fault.load();
+    uint32_t publication{};
+    {
+        std::lock_guard lock(s.mutex);
+        if (!s.started || s.inhibited)
+            return MANTIS_PL_NOT_READY;
+        ++s.active;
+        publication = s.publication++;
+    }
+    struct Guard {
+        Instance &s;
+        ~Guard() {
+            std::lock_guard lock(s.mutex);
+            --s.active;
+            s.wake.notify_all();
+        }
+    } guard{s};
+    if (f == TEST_PENDING) {
+        std::unique_lock lock(s.mutex);
+        ++pending_calls;
+        s.wake.wait_for(lock, std::chrono::milliseconds(t), [&] { return s.inhibited; });
+        --pending_calls;
+        return MANTIS_PL_NOT_READY;
+    }
+    if (f == TEST_NOT_READY || publication > 2)
+        return MANTIS_PL_NOT_READY;
+    if (f == TEST_FAILURE)
+        return MANTIS_PL_ERROR;
+    if (f == TEST_ZERO_EMIT)
+        return MANTIS_PL_OK;
+    int rc = MANTIS_PL_ERROR;
+    auto code = boundary([&] {
+        Bundle b(s, (f == TEST_BAD_FRAMESET || f == TEST_DOUBLE_EMIT || f == TEST_EMIT_AFTER_FAILURE) ? 1u
+                    : (f == TEST_RUN_MISMATCH) ? 2u
+                                               : publication);
+        switch (f) {
+        case TEST_WRONG_MEMBER:
+            b.semantic.kind = MANTIS_SEMANTIC_DATA;
+            break;
+        case TEST_TOO_MANY_MEMBERS:
+            b.bundle.member_count = 65;
+            b.bundle.trigger_count = 64;
+            break;
+        case TEST_BAD_FRAMESET:
+            b.frameset.frame_count = 0;
+            break;
+        case TEST_BAD_EVIDENCE:
+            b.bundle.evidence.emitters_count = 0;
+            b.bundle.evidence.emitters = nullptr;
+            break;
+        case TEST_RUN_MISMATCH:
+            b.trigger.key.run_id = "other-run";
+            break;
+        case TEST_ACTIVE_RUN:
+            b.bundle.key.run_id = "unrelated-run";
+            b.bundle.evidence.key.run_id = "unrelated-run";
+            break;
+        case TEST_PROGRAM_MISMATCH:
+            b.bundle.evidence.program.id = "unrelated-program";
+            break;
+        case TEST_BUNDLE_SIZE:
+            b.bundle.struct_size = 0;
+            break;
+        case TEST_BUNDLE_VERSION:
+            b.bundle.abi_version = 99;
+            break;
+        case TEST_BUNDLE_PRESENCE:
+            b.emitter.observed.presence = 99;
+            break;
+        default:
+            break;
+        }
+        rc = emit(ctx, f == TEST_BUNDLE_NULL ? nullptr : &b.semantic);
+        if (f == TEST_DOUBLE_EMIT) {
+            (void)emit(ctx, &b.semantic);
+            rc = MANTIS_PL_OK;
+        }
+        if (f == TEST_EMIT_AFTER_FAILURE)
+            rc = MANTIS_PL_ERROR;
+    });
+    return code ? code : rc;
+}
+int status(void *ptr, uint32_t t, MantisProjectedStatusEmitV1 emit, void *ctx) {
+    if (!ptr || !emit || t > MANTIS_MAX_TIMEOUT_MS)
+        return MANTIS_PL_INVALID;
+    auto &s = *static_cast<Instance *>(ptr);
+    Instance::Call active(s);
+    std::string run_value, generation_value;
+    uint32_t state;
+    {
+        std::lock_guard lock(s.mutex);
+        state = s.started ? MANTIS_RUN_STARTED : s.prepared ? MANTIS_RUN_PREPARED : MANTIS_RUN_OPEN;
+        run_value = s.run;
+        generation_value = s.generation;
+    }
+    auto out = view<MantisProjectedStatusV1>();
+    out.state = state;
+    const char *run = run_value.c_str(), *gen = generation_value.c_str();
+    out.run = run_value.empty() ? absent<MantisEvidenceRunIdV1>(MANTIS_PRESENCE_UNAVAILABLE)
+                                : present<MantisEvidenceRunIdV1>(&run);
+    out.generation = generation_value.empty()
+                         ? absent<MantisEvidenceGenerationIdV1>(MANTIS_PRESENCE_UNAVAILABLE)
+                         : present<MantisEvidenceGenerationIdV1>(&gen);
+    out.step = absent<MantisEvidenceStepInstanceV1>();
+    out.commands_available = absent<MantisEvidenceUInt32V1>();
+    out.evidence_available = absent<MantisEvidenceUInt32V1>(MANTIS_PRESENCE_UNAVAILABLE);
+    out.error = view<MantisContractErrorV1>();
+    if (fault == TEST_BAD_STATUS)
+        out.state = 99;
+    int rc = MANTIS_PL_ERROR;
+    auto code = boundary([&] { rc = emit(ctx, &out); });
+    return code ? code : rc;
+}
+int abort(void *ptr, uint32_t reason, uint32_t t, MantisAbortEmitV1 emit, void *ctx) {
+    if (!ptr || !emit || t > MANTIS_MAX_TIMEOUT_MS || reason > MANTIS_ACQUISITION_REASON_CLEANUP_FAILURE)
+        return MANTIS_PL_INVALID;
+    auto &s = *static_cast<Instance *>(ptr);
+    Instance::Call active(s);
+    // This lock is never held by pending next or its callback. Fence first, then OFF.
+    std::string run, gen;
+    {
+        std::lock_guard lock(s.mutex);
+        s.inhibited = true;
+        run = s.run;
+        gen = s.generation;
+        s.wake.notify_all();
+    }
+    int rc = MANTIS_PL_ERROR;
+    auto code = boundary([&] {
+        auto out = view<MantisAbortOutcomeV1>();
+        const char *run_id = run.c_str(), *generation = gen.c_str();
+        out.run = run.empty() ? absent<MantisEvidenceRunIdV1>(MANTIS_PRESENCE_UNAVAILABLE)
+                              : present<MantisEvidenceRunIdV1>(&run_id);
+        out.fenced_generation = gen.empty()
+                                    ? absent<MantisEvidenceGenerationIdV1>(MANTIS_PRESENCE_UNAVAILABLE)
+                                    : present<MantisEvidenceGenerationIdV1>(&generation);
+        uint32_t yes = 1;
+        out.inhibited = present<MantisEvidenceUInt32V1>(&yes);
+        out.stale_work_fenced = present<MantisEvidenceUInt32V1>(&yes);
+        out.off_requested = present<MantisEvidenceUInt32V1>(&yes);
+        auto emitter = emitter_evidence();
+        auto command = view<MantisEmitterCommandV1>();
+        command.request = "abort-off";
+        command.target = "emitter-alpha";
+        command.state = MANTIS_EMITTER_STATE_OFF;
+        command.dispatched = host_time();
+        emitter.commanded = present<MantisEvidenceEmitterCommandV1>(&command);
+        out.emitters = &emitter;
+        out.emitter_count = 1;
+        out.error = view<MantisContractErrorV1>();
+        if (fault == TEST_BAD_ABORT)
+            yes = 9;
+        rc = emit(ctx, &out);
+    });
+    return code ? code : rc;
+}
+int stop(void *ptr, uint32_t t) {
+    if (!ptr || t > MANTIS_MAX_TIMEOUT_MS)
+        return MANTIS_PL_INVALID;
+    auto &s = *static_cast<Instance *>(ptr);
+    std::unique_lock lock(s.mutex);
+    s.inhibited = true;
+    s.wake.notify_all();
+    if (!s.wake.wait_for(lock, std::chrono::milliseconds(t), [&] { return s.active == 0; }))
+        return MANTIS_PL_BUSY;
+    s.started = false;
+    return MANTIS_PL_OK;
+}
+int destroy(void *ptr, uint32_t t) {
+    if (fault == TEST_DESTROY_REFUSE)
+        return MANTIS_PL_BUSY;
+    auto rc = stop(ptr, t);
+    if (rc)
+        return rc;
+    delete static_cast<Instance *>(ptr);
+    std::lock_guard lock(ownership);
+    owned = false;
+    --live_instances;
+    ++destroyed_instances;
+    return MANTIS_PL_OK;
+}
+int diagnostics(void *ptr, uint32_t t, MantisTextEmitV1 emit, void *ctx) {
+    if (!emit || t > MANTIS_MAX_TIMEOUT_MS)
+        return MANTIS_PL_INVALID;
+    std::unique_ptr<Instance::Call> active;
+    if (ptr)
+        active = std::make_unique<Instance::Call>(*static_cast<Instance *>(ptr));
+    int rc = MANTIS_PL_ERROR;
+    auto code =
+        boundary([&] { rc = emit(ctx, "deterministic contract fixture; optical state unavailable"); });
+    return code ? code : rc;
+}
+// Last exception boundary includes allocation/locking before inner callbacks.
+template <auto Function> struct Safe;
+template <class R, class... Args, R (*Function)(Args...)> struct Safe<Function> {
+    static R call(Args... args) noexcept {
+        try {
+            return Function(args...);
+        } catch (...) {
+            if constexpr (std::is_void_v<R>)
+                return;
+            else if constexpr (std::is_pointer_v<R>)
+                return nullptr;
+            else
+                return MANTIS_PL_ERROR;
+        }
+    }
+};
+const MantisProjectedLightV1 projected = {sizeof(projected),      1,
+                                          Safe<enumerate>::call,  Safe<open>::call,
+                                          Safe<validate>::call,   Safe<prepare>::call,
+                                          Safe<start>::call,      Safe<next>::call,
+                                          Safe<status>::call,     Safe<abort>::call,
+                                          Safe<stop>::call,       Safe<destroy>::call,
+                                          Safe<diagnostics>::call};
+// Camera-only mode shares parent ownership but never opens the projected interface.
+int camera_enumerate(MantisDiscoverEmitV1 emit, void *ctx) {
+    static const char *caps[] = {MANTIS_FRAMESET_STREAM_V1};
+    MantisDiscoveredDeviceV1 d{sizeof(d), 1, "parent-alpha", "", "Camera-only fixture", caps, 1, "{}"};
+    int rc = 1;
+    auto code = boundary([&] { rc = emit(ctx, &d); });
+    return code ? code : rc;
+}
+int camera_open(const MantisHostV1 *h, const char *id, void **p) {
+    return open(h, id, 0, p);
+}
+void camera_destroy(void *p) {
+    (void)destroy(p, 1000);
+}
+int camera_start(void *p) {
+    auto &s = *static_cast<Instance *>(p);
+    s.started = true;
+    return 0;
+}
+int camera_stop(void *p) {
+    return stop(p, 1000);
+}
+int camera_next(void *p, uint32_t t, MantisFrameSetEmitV1 emit, void *ctx) {
+    if (!p || !emit || t > MANTIS_MAX_TIMEOUT_MS)
+        return 1;
+    int rc = 1;
+    auto code = boundary([&] {
+        auto &s = *static_cast<Instance *>(p);
+        if (!s.started)
+            return;
+        mantis::sdk::Buffer buffer(s.host, 4);
+        std::fill(buffer.writable().begin(), buffer.writable().end(), std::byte{5});
+        buffer.publish();
+        MantisAttributeV1 a{sizeof(a), 1,      "org.mantis.pixels", "intensity", 1, 2,
+                            {2, 2},    {2, 1}, buffer.get(),        0,           4};
+        MantisObservationV1 image{};
+        image.struct_size = sizeof(image);
+        image.abi_version = 1;
+        image.packet = {sizeof(MantisPacketV1), 1, MANTIS_IMAGE, 1, 7, 0, "clock", "", 0, "optical", &a, 1};
+        image.metadata_json = "{}";
+        MantisFrameSetV1 set{};
+        set.struct_size = sizeof(set);
+        set.abi_version = 1;
+        set.observation = image;
+        set.observation.packet.type_id = MANTIS_FRAMESET;
+        set.observation.packet.attributes = nullptr;
+        set.observation.packet.attribute_count = 0;
+        set.frames = &image;
+        set.frame_count = 1;
+        rc = emit(ctx, &set);
+    });
+    return code ? code : rc;
+}
+int camera_diagnostics(void *, MantisTextEmitV1 emit, void *ctx) {
+    return emit ? emit(ctx, "{}") : MANTIS_PL_INVALID;
+}
+const MantisAcquisitionV1 acquisition = {sizeof(acquisition),           1,
+                                         Safe<camera_enumerate>::call,  Safe<camera_open>::call,
+                                         Safe<camera_destroy>::call,    Safe<camera_start>::call,
+                                         Safe<camera_next>::call,       Safe<camera_stop>::call,
+                                         Safe<camera_diagnostics>::call};
+int processor_describe(uint32_t timeout_ms, MantisNodeDescriptorV1 *out) {
+    if (timeout_ms > MANTIS_MAX_TIMEOUT_MS || !mantis::sdk::compatible_table(out))
+        return 1;
+    *out = {
+        sizeof(*out), 1, "semantic-identity", MANTIS_ACQUISITION_BUNDLE, MANTIS_ACQUISITION_BUNDLE, 1, 1, 1,
+        "cpu"};
+    return 0;
+}
+int processor_process(const MantisHostV1 *, const MantisSemanticPacketV1 *p, uint32_t t,
+                      MantisSemanticEmitV1 emit, void *ctx) {
+    if (!mantis::sdk::compatible_table(p) || t > MANTIS_MAX_TIMEOUT_MS || !emit)
+        return MANTIS_PL_INVALID;
+    int rc = 1;
+    auto code = boundary([&] { rc = emit(ctx, p); });
+    return code ? code : rc;
+}
+const MantisProcessorV2 processor = {sizeof(processor), 1, Safe<processor_describe>::call,
+                                     Safe<processor_process>::call};
+const TestProjectedControl control = {[](uint32_t f) { fault = f; },
+                                      [] { return pending_calls.load(); },
+                                      [] { return destroyed_instances.load(); },
+                                      [] { return live_instances.load(); },
+                                      [] { return initializations.load(); },
+                                      [] { return shutdowns.load(); }};
+int initialize(const MantisHostV1 *h) {
+    if (!mantis::sdk::compatible(h))
+        return 1;
+    ++initializations;
+    return 0;
+}
+void shutdown() {
+    ++shutdowns;
+}
+const void *query(const char *id) {
+    if (!id)
+        return nullptr;
+    if (!std::strcmp(id, MANTIS_PROJECTED_LIGHT_V1))
+        return &projected;
+    if (!std::strcmp(id, MANTIS_ACQUISITION_V1))
+        return &acquisition;
+    if (!std::strcmp(id, MANTIS_PROCESSOR_V2))
+        return &processor;
+    if (!std::strcmp(id, TEST_PROJECTED_CONTROL))
+        return &control;
+    return nullptr;
+}
+const MantisPluginV1 plugin = {sizeof(plugin),
+                               1,
+                               "org.example.projected-contract",
+                               "1.0.0",
+                               Safe<initialize>::call,
+                               Safe<shutdown>::call,
+                               Safe<query>::call};
+} // namespace
+extern "C" MANTIS_EXPORT const MantisPluginV1 *mantis_plugin_entry(uint32_t abi) {
+    return abi == 1 ? &plugin : nullptr;
+}

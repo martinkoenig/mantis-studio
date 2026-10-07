@@ -48,3 +48,11 @@ for path in (root / "plugins/first-party/devices").rglob("*.cpp"):
     if path.name != "linux.cpp":
         assert not re.search(r'#include\s*[<"]linux/', text), path
 print("Foundation, frontend, plugin and Linux media implementation boundaries passed")
+
+# Device APIs expose canonical domain types, never plugin tables/runtime policy.
+for path in (root / "src/device-api/include").rglob("*.hpp"):
+    assert not re.search(r'#include\s*[<"]mantis/(?:plugin|sdk|.*_runtime|services|protocol)', path.read_text()), path
+# The C++ plugin SDK wraps public C concepts only.
+for path in (root / "sdk/cpp").rglob("*.hpp"):
+    includes = re.findall(r'#include\s*[<"](mantis/[^>"]+)', path.read_text())
+    assert all((root / "sdk/c/include" / name).is_file() for name in includes), path

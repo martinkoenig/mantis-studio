@@ -43,3 +43,7 @@ mantis_assert_dependency_boundary(mantis-calibration-artifacts "^opencv_|^Qt[0-9
 
 # Canonical acquisition semantics must never acquire upward API/runtime dependencies.
 mantis_assert_dependency_boundary(mantis-data "^mantis-(device-api|artifact-api|plugin-runtime|services|protocol)$|^protobuf::|^Qt[0-9]::")
+
+mantis_assert_dependency_boundary(mantis-device-api "^mantis-(sdk-.*|plugin-runtime|device-runtime|services|protocol)$")
+mantis_assert_dependency_boundary(mantis-sdk-c "^mantis-(data|device-api|.*-runtime|services|protocol)$|^Qt[0-9]::|^protobuf::")
+mantis_assert_dependency_boundary(mantis-sdk-cpp "^mantis-(data|device-api|.*-runtime|services|protocol)$|^Qt[0-9]::|^protobuf::")

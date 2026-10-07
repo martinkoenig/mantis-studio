@@ -203,6 +203,7 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
             fail(Status::corrupt, "Active RigCalibration hash mismatch", "capture");
         std::vector<calibration::artifacts::CameraComponent> components;
         for (const auto &child : streams.front()->components()) {
+            if (!device::image_participant(child)) continue;
             auto component = discovered_calibration_component(child);
             if (!component)
                 throw Failure(component.error());

@@ -3,6 +3,7 @@
 #include <mantis/device_api.hpp>
 #include <mantis/pipeline_api.hpp>
 #include <mantis/platform.hpp>
+#include <mantis/projected_light_device.hpp>
 #include <mantis/sdk.hpp>
 #include <mutex>
 namespace mantis::plugins {
@@ -18,13 +19,18 @@ struct PluginStatus {
 };
 const MantisHostV1 *host_api();
 class Loaded {
-    platform::Library library_;
+    struct SharedLibrary;
+    std::shared_ptr<SharedLibrary> library_;
+    std::filesystem::path path_;
     const MantisPluginV1 *api_{};
 
   public:
     explicit Loaded(const std::filesystem::path &);
     ~Loaded();
     Loaded(const Loaded &) = delete;
+    const std::filesystem::path &path() const {
+        return path_;
+    }
     const MantisPluginV1 *api() const {
         return api_;
     }
@@ -35,6 +41,9 @@ class Loaded {
         return p;
     }
 };
+std::vector<device::ProjectedGraph> discover_projected_light(const Loaded &, uint32_t timeout_ms);
+std::unique_ptr<device::ProjectedExecutor> open_projected_light(std::shared_ptr<Loaded>, const Id &parent,
+                                                                uint32_t timeout_ms);
 data::Published process(const Loaded &, const data::Packet &);
 void export_data(const Loaded &, const data::Packet &, const std::filesystem::path &);
 pipeline::NodeDescriptor describe_node(const Loaded &);
@@ -58,6 +67,13 @@ class Registry {
     void discover(const std::filesystem::path &, const std::vector<std::string> &approved_in_process);
     std::vector<PluginStatus> statuses() const;
     std::vector<std::unique_ptr<device::ImageStream>> devices();
+    struct ProjectedParent {
+        std::string plugin_id;
+        device::ProjectedGraph graph;
+    };
+    std::vector<ProjectedParent> projected_light_parents(uint32_t timeout_ms);
+    std::unique_ptr<device::ProjectedExecutor> open_projected_light(const std::string &plugin_id,
+                                                                    const Id &parent, uint32_t timeout_ms);
     pipeline::Node node(const std::string &);
     void export_file(const std::string &, const data::Packet &, const std::filesystem::path &,
                      const CancellationToken &);
