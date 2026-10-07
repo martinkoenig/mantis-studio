@@ -98,6 +98,7 @@ No x86 intrinsics or pointer-width assumptions are used in public structures. Th
 
 ## Documentation
 
+- [Release roadmap](ROADMAP.md)
 - [Build and run](BUILDING.md)
 - [Implementation architecture and module map](docs/architecture/implementation.md)
 - [Acceptance evidence](docs/architecture/validation.md)
