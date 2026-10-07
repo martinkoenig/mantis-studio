@@ -81,3 +81,15 @@ MantisProcessorV1 retains its v0.1 single-packet attribute contract. FrameSet-aw
 native processing plugins will need a future queried processing interface; no
 scanner algorithm is added here. The v0.2 source and C++ semantic pipeline carry
 the complete FrameSet unchanged through acquisition/replay.
+
+
+## Future custom/exotic sensor path
+
+The accepted future architecture for community scanners with unusual sensors is
+documented in [Integrating custom and exotic sensors](custom-sensors.md) and
+[ADR-038](../adr/038-extensible-sensor-observations-and-generic-studio-fallback.md).
+
+The goal is that a plugin can declare and publish a generic scalar/vector/event
+measurement and receive persistence, replay and baseline Studio presentation
+without sensor-specific Studio code. The measurement-source API described there is
+not implemented in v0.3; do not infer current ABI support from the design examples.

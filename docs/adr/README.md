@@ -1,5 +1,13 @@
 # Architecture Decision Records
 
+- [ADR-038: Extensible sensor observations are first-class typed data with generic Studio fallback](038-extensible-sensor-observations-and-generic-studio-fallback.md)
+
+ADR-038 defines the extension contract for community-built scanners with unusual
+or previously unknown sensors. Generic typed measurements must remain recordable,
+replayable and useful in Studio without requiring sensor-specific core/UI code.
+See the [extensible sensor platform](../architecture/extensible-sensor-platform.md)
+and [custom sensor guide](../plugin-development/custom-sensors.md).
+
 - [ADR-037: Real hardware calibration acceptance is evidence driven](037-real-hardware-calibration-acceptance-is-evidence-driven.md)
 
 - [ADR-036: Studio calibration workspace uses the public calibration API](036-studio-calibration-workspace-uses-public-calibration-api.md)
