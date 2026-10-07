@@ -565,6 +565,8 @@ void validate_evidence(const AcquisitionEvidence &v) {
         require(contains(v.participants.emitters, e.emitter) && emitters.insert(e.emitter).second,
                 "Unknown/duplicate evidence emitter");
         emitter(e, v.frames);
+        require(e.exposure_effective.size() == v.frames.size(),
+                "Every emitter requires exactly one effective-state entry per source frame");
     }
     unique(v.triggers);
     std::map<ComponentId, GenerationId> controller_generations;

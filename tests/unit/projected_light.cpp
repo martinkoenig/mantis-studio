@@ -578,6 +578,106 @@ void evidence_states() {
         ContentReference{{"rig-artifact"}, {"org.mantis.RigCalibration", 1}, Hash{"sha256", "abcd"}, 7}};
     valid(calibrated);
 }
+void exposure_effective_presence() {
+    auto captured = evidence();
+    captured.disposition = AcquisitionDisposition::captured;
+    captured.step = StepInstance{run, 0, 0};
+    captured.frameset = FrameSetKey{run, {{{"frameset-stream"}}, generation}, 10};
+    captured.frames = {source_frame()};
+    rejects(captured, [](auto &) {}, "exactly one effective-state entry per source frame");
+    CHECK(captured.emitters[0].exposure_effective.empty()); // Validation never fills missing evidence.
+
+    captured.emitters[0].exposure_effective = {{frame_key(), Unknown{}}};
+    valid(captured);
+    CHECK(captured.emitters[0].exposure_effective[0].state.presence() == Presence::unknown);
+    CHECK(!captured.emitters[0].exposure_effective[0].state.get());
+    auto unknown = captured;
+    captured.emitters[0].exposure_effective[0].state = Unavailable{};
+    valid(captured);
+    CHECK(captured.emitters[0].exposure_effective[0].state.presence() == Presence::unavailable);
+    CHECK(!captured.emitters[0].exposure_effective[0].state.get());
+    CHECK(unknown.emitters[0].exposure_effective[0].state.presence() !=
+          captured.emitters[0].exposure_effective[0].state.presence());
+    // Unresolved effective state does not require established exposure evidence.
+    for (auto state :
+         {Evidence<ExposureEffectiveState>{Unknown{}}, Evidence<ExposureEffectiveState>{Unavailable{}}}) {
+        auto unresolved = captured;
+        unresolved.frames[0].exposure = Unavailable{};
+        unresolved.emitters[0].exposure_effective[0].state = state;
+        valid(unresolved);
+    }
+
+    auto established = captured;
+    established.emitters[0].exposure_effective[0].state =
+        ExposureEffectiveState{frame_key(),
+                               EmitterState::off,
+                               EvidenceScope::electrical_enable,
+                               proof(EvidenceMethod::electrical_readback),
+                               {ts(0), ts(10)}};
+    valid(established);
+    rejects(
+        established,
+        [](auto &x) {
+            auto state = *x.emitters[0].exposure_effective[0].state.get();
+            state.frame.native_sequence++;
+            x.emitters[0].exposure_effective[0].state = state;
+        },
+        "Effective-state frame mismatch");
+    rejects(
+        established,
+        [](auto &x) {
+            auto state = *x.emitters[0].exposure_effective[0].state.get();
+            state.scope = EvidenceScope::optical_emission;
+            x.emitters[0].exposure_effective[0].state = state;
+        },
+        "Electrical");
+
+    auto multiple = captured;
+    auto right = source_frame();
+    right.frame.camera = {{"second-camera-stable"}};
+    right.frame.stream.id = {{"second-image-stream"}};
+    right.camera_role = "right";
+    auto exposure = *right.exposure.get();
+    exposure.evidence.source = right.frame.camera;
+    right.exposure = exposure;
+    multiple.participants.cameras.push_back({right.frame.camera, right.frame.stream.id, right.camera_role});
+    multiple.frames.push_back(right);
+    multiple.emitters[0].exposure_effective.push_back({right.frame, Unknown{}});
+    auto second_emitter = multiple.emitters[0];
+    second_emitter.emitter = emitter_b;
+    multiple.participants.emitters.push_back(emitter_b);
+    multiple.emitters.push_back(second_emitter);
+    valid(multiple);
+    for (size_t emitter = 0; emitter < multiple.emitters.size(); ++emitter) {
+        for (size_t frame = 0; frame < multiple.frames.size(); ++frame) {
+            rejects(
+                multiple,
+                [&](auto &x) {
+                    auto &entries = x.emitters[emitter].exposure_effective;
+                    entries.erase(entries.begin() + static_cast<std::ptrdiff_t>(frame));
+                },
+                "exactly one effective-state entry per source frame");
+        }
+    }
+    rejects(
+        multiple, [](auto &x) { x.emitters[0].exposure_effective[1] = x.emitters[0].exposure_effective[0]; },
+        "Duplicate camera effective-state association");
+    rejects(
+        multiple, [](auto &x) { x.emitters[0].exposure_effective[1].frame.native_sequence++; },
+        "no source frame evidence");
+
+    for (auto disposition : {AcquisitionDisposition::startup, AcquisitionDisposition::control_only}) {
+        auto empty = evidence();
+        empty.disposition = disposition;
+        if (disposition == AcquisitionDisposition::control_only)
+            empty.step = StepInstance{run, 0, 0};
+        valid(empty);
+        CHECK(empty.frames.empty() && empty.emitters[0].exposure_effective.empty());
+        rejects(
+            empty, [](auto &x) { x.emitters[0].exposure_effective = {{frame_key(), Unavailable{}}}; },
+            "no source frame evidence");
+    }
+}
 void triggers_and_bundles() {
     auto t = request();
     valid(t);
@@ -678,6 +778,7 @@ void triggers_and_bundles() {
     captured.frameset = images;
     captured.evidence.frameset = fs;
     captured.evidence.frames = {source_frame()};
+    captured.evidence.emitters[0].exposure_effective = {{frame_key(), Unknown{}}};
     captured.evidence.step = StepInstance{run, 0, 0};
     captured.evidence.disposition = AcquisitionDisposition::captured;
     valid(captured);
@@ -966,6 +1067,7 @@ int main() {
         identities();
         programs();
         evidence_states();
+        exposure_effective_presence();
         triggers_and_bundles();
         resolved_calibration_references();
         observation_run_identity();

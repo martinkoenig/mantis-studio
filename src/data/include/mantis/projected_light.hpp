@@ -357,6 +357,7 @@ struct AcquisitionEvidence {
     std::vector<EvidenceKey> causal_predecessors;
     Participants participants;
     std::vector<ImplementationIdentity> implementations;
+    // Each emitter requires one exposure_effective entry per frame, even when Unknown/Unavailable.
     std::vector<EmitterEvidence> emitters;
     Evidence<FrameSetKey> frameset;
     std::vector<CameraFrameEvidence> frames;
