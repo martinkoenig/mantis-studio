@@ -1,5 +1,12 @@
 # Control protocol v1 and data plane
 
+> **Separate future hardware protocol:** scanners or microcontrollers that cannot
+> run `mantisd` use the planned
+> [Mantis Device Bridge Protocol](device-bridge.md), governed by
+> [ADR-039](../adr/039-constrained-and-external-scanners-use-a-host-side-device-bridge.md).
+> That hardware-facing bridge is intentionally distinct from the client/service
+> protocol documented on this page.
+
 [`protocol/protobuf/mantis.proto`](../../protocol/protobuf/mantis.proto) is the source of truth for generated wire messages. The schema is transport independent. Commands cover device discovery, capture start/stop, pipelines, project create/open, artifacts/data references/recovery/export, jobs/cancellation, plugin state and diagnostics/events.
 
 ## Local framing

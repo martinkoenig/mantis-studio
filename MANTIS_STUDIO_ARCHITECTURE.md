@@ -749,6 +749,15 @@ A Mantis X1 Pro is a composite device that may contain cameras, laser projectors
 
 A DIY scanner may expose an entirely different topology.
 
+A physical device is **not required to run `mantisd`**. Constrained or external
+hardware may be represented by host-side `mantisd` through a bridged device
+adapter. Native runtime devices, bridged devices and result-only/imported devices
+must converge on the same capability/data semantics rather than separate
+product-specific models. See
+[ADR-039](docs/adr/039-constrained-and-external-scanners-use-a-host-side-device-bridge.md)
+and the
+[device integration/bridge architecture](docs/architecture/device-integration-and-bridge.md).
+
 ---
 
 # 24. Device Capabilities
@@ -1329,6 +1338,11 @@ Local systems may use Unix-domain sockets or Windows equivalents.
 Remote systems may use a secure network transport.
 
 Transport choice must not leak into core application semantics.
+
+The Mantis service/client protocol is distinct from the future
+[Mantis Device Bridge Protocol](docs/protocol/device-bridge.md). The latter is a
+hardware-facing, constrained-device-friendly contract for scanners that cannot host
+`mantisd`; it must map into the same Device Graph and typed data semantics.
 
 ---
 

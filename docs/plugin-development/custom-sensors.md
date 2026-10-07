@@ -21,6 +21,12 @@ automatically.
 
 Custom processors and custom Studio presentation are optional.
 
+If the hardware is too constrained to run `mantisd` (for example ESP32/Arduino-
+class firmware), use the future
+[bridged-device path](../architecture/device-integration-and-bridge.md) instead of
+inventing a separate sensor transport. The same measurement schemas described here
+travel over the [Mantis Device Bridge Protocol](../protocol/device-bridge.md).
+
 ## Example scanner
 
 Assume a DIY Raspberry Pi 5 scanner contains:

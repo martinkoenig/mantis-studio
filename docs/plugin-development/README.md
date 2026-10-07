@@ -93,3 +93,18 @@ The goal is that a plugin can declare and publish a generic scalar/vector/event
 measurement and receive persistence, replay and baseline Studio presentation
 without sensor-specific Studio code. The measurement-source API described there is
 not implemented in v0.3; do not infer current ABI support from the design examples.
+
+
+## Future bridged/external device path
+
+A physical scanner does not have to run `mantisd` or even Linux. Microcontroller
+devices and vendor-controlled scanners may use a host-side bridged integration.
+The accepted future architecture is documented in
+[Device integration and bridge architecture](../architecture/device-integration-and-bridge.md),
+[ADR-039](../adr/039-constrained-and-external-scanners-use-a-host-side-device-bridge.md)
+and the [Device Bridge Protocol](../protocol/device-bridge.md).
+
+The planned generic bridge adapter maps capability/stream descriptors into the
+normal Device API so Studio/core code does not acquire ESP32, Arduino or
+vendor-model branches. Arduino/ESP libraries are future convenience bindings over
+that one protocol, not alternative Mantis data models.

@@ -16,6 +16,9 @@ Related decisions:
   scanner-side observations are a normal distributed boundary.
 - [ADR-032](../adr/032-distributed-runtime-and-worker-pools.md) —
   scanner runtimes retain capture authority.
+- [ADR-039](../adr/039-constrained-and-external-scanners-use-a-host-side-device-bridge.md) —
+  constrained/external scanners may publish the same observations through a
+  host-side device bridge.
 
 ## 1. Goal
 
@@ -473,6 +476,11 @@ typed observations
 ```
 
 USB, Wi-Fi and local IPC must not change the semantic meaning of the observation.
+
+For hardware that cannot run `mantisd`, these observations may enter through the
+generic bridged-device path defined in
+[Device integration and bridge architecture](device-integration-and-bridge.md);
+this document does not define a second sensor protocol.
 
 Disconnect/backpressure policy must be explicit and bounded. Sensor data must not
 silently disappear merely because a Studio client disconnected.

@@ -1,5 +1,14 @@
 # Architecture Decision Records
 
+- [ADR-039: Constrained and external scanners use a host-side device bridge](039-constrained-and-external-scanners-use-a-host-side-device-bridge.md)
+
+ADR-039 defines how microcontroller-class, vendor-controlled and otherwise external
+scanners join Mantis without running `mantisd` on the device itself. It introduces
+the future transport-neutral Device Bridge Protocol and keeps bridged hardware on
+the same capability/data model as native scanners. See
+[device integration and bridge architecture](../architecture/device-integration-and-bridge.md)
+and the [bridge protocol contract](../protocol/device-bridge.md).
+
 - [ADR-038: Extensible sensor observations are first-class typed data with generic Studio fallback](038-extensible-sensor-observations-and-generic-studio-fallback.md)
 
 ADR-038 defines the extension contract for community-built scanners with unusual
