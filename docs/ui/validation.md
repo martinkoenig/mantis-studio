@@ -249,7 +249,7 @@ GCC 15 and Qt 6.9.2. All runs use offscreen/software Qt rendering and Debug buil
 | Ubuntu 25.10 / Qt 6.9 desktop ASan/UBSan, leak detection enabled | PASS, 46/46 | `qt69-sanitizers-ctest.log` |
 | Qt 6.4 focused QML after bounded conversion addition | PASS, three consecutive runs | `qt64-bounded-ctest.log` |
 | Qt 6.9 desktop ASan/UBSan affected QML/CLI after final additions | PASS, 2/2 | `qt69-sanitizers-bounded-ctest.log` |
-| Ubuntu 24.04 / Qt disabled ASan/UBSan, leak detection enabled | Pending | `headless-sanitizers-ctest.log` |
+| Ubuntu 24.04 / Qt disabled ASan/UBSan, leak detection enabled | PASS, 41/41 | `headless-sanitizers-ctest.log` |
 | Additional Ubuntu 24.04 / Qt 6.4 desktop ASan/UBSan | FAIL, pre-existing Qt software texture leaks; see below | `sanitizers-ctest.log` |
 
 The host OpenCV packages were extracted locally because installed development
@@ -329,9 +329,39 @@ diagnostics as `ui-m0-ubuntu-24.04` and `ui-m0-ubuntu-24.04-arm` artifacts for
 
 ### Exact-SHA CI release gate
 
-The correction implementation and full final pushed-SHA matrix are pending.
-This intermediate record does **not** assert READY FOR REVIEW. Native ARM64
-verification will come from that matrix; local evidence is x86_64 only.
+Correction implementation SHA: `3446ace818506938f245285b9eab53c9e83222a7`.
+[Correction CI run](https://github.com/martinkoenig/mantis-studio/actions/runs/37778795139).
+Every job's API `head_sha` matches this SHA. No test, architecture gate or
+matrix entry was removed or weakened. The workflow change only adds artifact upload.
+
+| Required job | Outcome | Exact-SHA job |
+| --- | --- | --- |
+| Ubuntu 24.04 x86_64, Studio ON / Qt 6.4 | PASS, 46/46 | [Desktop x86_64](https://github.com/martinkoenig/mantis-studio/actions/runs/37778795139/job/113316342788) |
+| Ubuntu 24.04 native ARM64, Studio ON / Qt 6.4 | PASS, 46/46 | [Desktop ARM64](https://github.com/martinkoenig/mantis-studio/actions/runs/37778795139/job/113316342874) |
+| Ubuntu 24.04 x86_64, Studio OFF | PASS, 41/41 | [Headless x86_64](https://github.com/martinkoenig/mantis-studio/actions/runs/37778795139/job/113316342975) |
+| Ubuntu 24.04 native ARM64, Studio OFF | PASS, 41/41 | [Headless ARM64](https://github.com/martinkoenig/mantis-studio/actions/runs/37778795139/job/113316343179) |
+| Ubuntu 24.04 x86_64 ASan/UBSan | PASS, 41/41 | [Sanitizers](https://github.com/martinkoenig/mantis-studio/actions/runs/37778795139/job/113316342628) |
+
+The two uploaded [review artifacts](https://github.com/martinkoenig/mantis-studio/actions/runs/37778795139#artifacts)
+were downloaded and verified: each contains 38 PNGs and `LastTest.log` with
+the QML and CLI PASS markers, plus the committed diagnostic evidence.
+Local runs are x86_64; ARM64 evidence is from native GitHub runners.
+
+Correction commits are the layout/root-cause repair `4d87b7df7f2010bf1b5b893c0ca18a0751843b8a`
+and the remaining review fixes `3446ace818506938f245285b9eab53c9e83222a7`.
+Correction files relative to the reviewed SHA:
+
+- `apps/studio/{bridge.cpp,bridge.hpp,main.cpp,screenshot.hpp}`.
+- `ui/workspaces/{FoundationWorkspace,AcquisitionWorkspace}.qml`,
+  `ui/state/{AppUiState,MockFixtures}.qml`, `ui/shell/Main.qml`,
+  `ui/components/StudioButton.qml`, `ui/design/Theme.qml`.
+- `tests/unit/studio_ui_m0.cpp`, `tests/integration/studio_ui_m0.py`,
+  `CMakeLists.txt`, `.github/workflows/build.yml`.
+- `docs/ui/{README,validation}.md`,
+  `docs/ui/evidence/{qt64-baseline-crash.txt,qt64-layout-reproducer.cpp,qt64-baseline-software-renderer-leak.txt}`.
+
+The documentation follow-up must itself pass a fresh complete exact-SHA CI matrix
+before handoff; the final handoff supplies its SHA and run URL.
 Physical scanner/laser, metrology precision, remote networking and native
 window-system accessibility acceptance remain outside this UI fixture evidence.
 Independent reviewer approval remains required after all five jobs pass.
