@@ -118,7 +118,7 @@ struct ProjectedRun::Impl {
     };
     std::vector<PendingStep> pending;
     std::optional<AcquisitionBundle> previous;
-    uint64_t payload_bytes{}, metadata_bytes{}, event_count{};
+    uint64_t payload_bytes{}, metadata_bytes{}, publication_metadata_bytes{}, event_count{};
     size_t entries{};
 
     Impl(std::unique_ptr<ProjectedExecutor> e, AcquisitionProgram p, ProjectedRunConfig c,
@@ -360,7 +360,21 @@ struct ProjectedRun::Impl {
                     AcquisitionReason::rejected, "Inaccessible evidence requirement/scope");
             }
         }
-        entries = static_cast<size_t>(std::min<uint64_t>(config.max_correlation_entries, b.max_events));
+        // Run-global identities must fit the *declared* command/event maxima, not
+        // just the minimum facts needed to cover steps. References to unresolved
+        // identities must also be resolvable within those same finite budgets.
+        auto step_links = product(count, program.participants.emitters.size());
+        auto source_keys = product(b.max_events, program.participants.cameras.size());
+        auto associations_bound = detail::add_bytes(source_keys, product(b.max_events, 2));
+        auto request_bound = detail::add_bytes(step_links, detail::add_bytes(b.max_commands,
+            product(b.max_events, program.participants.cameras.size() +
+                    program.participants.controllers.size() + 1)));
+        auto required_entries = std::max({b.max_events, b.max_commands, count, step_links,
+                                          source_keys, associations_bound, request_bound,
+                                          uint64_t{data::max_participants + 1}});
+        require(required_entries <= config.max_correlation_entries,
+                AcquisitionReason::resource_limit, "Declared identity budgets exceed local correlation capacity");
+        entries = static_cast<size_t>(required_entries);
         require(count <= entries, AcquisitionReason::resource_limit,
                 "Step evidence cannot fit correlation reservation");
         uint64_t source_count = 0, command_count = 0, trigger_count = 0;
@@ -381,16 +395,29 @@ struct ProjectedRun::Impl {
         // Reserve metadata before arming. No large per-executed-step objects.
         uint64_t per_entry = sizeof(FrameRecord) + sizeof(TriggerKey) * 2 + sizeof(EmitterCommand) +
                              sizeof(CausalOrdinal) + 2 * sizeof(RequestRecord) + sizeof(SourceFrameKey) +
-                             sizeof(TriggerRecord) + sizeof(AssociationRecord);
-        auto fixed = (count + 3) / 4 +
-                     uint64_t{config.queue_capacity} * sizeof(std::shared_ptr<const AcquisitionBundle>) +
-                     std::min<uint64_t>(entries, b.max_in_flight_captures) * sizeof(PendingStep) +
-                     program.steps.size() * sizeof(std::pair<uint32_t, size_t>);
-        require(entries <= (UINT64_MAX - fixed) / per_entry && fixed + entries * per_entry <= b.max_bytes,
-                AcquisitionReason::resource_limit, "Correlation reservation exceeds byte budget");
+                             sizeof(TriggerRecord) + sizeof(AssociationRecord) + sizeof(StepCommand) + sizeof(PendingStep);
+        uint64_t fixed = sizeof(Impl);
+        auto reserve_bytes = [&](uint64_t n, uint64_t element) {
+            if (n) fixed = detail::add_bytes(fixed, detail::allocation_bytes(product(n, element)));
+        };
+        reserve_bytes((count + 3) / 4, 1);
+        reserve_bytes(config.queue_capacity, sizeof(std::shared_ptr<const AcquisitionBundle>));
+        reserve_bytes(program.steps.size(), sizeof(std::pair<uint32_t, size_t>));
+        // Twelve run-global tables, including the generic pending step table.
+        fixed = detail::add_bytes(fixed, product(entries, per_entry));
+        fixed = detail::add_bytes(fixed, product(12, detail::allocation_bytes(0)));
+        reserve_bytes(data::max_participants, sizeof(decltype(native_generations)::value_type));
+        reserve_bytes(data::max_participants, sizeof(ControllerRecord));
+        reserve_bytes(data::max_participants + 1, sizeof(decltype(stream_generations)::value_type));
+        fixed = detail::add_bytes(fixed, detail::heap_bytes(program));
+        fixed = detail::add_bytes(fixed, detail::heap_bytes(graph));
+        fixed = detail::add_bytes(fixed, detail::heap_bytes(identity.run));
+        fixed = detail::add_bytes(fixed, detail::heap_bytes(identity.generation));
+        require(fixed <= b.max_bytes, AcquisitionReason::resource_limit,
+                "Correlation reservation exceeds byte budget");
         queue.resize(config.queue_capacity);
         coverage.assign((count + 3) / 4, 0);
-        metadata_bytes = fixed + entries * per_entry;
+        metadata_bytes = fixed;
         evidence_keys.reserve(entries);
         trigger_keys.reserve(entries);
         pending_triggers.reserve(entries);
@@ -405,11 +432,34 @@ struct ProjectedRun::Impl {
         native_generations.reserve(data::max_participants);
         controllers.reserve(data::max_participants);
         stream_generations.reserve(data::max_participants + 1);
-        pending.reserve(std::min<uint64_t>(entries, b.max_in_flight_captures));
+        pending.reserve(entries);
         for (size_t i = 0; i < program.steps.size(); ++i)
             indices.emplace_back(program.steps[i].index, i);
         std::sort(indices.begin(), indices.end());
+        // Measure the actual reserved capacities (reserve may overallocate) rather
+        // than assuming a particular standard-library growth policy.
+        metadata_bytes = sizeof(Impl);
+        auto charge_fixed = [&](uint64_t bytes) { metadata_bytes = detail::add_bytes(metadata_bytes, bytes); };
+        charge_fixed(detail::heap_bytes(program));
+        charge_fixed(detail::heap_bytes(graph));
+        charge_fixed(detail::heap_bytes(identity.run));
+        charge_fixed(detail::heap_bytes(identity.generation));
         std::lock_guard lock(mutex);
+        charge_fixed(detail::heap_bytes(view.identity.run));
+        charge_fixed(detail::heap_bytes(view.identity.generation));
+        std::apply([&](const auto &...v) {
+            auto charge_vector = [&](const auto &values) {
+                using T = typename std::decay_t<decltype(values)>::value_type;
+                if (values.capacity())
+                    charge_fixed(detail::allocation_bytes(product(values.capacity(), sizeof(T))));
+            };
+            (charge_vector(v), ...);
+        }, std::tie(queue, coverage, indices, evidence_keys, trigger_keys, pending_triggers, commands,
+                    step_commands, frames, unresolved_requests, resolved_requests, pending_frames,
+                    trigger_steps, associations, native_generations, controllers, stream_generations,
+                    pending, view.transitions));
+        require(metadata_bytes <= b.max_bytes, AcquisitionReason::resource_limit,
+                "Actual metadata reservation exceeds byte budget");
         view.expected_steps = count;
     }
     uint8_t flags(size_t position) const {
@@ -458,6 +508,64 @@ struct ProjectedRun::Impl {
             }
         }
     }
+    const ProjectedComponent &evidence_source(const EvidenceSource &source,
+                                               std::optional<EvidenceScope> scope = {}) const {
+        auto it = std::find_if(graph.components.begin(), graph.components.end(), [&](const auto &c) {
+            return c.descriptor.id == source.source.id;
+        });
+        require(it != graph.components.end() && contains(it->evidence_methods, source.method) &&
+                    (!scope || contains(it->evidence_scopes, *scope)),
+                AcquisitionReason::contradictory_evidence, "Foreign or unadvertised evidence source/method/scope");
+        return *it;
+    }
+    void emitter_source(const EvidenceSource &source, EvidenceScope scope, ComponentId target,
+                        bool acknowledgement = false) const {
+        const auto &c = evidence_source(source, scope);
+        bool authority = (c.kind == ParticipantKind::controller || c.kind == ParticipantKind::parent) &&
+                         has_capability(c.descriptor, "org.mantis.emitter.power-control.v1") &&
+                         contains(c.controls, target.id);
+        if (acknowledgement) {
+            require(authority && (c.kind == ParticipantKind::parent ||
+                                 contains(program.participants.controllers, source.source)),
+                    AcquisitionReason::contradictory_evidence, "Acknowledgement lacks participating control authority");
+        } else if (scope != EvidenceScope::optical_emission)
+            require(c.descriptor.id == target.id || authority,
+                    AcquisitionReason::contradictory_evidence, "Emitter readback from unrelated component");
+    }
+    void validate_sources(const AcquisitionBundle &bundle) const {
+        for (const auto &emitter : bundle.evidence.emitters) {
+            if (auto ack = emitter.acknowledged.get())
+                emitter_source(ack->evidence, ack->scope, emitter.emitter, true);
+            if (auto observed = emitter.observed.get())
+                emitter_source(observed->evidence, observed->scope, emitter.emitter);
+            for (const auto &effective : emitter.exposure_effective)
+                if (auto value = effective.state.get())
+                    emitter_source(value->evidence, value->scope, emitter.emitter);
+        }
+        for (const auto &frame : bundle.evidence.frames) {
+            if (auto exposure = frame.exposure.get())
+                (void)evidence_source(exposure->evidence);
+            if (auto sync = frame.sync.get())
+                if (auto association = sync->hardware_association.get())
+                    (void)evidence_source(association->evidence);
+        }
+        for (const auto &trigger : bundle.triggers) {
+            (void)evidence_source(trigger.evidence);
+            if (auto ack = trigger.acknowledgement.get()) {
+                const auto &source = evidence_source(ack->evidence, ack->scope);
+                require(source.descriptor.id == trigger.key.source.id,
+                        AcquisitionReason::contradictory_evidence, "Trigger acknowledgement from unrelated authority");
+            }
+            if (auto association = trigger.exposure_association.get())
+                (void)evidence_source(association->evidence);
+        }
+    }
+    static void acknowledgement_outcome(const Acknowledgement &ack) {
+        if (ack.result == AcknowledgementResult::rejected)
+            require(false, AcquisitionReason::rejected, "Emitter acknowledgement rejected");
+        if (ack.result == AcknowledgementResult::failed)
+            require(false, AcquisitionReason::device_failure, "Emitter acknowledgement failed");
+    }
     void correlate(const AcquisitionBundle &bundle) {
         const auto &e = bundle.evidence;
         require(e.key.run_id == identity.run && bundle.key.run_id == identity.run,
@@ -472,11 +580,15 @@ struct ProjectedRun::Impl {
                 throw std::pair{AcquisitionReason::contradictory_evidence,
                                 error(Status::incompatible, successor.error().message)};
         }
-        auto semantic_bytes =
-            4 * (sizeof(AcquisitionBundle) + detail::heap_bytes(e) + detail::heap_bytes(bundle.triggers));
-        require(semantic_bytes <= program.bounds.max_bytes - metadata_bytes - payload_bytes,
-                AcquisitionReason::resource_limit, "In-memory evidence metadata budget exceeded");
-        metadata_bytes += semantic_bytes;
+        validate_sources(bundle);
+        for (const auto &emitter : e.emitters)
+            if (auto ack = emitter.acknowledged.get())
+                acknowledgement_outcome(*ack);
+        auto publication_charge = detail::allocation_bytes(sizeof(AcquisitionBundle) + 2 * sizeof(void *));
+        publication_charge = detail::add_bytes(publication_charge, detail::heap_bytes(bundle));
+        if (bundle.frameset)
+            publication_charge = detail::add_bytes(publication_charge, detail::packet_metadata_bytes(*bundle.frameset));
+        charge(publication_metadata_bytes, publication_charge);
         for (const auto &p : e.causal_predecessors)
             require(std::binary_search(evidence_keys.begin(), evidence_keys.end(), p.ordinal),
                     AcquisitionReason::contradictory_evidence, "Causal predecessor was never published");
@@ -565,8 +677,15 @@ struct ProjectedRun::Impl {
             std::erase(pending_triggers, t.key);
             if (t.kind == TriggerEvent::Kind::requested)
                 mark(position, 2);
-            if (t.kind == TriggerEvent::Kind::rejected || t.kind == TriggerEvent::Kind::timed_out)
-                require(false, AcquisitionReason::device_failure, "Requested trigger failed");
+            if (t.kind == TriggerEvent::Kind::rejected)
+                require(false, AcquisitionReason::rejected, "Requested trigger rejected");
+            if (t.kind == TriggerEvent::Kind::timed_out)
+                require(false, AcquisitionReason::timeout, "Requested trigger timed out");
+            if (t.kind == TriggerEvent::Kind::cancelled) {
+                std::lock_guard lock(mutex);
+                require(view.state != ProjectedState::running, AcquisitionReason::device_failure,
+                        "Executor cancelled trigger without daemon stop/cancel");
+            }
         }
         for (const auto &t : e.triggers)
             trigger_reference(t);
@@ -667,13 +786,44 @@ struct ProjectedRun::Impl {
             for (const auto &image : bundle.frameset->frames)
                 for (const auto &attribute : image->attributes) {
                     require(attribute.buffer.size() <=
-                                program.bounds.max_bytes - payload_bytes - metadata_bytes,
+                                remaining_bytes(),
                             AcquisitionReason::resource_limit, "Published bulk payload budget exceeded");
                     payload_bytes += attribute.buffer.size();
                 }
         if (const auto *instance = e.step.get())
             step_evidence(slot(*instance), e);
         previous = bundle; // Pixels remain shared and immutable.
+        require(internal_metadata_bytes() <= remaining_bytes(), AcquisitionReason::resource_limit,
+                "Retained correlation metadata exceeds byte budget");
+    }
+    uint64_t remaining_bytes() const {
+        auto used = detail::add_bytes(metadata_bytes, detail::add_bytes(publication_metadata_bytes, payload_bytes));
+        require(used <= program.bounds.max_bytes, AcquisitionReason::resource_limit, "In-memory resource budget exceeded");
+        return program.bounds.max_bytes - used;
+    }
+    void charge(uint64_t &counter, uint64_t bytes) {
+        require(bytes <= remaining_bytes(), AcquisitionReason::resource_limit, "In-memory metadata budget exceeded");
+        counter = detail::add_bytes(counter, bytes);
+    }
+    uint64_t internal_metadata_bytes() const {
+        // Vector object storage was reserved/charged before start. Charge dynamic
+        // contents of each actual correlation copy; no whole-bundle multiplier.
+        uint64_t bytes = previous ? detail::heap_bytes(*previous) : 0;
+        auto add = [&](const auto &v) { bytes = detail::add_bytes(bytes, detail::heap_bytes(v)); };
+        for (const auto &v : pending) add(v.evidence);
+        for (const auto &v : frames) add(v.value);
+        for (const auto &v : commands) add(v);
+        for (const auto &v : trigger_keys) add(v);
+        for (const auto &v : pending_triggers) add(v);
+        for (const auto &v : pending_frames) add(v);
+        for (const auto &v : unresolved_requests) { add(v.request); add(v.target); }
+        for (const auto &v : resolved_requests) { add(v.request); add(v.target); }
+        for (const auto &v : trigger_steps) add(v.key);
+        for (const auto &v : associations) { add(v.frame); add(v.trigger); }
+        for (const auto &v : native_generations) { add(v.first); add(v.second); }
+        for (const auto &v : stream_generations) { add(v.first); add(v.second); }
+        for (const auto &v : controllers) { add(v.source); add(v.generation); }
+        return bytes;
     }
     void frame_reference(const SourceFrameKey &key) {
         require(std::any_of(program.participants.cameras.begin(), program.participants.cameras.end(),
@@ -736,8 +886,7 @@ struct ProjectedRun::Impl {
                 if (command)
                     require(ack->request == command->request, AcquisitionReason::contradictory_evidence,
                             "Acknowledgement request mismatch");
-                require(ack->result == AcknowledgementResult::success,
-                        AcquisitionReason::contradictory_evidence, "Unsuccessful acknowledgement");
+                acknowledgement_outcome(*ack);
             }
             if (*step.evidence_requirement == EvidenceRequirement::controller_acknowledged) {
                 auto ack = it->acknowledged.get();
@@ -794,8 +943,7 @@ struct ProjectedRun::Impl {
         auto found =
             std::find_if(pending.begin(), pending.end(), [&](auto &p) { return p.slot == position; });
         if (found == pending.end()) {
-            require(pending.size() < std::min<uint64_t>(entries, program.bounds.max_in_flight_captures),
-                    AcquisitionReason::resource_limit, "Pending evidence reservation exhausted");
+            room(pending.size());
             pending.push_back({position, e, deadline(now(), step.max_duration), represented});
             found = std::prev(pending.end());
         } else {
@@ -871,6 +1019,11 @@ struct ProjectedRun::Impl {
             std::lock_guard lock(mutex);
             ++view.covered_steps;
         }
+        auto captures = std::count_if(pending.begin(), pending.end(), [&](const auto &p) {
+            return p.represented && program.steps[p.slot % program.steps.size()].capture.mode != CaptureMode::none;
+        });
+        require(static_cast<uint64_t>(captures) <= program.bounds.max_in_flight_captures,
+                AcquisitionReason::resource_limit, "Unresolved capture instance limit exceeded");
         update_evidence_deadline();
     }
     void resolve_pending() {
@@ -908,14 +1061,14 @@ struct ProjectedRun::Impl {
         if (queue_size == config.queue_capacity || view.state != ProjectedState::running ||
             now() >= run_deadline) {
             view.terminal.unqueued_bundle = std::move(bundle);
-            if (queue_size == config.queue_capacity)
-                ++view.queue.saturation_failures;
             if (now() >= run_deadline)
                 latch(AcquisitionReason::timeout,
                       error(Status::plugin_failed, "Run deadline expired at publication"));
-            else if (queue_size == config.queue_capacity)
+            else if (view.state == ProjectedState::running && queue_size == config.queue_capacity) {
+                ++view.queue.saturation_failures;
                 latch(AcquisitionReason::resource_limit,
                       error(Status::busy, "Authoritative publication queue saturated"));
+            }
             lock.unlock();
             abort_once();
             return false;
@@ -1087,6 +1240,8 @@ struct ProjectedRun::Impl {
             }
         } catch (const std::pair<AcquisitionReason, Error> &e) {
             request(e.first, e.second);
+        } catch (const detail::AccountingOverflow &) {
+            request(AcquisitionReason::resource_limit, error(Status::busy, "In-memory accounting overflow"));
         } catch (const std::bad_alloc &) {
             request(AcquisitionReason::resource_limit, error(Status::busy, "Runtime reservation exhausted"));
         } catch (const std::exception &e) {

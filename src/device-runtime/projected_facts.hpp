@@ -1,7 +1,9 @@
 // Internal structural comparison/refinement of typed semantic facts. No ABI or codec.
 #pragma once
-#include <mantis/projected_light.hpp>
+#include <mantis/projected_light_device.hpp>
 #include <tuple>
+#include <limits>
+#include <stdexcept>
 namespace mantis::device::detail {
 inline auto fields(schema::DataTypeId &v) {
     return std::tie(v.name, v.version);
@@ -299,10 +301,60 @@ template <class T> bool refine(T &a, const T &b) {
     } else
         return a == b;
 }
-// In-memory semantic accounting only; this is not a serialized byte count.
+// A structural resource charge, not allocator introspection or serialized size.
+struct AccountingOverflow : std::overflow_error {
+    AccountingOverflow() : std::overflow_error("In-memory resource accounting overflow") {}
+};
+inline uint64_t add_bytes(uint64_t a, uint64_t b) {
+    if (b > UINT64_MAX - a)
+        throw AccountingOverflow{};
+    return a + b;
+}
+inline uint64_t multiply_bytes(uint64_t a, uint64_t b) {
+    if (b && a > UINT64_MAX / b)
+        throw AccountingOverflow{};
+    return a * b;
+}
+// Every allocation is charged its storage, maximum ordinary alignment padding,
+// and two pointer-sized bookkeeping slots. This is an explicit admission policy;
+// allocator arenas and executor-owned resources are outside this runtime charge.
+inline uint64_t allocation_bytes(uint64_t storage) {
+    return add_bytes(storage, alignof(std::max_align_t) - 1 + 2 * sizeof(void *));
+}
+inline auto fields(const data::BundleKey &v) { return std::tie(v.run_id, v.sequence); }
+inline auto fields(const data::AcquisitionBundle &v) {
+    return std::tie(v.type, v.key, v.published, v.evidence, v.triggers);
+}
+inline auto fields(const time::DeviceTimestamp &v) { return std::tie(v.domain); }
+inline auto fields(const spatial::CoordinateFrame &v) { return std::tie(v.id, v.name); }
+inline auto fields(const data::Header &v) {
+    return std::tie(v.timestamp, v.sync, v.calibration, v.frame, v.metadata);
+}
+inline auto fields(const schema::AttributeDescriptor &v) {
+    return std::tie(v.name, v.unit, v.shape, v.stride);
+}
+inline auto fields(const data::TriggerIntent &v) { return std::tie(v.controller, v.request, v.endpoints); }
+inline auto fields(const data::CaptureIntent &v) { return std::tie(v.cameras, v.trigger); }
+inline auto fields(const data::EmitterIntent &v) { return std::tie(v.emitter); }
+inline auto fields(const data::AcquisitionStep &v) { return std::tie(v.label, v.emitters, v.capture); }
+inline auto fields(const data::AcquisitionProgram &v) {
+    return std::tie(v.type, v.identity, v.participants, v.steps);
+}
+inline auto fields(const device::Descriptor &v) {
+    return std::tie(v.id, v.name, v.plugin_id, v.capabilities, v.children, v.parent, v.metadata);
+}
+inline auto fields(const device::ProjectedImageSource &v) { return std::tie(v.stream, v.physical_identity); }
+inline auto fields(const data::LineIdentity &v) { return std::tie(v.emitter, v.pattern, v.pattern_revision, v.local_line); }
+inline auto fields(const device::ProjectedComponent &v) {
+    return std::tie(v.descriptor, v.role, v.image_source, v.controls, v.participants, v.trigger_endpoints,
+                    v.emitter_states, v.capture_modes, v.trigger_modes, v.evidence_methods, v.evidence_scopes,
+                    v.pattern, v.pattern_revision, v.lines);
+}
+inline auto fields(const device::ProjectedGraph &v) { return std::tie(v.parent, v.components, v.frameset_stream); }
 template <class T> uint64_t heap_bytes(const T &v);
 inline uint64_t heap_bytes(const std::string &v) {
-    return v.size();
+    // Charging even small-string inline capacity is conservative and portable.
+    return allocation_bytes(add_bytes(v.capacity(), 1));
 }
 template <class T> uint64_t heap_bytes(const data::Evidence<T> &v) {
     return v.get() ? heap_bytes(*v.get()) : 0;
@@ -311,19 +363,51 @@ template <class T> uint64_t heap_bytes(const std::optional<T> &v) {
     return v ? heap_bytes(*v) : 0;
 }
 template <class T> uint64_t heap_bytes(const std::vector<T> &v) {
-    uint64_t size = v.capacity() * sizeof(T);
+    uint64_t size = v.capacity() ? allocation_bytes(multiply_bytes(v.capacity(), sizeof(T))) : 0;
     for (const auto &x : v)
-        size += heap_bytes(x);
+        size = add_bytes(size, heap_bytes(x));
+    return size;
+}
+inline uint64_t heap_bytes(const data::Metadata &v) {
+    uint64_t size = 0;
+    for (const auto &[key, value] : v) {
+        // std::map value plus three tree links and a pointer-sized color/padding slot.
+        size = add_bytes(size, allocation_bytes(sizeof(data::Metadata::value_type) + 4 * sizeof(void *)));
+        size = add_bytes(size, add_bytes(heap_bytes(key), heap_bytes(value)));
+    }
     return size;
 }
 template <class T> uint64_t heap_bytes(const T &v) {
     if constexpr (requires { fields(v); }) {
-        return std::apply([](const auto &...x) { return (heap_bytes(x) + ... + uint64_t{0}); }, fields(v));
+        return std::apply([](const auto &...x) {
+            uint64_t result = 0;
+            ((result = add_bytes(result, heap_bytes(x))), ...);
+            return result;
+        }, fields(v));
     } else if constexpr (requires { v.id; })
         return heap_bytes(v.id);
     else if constexpr (std::is_same_v<T, Id>)
         return heap_bytes(v.value);
     else
         return 0;
+}
+inline uint64_t packet_metadata_bytes(const data::Packet &packet) {
+    uint64_t size = allocation_bytes(sizeof(data::Packet) + 2 * sizeof(void *));
+    size = add_bytes(size, heap_bytes(packet.type));
+    size = add_bytes(size, heap_bytes(packet.header));
+    if (packet.attributes.capacity())
+        size = add_bytes(size, allocation_bytes(multiply_bytes(packet.attributes.capacity(), sizeof(data::Attribute))));
+    for (const auto &a : packet.attributes) {
+        size = add_bytes(size, heap_bytes(a.descriptor));
+        // One storage descriptor/control block per attribute is a conservative charge
+        // even if several immutable attributes share it. Payload is counted separately.
+        size = add_bytes(size, allocation_bytes(sizeof(memory::Storage) + 2 * sizeof(void *)));
+    }
+    if (packet.frames.capacity())
+        size = add_bytes(size, allocation_bytes(multiply_bytes(packet.frames.capacity(), sizeof(data::Published))));
+    // L1 restricts this tree to one FrameSet and 1..16 non-composite images.
+    for (const auto &child : packet.frames)
+        size = add_bytes(size, packet_metadata_bytes(*child));
+    return size;
 }
 } // namespace mantis::device::detail

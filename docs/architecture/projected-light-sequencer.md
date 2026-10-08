@@ -46,8 +46,13 @@ bounds (at most 60 seconds), a positive queue capacity no larger than the graph'
 pending-bundle limit, and a finite correlation-entry reservation. Checked canonical
 step expansion precedes allocation. A two-bit-per-instance table uses at most
 250,000 bytes for one million steps. Correlation tables and queue slots are reserved
-before start. Step evidence must fit the correlation-entry reservation. Smaller
-configured reservations intentionally constrain the accepted run.
+before start. The declared event and command maxima, step/emitter correlations,
+and the derived source-frame, trigger-association and request identity maxima must
+fit the local per-table correlation-entry capacity. A larger declared budget is rejected before executor
+validation rather than accepted with an undersized runtime table. Generic pending
+control evidence uses that capacity; only unresolved represented capture instances
+consume `max_in_flight_captures`. Smaller configured reservations intentionally
+constrain the accepted run.
 
 The authoritative output is a preallocated lossless ring of shared immutable
 AcquisitionBundles. It has no drop/latest policy. Images remain shared BufferViews;
@@ -57,13 +62,28 @@ report capacity, occupancy, high water, accepted/produced publications, consumed
 publications and saturation failures. An unqueued or rejected publication is retained
 in the terminal summary, with its initiating fault. Full-queue publication waits have
 a finite bound and wake immediately on stop/fault; saturation aborts and fails the
-run. No consumer progress is required for abort or cleanup.
+run. A wait interrupted by daemon stop/cancel/fault retains the in-flight bundle
+without recording saturation or replacing its cause; actual run expiration wins,
+and only publication timeout while still RUNNING counts as saturation. No consumer
+progress is required for abort or cleanup.
 
-In-memory semantic admission charges bound retained correlation/publication metadata
-conservatively, including shared-snapshot bookkeeping, together with cumulative
-published attribute payload bytes, against `max_bytes`. These are memory/resource
-charges, **not serialized record sizes**. Entry, event, command and pending-evidence
-exhaustion also fail explicitly. Persistence/record sizing remains L4.
+In-memory admission charges actual reserved vector capacities and dynamic contents
+of the actual correlation copies, alongside cumulative immutable publication
+metadata and attribute payload bytes, against `max_bytes`. Checked sums/products
+include the FrameSet and each child Packet, header metadata map nodes/keys/values,
+clock/calibration/coordinate strings, attribute names/units and shape/stride
+capacity, child/attribute vector storage and shared ownership structures. Shared
+pixels are never copied; attribute payload is charged once per publication, not
+again for successor/correlation views. FrameSet structures shared by those views
+are likewise charged with the publication. Drained publications remain charged
+conservatively for the run. There is no whole-bundle multiplication heuristic.
+Each allocation's structural admission charge adds maximum ordinary alignment
+padding and two pointer-sized bookkeeping slots; map nodes additionally charge
+three tree links plus a pointer-sized color/padding slot. Small-string capacity
+is charged even when inline. This policy bounds admitted runtime structures;
+allocator arena retention and executor-owned allocation/transfer resources are
+outside the runtime charge. These are **not serialized record sizes**. Entry,
+event, command and pending-evidence exhaustion also fail explicitly. Persistence/record sizing remains L4.
 
 The run deadline starts at successful executor start and uses monotonic time.
 Ordinary calls use the minimum of remaining run time, advertised call timeout and
@@ -100,12 +120,27 @@ coverage; later explicit context is correlated by their exact immutable source k
 A second capture key for the same slot/camera is contradictory. Missing coverage or unresolved
 requirements at completed terminal evidence fails the run.
 
+Every interpreted typed EvidenceSource resolves to the selected graph and advertises
+its claimed method and, where applicable, scope. Emitter acknowledgements require
+an explicit `controls` relation from a power-capable controller (listed in the
+program's controller participants), or a power-capable integrated parent authority.
+Controller/register/electrical emitter facts come from that control authority or
+the emitter itself; graph-owned optical sources may establish their advertised
+optical evidence without being controllers. Foreign/unadvertised provenance is
+rejected. Camera exposure and trigger/association sources are checked too.
+
 Commanded-only requires an established matching emitter command. Controller-
 acknowledged requires that command and matching successful acknowledgement at the
 required scope. Acceptance and completion remain the actual reported distinct
 stages; either successful stage can satisfy this evidence class, without inventing
-completion. Exposure-effective requires established matching state at the required
-scope for every requested source frame and emitter. L1 checks exact frame identity
+completion. A valid acknowledgement rejection terminates with `rejected`; a failed
+acknowledgement terminates with `device_failure`. Trigger rejection maps to
+`rejected`, trigger timeout to `timeout`, and unsolicited trigger cancellation
+while RUNNING to `device_failure`. Cancellation evidence arriving after daemon
+stop/cancel is retained without replacing the existing cause. Missing presence
+still means `evidence_missing`, and the original typed negative facts remain
+unchanged in the retained publication. Exposure-effective requires established
+matching state at the required scope for every requested source frame and emitter. L1 checks exact frame identity
 and complete exposure interval coverage. Unknown/Unavailable cannot satisfy a
 required established value, and no weaker class is substituted. Established
 command/observed/effective contradictions fail without modifying publications.
