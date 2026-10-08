@@ -458,3 +458,17 @@ Final exact-SHA CI results are provided in the handoff for this correction.
 Screenshot artifacts and the required five-job matrix remain enabled; no failing
 check, warning assertion or matrix entry was suppressed. Physical hardware and
 metrology acceptance limits are unchanged.
+
+The implementation commit `997b1abde9315ad8ac225649cfe41dd7a1fcb1e6`
+passed all five jobs in [run 37785770600](https://github.com/martinkoenig/mantis-studio/actions/runs/37785770600):
+Studio ON x86_64/native ARM64 each 47/47, Studio OFF x86_64/native ARM64 and
+ASan/UBSan each 41/41. Both desktop artifacts were downloaded and verified;
+each includes 38 PNGs and wire/QML/CLI PASS markers in `LastTest.log`.
+
+The final assertion follow-up checks rejection codes directly against the wire
+fixture's known `busy`, `io` and `invalid_argument` values, both before presentation
+and in `errorDetails`, rather than comparing only two representations of the
+collected result. That final regression passes under Qt 6.4, Qt 6.4 ASan/UBSan and
+Qt 6.9 ASan/UBSan. Logs: `wire-status-{qt64,qt64-sanitizers,qt69-sanitizers}-test.log`.
+This assertion/documentation follow-up changes no production behavior and requires
+a fresh complete exact-SHA matrix before the final handoff.
