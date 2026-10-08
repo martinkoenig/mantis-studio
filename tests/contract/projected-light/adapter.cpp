@@ -312,6 +312,117 @@ void prepared_program(const std::shared_ptr<plugins::Loaded> &loaded) {
         c->shape(UINT32_MAX);
     }
 }
+void exact_reference(const std::shared_ptr<plugins::Loaded> &loaded) {
+    auto *c = control(*loaded);
+    for (auto presence :
+         {data::Presence::unknown, data::Presence::unavailable, data::Presence::established}) {
+        c->fault(TEST_NORMAL);
+        c->shape(0);
+        auto executor = opened(loaded);
+        auto prepared = program();
+        if (presence == data::Presence::established) {
+            prepared.identity.hash = Hash{"sha256", "abcd"};
+            prepared.identity.content = data::ContentReference{
+                prepared.identity.id.id, schema::acquisition_program, Hash{"sha256", "abcd"}, 7};
+        } else if (presence == data::Presence::unknown) {
+            prepared.identity.hash = data::Unknown{};
+            prepared.identity.content = data::Unknown{};
+        } else {
+            prepared.identity.hash = data::Unavailable{};
+            prepared.identity.content = data::Unavailable{};
+        }
+        CHECK(get(executor->prepare(prepared, 100)).accepted);
+        get(executor->start(run, generation, 100));
+        auto first = get(executor->next(100));
+        CHECK(first && first->evidence.program.hash == prepared.identity.hash &&
+              first->evidence.program.content.presence() == presence);
+        if (presence == data::Presence::established) {
+            CHECK(first->evidence.program.content.get()->revision == 7 &&
+                  first->evidence.program.content.get()->hash == prepared.identity.content.get()->hash);
+        } else {
+            for (auto f : {TEST_HASH_ESTABLISHED, TEST_HASH_UNAVAILABLE, TEST_HASH_DOWNGRADE,
+                           TEST_CONTENT_ESTABLISHED, TEST_CONTENT_UNAVAILABLE, TEST_CONTENT_DOWNGRADE}) {
+                if ((presence == data::Presence::unknown &&
+                     (f == TEST_HASH_DOWNGRADE || f == TEST_CONTENT_DOWNGRADE)) ||
+                    (presence == data::Presence::unavailable &&
+                     (f == TEST_HASH_UNAVAILABLE || f == TEST_CONTENT_UNAVAILABLE)))
+                    continue; // unchanged absence is tested by the successful first publication
+                c->fault(f);
+                c->publication(1);
+                auto rejected = executor->next(100);
+                CHECK(!rejected && rejected.error().code == Status::incompatible);
+            }
+        }
+        c->fault(TEST_NORMAL);
+        c->publication(1);
+        CHECK(get(executor->next(100))->key.sequence.value == 1);
+        get(executor->close(100));
+        c->shape(UINT32_MAX);
+    }
+    // Exact presence also applies to the hash nested inside established content.
+    for (auto presence :
+         {data::Presence::unknown, data::Presence::unavailable, data::Presence::established}) {
+        c->fault(TEST_NORMAL);
+        c->shape(0);
+        auto executor = opened(loaded);
+        auto prepared = program();
+        data::Evidence<Hash> hash = data::Unknown{};
+        if (presence == data::Presence::unavailable)
+            hash = data::Unavailable{};
+        if (presence == data::Presence::established)
+            hash = Hash{"sha256", "abcd"};
+        prepared.identity.hash = data::Unknown{};
+        prepared.identity.content =
+            data::ContentReference{prepared.identity.id.id, schema::acquisition_program, hash, 7};
+        CHECK(get(executor->prepare(prepared, 100)).accepted);
+        get(executor->start(run, generation, 100));
+        CHECK(get(executor->next(100))->evidence.program.content.get()->hash == hash);
+        for (auto f : {TEST_CONTENT_HASH, TEST_CONTENT_HASH_UNKNOWN, TEST_CONTENT_HASH_UNAVAILABLE}) {
+            if ((presence == data::Presence::unknown && f == TEST_CONTENT_HASH_UNKNOWN) ||
+                (presence == data::Presence::unavailable && f == TEST_CONTENT_HASH_UNAVAILABLE))
+                continue;
+            c->fault(f);
+            c->publication(1);
+            auto rejected = executor->next(100);
+            CHECK(!rejected && rejected.error().code == Status::incompatible);
+        }
+        c->fault(TEST_NORMAL);
+        c->publication(1);
+        CHECK(get(executor->next(100))->key.sequence.value == 1);
+        get(executor->close(100));
+        c->shape(UINT32_MAX);
+    }
+}
+void capture_graph(const std::shared_ptr<plugins::Loaded> &loaded) {
+    auto *c = control(*loaded);
+    for (auto f :
+         {TEST_SOURCE_WIDTH, TEST_SOURCE_HEIGHT, TEST_OUTPUT_FRAMESET_STREAM, TEST_GRAPH_NO_FRAMESET}) {
+        c->fault(f == TEST_GRAPH_NO_FRAMESET ? f : TEST_NORMAL);
+        c->shape(f == TEST_GRAPH_NO_FRAMESET ? 0u : 1u);
+        auto executor = opened(loaded);
+        c->fault(TEST_NORMAL);
+        start(*executor);
+        CHECK(get(executor->next(100)));
+        c->shape(1);
+        c->fault(f == TEST_GRAPH_NO_FRAMESET ? TEST_NORMAL : f);
+        auto rejected = executor->next(100);
+        CHECK(!rejected && rejected.error().code == Status::incompatible);
+        c->fault(TEST_NORMAL);
+        if (f == TEST_GRAPH_NO_FRAMESET)
+            c->shape(0);
+        c->publication(1);
+        auto accepted = get(executor->next(100));
+        CHECK(accepted && accepted->key.sequence.value == 1);
+        if (f != TEST_GRAPH_NO_FRAMESET) {
+            const auto &source = *executor->graph().components[1].image_source;
+            CHECK(accepted->evidence.frames[0].width == source.width &&
+                  accepted->evidence.frames[0].height == source.height &&
+                  accepted->evidence.frameset.get()->stream.id == *executor->graph().frameset_stream.get());
+        }
+        get(executor->close(100));
+        c->shape(UINT32_MAX);
+    }
+}
 void abort_emitters(const std::shared_ptr<plugins::Loaded> &loaded) {
     auto *c = control(*loaded);
     for (auto f : {TEST_ABORT_EMPTY, TEST_ABORT_MISSING, TEST_ABORT_DUPLICATE, TEST_ABORT_FOREIGN,
@@ -667,6 +778,8 @@ int main(int argc, char **argv) {
         malformed(loaded);
         successors(loaded);
         prepared_program(loaded);
+        exact_reference(loaded);
+        capture_graph(loaded);
         abort_emitters(loaded);
         concurrency(loaded);
         registry(argv[2]);

@@ -143,7 +143,11 @@ selected graph. Start requires a locally recorded successful preparation. Every
 admitted prepare attempt invalidates the previous prepared snapshot before validation;
 local errors, plugin failures and rejected preparations leave no startable snapshot.
 Emitted evidence must match its ProgramId and participant declarations and preserve
-established hash/content provenance exactly, without downgrade or contradiction.
+the exact prepared ProgramReference: hash/content presence and every established
+value, including content ID/type/revision and nested hash presence/value. Established,
+Unknown and Unavailable are distinct; upgrades, downgrades and replacements fail.
+There are no canonical L2 serialization bytes from which a plugin may derive
+authoritative replacement program provenance.
 Every established evidence/status step and every TriggerEvent step must belong to
 the active run, have `repetition_index < prepared.repetitions`, and reference a
 declared step **index**, which need not equal its position in the vector.
@@ -179,6 +183,13 @@ increase without reuse, and controller/source-stream generations remain stable.
 One previous immutable bundle is held through shared buffer ownership. Malformed
 outputs, failed calls, NOT_READY and abort never advance it. Successful start resets
 successor state for the new run. This is boundary validation, not L3 scheduling.
+Every evidence source frame's width/height must match its selected typed image
+source. Every established evidence FrameSetKey requires an established graph
+`frameset_stream` with the same stable stream ID, including without an attached
+FrameSet. Generations remain runtime evidence, never fabricated from graph IDs.
+Dimension/stream contradictions fail `Status::incompatible` before successor state
+advances. Physical identity resolves through the stable camera component; it is
+not duplicated into each source frame's evidence.
 All converted semantic values undergo L1 validation, including trigger/evidence run
 consistency, actual FrameSet validity and exposure-effective presence. Projected
 `next` accepts only the bundle alternative and binds its run/program/participants
@@ -323,18 +334,34 @@ versioned interface decision. It defines no on-disk bytes.
 
 ## Local validation evidence
 
+The final public L2 C ABI is frozen by `tests/contract/l2/include/mantis/` snapshots
+of `plugin.h`, `semantic_views.h` and `projected_light.h`. They are ABI test
+evidence, not normative documentation. Separate frozen/current C translation units
+compare size/alignment and all field offsets/sizes for 129 public structs and 10
+callback aliases, 113 numeric constants and 22 identifiers. The semantic layout
+catalog is generated from the explicit checked-in L2 model; read-only catalog,
+field declaration and callback signature verification runs in CTest. Same-width
+type changes cannot evade layout checks. No x86_64 offsets are prescribed. Both tests run in
+the existing native x86_64/ARM64 CI matrix. Future additions must use new versioned
+interfaces/structures rather than mutate this snapshot or existing L2 layouts.
+
 On x86_64 with GCC 15.2, the complete headless non-hardware CTest suite passed
-**38/38**. This includes projected-light-contract, c-abi, legacy-abi,
+**40/40**. This includes frozen-l2-abi, frozen-l2-catalog, projected-light-contract, c-abi, legacy-abi,
 projected-light-semantics, core, acquisition, acquisition-qos and existing camera/
 calibration/recording regressions. `git diff --check` and
 `python3 tests/contract/boundaries.py .` passed.
 
-ASan + UBSan with leak detection and halt-on-error passed **7/7** focused tests:
-projected-light-contract, c-abi, legacy-abi, projected-light-semantics, acquisition,
+ASan + UBSan with leak detection and halt-on-error passed **8/8** focused tests:
+frozen-l2-abi, projected-light-contract, c-abi, legacy-abi, projected-light-semantics, acquisition,
 acquisition-qos and core. The final fixture changes were retested under both ordinary
 and sanitizer builds. No use-after-free, undefined behavior or leak was reported.
 Native ARM64/cross-toolchain execution was unavailable locally; those results are
 not claimed. L2 acceptance remains pending.
+
+Deliberately mutated SDK copies under the ignored build directory were rejected:
+the C probe detected image-dimension layout and status-enum value changes, and the
+declaration guard detected a callback signature change with unchanged pointer size.
+The public headers and frozen snapshots were not modified by these checks.
 
 Build/test configuration used `MANTIS_BUILD_STUDIO=OFF`, existing OpenCV 4.10 SDK/
 runtime dependencies, and `/usr/bin/python3` with protobuf. Missing imgcodecs SDK

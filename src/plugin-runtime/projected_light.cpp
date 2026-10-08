@@ -109,8 +109,8 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
     }
     void reference_matches(const data::ProgramReference &actual) const {
         const auto &expected = prepared_->identity;
-        if (actual.id != expected.id ||
-            (expected.hash.get() && (!actual.hash.get() || *actual.hash.get() != *expected.hash.get())))
+        if (actual.id != expected.id || actual.hash != expected.hash ||
+            actual.content.presence() != expected.content.presence())
             fail(Status::incompatible, "Program identity/hash differs from prepared program");
         if (const auto *e = expected.content.get()) {
             const auto *a = actual.content.get();
@@ -118,13 +118,6 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
                 a->hash != e->hash)
                 fail(Status::incompatible, "Program content provenance differs from prepared program");
         }
-        // An enriched reference must also agree with established prepared provenance.
-        if (const auto *a = actual.content.get();
-            a && a->hash.get() && expected.hash.get() && *a->hash.get() != *expected.hash.get())
-            fail(Status::incompatible, "Program content contradicts prepared hash");
-        if (actual.hash.get() && expected.content.get() && expected.content.get()->hash.get() &&
-            *actual.hash.get() != *expected.content.get()->hash.get())
-            fail(Status::incompatible, "Program hash contradicts prepared content");
     }
     void run_matches(const data::Evidence<data::RunId> &run,
                      const data::Evidence<data::GenerationId> &generation) {
@@ -285,6 +278,21 @@ class ProjectedExecutor final : public device::ProjectedExecutor {
                         actual.cameras[i].stream != expected.cameras[i].stream ||
                         actual.cameras[i].role != expected.cameras[i].role)
                         fail(Status::incompatible, "Bundle camera identity differs from prepared program");
+                for (const auto &frame : r.value->evidence.frames) {
+                    const auto camera = std::find_if(
+                        graph_.components.begin(), graph_.components.end(), [&](const auto &component) {
+                            return component.kind == device::ParticipantKind::image &&
+                                   component.descriptor.id == frame.frame.camera.id;
+                        });
+                    if (camera == graph_.components.end() || !camera->image_source ||
+                        frame.width != camera->image_source->width ||
+                        frame.height != camera->image_source->height)
+                        fail(Status::incompatible, "Source dimensions differ from selected image source");
+                }
+                if (const auto *frameset = r.value->evidence.frameset.get();
+                    frameset &&
+                    (!graph_.frameset_stream.get() || frameset->stream.id != *graph_.frameset_stream.get()))
+                    fail(Status::incompatible, "FrameSet stream differs from selected graph");
                 if (previous_) {
                     auto valid = data::validate_successor(*previous_, *r.value);
                     if (!valid)

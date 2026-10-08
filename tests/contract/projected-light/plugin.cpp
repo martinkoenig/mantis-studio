@@ -324,6 +324,10 @@ int enumerate(uint32_t t, MantisProjectedGraphEmitV1 emit, void *ctx) {
         case TEST_FRAMESET_STREAM:
             g.graph.frameset_stream = absent<MantisEvidenceStreamIdV1>();
             break;
+        case TEST_GRAPH_NO_FRAMESET:
+            g.components[0].capability_count = 1;
+            g.graph.frameset_stream = absent<MantisEvidenceStreamIdV1>(MANTIS_PRESENCE_UNAVAILABLE);
+            break;
         case TEST_TWO_EMITTERS: {
             static const char *participants[] = {"camera-alpha", "emitter-alpha", "controller-alpha",
                                                  "emitter-beta"};
@@ -610,6 +614,9 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
         wrong_hash.algorithm = "sha256";
         wrong_hash.hex = "dead";
         auto wrong_content = view<MantisContentReferenceV1>();
+        wrong_content.id = s.program.c_str();
+        wrong_content.type = type(MANTIS_ACQUISITION_PROGRAM);
+        wrong_content.hash = absent<MantisEvidenceHashV1>(MANTIS_PRESENCE_UNAVAILABLE);
         if (b.bundle.evidence.program.content.value)
             wrong_content = *b.bundle.evidence.program.content.value;
         switch (f) {
@@ -669,7 +676,27 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
             b.effective.frame.stream.generation = "another-camera-generation";
             break;
         case TEST_HASH_MISMATCH:
+        case TEST_HASH_ESTABLISHED:
             b.bundle.evidence.program.hash = present<MantisEvidenceHashV1>(&wrong_hash);
+            break;
+        case TEST_HASH_UNAVAILABLE:
+            b.bundle.evidence.program.hash = absent<MantisEvidenceHashV1>(MANTIS_PRESENCE_UNAVAILABLE);
+            break;
+        case TEST_CONTENT_ESTABLISHED:
+            b.bundle.evidence.program.content = present<MantisEvidenceContentReferenceV1>(&wrong_content);
+            break;
+        case TEST_CONTENT_UNAVAILABLE:
+            b.bundle.evidence.program.content =
+                absent<MantisEvidenceContentReferenceV1>(MANTIS_PRESENCE_UNAVAILABLE);
+            break;
+        case TEST_SOURCE_WIDTH:
+            ++b.frame.width;
+            break;
+        case TEST_SOURCE_HEIGHT:
+            ++b.frame.height;
+            break;
+        case TEST_OUTPUT_FRAMESET_STREAM:
+            b.frameset_key.stream.id = "unadvertised-frameset-stream";
             break;
         case TEST_HASH_DOWNGRADE:
             b.bundle.evidence.program.hash = absent<MantisEvidenceHashV1>();
@@ -683,6 +710,12 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
             break;
         case TEST_CONTENT_HASH:
             wrong_content.hash = present<MantisEvidenceHashV1>(&wrong_hash);
+            b.bundle.evidence.program.content = present<MantisEvidenceContentReferenceV1>(&wrong_content);
+            break;
+        case TEST_CONTENT_HASH_UNKNOWN:
+        case TEST_CONTENT_HASH_UNAVAILABLE:
+            wrong_content.hash = absent<MantisEvidenceHashV1>(
+                f == TEST_CONTENT_HASH_UNKNOWN ? MANTIS_PRESENCE_UNKNOWN : MANTIS_PRESENCE_UNAVAILABLE);
             b.bundle.evidence.program.content = present<MantisEvidenceContentReferenceV1>(&wrong_content);
             break;
         case TEST_EVIDENCE_STEP:
