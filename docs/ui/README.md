@@ -61,7 +61,7 @@ acceptance action, not ordinary launch behavior.
 
 | Mode | Runtime status | Device data | Action authority |
 | --- | --- | --- | --- |
-| `live` | `StudioBridge.connected` confirms a successful authenticated snapshot; otherwise runtime state is unconfirmed | Confirmed runtime descriptors only; empty when unconfirmed | Existing real controls, gated by runtime availability |
+| `live` | `StudioBridge.connected` confirms a successful authenticated snapshot; otherwise runtime state is unconfirmed | Snapshot descriptors; cached data explicitly last known after failed confirmation | Existing real controls, gated by runtime availability |
 | `mock` | “Mock · runtime not used”; always disconnected | Deterministic, separately authored `Demo / Mock` fixture | Bridge polling and commands disabled; legacy acquisition/calibration controls disabled |
 | `hybrid` | Actual runtime status, including disconnection | Live descriptors and a separate `Demo / Mock` example | Only real descriptors enter existing runtime controls; fixtures expose no actions |
 

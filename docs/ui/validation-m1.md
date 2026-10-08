@@ -79,7 +79,7 @@ is used. Required CI uses its unchanged headless sanitizer preset/environment.
 | Deterministic result-delivery fix, public-wire repetition | 10 consecutive passes, 13.57 s | `race-fix-repeat.log` |
 | Home component and public-wire repetition | Each passed three consecutive times, 25.51 s | `final-repeat.log` |
 
-Exact-SHA CI results are recorded below after execution.
+Exact-SHA CI results are recorded below.
 Local logs/build products are ignored, not repository assets;
 CI uploads reproducible captures, fixture commands and complete CTest diagnostics.
 
@@ -170,8 +170,9 @@ Strings/capabilities/issues are bounded as specified in [Home](home.md).
 Input QVariant lists/maps are implicitly shared; the 10,000-row regression with
 oversized strings checks output bounds. The model emits no change for 100 equal
 normalized notifications. No per-component timer or network access exists.
-The repeatable 90-transition stress reported roughly 2.7–3.7 s on this Qt 6.4
-software-rendered environment, including event processing and final settling. This is
+The repeatable 90-transition stress reported 3018 / 3049 / 3077 ms on three
+consecutive runs in this Qt 6.4 software-rendered environment, including event
+processing and final settling. This is
 an observed test workload, not a per-update latency measurement, throughput
 promise or hardware performance budget.
 
@@ -203,9 +204,38 @@ unproven here. Independent technical/visual review remains the acceptance author
 
 ## Exact-commit CI gate
 
-Pending first push. Completion requires all five unchanged required jobs for the
-final pushed SHA: Ubuntu 24.04 x86_64/ARM64 Studio ON and OFF, plus headless
-ASan/UBSan. Studio ON uploads retain the names `ui-m0-ubuntu-24.04` and
-`ui-m0-ubuntu-24.04-arm`, now including both `ui-m0/` and `ui-m1/`, fixture evidence,
-`LastTest.log` and retained diagnostic files. Final SHA, run/job/artifact links and
-results must be recorded after observation; an earlier green SHA is insufficient.
+Implementation commit **`2be93de0c85d85aaa6e0fa07910623dfbe513c0d`**, following
+bridge correction `41e6740bbe923d9b4833f71e6cc2b3670ff235b1`, passed the complete
+[architecture run 37820671478](https://github.com/martinkoenig/mantis-studio/actions/runs/37820671478).
+All five required jobs completed successfully:
+
+| Required job | Result / exact-run link |
+| --- | --- |
+| Ubuntu 24.04 x86_64 Studio ON, Qt 6.4 | [Success — 49 tests](https://github.com/martinkoenig/mantis-studio/actions/runs/37820671478/job/113460581949) |
+| Ubuntu 24.04 native ARM64 Studio ON, Qt 6.4 | [Success — 49 tests](https://github.com/martinkoenig/mantis-studio/actions/runs/37820671478/job/113460582193) |
+| Ubuntu 24.04 x86_64 Studio OFF | [Success — 41 tests](https://github.com/martinkoenig/mantis-studio/actions/runs/37820671478/job/113460582225) |
+| Ubuntu 24.04 native ARM64 Studio OFF | [Success — 41 tests](https://github.com/martinkoenig/mantis-studio/actions/runs/37820671478/job/113460581575) |
+| Ubuntu 24.04 headless ASan/UBSan/LSan | [Success — 41 tests](https://github.com/martinkoenig/mantis-studio/actions/runs/37820671478/job/113460582131) |
+
+Downloaded and verified both exact-run desktop artifacts:
+[x86_64 evidence](https://github.com/martinkoenig/mantis-studio/actions/runs/37820671478/artifacts/11568614935)
+and [native ARM64 evidence](https://github.com/martinkoenig/mantis-studio/actions/runs/37820671478/artifacts/11568684825).
+Each contains 49 passing CTest entries, 34 M1 PNGs, all 38 M0 PNGs and the expected
+public-wire command log. The native ARM64 mock 1536 capture was additionally
+inspected against the reviewed composition; source labels and layout agree.
+Artifacts expire after 30 days; the registered tests regenerate them. Upload
+names remain `ui-m0-ubuntu-24.04` / `ui-m0-ubuntu-24.04-arm` and retain both UI
+directories, fixture evidence, `LastTest.log` and diagnostic files.
+
+This evidence-recording documentation successor changes no implementation or
+tests. It requires its own full five-job matrix after pushing; the final handoff
+must identify that exact successor SHA/run and report completion only after all
+five succeed. The implementation run above is traceable source evidence, not a
+substitute for that final-commit gate. A document cannot embed its own Git commit
+hash; retrieve the final exact-SHA run with:
+
+```bash
+gh run list --branch feature/ui-m1-home --commit "$(git rev-parse HEAD)" \
+  --json databaseId,headSha,status,conclusion,url
+gh run view RUN_ID --json headSha,status,conclusion,url,jobs
+```
