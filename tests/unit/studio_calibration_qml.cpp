@@ -1,5 +1,6 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
+#include "home_model.hpp"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -25,6 +26,7 @@ bool hasStage(QQuickItem *item, const QString &name) {
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
+    qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qInstallMessageHandler(handler);
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");

@@ -38,6 +38,7 @@ jobs:
           retention-days: 30
           path: |
             build/ci/ui-m0/
+            build/ci/ui-m1/
             build/ci/Testing/Temporary/LastTest.log
             docs/ui/evidence/
 

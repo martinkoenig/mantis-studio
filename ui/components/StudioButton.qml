@@ -10,6 +10,7 @@ Button {
     activeFocusOnTab: true
     contentItem: Text {
         text: control.text
+        textFormat: Text.PlainText
         font: control.font
         color: !control.enabled ? Theme.muted : control.primary ? Theme.canvas : Theme.text
         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
@@ -21,5 +22,6 @@ Button {
         border.width: control.visualFocus ? 2 : 1
         border.color: control.enabled && control.visualFocus ? Theme.focus : control.enabled && control.primary ? color : Theme.border
     }
+    HoverHandler { cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
     Accessible.name: text
 }

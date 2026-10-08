@@ -83,7 +83,7 @@ ApplicationWindow {
                 }
                 Item { Layout.fillHeight: true }
                 Label { text: "WORKSPACE FOUNDATION"; font.pixelSize: 9; color: Theme.muted; Layout.leftMargin: 10 }
-                Label { text: "UI-M0"; font.pixelSize: 12; color: Theme.secondary; Layout.leftMargin: 10; Layout.bottomMargin: 12 }
+                Label { text: "UI-M1"; font.pixelSize: 12; color: Theme.secondary; Layout.leftMargin: 10; Layout.bottomMargin: 12 }
             }
         }
         ColumnLayout {
@@ -103,14 +103,15 @@ ApplicationWindow {
             }
             ColumnLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.margins: window.compact ? 16 : Theme.padding
+                Layout.margins: window.workspace === "home" ? 12 : window.compact ? 16 : Theme.padding
                 spacing: Theme.gap
                 RowLayout {
+                    visible: window.workspace !== "home"
                     Layout.fillWidth: true
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 6
                         Label { objectName: "workspaceTitle"; text: window.currentPage.title; font.pixelSize: Theme.titleSize; font.bold: true }
-                        Label { text: window.currentPage.description; color: Theme.secondary; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                        Label { visible: window.workspace !== "home"; text: window.currentPage.description; color: Theme.secondary; Layout.fillWidth: true; wrapMode: Text.Wrap }
                     }
                     SourceBadge { visible: window.legacyVisible || window.workspace === "calibration"; source: window.uiMode === "mock" ? "mock" : "live" }
                 }
@@ -124,10 +125,20 @@ ApplicationWindow {
                     Layout.fillWidth: true; Layout.fillHeight: true; visible: window.workspace === "calibration"
                     controller: calibration; studio: window.studioBridge; enabled: window.uiMode !== "mock"
                 }
+                HomeWorkspace {
+                    objectName: "homeWorkspace"
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    visible: window.workspace === "home"
+                    bridge: window.studioBridge; mode: window.uiMode
+                    onNavigate: function(route) {
+                        if (route === "calibration") window.openCalibration("")
+                        else window.workspace = route
+                    }
+                }
                 FoundationWorkspace {
                     objectName: "foundationWorkspace"
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    visible: !window.legacyVisible && window.workspace !== "calibration"
+                    visible: !window.legacyVisible && window.workspace !== "calibration" && window.workspace !== "home"
                     page: window.currentPage; state: window.appUiState
                     onOpenAcquisition: window.workspace = "acquisition"
                     onOpenDevices: window.workspace = "devices"
@@ -141,6 +152,7 @@ ApplicationWindow {
                     anchors.fill: parent; anchors.leftMargin: 20; anchors.rightMargin: 20
                     Label {
                         objectName: "runtimeMessage"
+                        textFormat: Text.PlainText
                         text: window.uiMode === "mock" ? "Demo / Mock · sample content only" : window.studioBridge.error.length > 0 ? (window.studioBridge.connected ? "Operation failed · " : "Runtime state unconfirmed · ") + window.studioBridge.error : window.studioBridge.project.length > 0 ? window.studioBridge.project : "Live source · awaiting runtime"
                         elide: Text.ElideMiddle; Layout.fillWidth: true; color: window.studioBridge.error.length > 0 && window.uiMode !== "mock" ? Theme.warning : Theme.muted; font.pixelSize: Theme.captionSize
                     }

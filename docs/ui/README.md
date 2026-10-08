@@ -1,8 +1,8 @@
-# Mantis Studio UI foundation (UI-M0)
+# Mantis Studio UI (UI-M0 foundation + UI-M1 Home)
 
 UI-M0 establishes the Qt 6 / Qt Quick desktop shell, ten routes, a small design
-system and an explicit presentation data contract. Full workspace tools and the
-Home dashboard are deferred. [Architecture v1](../../MANTIS_STUDIO_ARCHITECTURE.md)
+system and an explicit presentation data contract. UI-M1 adds the dedicated
+[Home dashboard](home.md); the other full workspace tools remain deferred. [Architecture v1](../../MANTIS_STUDIO_ARCHITECTURE.md)
 and the [master roadmap](../../ROADMAP.md) remain authoritative. This UI milestone
 does not change v0.3/v0.4 implementation or hardware acceptance status.
 
@@ -16,9 +16,11 @@ or treated as evidence of device readiness, calibration, accuracy, laser safety,
 remote support or release versions. In particular, the canonical convention is
 **mm, right-handed +X right / +Y forward / +Z up**, regardless of reference text.
 
-M0 pages deliberately show structured future-workspace panels. The Home page is
-a foundation, not the UI-M1 dashboard. There are no fabricated measurements,
-project histories, active jobs or hardware controls in these panels.
+The nine M0 foundation routes retain their existing workflows and planned panels.
+Home now presents bounded current project, logical device, job, artifact and
+event summaries. Readiness, project history and utilization remain explicitly
+unknown/unavailable. Mock has a clearly labelled deterministic showcase; hybrid
+places illustrative projects below the live dashboard, never in its counts.
 
 ## Launch and data sources
 
@@ -31,10 +33,10 @@ by a hardware-facing UI control.
 # Fully offline, without mantisd or MANTIS_TOKEN:
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
   ./build/debug/bin/mantis-studio --ui-mode=mock --workspace=home \
-  --window-size=1536x1024 --quit-after 5000 --screenshot /tmp/mantis-ui-m0-home.png
+  --window-size=1536x1024 --quit-after 5000 --screenshot /tmp/mantis-ui-m1-home.png
 
-# Runtime data plus a separately labelled illustrative device:
-./build/debug/bin/mantis-studio --ui-mode=hybrid --workspace=devices
+# Runtime Home plus a separately labelled illustrative showcase:
+./build/debug/bin/mantis-studio --ui-mode=hybrid --workspace=home
 
 # Existing real workflow, with the usual runtime endpoint/token:
 ./build/debug/bin/mantis-studio --ui-mode=live --workspace=scan
@@ -111,6 +113,10 @@ true only for Devices/Calibration in live/hybrid; mock never starts its polling.
   route descriptors. It owns no capture state, client transport or polling timer.
 - `ui/state/MockFixtures.qml` owns the deterministic illustrative fixture. It is
   isolated from `StudioBridge`; it has no command methods.
+- `HomeWorkspace.qml` composes the dedicated dashboard and separately labelled
+  hybrid showcase. `HomeModel` owns bounded, read-only snapshot formatting and
+  emits no notification for equal normalized results; mock detaches it from the
+  bridge. `ui/home/` contains original procedural artwork and reusable cards.
 - `FoundationWorkspace.qml` renders route descriptors and provider data through
   the shared components. New full workspaces should receive presentation models
   and emit intents; runtime commands belong in frontend controllers using the
@@ -147,7 +153,7 @@ work from the master roadmap.
 
 | Route | Existing real functionality retained | Planned UI / milestone | Migration to live |
 | --- | --- | --- | --- |
-| `home` | Runtime status and discovered device summary | Welcome, recent projects/activity · UI-M1 | Add project/job presentation providers; reuse cards and source badges |
+| `home` | UI-M1: truthful project/devices/jobs/artifacts/events, stale/error states and navigation | History, telemetry and tutorial browser remain unavailable | Read-only HomeModel consumes existing bridge notifications; no extra transport |
 | `scan` | All acquisition, dual preview, replay and viewport tools | Redesigned scan setup/review · UI-M3 | Wrap existing bridge/controller intents; replace legacy layout incrementally |
 | `process` | Recipe execution and jobs in acquisition | Recipes, lineage and stages · UI-M4 | Bind supported pipeline/job descriptors to a workspace model |
 | `inspect` | Geometry viewing in acquisition; no metrology tools | Selection/measurement evidence · UI-M5 | Feed versioned analysis artifacts, units and validity into visual components |
@@ -201,6 +207,17 @@ provides x86_64 evidence only.
 
 Correction evidence is in [validation.md](validation.md#additional-correction-record--2026-10-08-review-gate)
 and [the retained Qt 6.4 backtrace](evidence/qt64-baseline-crash.txt).
+`studio-home-qml` adds source/presence/error contracts, all Home CTAs, accessibility,
+large/invalid inputs, alternate font metrics and 90 immediate model/mode/route/resize
+transitions. `studio-home-wire` drives the production asynchronous bridge through
+the public client and deterministic wire fault fixture. Home captures are in
+`build/debug/ui-m1/{screenshots,wire}/`; run both with:
+
+```bash
+ctest --test-dir build/debug -R '^studio-home-(qml|wire)$' --output-on-failure
+```
+
+See [M1 validation](validation-m1.md) for executed checks and exact-SHA CI evidence.
 Studio ON CI jobs upload generated screenshots and CTest diagnostics as
 `ui-m0-ubuntu-24.04` and `ui-m0-ubuntu-24.04-arm` artifacts on the matching Actions run.
 These captures are software presentation evidence, never physical scanner results.

@@ -138,9 +138,13 @@ if(MANTIS_BUILD_STUDIO)
  set_target_properties(mantis-studio-calibration PROPERTIES AUTOMOC ON)
  target_include_directories(mantis-studio-calibration PUBLIC apps/studio)
  target_link_libraries(mantis-studio-calibration PUBLIC mantis-client Qt6::Core Qt6::Concurrent)
+ add_library(mantis-studio-home STATIC apps/studio/home_model.cpp apps/studio/home_model.hpp)
+ set_target_properties(mantis-studio-home PROPERTIES AUTOMOC ON)
+ target_include_directories(mantis-studio-home PUBLIC apps/studio)
+ target_link_libraries(mantis-studio-home PUBLIC Qt6::Qml mantis-options)
  add_executable(mantis-studio apps/studio/main.cpp apps/studio/screenshot.hpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
  set_target_properties(mantis-studio PROPERTIES AUTOMOC ON)
- target_link_libraries(mantis-studio PRIVATE mantis-studio-calibration mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
+ target_link_libraries(mantis-studio PRIVATE mantis-studio-home mantis-studio-calibration mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
  set(MANTIS_STUDIO_QML_FILES
   ui/calibration/ArtifactSelector.qml
   ui/calibration/CamerasStage.qml
@@ -161,6 +165,14 @@ if(MANTIS_BUILD_STUDIO)
   ui/components/StatusIndicator.qml
   ui/components/StudioButton.qml
   ui/components/StudioIcon.qml
+  ui/home/HomeText.qml
+  ui/home/HomeCard.qml
+  ui/home/GeometryArt.qml
+  ui/home/HomeDemo.qml
+  ui/home/HomeRows.qml
+  ui/home/HomeProjects.qml
+  ui/home/HomeDashboard.qml
+  ui/workspaces/HomeWorkspace.qml
   ui/state/AppUiState.qml
   ui/state/MockFixtures.qml
   ui/workspaces/AcquisitionWorkspace.qml
@@ -177,9 +189,16 @@ if(MANTIS_BUILD_STUDIO)
   target_link_libraries(mantis-studio-bridge-tests PRIVATE mantis-client mantis-render Qt6::Concurrent Qt6::Test)
   add_test(NAME studio-bridge-errors COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_bridge.py ${CMAKE_BINARY_DIR})
   set_tests_properties(studio-bridge-errors PROPERTIES TIMEOUT 45)
+  add_executable(mantis-studio-home-tests tests/unit/studio_home.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+  set_target_properties(mantis-studio-home-tests PROPERTIES AUTOMOC ON)
+  target_link_libraries(mantis-studio-home-tests PRIVATE mantis-studio-home mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
+  qt_add_resources(mantis-studio-home-tests studio-home-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
+  add_test(NAME studio-home-qml COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/screenshots)
+  add_test(NAME studio-home-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_home.py ${CMAKE_BINARY_DIR})
+  set_tests_properties(studio-home-qml studio-home-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 60)
   add_executable(mantis-studio-ui-m0-tests tests/unit/studio_ui_m0.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
   set_target_properties(mantis-studio-ui-m0-tests PROPERTIES AUTOMOC ON)
-  target_link_libraries(mantis-studio-ui-m0-tests PRIVATE mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
+  target_link_libraries(mantis-studio-ui-m0-tests PRIVATE mantis-studio-home mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
   qt_add_resources(mantis-studio-ui-m0-tests studio-m0-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
   add_test(NAME studio-ui-m0-qml COMMAND mantis-studio-ui-m0-tests ${CMAKE_BINARY_DIR}/ui-m0/screenshots)
   add_test(NAME studio-ui-m0-cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_ui_m0.py $<TARGET_FILE:mantis-studio> ${CMAKE_BINARY_DIR}/ui-m0/cli)
@@ -193,7 +212,7 @@ if(MANTIS_BUILD_STUDIO)
   set_tests_properties(studio-calibration-daemon PROPERTIES TIMEOUT 180)
   add_executable(mantis-studio-calibration-qml tests/unit/studio_calibration_qml.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
   set_target_properties(mantis-studio-calibration-qml PROPERTIES AUTOMOC ON)
-  target_link_libraries(mantis-studio-calibration-qml PRIVATE mantis-studio-calibration mantis-render Qt6::QuickControls2)
+  target_link_libraries(mantis-studio-calibration-qml PRIVATE mantis-studio-home mantis-studio-calibration mantis-render Qt6::QuickControls2)
   qt_add_resources(mantis-studio-calibration-qml studio-test-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
   add_test(NAME studio-calibration-qml COMMAND mantis-studio-calibration-qml)
   set_tests_properties(studio-calibration-qml PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software" TIMEOUT 30)

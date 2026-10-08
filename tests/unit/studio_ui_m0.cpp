@@ -1,5 +1,6 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
+#include "home_model.hpp"
 #include "screenshot.hpp"
 #include <QDir>
 #include <QEventLoop>
@@ -418,6 +419,7 @@ static void screenshotRegression(QQuickWindow *window, const QString &output) {
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
+    qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qInstallMessageHandler(messages);
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
@@ -518,14 +520,17 @@ int main(int argc, char **argv) {
         }
         std::cout << "STAGE: dynamic device removal followed by immediate resize" << std::endl;
         window->setProperty("workspace", "home");
-        for (int iteration = 0; iteration < 8; ++iteration) {
-            // No settling between model mutation and resize: this reproduced the Qt 6.4 crash.
-            window->setProperty("uiMode", iteration % 2 ? "mock" : "hybrid");
-            window->resize(iteration % 2 ? QSize(1080, 720) : QSize(1920, 1080));
-            settle();
-            require(list(state, "devices").size() == (iteration % 2 ? 1 : 0),
-                    "Device removal/repopulation failed during resize");
-            require(!window->grabWindow().isNull(), "Transition failed to render");
+        for (const auto &stressRoute : QStringList{"home", "devices"}) {
+            window->setProperty("workspace", stressRoute);
+            for (int iteration = 0; iteration < 8; ++iteration) {
+                // No settling between model mutation and resize: this reproduced the Qt 6.4 crash.
+                window->setProperty("uiMode", iteration % 2 ? "mock" : "hybrid");
+                window->resize(iteration % 2 ? QSize(1080, 720) : QSize(1920, 1080));
+                settle();
+                require(list(state, "devices").size() == (iteration % 2 ? 1 : 0),
+                        "Device removal/repopulation failed during resize");
+                require(!window->grabWindow().isNull(), "Transition failed to render");
+            }
         }
         std::cout << "STAGE: presentation provider" << std::endl;
         SnapshotStub snapshot;

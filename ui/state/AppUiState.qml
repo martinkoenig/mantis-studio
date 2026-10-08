@@ -41,7 +41,7 @@ QtObject {
     // Hybrid fixtures stay separate even when real devices are available.
     readonly property var demoDevices: mode === "hybrid" ? fixtures.devices : []
     readonly property var routes: [
-        {route: "home", title: "Home", milestone: "UI-M1", description: "Your starting point for acquisition and engineering.", planned: "Welcome, recent projects and activity", detail: "The full Home dashboard arrives in UI-M1."},
+        {route: "home", title: "Home", milestone: "UI-M1", description: "Your starting point for acquisition and engineering.", planned: "Home dashboard", detail: "Current runtime information and explicitly separated illustrative examples."},
         {route: "scan", title: "Scan", milestone: "UI-M3", description: "Acquire and replay data from runtime-owned captures.", planned: "Acquisition workspace and capture review", detail: "Camera previews, scan setup and timeline will adopt the new design in UI-M3."},
         {route: "process", title: "Process", milestone: "UI-M4", description: "Build reproducible processing workflows.", planned: "Recipes, artifact lineage and processing stages", detail: "Registration, fusion, mesh and texture tools depend on supported runtime capabilities."},
         {route: "inspect", title: "Inspect", milestone: "UI-M5", description: "Explore geometry and its measurement evidence.", planned: "Selection, measurements and evidence review", detail: "Measurement results and uncertainty require validated runtime data."},

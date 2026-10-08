@@ -1,5 +1,6 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
+#include "home_model.hpp"
 #include "screenshot.hpp"
 #include <QCommandLineParser>
 #include <QGuiApplication>
@@ -14,8 +15,9 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("Mantis Studio");
     QQuickStyle::setStyle("Basic");
+    qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     QCommandLineParser parser;
-    parser.setApplicationDescription("Mantis Studio desktop client · UI-M0");
+    parser.setApplicationDescription("Mantis Studio desktop client · UI-M1");
     parser.addHelpOption();
     parser.addOptions(
         {{"ui-mode", "UI data source: live, hybrid or mock (default: live).", "mode", "live"},
