@@ -152,6 +152,19 @@ if(MANTIS_BUILD_STUDIO)
   ui/calibration/SolveEvidence.qml
   ui/calibration/StageError.qml
   ui/calibration/TargetStage.qml
+  ui/design/Theme.qml
+  ui/design/qmldir
+  ui/components/DeviceSummary.qml
+  ui/components/NavigationItem.qml
+  ui/components/Panel.qml
+  ui/components/SourceBadge.qml
+  ui/components/StatusIndicator.qml
+  ui/components/StudioButton.qml
+  ui/components/StudioIcon.qml
+  ui/state/AppUiState.qml
+  ui/state/MockFixtures.qml
+  ui/workspaces/AcquisitionWorkspace.qml
+  ui/workspaces/FoundationWorkspace.qml
   ui/shell/Main.qml
   ui/workspaces/CalibrationWorkspace.qml
   ui/workspaces/DevicesWorkspace.qml)

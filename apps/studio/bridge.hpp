@@ -29,6 +29,7 @@ class StudioBridge : public QObject {
     QVariantList devices_, artifacts_, jobs_, plugins_, diagnostics_;
     QString project_, error_, capture_, selected_, newest_;
     bool connected_{};
+    const bool runtime_enabled_;
     mantis::client::Client client_;
     QFutureWatcher<StudioResult> watcher_;
     QTimer timer_, preview_timer_;
@@ -41,7 +42,7 @@ class StudioBridge : public QObject {
     void execute(std::function<void(const mantis::client::Client &)> action = {});
 
   public:
-    explicit StudioBridge(QObject *parent = nullptr);
+    explicit StudioBridge(QObject *parent = nullptr, bool runtimeEnabled = true);
     ~StudioBridge() override;
     QVariantList devices() const {
         return devices_;

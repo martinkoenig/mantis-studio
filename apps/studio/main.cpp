@@ -1,44 +1,105 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
+#include <QCommandLineParser>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QTimer>
+#include <algorithm>
 #include <iostream>
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("Mantis Studio");
     QQuickStyle::setStyle("Basic");
+    QCommandLineParser parser;
+    parser.setApplicationDescription("Mantis Studio desktop client · UI-M0");
+    parser.addHelpOption();
+    parser.addOptions(
+        {{"ui-mode", "UI data source: live, hybrid or mock (default: live).", "mode", "live"},
+         {"workspace",
+          "Initial workspace: home, scan, process, inspect, reverse, automate, projects, devices, plugins, "
+          "settings, calibration or acquisition.",
+          "route"},
+         {"window-size", "Initial viewport WIDTHxHEIGHT (minimum 1080x720).", "size", "1536x1024"},
+         {"screenshot", "Save the rendered window as a PNG.", "path"},
+         {"quit-after", "Exit after a positive number of milliseconds.", "milliseconds"},
+         {"acceptance-export", "Run the real asynchronous capture/pipeline/PLY acceptance workflow.",
+          "path"}});
+    auto invalid = [&](const QString &message) {
+        std::cerr << message.toStdString() << "\nUse --help for usage.\n";
+        return 2;
+    };
+    if (!parser.parse(app.arguments()))
+        return invalid(parser.errorText());
+    if (parser.isSet("help")) {
+        std::cout << parser.helpText().toStdString();
+        return 0;
+    }
+    if (!parser.positionalArguments().empty())
+        return invalid("Unexpected positional argument");
+    const auto mode = parser.value("ui-mode");
+    if (!QStringList{"live", "hybrid", "mock"}.contains(mode))
+        return invalid("Invalid --ui-mode");
+    auto workspace = parser.value("workspace");
+    if (parser.isSet("workspace") &&
+        !QStringList{"home", "scan", "process", "inspect", "reverse", "automate", "projects", "devices",
+                     "plugins", "settings", "calibration", "acquisition"}
+             .contains(workspace))
+        return invalid("Invalid --workspace");
+    if (workspace.isEmpty())
+        workspace = mode == "live" ? "acquisition" : "home";
+    const auto demo = parser.value("acceptance-export");
+    if (parser.isSet("acceptance-export")) {
+        if (demo.isEmpty() || mode == "mock")
+            return invalid("--acceptance-export requires a path and live or hybrid mode");
+        workspace = "acquisition"; // Acceptance requires an initialized real point-cloud viewport.
+    }
+    const auto dimensions = QRegularExpression("^(\\d+)x(\\d+)$").match(parser.value("window-size"));
+    const int width = dimensions.captured(1).toInt(), height = dimensions.captured(2).toInt();
+    if (!dimensions.hasMatch() || width < 1080 || height < 720 || width > 7680 || height > 4320)
+        return invalid("Invalid --window-size (supported range: 1080x720 to 7680x4320)");
+    int quitMs = 0;
+    if (parser.isSet("quit-after")) {
+        bool ok{};
+        quitMs = parser.value("quit-after").toInt(&ok);
+        if (!ok || quitMs <= 0)
+            return invalid("--quit-after requires positive milliseconds");
+    }
+    const auto screenshot = parser.value("screenshot");
+    if (parser.isSet("screenshot") && screenshot.isEmpty())
+        return invalid("--screenshot requires a path");
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
-    StudioBridge bridge;
-    CalibrationController calibration;
-    QObject::connect(&bridge, &StudioBridge::snapshotReady, &calibration, &CalibrationController::observeSnapshot);
+    StudioBridge bridge(nullptr, mode != "mock");
+    auto calibrationClient =
+        mode == "mock"
+            ? std::make_shared<PublicCalibrationClient>(mantis::client::Client{mantis::client::Endpoint{}})
+            : std::make_shared<PublicCalibrationClient>();
+    CalibrationController calibration(calibrationClient);
+    QObject::connect(&bridge, &StudioBridge::snapshotReady, &calibration,
+                     &CalibrationController::observeSnapshot);
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("studio", &bridge);
     engine.rootContext()->setContextProperty("calibration", &calibration);
+    engine.setInitialProperties(
+        {{"uiMode", mode}, {"workspace", workspace}, {"width", width}, {"height", height}});
     engine.load(QUrl("qrc:/ui/shell/Main.qml"));
     if (engine.rootObjects().isEmpty())
         return 1;
-    auto args = app.arguments();
-    auto value = [&](const QString &option) {
-        auto i = args.indexOf(option);
-        return i >= 0 && i + 1 < args.size() ? args[i + 1] : QString();
-    };
-    auto screenshot = value("--screenshot");
-    auto quit = value("--quit-after");
     if (!screenshot.isEmpty())
-        QTimer::singleShot(3500, &app, [&] {
+        QTimer::singleShot(quitMs > 0 ? std::min(3500, std::max(0, quitMs - 100)) : 3500, &app, [&] {
             auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
-            if (!window || !window->grabWindow().save(screenshot))
+            if (!window || !window->grabWindow().save(screenshot)) {
                 std::cerr << "Screenshot failed\n";
+                app.exit(1);
+            }
         });
-    if (!quit.isEmpty())
-        QTimer::singleShot(quit.toInt(), &app, &QCoreApplication::quit);
+    if (quitMs > 0)
+        QTimer::singleShot(quitMs, &app, &QCoreApplication::quit);
     // Acceptance harness drives the same asynchronous client commands as the QML controls.
-    auto demo = value("--acceptance-export");
     QTimer automation;
     int stage = 0;
     QString previousArtifact;

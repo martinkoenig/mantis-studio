@@ -2,7 +2,9 @@
 #include <mantis/image_layout.hpp>
 #include <QtConcurrent/QtConcurrentRun>
 #include <iostream>
-StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
+StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled)
+    : QObject(parent), runtime_enabled_(runtimeEnabled),
+      client_(runtimeEnabled ? mantis::client::Endpoint::environment() : mantis::client::Endpoint{}) {
     connect(&watcher_, &QFutureWatcher<StudioResult>::finished, this, [this] {
         auto result = watcher_.result();
         if (!result.error.empty()) {
@@ -25,8 +27,12 @@ StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
         project_ = QString::fromStdString(result.snapshot.project_path());
         auto s = [](const std::string &v) { return QString::fromStdString(v); };
         for (auto &d : result.snapshot.devices())
-            if (d.parent().empty()) devices_.push_back(
-                QVariantMap{{"id", s(d.id())}, {"name", s(d.name())}, {"plugin", s(d.plugin_id())}});
+            if (d.parent().empty()) {
+                QStringList capabilities;
+                for (const auto &capability : d.capabilities()) capabilities.push_back(s(capability));
+                devices_.push_back(QVariantMap{{"id", s(d.id())}, {"name", s(d.name())},
+                    {"plugin", s(d.plugin_id())}, {"capabilities", capabilities}});
+            }
         for (auto &c : result.snapshot.captures()) {
             if (c.active()) capture_ = s(c.id());
             if (c.diagnostics().contains("left.identity")) {
@@ -86,11 +92,13 @@ StudioBridge::StudioBridge(QObject *parent) : QObject(parent) {
     });
     preview_timer_.setInterval(66);
     connect(&preview_timer_, &QTimer::timeout, this, &StudioBridge::refreshPreview);
-    preview_timer_.start();
+    if (runtime_enabled_) preview_timer_.start();
     timer_.setInterval(500);
     connect(&timer_, &QTimer::timeout, this, &StudioBridge::refresh);
-    timer_.start();
-    QTimer::singleShot(0, this, &StudioBridge::refresh);
+    if (runtime_enabled_) {
+        timer_.start();
+        QTimer::singleShot(0, this, &StudioBridge::refresh);
+    }
 }
 StudioBridge::~StudioBridge() {
     timer_.stop(); preview_timer_.stop();
@@ -101,7 +109,7 @@ void StudioBridge::attachView(QObject *object) {
     view_ = qobject_cast<mantis::render::PointCloudView *>(object);
 }
 void StudioBridge::execute(std::function<void(const mantis::client::Client &)> action) {
-    if (watcher_.isRunning())
+    if (!runtime_enabled_ || watcher_.isRunning())
         return;
     auto client = client_;
     auto selected = newest_.toStdString();
@@ -157,7 +165,7 @@ void StudioBridge::cancelJob(QString id) {
     });
 }
 void StudioBridge::selectArtifact(QString id) {
-    if (watcher_.isRunning())
+    if (!runtime_enabled_ || watcher_.isRunning())
         return;
     auto client = client_;
     watcher_.setFuture(QtConcurrent::run([client, id] {

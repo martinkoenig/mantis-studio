@@ -86,9 +86,11 @@ Item {
                 Layout.preferredWidth: 220; Layout.fillHeight: true; visible: root.width >= 1220
                 background: Rectangle { color: root.panelColor; border.color: root.borderColor; radius: 8 }
                 ScrollView {
+                    id: revisionScroll
                     anchors.fill: parent; clip: true
+                    contentWidth: availableWidth
                     ColumnLayout {
-                        width: parent.availableWidth; spacing: 12
+                        width: revisionScroll.availableWidth; spacing: 12
                         Label { text: "Immutable revisions"; font.bold: true; color: root.accentColor }
                         Label { text: "Resume with finalized artifacts. Open revisions remain visible here for diagnostics."; Layout.fillWidth: true; wrapMode: Text.Wrap; opacity: 0.7 }
                         Repeater {
