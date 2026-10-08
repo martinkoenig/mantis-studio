@@ -3,10 +3,10 @@ QtObject {
     objectName: "homeDemoFixture"
     // Illustrative presentation only. No command IDs, client or runtime capabilities.
     readonly property var projects: [
-        {name: "Housing study", description: "Illustrative project", variant: 0},
-        {name: "Rotor study", description: "Illustrative project", variant: 1},
-        {name: "Bracket study", description: "Illustrative project", variant: 2},
-        {name: "Cover study", description: "Illustrative project", variant: 3}
+        {name: "Housing study", description: "Illustrative project", shape: "housing"},
+        {name: "Rotor study", description: "Illustrative project", shape: "rotor"},
+        {name: "Bracket study", description: "Illustrative project", shape: "bracket"},
+        {name: "Cover study", description: "Illustrative project", shape: "cover"}
     ]
     readonly property var data: ({
         source: "mock", confirmed: false, hasSnapshot: false,

@@ -131,8 +131,9 @@ ColumnLayout {
                 RowLayout {
                     Layout.fillWidth: true
                     HomeText { text: root.snapshot.artifactsSummary; visible: !root.illustrative; font.pixelSize: 10; Layout.fillWidth: true }
-                    StudioButton { objectName: "homeArtifacts"; text: "View artifacts"; onClicked: root.navigate("acquisition"); Accessible.description: "Open existing acquisition artifacts; no artifact automatically loaded" }
+                    StudioButton { objectName: "homeArtifacts"; text: "View artifacts"; enabled: !root.illustrative; onClicked: if (!root.illustrative) root.navigate("acquisition"); Accessible.description: root.illustrative ? "Demo artifacts are illustrative; details are unavailable" : "Open existing acquisition artifacts; no artifact automatically loaded" }
                 }
+                HomeText { objectName: "homeArtifactsUnavailable"; visible: root.illustrative; text: "Demo artifacts are illustrative. Details are unavailable."; font.pixelSize: 11; Layout.fillWidth: true }
             }
             HomeCard {
                 Layout.fillWidth: true
@@ -172,7 +173,8 @@ ColumnLayout {
                 }
                 HomeText { visible: root.snapshot.jobs.length === 0; text: root.snapshot.confirmed && root.snapshot.jobsAvailable && root.snapshot.jobsCount === 0 ? "No jobs in the current snapshot." : root.snapshot.confirmed ? "Job data unavailable in this snapshot." : "Current job state unknown."; Layout.fillWidth: true }
                 HomeText { visible: !root.illustrative; text: root.snapshot.jobsSummary + " · no ETA supplied"; font.pixelSize: 10; Layout.fillWidth: true }
-                StudioButton { objectName: "homeJobs"; text: "View jobs"; Layout.fillWidth: true; onClicked: root.navigate("acquisition"); Accessible.description: "Open existing acquisition jobs; no cancellation or job selection" }
+                StudioButton { objectName: "homeJobs"; text: "View jobs"; Layout.fillWidth: true; enabled: !root.illustrative; onClicked: if (!root.illustrative) root.navigate("acquisition"); Accessible.description: root.illustrative ? "Demo jobs are illustrative; details are unavailable" : "Open existing acquisition jobs; no cancellation or job selection" }
+                HomeText { objectName: "homeJobsUnavailable"; visible: root.illustrative; text: "Demo jobs are illustrative. Details are unavailable."; font.pixelSize: 11; Layout.fillWidth: true }
             }
             HomeCard {
                 Layout.fillWidth: true; title: "Workflow guide"; source: root.snapshot.source

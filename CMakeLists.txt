@@ -168,6 +168,7 @@ if(MANTIS_BUILD_STUDIO)
   ui/home/HomeText.qml
   ui/home/HomeCard.qml
   ui/home/GeometryArt.qml
+  ui/home/ProjectIllustration.qml
   ui/home/HomeDemo.qml
   ui/home/HomeRows.qml
   ui/home/HomeProjects.qml

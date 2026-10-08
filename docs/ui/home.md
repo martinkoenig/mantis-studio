@@ -17,15 +17,15 @@ manual visual review, full local checks and exact-final-commit five-job CI gate.
 | Runtime | StudioBridge.connected, hasSnapshot, busy, errorDetails (phase/kind/code/component/message) | Awaiting first confirmation; failed confirmation unconfirmed; previously confirmed snapshot last known. Operation rejection retains confirmation when snapshot succeeds | Mock never consumes bridge; hybrid real summary | Read-only diagnostics |
 | Project | Snapshot project_path through bridge.project | Path unavailable; no history, sizes or dates. Retained path labelled last known | Deterministic showcase projects only in separate demo area | Current project opens Acquisition; Projects opens UI-M2 foundation |
 | Devices | Bridge top-level logical descriptors: id/name/plugin/capabilities | Empty discovered list distinct from unconfirmed state; physical availability/readiness unknown | Demo scanner has no runtime capabilities or actionable identity | Devices route; calibration stays in controller-verified Devices workflow |
-| Jobs | id/name/state/progress/diagnostics | Queued/Running/Completed/Failed/Cancelled explicit; missing/nonfinite/out-of-range/zero progress unavailable (proto3 scalar has no presence bit); last-known label on failure | Demo jobs separate from live counts and lists | View jobs opens Acquisition, without selection or cancellation |
-| Artifacts | id/type/state/chunks (zero cannot establish scalar presence) | Empty/unknown/stale explicit; no timestamps, size or geometry inferred | Demo artifact rows clearly labelled | View artifacts opens Acquisition, without loading an ID |
+| Jobs | id/name/state/progress/diagnostics | Queued/Running/Completed/Failed/Cancelled explicit; missing/nonfinite/out-of-range/zero progress unavailable (proto3 scalar has no presence bit); last-known label on failure | Demo jobs separate from live counts and lists; detail action disabled with visible/accessible explanation | Live/hybrid View jobs opens Acquisition, without selection or cancellation; mock has no detail navigation |
+| Artifacts | id/type/state/chunks (zero cannot establish scalar presence) | Empty/unknown/stale explicit; no timestamps, size or geometry inferred | Demo rows labelled; detail action disabled with visible/accessible explanation | Live/hybrid View artifacts opens Acquisition, without loading an ID; mock has no detail navigation |
 | Events | sequence/kind/component/message | Ordered by sequence, not invented dates; unavailable sequence explicit | Separate deterministic illustrative events | View runtime opens Acquisition |
 | System | No bridge CPU/GPU/RAM/storage metrics | Metrics not available from this runtime | Demo remains honest about unsupported telemetry | Read-only |
 | Quick Actions | Existing local routes | New/Open/Import unavailable with visible UI-M2 explanation | Navigation only; acquisition/calibration controls remain disabled in mock | Acquisition, Devices, Calibration, Projects foundation |
 | Help | Static workflow guidance | No packaged tutorial browser or release feed | Identical information, no fictitious releases | Read-only |
 
-Home owns no session, transport, command method, watcher or polling timer. All
-CTAs emit local route intent without any device/job/artifact identity. Calibration
+Home owns no session, transport, command method, watcher or polling timer.
+Enabled CTAs emit local route intent without any device/job/artifact identity. Calibration
 entry selects no device and activates no revision. Actual recording, cancellation,
 artifact loading and calibration operations remain in their existing workspaces.
 
@@ -72,3 +72,18 @@ received a confirmed snapshot, preserving last-known semantics across a mock/liv
 mode swap. Its busy lease lasts until worker completion is applied on the GUI
 thread: a completed-but-undelivered result cannot be replaced by a subsequent
 request. This narrow delivery fix preserves one watcher and no request queue.
+
+## Reviewed visual and mock-action corrections
+
+The four showcase thumbnails are original local `ProjectIllustration` Canvas
+studies: an open cast housing with flange/ribs, a swept-blade rotor with central
+hub, an angular L bracket with upright flange/gusset, and a shallow closed ribbed
+cover. Named shapes have distinct geometry and silhouettes, using one projection
+and the existing dark/mint material palette. Fixed bounded geometry, no timers,
+randomness, external assets or reference-image rendering; every card retains its
+Demo / Mock read-only label. The accepted hero artwork is unchanged.
+
+Mock jobs/artifacts have no detail browser. Both detail buttons are disabled,
+with adjacent visible explanations and accessible descriptions; their handlers
+also reject illustrative-source navigation. Live/hybrid controls still navigate
+to real Acquisition data. No browser, deep link or new runtime operation is added.

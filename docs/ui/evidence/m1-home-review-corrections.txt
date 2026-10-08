@@ -1,0 +1,61 @@
+UI-M1 independent-review correction evidence, 2026-10-08
+Reviewed baseline: da440f2e54559ed6f8d35cb6a37327422a22ce88
+Environment: Ubuntu 24.04 x86_64, Qt 6.4.2 software/offscreen rendering.
+
+UI-M1-01 regression substitutes the original GeometryArt(index) thumbnails
+into the corrected gallery. Pairwise rendered-art comparison fails; the original
+housing/cover variants share identical geometry. This broad differentiation check
+is not a pixel comparison to the approved reference. Shape semantics are verified
+by manual inspection of original local Canvas art at all three required sizes.
+
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start 2: studio-home-qml
+1/1 Test #2: studio-home-qml ..................***Failed    3.41 sec
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Project illustrations are visually indistinguishable
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   3.42 sec
+
+The following tests FAILED:
+	  2 - studio-home-qml (Failed)
+Errors while running CTest
+
+UI-M1-02 regression removes the two source guards/disabled bindings while keeping
+visible explanations, isolating the original misleading enabled action behavior.
+The mock action availability assertion fails. Corrected tests cover live, mock,
+hybrid, mock, live transitions; both mouse and keyboard enabled routes, disabled
+input suppression, visible/accessibility explanations and accessible press safety.
+
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start 2: studio-home-qml
+1/1 Test #2: studio-home-qml ..................***Failed    2.32 sec
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Detail action source/availability contract wrong
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   2.32 sec
+
+The following tests FAILED:
+	  2 - studio-home-qml (Failed)
+Errors while running CTest
+
+Temporary substitutions were restored before complete tests/committing.
+Reproduce corrected regression with the normal Studio build:
+ctest --test-dir build/debug -R '^studio-home-(qml|wire)$' --output-on-failure
+
+Qt 6.4 accessibility scope: QAccessibleQuickItem::state() copies attached state
+and adds visibility/focus flags; it does not derive disabled from Item.enabled.
+QQuickAccessibleAttached provides no disabled property. Tests establish actual
+button.enabled, input suppression, accessible role/description and press safety;
+no dependency patch, private Qt API or fabricated disabled state is introduced.
+Qt sources inspected:
+https://github.com/qt/qtdeclarative/blob/v6.4.2/src/quick/accessible/qaccessiblequickitem.cpp
+https://github.com/qt/qtdeclarative/blob/v6.4.2/src/quick/items/qquickaccessibleattached_p.h
+Native OS screen-reader validation remains outside this offscreen fixture.

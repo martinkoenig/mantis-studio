@@ -18,6 +18,7 @@ Column {
             model: root.projects
             delegate: Panel {
                 required property var modelData
+                required property int index
                 width: (cards.width - (cards.columns - 1) * cards.spacing) / cards.columns
                 implicitHeight: 142
                 clip: true
@@ -26,7 +27,7 @@ Column {
                     Rectangle {
                         width: parent.width; height: 78
                         color: Theme.raised
-                        GeometryArt { anchors.fill: parent; variant: modelData.variant }
+                        ProjectIllustration { objectName: "homeProjectArt" + index; anchors.fill: parent; shape: modelData.shape }
                     }
                     HomeText { width: parent.width - 24; x: 12; text: modelData.name; font.bold: true; color: Theme.text; maximumLineCount: 1 }
                     HomeText { width: parent.width - 24; x: 12; text: "Demo / Mock · read-only"; font.pixelSize: 10; color: Theme.warning; maximumLineCount: 1 }

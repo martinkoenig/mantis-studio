@@ -96,7 +96,7 @@ CI uploads reproducible captures, fixture commands and complete CTest diagnostic
   stable bounded ordering, deletion/replacement of the bridge.
 - Last-known snapshot retention, operation failure with confirmed connection,
   failed confirmation and restored current data, including mock/live reattachment.
-- All nine enabled Home CTAs via mouse and keyboard, focus/hover, accessible
+- All nine enabled live Home CTAs via mouse and keyboard, focus/hover, accessible
   Button names and disabled-control description. Planned project tools cannot
   dispatch; calibration routing selects no device and activates no revision.
 - Demo fixtures expose no command API or actionable IDs. Mock detaches the model;
@@ -239,3 +239,70 @@ gh run list --branch feature/ui-m1-home --commit "$(git rev-parse HEAD)" \
   --json databaseId,headSha,status,conclusion,url
 gh run view RUN_ID --json headSha,status,conclusion,url,jobs
 ```
+
+## Independent-review corrections — UI-M1-01 / UI-M1-02
+
+Reviewed baseline: `da440f2e54559ed6f8d35cb6a37327422a22ce88`, whose complete
+[final five-job run](https://github.com/martinkoenig/mantis-studio/actions/runs/37822471911)
+passed. This correction preserves the independently accepted model, data authority,
+bridge lifecycle and acquisition/calibration workflows. Only Home art/action
+presentation, resource registration, tests and documentation change.
+
+UI-M1-01: original deterministic local Canvas geometry now depicts four different
+mechanical forms: open flanged/ribbed housing, swept-blade impeller/rotor, upright
+L mounting bracket with gusset, and shallow closed ribbed cover. Shared projection
+and palette keep the style coherent; shape geometry and silhouettes differ.
+All four retain their Demo / Mock labels. No external asset/dependency, reference
+image rendering, network loading, random input or animation timer is introduced.
+The hero remains unchanged. The drawing uses fixed bounded polygons/curves (at
+most 11 blades, 40 disc segments and 32 hub segments), rendering on resize/shape
+changes, with no polling or animation timer.
+
+UI-M1-02: mock detail buttons are disabled, visibly explain that illustrative
+jobs/artifacts have no available details, and expose that reason through accessible
+descriptions. Handlers also guard the illustrative source. Live/hybrid buttons
+still open existing Acquisition; no browser or backend operation is added.
+`studio-home-qml` covers live → mock → hybrid → mock → live transitions, enabled
+mouse/keyboard routing, disabled Space/Return/mouse suppression, accessible
+role/description and accessible press safety. Real Tab/Backtab traversal verifies
+focus even when a persistent button retained mouse focus. Existing public-wire
+navigation/authority checks remain in place.
+
+The rendered-art regression compares all six pairs in the fitted artwork viewport
+at 1080×720, 1536×1024 and 1920×1080. It requires a broad visual difference,
+without depending on specific reference pixels. Semantic mechanical shapes are
+established by manual review, not inferred by that numeric check.
+[Retained red-test evidence](evidence/m1-home-review-corrections.txt) proves the
+original gear variants and unguarded mock actions fail the new regressions;
+temporary substitutions were restored before final testing.
+
+Updated full-size mock captures at all three required sizes were inspected directly
+against the approved Home reference. Review corrected a cropped upper bracket
+edge and a rectangular shadow; final silhouettes fit the thumbnail viewports,
+shadows fade transparently, explicit labels remain, and disabled detail actions
+have visible reasons. Compact layouts retain vertical scrolling for lower cards.
+Generated capture paths and CI upload structure remain unchanged (34 M1 PNGs,
+plus all 38 M0 PNGs per desktop artifact).
+
+Qt 6.4 accessibility scope: its Quick item state does not derive the disabled flag
+from `Item.enabled`, as confirmed in the
+[Qt 6.4 implementation](https://github.com/qt/qtdeclarative/blob/v6.4.2/src/quick/accessible/qaccessiblequickitem.cpp)
+and [attached properties](https://github.com/qt/qtdeclarative/blob/v6.4.2/src/quick/items/qquickaccessibleattached_p.h).
+The tests prove effective enabled state, actual input/accessible press behavior
+and accessible explanations. No private Qt API, dependency patch or fabricated
+disabled state is introduced. Native OS screen-reader validation remains unproven.
+
+All complete local correction suites passed, using the environment/commands
+above and the restored final implementation:
+
+| Correction suite | Result | Local log under `build/ui-m1-review/` |
+| --- | --- | --- |
+| Qt 6.4 complete desktop | 49/49 passed, 165.47 s | `corrections-qt64-full.log` |
+| Complete Qt-free headless | 41/41 passed, 118.92 s | `corrections-headless-full.log` |
+| Headless ASan/UBSan/LSan | 41/41 passed, 272.36 s | `corrections-headless-sanitizers-full.log` |
+| Additional Qt 6.9 desktop ASan/UBSan/LSan | 49/49 passed, 353.45 s | `corrections-qt69-sanitizers-full.log` |
+| Final Qt 6.4 Home component/public-wire checks | 2/2 passed, 10.77 s | `corrections-final-focused.log` |
+| Final Qt 6.9 sanitizer Home component/public-wire checks | 2/2 passed, 16.14 s | `corrections-final-sanitizers-focused.log` |
+
+The final handoff identifies the exact correction SHA, all five completed job results and
+its uploaded evidence; the baseline run above cannot satisfy the correction gate.

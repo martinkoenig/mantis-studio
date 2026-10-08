@@ -21,6 +21,9 @@ Home now presents bounded current project, logical device, job, artifact and
 event summaries. Readiness, project history and utilization remain explicitly
 unknown/unavailable. Mock has a clearly labelled deterministic showcase; hybrid
 places illustrative projects below the live dashboard, never in its counts.
+The showcase uses four distinct locally rendered technical shapes: housing,
+rotor, bracket and cover. Mock job/artifact detail actions are explicitly disabled
+with visible explanations; live/hybrid detail routes still open Acquisition.
 
 ## Launch and data sources
 

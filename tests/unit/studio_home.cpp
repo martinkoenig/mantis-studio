@@ -5,7 +5,9 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
+#include <QImage>
 #include <QJSValue>
+#include <QList>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlProperty>
@@ -16,6 +18,7 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QThread>
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -58,7 +61,15 @@ void click(QQuickWindow *window, const QString &name, bool keyboard = false) {
     require(button->isVisible() && button->isEnabled(), "CTA unavailable");
     if (keyboard) {
         button->forceActiveFocus(Qt::TabFocusReason);
-        require(button->property("visualFocus").toBool(), "CTA keyboard focus invisible");
+        // Exercise actual tab traversal even when a persistent control retained mouse focus.
+        QTest::keyClick(window, Qt::Key_Tab);
+        QTest::keyClick(window, Qt::Key_Backtab, Qt::ShiftModifier);
+        require(button->property("visualFocus").toBool(),
+                ("CTA keyboard focus invisible: " + name +
+                 ", active=" + QString::number(button->hasActiveFocus()) +
+                 ", reason=" + button->property("focusReason").toString())
+                    .toLocal8Bit()
+                    .constData());
         QTest::keyClick(window, Qt::Key_Space);
     } else {
         auto point = button->mapToScene(QPointF(button->width() / 2, button->height() / 2));
@@ -266,6 +277,85 @@ void bounds(QQuickWindow *window) {
     require(item(window, "homeMetrics")->property("text") == "Metrics not available from this runtime",
             "Unsupported telemetry invented");
 }
+void projectIllustrations(QQuickWindow *window) {
+    const auto frame = window->grabWindow();
+    QList<QImage> thumbnails;
+    for (int i = 0; i < 4; ++i) {
+        auto *art = item(window, "homeProjectArt" + QString::number(i));
+        const auto topLeft = art->mapToScene(QPointF{});
+        // Compare the artwork's fitted viewport, excluding unused wide-card margins and text.
+        const int fittedWidth = qRound(std::min(art->width(), art->height() * 300 / 140));
+        const QRect crop(qRound(topLeft.x() + (art->width() - fittedWidth) / 2), qRound(topLeft.y()),
+                         fittedWidth, qRound(art->height()));
+        require(art->isVisible() && frame.rect().contains(crop), "Project illustration clipped");
+        thumbnails.push_back(frame.copy(crop));
+    }
+    for (qsizetype i = 0; i < thumbnails.size(); ++i)
+        for (qsizetype j = i + 1; j < thumbnails.size(); ++j) {
+            require(thumbnails[i].size() == thumbnails[j].size(), "Thumbnail viewports differ");
+            int different = 0;
+            for (int y = 0; y < thumbnails[i].height(); ++y)
+                for (int x = 0; x < thumbnails[i].width(); ++x) {
+                    const auto a = thumbnails[i].pixelColor(x, y), b = thumbnails[j].pixelColor(x, y);
+                    if (std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) +
+                            std::abs(a.blue() - b.blue()) >
+                        30)
+                        ++different;
+                }
+            // Broad differentiation check, not a reference pixel-diff or semantic shape claim.
+            require(different > thumbnails[i].width() * thumbnails[i].height() / 10,
+                    "Project illustrations are visually indistinguishable");
+        }
+}
+void detailActions(QQuickWindow *window, ObservedBridge &bridge) {
+    window->resize(1536, 1024);
+    window->setProperty("workspace", "home");
+    for (const auto &mode : QStringList{"live", "mock", "hybrid", "mock", "live"}) {
+        window->setProperty("uiMode", mode);
+        settle();
+        for (const auto &[buttonName, reasonName] :
+             {std::pair{"homeJobs", "homeJobsUnavailable"}, {"homeArtifacts", "homeArtifactsUnavailable"}}) {
+            auto *button = item(window, buttonName);
+            auto *reason = item(window, reasonName);
+            const bool demo = mode == "mock";
+            require(button->isEnabled() != demo && reason->isVisible() == demo,
+                    "Detail action source/availability contract wrong");
+            auto *accessible = QAccessible::queryAccessibleInterface(button);
+            // Qt 6.4 QAccessibleQuickItem::state() does not expose Item.enabled as disabled.
+            // Prove actual input suppression, role/description and accessible press safety below.
+            require(accessible && accessible->role() == QAccessible::Button,
+                    "Detail action accessible role missing");
+            if (demo) {
+                require(reason->property("text").toString().contains("illustrative") &&
+                            accessible->text(QAccessible::Description).contains("unavailable"),
+                        "Mock detail action missing visible or accessible explanation");
+                QSignalSpy clicks(button, SIGNAL(clicked()));
+                const auto point = button->mapToScene(QPointF(button->width() / 2, button->height() / 2));
+                require(window->contentItem()->contains(point), "Disabled detail control clipped");
+                QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
+                button->forceActiveFocus(Qt::TabFocusReason);
+                QTest::keyClick(window, Qt::Key_Space);
+                QTest::keyClick(window, Qt::Key_Return);
+                settle();
+                require(clicks.empty() && window->property("workspace") == "home" && !bridge.busy(),
+                        "Disabled mock details dispatched navigation or operation");
+                require(accessible->actionInterface(), "Detail action accessible interface missing");
+                accessible->actionInterface()->doAction(QAccessibleActionInterface::pressAction());
+                settle();
+                require(window->property("workspace") == "home" && !bridge.busy(),
+                        "Accessible press bypassed disabled mock detail guard");
+            } else {
+                for (bool keyboard : {false, true}) {
+                    click(window, buttonName, keyboard);
+                    require(window->property("workspace") == "acquisition" && !bridge.busy(),
+                            "Live/hybrid detail navigation failed or issued an operation");
+                    window->setProperty("workspace", "home");
+                    settle();
+                }
+            }
+        }
+    }
+}
 void components(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
     // Local route intent only. Even with a confirmed capture-capable snapshot,
     // the runtime-disabled bridge cannot hide an accidental command behind busy state.
@@ -309,6 +399,7 @@ void components(QQuickWindow *window, ObservedBridge &bridge, const QString &out
     auto point = planned->mapToScene(QPointF(planned->width() / 2, planned->height() / 2));
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
     require(clicks.empty(), "Disabled CTA clicked");
+    detailActions(window, bridge);
     for (const QSize size : {QSize(1080, 720), QSize(1536, 1024), QSize(1920, 1080)}) {
         window->resize(size);
         for (const auto &mode : QStringList{"mock", "live", "hybrid"}) {
@@ -334,6 +425,8 @@ void components(QQuickWindow *window, ObservedBridge &bridge, const QString &out
             require(model->data()["devicesCount"].toInt() == (mode == "mock" ? 0 : 3),
                     "Demo merged into live count");
             capture(window, output, mode + "-populated");
+            if (mode == "mock")
+                projectIllustrations(window);
             if (mode == "hybrid") {
                 require(item(window, "homeHybridSeparation")->isVisible(), "Hybrid separation missing");
                 auto *scroll = item(window, "homeWorkspace")->property("contentItem").value<QObject *>();
@@ -492,6 +585,7 @@ void wire(QQuickWindow *window, ObservedBridge &observed, const QString &output)
 } // namespace
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
+    QAccessible::setActive(true); // Exercise control state updates as with an active accessibility client.
     QQuickStyle::setStyle("Basic");
     qInstallMessageHandler(messages);
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
