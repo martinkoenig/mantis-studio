@@ -84,7 +84,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         active = None
         if studio_bin.exists():
             ui_log = open(root / "studio.log", "w+")
-            studio = subprocess.Popen([str(studio_bin), "--acceptance-export", str(root / "studio.ply")], env=env, stdout=ui_log, stderr=ui_log)
+            studio = subprocess.Popen([str(studio_bin), "--ui-mode=live", "--workspace=home", "--window-size=1080x720", "--acceptance-export", str(root / "studio.ply")], env=env, stdout=ui_log, stderr=ui_log)
             studios.append(studio)
             until(lambda: (root / "studio.ply").exists())
             until(lambda: "STUDIO_ACCEPTANCE_READY" in (root / "studio.log").read_text())
