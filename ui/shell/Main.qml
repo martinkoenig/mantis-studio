@@ -140,8 +140,9 @@ ApplicationWindow {
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 20; anchors.rightMargin: 20
                     Label {
-                        text: window.uiMode === "mock" ? "Demo / Mock · sample content only" : studio.error.length > 0 ? "Runtime disconnected · " + studio.error : studio.project.length > 0 ? studio.project : "Live source · awaiting runtime"
-                        elide: Text.ElideMiddle; Layout.fillWidth: true; color: studio.error.length > 0 && window.uiMode !== "mock" ? Theme.warning : Theme.muted; font.pixelSize: Theme.captionSize
+                        objectName: "runtimeMessage"
+                        text: window.uiMode === "mock" ? "Demo / Mock · sample content only" : window.studioBridge.error.length > 0 ? (window.studioBridge.connected ? "Operation failed · " : "Runtime state unconfirmed · ") + window.studioBridge.error : window.studioBridge.project.length > 0 ? window.studioBridge.project : "Live source · awaiting runtime"
+                        elide: Text.ElideMiddle; Layout.fillWidth: true; color: window.studioBridge.error.length > 0 && window.uiMode !== "mock" ? Theme.warning : Theme.muted; font.pixelSize: Theme.captionSize
                     }
                     Label { text: "mm  ·  X right / Y forward / Z up"; font.pixelSize: Theme.captionSize; color: Theme.muted }
                 }

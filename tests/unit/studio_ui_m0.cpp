@@ -138,9 +138,10 @@ static void stateRegression(QQmlApplicationEngine &engine, QQuickWindow *window,
                                               {"calibrationProvider", QVariant::fromValue(&eligibility)}}));
     require(model != nullptr, "Eligibility provider failed");
     StudioResult current;
-    current.snapshot.set_project_path("retained-project");
+    current.snapshot.emplace();
+    current.snapshot->set_project_path("retained-project");
     auto addDevice = [&](const char *id, const char *cap, const char *parent = "") {
-        auto *device = current.snapshot.add_devices();
+        auto *device = current.snapshot->add_devices();
         device->set_id(id);
         device->set_name(id);
         device->set_parent(parent);
@@ -151,11 +152,11 @@ static void stateRegression(QQmlApplicationEngine &engine, QQuickWindow *window,
     addDevice("no-child", "org.mantis.camera.frameset-stream.v1");
     addDevice("emitter", "org.mantis.emitter.power-control.v1", "no-child");
     addDevice("single-image", "org.mantis.camera.image-stream.v1");
-    auto *capture = current.snapshot.add_captures();
+    auto *capture = current.snapshot->add_captures();
     capture->set_id("daemon-capture");
     capture->set_active(true);
     (*capture->mutable_diagnostics())["left.identity"] = "test-camera";
-    auto *artifact = current.snapshot.add_artifacts();
+    auto *artifact = current.snapshot->add_artifacts();
     artifact->set_id("retained-capture");
     artifact->set_type("org.mantis.RawCapture");
     artifact->set_state("FINALIZED");
@@ -218,12 +219,33 @@ static void stateRegression(QQmlApplicationEngine &engine, QQuickWindow *window,
     require(checkedItem(window->contentItem(), "acquisitionCaptureStatus")->property("text") ==
                 "Streaming · raw recording",
             "Confirmed streaming label missing");
+    auto rejection = current;
+    rejection.operationAttempted = true;
+    rejection.issues.push_back({"operation", "Rejected operation",
+                                mantis::Error{mantis::Status::busy, "Rejected operation", "pipeline"}});
+    observed.applyResult(rejection);
+    require(observed.connected() && observed.capturing(), "Rejection falsely disconnected runtime");
+    require(checkedItem(window->contentItem(), "runtimeMessage")
+                ->property("text")
+                .toString()
+                .startsWith("Operation failed"),
+            "Operation rejection is visibly presented as runtime loss");
+    rejection.issues.clear();
+    observed.applyResult(rejection);
+    require(observed.errorDetails().empty(), "Successful operation retained failure");
     const auto retainedText = observed.acquisitionText();
     StudioResult failure;
-    failure.error = "deterministic snapshot transport failure";
+    failure.issues.push_back(
+        {"snapshot", "deterministic snapshot transport failure",
+         mantis::Error{mantis::Status::io, "deterministic snapshot transport failure", "platform"}});
     observed.applyResult(failure);
     require(!observed.connected() && !observed.capturing() && observed.lastKnownCapturing(),
             "Disconnect presented cached capture as current");
+    require(checkedItem(window->contentItem(), "runtimeMessage")
+                ->property("text")
+                .toString()
+                .startsWith("Runtime state unconfirmed"),
+            "Unavailable snapshot presented confirmed runtime access");
     require(observed.devices().size() == 3 && observed.artifacts().size() == 1 &&
                 observed.project() == "retained-project" && observed.acquisitionText() == retainedText,
             "Disconnect erased last-known authoritative data");
@@ -248,7 +270,7 @@ static void stateRegression(QQmlApplicationEngine &engine, QQuickWindow *window,
     settle();
     require(observed.capturing() && list(model.get(), "devices").size() == 3 && observed.error().isEmpty(),
             "Reconnect did not refresh confirmed state");
-    current.snapshot.clear_captures();
+    current.snapshot->clear_captures();
     observed.applyResult(current);
     require(!observed.capturing() && !observed.lastKnownCapturing() && observed.acquisitionText().isEmpty(),
             "Fresh idle snapshot retained active capture/diagnostics");
@@ -467,7 +489,7 @@ int main(int argc, char **argv) {
                         (mode == "hybrid" ? "Hybrid" : "Live source"),
                     "Mode badge mismatch");
             require(checkedItem(window->contentItem(), "runtimeStatusLabel")->property("text") ==
-                        "Runtime disconnected",
+                        "Runtime state unconfirmed",
                     "Disconnected runtime label missing");
             require(!state->property("runtimeConnected").toBool(), "Offline mode invented connection");
             require(list(state, "devices").empty(), "Offline live devices were synthesized");

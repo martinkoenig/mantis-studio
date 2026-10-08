@@ -59,7 +59,7 @@ acceptance action, not ordinary launch behavior.
 
 | Mode | Runtime status | Device data | Action authority |
 | --- | --- | --- | --- |
-| `live` | Actual `StudioBridge.connected`; disconnected remains disconnected | Current runtime descriptors only; empty when disconnected | Existing real controls, gated by runtime availability |
+| `live` | `StudioBridge.connected` confirms a successful authenticated snapshot; otherwise runtime state is unconfirmed | Confirmed runtime descriptors only; empty when unconfirmed | Existing real controls, gated by runtime availability |
 | `mock` | “Mock · runtime not used”; always disconnected | Deterministic, separately authored `Demo / Mock` fixture | Bridge polling and commands disabled; legacy acquisition/calibration controls disabled |
 | `hybrid` | Actual runtime status, including disconnection | Live descriptors and a separate `Demo / Mock` example | Only real descriptors enter existing runtime controls; fixtures expose no actions |
 
@@ -120,6 +120,16 @@ true only for Devices/Calibration in live/hybrid; mock never starts its polling.
   state and diagnostics as last-known and disables runtime intents. Reconnection
   refreshes from the daemon, including active/idle transitions. Client disconnect
   sends no stop/cancel command and adds no polling path.
+- Operation and artifact failures preserve the client's structured code, component
+  and message in `StudioBridge.errorDetails`, tagged by phase. They do not establish
+  loss of connectivity. A snapshot confirms usable runtime access after operations;
+  artifact failures trigger one bounded snapshot confirmation because `Client.data`
+  combines a control call with local mapped-file access. Failed confirmation retains
+  last-known data and labels runtime state unconfirmed. Mutating operations are never
+  retried. Operation/artifact diagnostics survive unrelated successful refreshes until
+  another attempt in the same phase resolves or replaces them; snapshot diagnostics
+  clear on successful reconnection. Untyped exceptions retain their message without
+  a fabricated transport status.
 - `AcquisitionWorkspace.qml` is the compatibility workspace until UI-M3.
   Calibration continues using its existing client/controller seam.
 
@@ -177,6 +187,12 @@ screenshots and twelve mock initial routes against a listening socket trap.
 `acceptance` tests remain in place; acceptance additionally starts with `--workspace=home` at 1080x720 to prove the real viewport override. Tests need no physical scanner
 or laser activation. Screenshots are review artifacts; there is no brittle pixel
 comparison against illustrative concept imagery.
+
+`studio-bridge-errors` exercises the real public C++ client against a bounded,
+deterministic wire fixture. It covers rejected operations (including status `io`),
+transport loss, authentication rejection/missing credentials, missing/corrupt
+mapped artifacts, failed confirmation, retained diagnostics, refreshed capture
+state and recovery. The fixture asserts each mutating operation occurs exactly once.
 
 See [the M0 validation record](validation.md) for checks actually executed and
 remaining limits. Linux ARM64 remains an architectural target; this local run

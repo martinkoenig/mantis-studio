@@ -365,3 +365,96 @@ before handoff; the final handoff supplies its SHA and run URL.
 Physical scanner/laser, metrology precision, remote networking and native
 window-system accessibility acceptance remain outside this UI fixture evidence.
 Independent reviewer approval remains required after all five jobs pass.
+
+
+## Final P2 correction — operation errors and confirmed runtime state (2026-10-08)
+
+Baseline: `2c712f2ebf3eae579bf32ef29c99a3616dfe7600`, whose five required CI
+jobs passed. This follow-up addresses the independent review's remaining error
+classification finding; earlier evidence and dependency limitations above remain
+historical records.
+
+Read ADR-002, ADR-033, CONTRIBUTING.md and the binding reliability/performance
+standard before editing. Investigation of `mantis-client` showed that
+`Client.call` preserves a server error's code/component/message in `mantis::Failure`,
+but socket failures use the same type. `Client.data` also performs a control call,
+checks the data reference and reads a local mapped packet. A mapped-file failure
+and a socket failure can both be `Status::io` with component `platform`; server
+operations may also reject with `io`. Authentication rejection currently uses
+`invalid_argument`, without a distinct authentication status. Neither code nor
+message parsing can safely establish connectivity. Previously, a single catch
+reduced all exceptions to `what()`, skipped subsequent snapshot confirmation and
+marked the runtime disconnected, even after receiving a valid snapshot before
+artifact loading failed.
+
+The bridge now separates operation, snapshot and artifact phases. The result
+contains an optional successfully obtained snapshot, plus typed root causes.
+`connected` means a usable authenticated snapshot was confirmed; a failed
+confirmation means runtime state is unconfirmed, not a claim that the peer or
+physical scanner ceased operating. UI labels follow this distinction.
+
+Operations execute once, followed by the existing read-only snapshot request even
+when rejected. Artifact failures discard the preceding confirmation and make one
+bounded read-only snapshot request because a data error alone cannot distinguish
+control transport from local mapping. Failure of that confirmation preserves both
+causes and all authoritative last-known data. Successful confirmation updates
+capture/device/project state while retaining the operation/artifact diagnostic.
+No mutating operation is retried, no timer/polling loop is added, and no capture or
+calibration authority moves out of mantisd. No protocol, SDK, plugin ABI or daemon
+behavior changes were required.
+
+`StudioBridge.errorDetails` retains phase, numeric code, original component and
+message. Untyped exceptions retain their message with an absent code, without
+inventing an `io` classification. Diagnostics are bounded to the latest issue per
+phase: unrelated successful refreshes retain operation/artifact errors; the next
+attempt in that phase resolves/replaces them. Snapshot errors clear on successful
+confirmation. A failed cloud load preserves displayed cloud identity and does not
+mark the failed artifact as already displayed.
+
+The new `studio-bridge-errors` test uses the real public C++ client and a bounded
+Python wire fixture, without a daemon or hardware. It covers:
+
+- Successful connection and rejected operations with `busy`, `io` and
+  `invalid_argument`, preserving structured root cause and refreshing state.
+- Actual peer closure during operation and artifact requests; failed confirmation
+  retains both root causes and authoritative last-known state.
+- Missing/corrupt mapped packets, successful recovery, preserved cloud identity,
+  and repeated automatic acquisition of an artifact that has not loaded.
+- Authentication rejection and missing credentials, with no assumed connection.
+- Reconnection with refreshed active/idle capture state and diagnostic persistence.
+- Untyped local exceptions and exactly-once mutating operation requests.
+
+The QML regression checks that a rejected operation remains visibly labelled
+“Operation failed” while the runtime stays confirmed, and that failed snapshot
+confirmation shows “Runtime state unconfirmed”. All original M0 and calibration
+assertions remain; disconnected-label assertions now reflect that more precise
+meaning. Restoring the old early-return failure behavior makes the wire regression
+fail at the first rejected-operation snapshot assertion. Restoring the corrected
+collector passes; five consecutive Qt 6.4 runs also pass.
+
+Local logs are retained beneath ignored `build/ui-m0-errors/`. Reproduce focused
+coverage after the normal Studio build with:
+
+```bash
+ctest --test-dir build/debug -R '^studio-(bridge-errors|ui-m0-qml|calibration-qml)$' --output-on-failure
+```
+
+| Local configuration | Result | Log in `build/ui-m0-errors/` |
+| --- | --- | --- |
+| Ubuntu 24.04 / Qt 6.4 desktop | PASS, 47/47 | `qt64-final-ctest.log` |
+| Ubuntu 24.04 / Qt disabled | PASS, 41/41 | `headless-ctest.log` |
+| Ubuntu 24.04 / Qt disabled ASan/UBSan | PASS, 41/41 | `headless-sanitizers-ctest.log` |
+| Ubuntu 25.10 / Qt 6.9 desktop ASan/UBSan | PASS, 47/47 | `qt69-sanitizers-final-ctest.log` |
+| Qt 6.4 real-client error regression under ASan/UBSan | PASS, 1/1 | `qt64-sanitizers-focused.log` |
+| Qt 6.4 error regression repeated | PASS, five consecutive runs | `qt64-repeat.log` |
+
+Sanitizer runs retain leak detection; host OpenCV setup and the previously
+documented host OpenCL override are unchanged. The full Qt 6.4 software-QML
+sanitizer dependency limitation above is not reclassified as passing; the new
+QCoreApplication-based wire test separately passes Qt 6.4 ASan/UBSan without a
+suppression. Edited C/C++ formatting and `git diff --check` pass.
+
+Final exact-SHA CI results are provided in the handoff for this correction.
+Screenshot artifacts and the required five-job matrix remain enabled; no failing
+check, warning assertion or matrix entry was suppressed. Physical hardware and
+metrology acceptance limits are unchanged.

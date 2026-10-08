@@ -9,7 +9,7 @@ QtObject {
     readonly property var runtime: ({
         source: mode === "mock" ? "mock" : "live", connected: runtimeConnected,
         actionable: runtimeConnected,
-        label: mode === "mock" ? "Mock · runtime not used" : runtimeConnected ? "Runtime connected" : "Runtime disconnected"
+        label: mode === "mock" ? "Mock · runtime not used" : runtimeConnected ? "Runtime connected" : "Runtime state unconfirmed"
     })
     // Qt 6.4 exposes typed sequences (notably QStringList) as array-like objects.
     // Accept bounded sequences explicitly; strings and malformed data are not lists.

@@ -37,17 +37,40 @@ StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled)
     }
 }
 void StudioBridge::applyResult(const StudioResult &result) {
-    if (!result.error.empty()) {
-        error_ = QString::fromStdString(result.error);
-        connected_ = false;
-        emit changed();
-        return;
+    // A snapshot confirms usable runtime access. Failure codes alone cannot do so:
+    // the client uses the same Failure type for server, socket and mapped-file errors.
+    connected_ = result.snapshot.has_value();
+    error_details_.removeIf([&](const auto &value) {
+        const auto phase = value.toMap().value("phase").toString();
+        return phase == "snapshot" || (phase == "operation" && result.operationAttempted) ||
+               (phase == "artifact" && result.artifactAttempted);
+    });
+    for (const auto &issue : result.issues) {
+        error_details_.push_back(QVariantMap{
+            {"phase", QString::fromStdString(issue.phase)},
+            {"message", QString::fromStdString(issue.message)},
+            {"kind", issue.cause ? "failure" : "exception"},
+            {"code", issue.cause ? QVariant(static_cast<int>(issue.cause->code)) : QVariant{}},
+            {"component", issue.cause ? QString::fromStdString(issue.cause->component) : QString{}}});
     }
-    connected_ = true;
-    emit snapshotReady(result.snapshot);
+    QStringList messages;
+    for (const auto &value : error_details_) {
+        const auto issue = value.toMap();
+        messages.push_back(
+            QString("%1 [%2 / %3]: %4")
+                .arg(issue.value("phase").toString(), issue.value("component").toString(),
+                     issue.value("code").isValid() ? issue.value("code").toString() : "untyped",
+                     issue.value("message").toString()));
+    }
+    error_ = messages.join(" · ");
+    if (!result.snapshot) {
+        emit changed();
+        return; // Keep the authoritative last-known state; send no runtime command.
+    }
+    const auto &snapshot = *result.snapshot;
+    emit snapshotReady(snapshot);
     if (!result.newest_id.empty())
         newest_ = QString::fromStdString(result.newest_id);
-    error_.clear();
     devices_.clear();
     artifacts_.clear();
     jobs_.clear();
@@ -55,9 +78,9 @@ void StudioBridge::applyResult(const StudioResult &result) {
     diagnostics_.clear();
     capture_.clear();
     acquisition_text_.clear();
-    project_ = QString::fromStdString(result.snapshot.project_path());
+    project_ = QString::fromStdString(snapshot.project_path());
     auto s = [](const std::string &v) { return QString::fromStdString(v); };
-    for (auto &d : result.snapshot.devices())
+    for (auto &d : snapshot.devices())
         if (d.parent().empty()) {
             QStringList capabilities;
             for (const auto &capability : d.capabilities())
@@ -70,7 +93,7 @@ void StudioBridge::applyResult(const StudioResult &result) {
                 {"captureSupported", capabilities.contains("org.mantis.camera.image-stream.v1") ||
                                          capabilities.contains("org.mantis.camera.frameset-stream.v1")}});
         }
-    for (auto &c : result.snapshot.captures()) {
+    for (auto &c : snapshot.captures()) {
         if (c.active())
             capture_ = s(c.id());
         if (c.diagnostics().contains("left.identity")) {
@@ -116,23 +139,23 @@ void StudioBridge::applyResult(const StudioResult &result) {
                 acquisition_text_ = acquisition_text_.arg(text);
         }
     }
-    for (auto &a : result.snapshot.artifacts())
+    for (auto &a : snapshot.artifacts())
         artifacts_.push_back(QVariantMap{{"id", s(a.id())},
                                          {"type", s(a.type())},
                                          {"state", s(a.state())},
                                          {"chunks", QVariant::fromValue(a.chunks())}});
-    for (auto &j : result.snapshot.jobs())
+    for (auto &j : snapshot.jobs())
         jobs_.push_back(QVariantMap{{"id", s(j.id())},
                                     {"name", s(j.name())},
                                     {"state", s(j.state())},
                                     {"progress", j.progress()},
                                     {"diagnostics", s(j.diagnostics())}});
-    for (auto &p : result.snapshot.plugins())
+    for (auto &p : snapshot.plugins())
         plugins_.push_back(QVariantMap{{"id", s(p.id())},
                                        {"state", s(p.state())},
                                        {"execution", s(p.execution())},
                                        {"diagnostic", s(p.diagnostic())}});
-    for (auto &e : result.snapshot.events())
+    for (auto &e : snapshot.events())
         diagnostics_.push_back(QVariantMap{{"sequence", QVariant::fromValue(e.sequence())},
                                            {"kind", s(e.kind())},
                                            {"component", s(e.component())},
@@ -159,27 +182,55 @@ void StudioBridge::execute(std::function<void(const mantis::client::Client &)> a
         return;
     auto client = client_;
     auto selected = newest_.toStdString();
-    watcher_.setFuture(QtConcurrent::run([client, action, selected] {
-        StudioResult result;
-        try {
-            if (action)
-                action(client);
-            result.snapshot = client.snapshot();
-            std::string newest;
-            for (auto &a : result.snapshot.artifacts())
-                if (a.type() == mantis::schema::points.name && a.state() == "FINALIZED")
-                    newest = a.id();
-            result.newest_id = newest;
-            if (!newest.empty() && newest != selected) {
-                result.cloud = client.data(newest);
-                result.cloud_id = newest;
-            }
-        } catch (const std::exception &e) {
-            result.error = e.what();
-        }
-        return result;
-    }));
+    watcher_.setFuture(QtConcurrent::run(
+        [client, action, selected] { return collectResult(client, action, {}, selected); }));
     emit changed();
+}
+StudioResult StudioBridge::collectResult(const mantis::client::Client &client,
+                                         const std::function<void(const mantis::client::Client &)> &action,
+                                         std::optional<std::string> artifact,
+                                         const std::string &displayedNewest) {
+    StudioResult result;
+    auto attempt = [&](const char *phase, auto work) {
+        try {
+            work();
+            return true;
+        } catch (const mantis::Failure &failure) {
+            result.issues.push_back({phase, failure.error.message, failure.error});
+        } catch (const std::exception &failure) {
+            // Preserve untyped exceptions without inventing a transport status.
+            result.issues.push_back({phase, failure.what(), std::nullopt});
+        }
+        return false;
+    };
+    result.operationAttempted = bool(action);
+    if (action)
+        attempt("operation", [&] { action(client); });
+    // Confirm state after the operation, including a rejected or ambiguous outcome.
+    // Never retry the operation: capture and job authority remain in mantisd.
+    if (!attempt("snapshot", [&] { result.snapshot = client.snapshot(); }))
+        return result;
+    std::string newest;
+    if (!artifact) {
+        for (const auto &entry : result.snapshot->artifacts())
+            if (entry.type() == mantis::schema::points.name && entry.state() == "FINALIZED")
+                newest = entry.id();
+        if (newest.empty() || newest == displayedNewest)
+            return result;
+        artifact = newest;
+    }
+    result.artifactAttempted = true;
+    if (attempt("artifact", [&] { result.cloud = client.data(*artifact); })) {
+        result.cloud_id = *artifact;
+        result.newest_id = newest; // A failed load must not mark a cloud as already displayed.
+    } else {
+        // data() includes a control call and a local mapping. Its failure does not
+        // identify which connection is usable. One fresh snapshot resolves that
+        // uncertainty, preserving both root causes if confirmation also fails.
+        result.snapshot.reset();
+        attempt("snapshot", [&] { result.snapshot = client.snapshot(); });
+    }
+    return result;
 }
 void StudioBridge::refresh() {
     execute();
@@ -230,17 +281,9 @@ void StudioBridge::selectArtifact(QString id) {
     if (!runtime_enabled_ || !connected_ || watcher_.isRunning())
         return;
     auto client = client_;
-    watcher_.setFuture(QtConcurrent::run([client, id] {
-        StudioResult result;
-        try {
-            result.snapshot = client.snapshot();
-            result.cloud = client.data(id.toStdString());
-            result.cloud_id = id.toStdString();
-        } catch (const std::exception &e) {
-            result.error = e.what();
-        }
-        return result;
-    }));
+    watcher_.setFuture(
+        QtConcurrent::run([client, id] { return collectResult(client, {}, id.toStdString()); }));
+    emit changed();
 }
 void StudioBridge::enablePlugin(QString id, bool enabled) {
     if (!connected_)

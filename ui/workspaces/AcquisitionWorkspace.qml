@@ -29,7 +29,7 @@ ScrollView {
                         Label {
                             objectName: "acquisitionFreshness"
                             visible: !studio.connected
-                            text: "Runtime disconnected · last-known snapshot. Current capture and device availability are unknown."
+                            text: "Runtime state unconfirmed · last-known snapshot. Current capture and device availability are unknown."
                             color: "#edc078"; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.Wrap
                         }
                         Label {

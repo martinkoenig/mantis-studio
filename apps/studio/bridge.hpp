@@ -7,10 +7,18 @@
 #include <QVariantList>
 #include <mantis/client.hpp>
 #include <mantis/render.hpp>
+#include <optional>
+#include <vector>
+struct StudioIssue {
+    std::string phase, message;
+    std::optional<mantis::Error> cause;
+};
 struct StudioResult {
-    mantis::wire::v1::Response snapshot;
+    std::optional<mantis::wire::v1::Response> snapshot;
     mantis::data::Published cloud;
-    std::string cloud_id, newest_id, error;
+    std::string cloud_id, newest_id;
+    std::vector<StudioIssue> issues;
+    bool operationAttempted{}, artifactAttempted{};
 };
 class StudioBridge : public QObject {
     Q_OBJECT
@@ -23,6 +31,7 @@ class StudioBridge : public QObject {
     Q_PROPERTY(QVariantList diagnostics READ diagnostics NOTIFY changed)
     Q_PROPERTY(QString project READ project NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
+    Q_PROPERTY(QVariantList errorDetails READ errorDetails NOTIFY changed)
     Q_PROPERTY(bool connected READ connected NOTIFY changed)
     Q_PROPERTY(bool capturing READ capturing NOTIFY changed)
     Q_PROPERTY(bool lastKnownCapturing READ lastKnownCapturing NOTIFY changed)
@@ -31,6 +40,7 @@ class StudioBridge : public QObject {
     Q_PROPERTY(QString selectedArtifact READ selectedArtifact NOTIFY changed)
     QVariantList devices_, artifacts_, jobs_, plugins_, diagnostics_;
     QString project_, error_, capture_, selected_, newest_;
+    QVariantList error_details_;
     bool connected_{};
     const bool runtime_enabled_;
     mantis::client::Client client_;
@@ -47,6 +57,10 @@ class StudioBridge : public QObject {
   protected:
     // Internal presentation seam; asynchronous completions and deterministic tests share this path.
     void applyResult(const StudioResult &result);
+    static StudioResult collectResult(const mantis::client::Client &client,
+                                      const std::function<void(const mantis::client::Client &)> &action = {},
+                                      std::optional<std::string> artifact = {},
+                                      const std::string &displayedNewest = {});
 
   public:
     explicit StudioBridge(QObject *parent = nullptr, bool runtimeEnabled = true);
@@ -71,6 +85,9 @@ class StudioBridge : public QObject {
     }
     QString error() const {
         return error_;
+    }
+    QVariantList errorDetails() const {
+        return error_details_;
     }
     bool connected() const {
         return connected_;
