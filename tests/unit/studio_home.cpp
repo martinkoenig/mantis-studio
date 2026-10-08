@@ -8,6 +8,7 @@
 #include <QImage>
 #include <QJSValue>
 #include <QList>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlProperty>
@@ -517,10 +518,16 @@ void activityEdgeCases(QQuickWindow *window, ObservedBridge &bridge, const QStri
     resetScroll(window);
 }
 void localActions(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
+    const QList<QPointer<QQuickItem>> controls{item(window, "homeDevices"), item(window, "homeAcquisition"),
+                                               item(window, "homeLearn"), item(window, "homeExamples")};
     for (const auto &mode : QStringList{"live", "mock", "hybrid"}) {
+        std::cout << "STAGE: local Home actions in " << mode.toStdString() << std::endl;
         window->setProperty("uiMode", mode);
         window->setProperty("workspace", "home");
         resetScroll(window);
+        for (const auto &control : controls)
+            require(control && item(window, control->objectName()) == control,
+                    "Mode change recreated a persistent Home action");
         for (bool keyboard : {false, true}) {
             click(window, "homeLearn", keyboard);
             auto *guide = window->findChild<QObject *>("homeGuide");

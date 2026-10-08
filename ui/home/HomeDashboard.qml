@@ -109,11 +109,13 @@ ColumnLayout {
                     Grid {
                         id: actions; objectName: "homeQuickActions"; width: parent.width; columns: width < 760 ? 2 : 4; spacing: 12
                         Repeater {
+                            // Keep controls and nested layouts alive across mode changes.
+                            // Bind source-dependent labels in the delegate, not in this model.
                             model: [
                                 {title: "Scanner & Devices", icon: "devices", detail: "Inspect sources and\nadvertised capabilities", button: "View devices", name: "homeDevices"},
                                 {title: "Quick Scan", icon: "quickscan", detail: "Open acquisition.\nYou control when to capture.", button: "Go to Scan", name: "homeAcquisition"},
                                 {title: "Learn Mantis Studio", icon: "learn", detail: "A short guide to sources,\nartifacts and traceability.", button: "Read workflow guide", name: "homeLearn"},
-                                {title: "Example Projects", icon: "projects", detail: root.hasExamples ? "Explore four illustrative\nmechanical studies." : "Samples available in\nMock / Hybrid mode.", button: root.hasExamples ? "Browse examples" : "Samples unavailable", name: "homeExamples"}
+                                {title: "Example Projects", icon: "projects", detail: "", button: "", name: "homeExamples"}
                             ]
                             delegate: Panel {
                                 required property var modelData
@@ -133,10 +135,10 @@ ColumnLayout {
                                         StudioIcon { name: modelData.icon; color: Theme.accent; Layout.preferredWidth: 22; Layout.preferredHeight: 22 }
                                         HomeText { text: modelData.title; font.pixelSize: 12; font.bold: true; color: Theme.text; Layout.fillWidth: true; maximumLineCount: 1 }
                                     }
-                                    HomeText { text: modelData.detail; font.pixelSize: 11; Layout.fillWidth: true; Layout.rightMargin: index === 0 || index === 3 ? 35 : 0; maximumLineCount: 3 }
+                                    HomeText { text: index === 3 ? root.hasExamples ? "Explore four illustrative\nmechanical studies." : "Samples available in\nMock / Hybrid mode." : modelData.detail; font.pixelSize: 11; Layout.fillWidth: true; Layout.rightMargin: index === 0 || index === 3 ? 35 : 0; maximumLineCount: 3 }
                                     Item { Layout.fillHeight: true }
                                     StudioButton {
-                                        objectName: modelData.name; Layout.fillWidth: true; implicitHeight: 30; text: modelData.button; primary: index === 1; enabled: index !== 3 || root.hasExamples
+                                        objectName: modelData.name; Layout.fillWidth: true; implicitHeight: 30; text: index === 3 ? root.hasExamples ? "Browse examples" : "Samples unavailable" : modelData.button; primary: index === 1; enabled: index !== 3 || root.hasExamples
                                         onClicked: {
                                             if (index === 0) root.navigate("devices")
                                             else if (index === 1) root.navigate("acquisition")

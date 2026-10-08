@@ -92,6 +92,27 @@ The final handoff must supply that SHA, successful run and artifact URLs after
 reading complete results. Earlier CI links below belong to earlier accepted
 commits and cannot satisfy this change's gate. No branch merge is authorized.
 
+The first fidelity CI run ([37841122157](https://github.com/martinkoenig/mantis-studio/actions/runs/37841122157),
+`b95972a2b92e35b5079cb7d91bdc4d194197c7d6`) passed four jobs but ARM64 Studio ON
+reported a Home QML segmentation fault; it is **not** acceptance evidence.
+Review found that mode-dependent labels inside the Quick Actions Repeater model
+recreated all four controls and their nested layouts on mode changes. Labels now
+bind within persistent delegates. A new QPointer regression fails on the previous
+QML at live → mock and passes with the correction, alongside existing focus and
+input checks. No test is skipped or relaxed. Both Studio CI jobs additionally run
+the complete Home transition test three consecutive times; the required full
+CTest suites remain mandatory. The failure's exact native stack was unavailable,
+so the corrected code still requires the final native ARM64 gate.
+Local correction checks passed: Qt 6.4 bridge/Home/M0/CLI/calibration-QML/acceptance
+**7/7 in 36.84s**, the same Qt 6.9 ASan/UBSan/LSan checks **7/7 in 50.15s**, and
+three consecutive Qt 6.4 Home runs **33.07s**. The final mock 1536 screenshot is
+byte-identical to the retained after image; labels/layout and assets are unchanged.
+[Before-fix identity failure](evidence/fidelity/persistent-actions-before.txt),
+[Qt 6.4 checks](evidence/fidelity/qt64-persistent-actions.txt),
+[Qt 6.9 sanitizer checks](evidence/fidelity/qt69-persistent-actions.txt) and
+[repetition](evidence/fidelity/qt64-persistent-actions-repeat.txt) retain complete
+results separately from the earlier full suites.
+
 ## Earlier accepted implementation checks (retained history)
 
 All remaining sections preserve prior validation history, including superseded

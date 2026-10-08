@@ -1,0 +1,12 @@
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start 2: studio-home-qml
+    Test #2: studio-home-qml ..................   Passed   11.31 sec
+    Start 2: studio-home-qml
+    Test #2: studio-home-qml ..................   Passed   10.87 sec
+    Start 2: studio-home-qml
+1/1 Test #2: studio-home-qml ..................   Passed   10.89 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =  33.07 sec

@@ -1,0 +1,20 @@
+Internal ctest changing into directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+Test project /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+    Start  1: studio-bridge-errors
+1/7 Test  #1: studio-bridge-errors .............   Passed    0.21 sec
+    Start  2: studio-home-qml
+2/7 Test  #2: studio-home-qml ..................   Passed   16.28 sec
+    Start  3: studio-home-wire
+3/7 Test  #3: studio-home-wire .................   Passed    1.91 sec
+    Start  4: studio-ui-m0-qml
+4/7 Test  #4: studio-ui-m0-qml .................   Passed    7.32 sec
+    Start  5: studio-ui-m0-cli
+5/7 Test  #5: studio-ui-m0-cli .................   Passed   19.26 sec
+    Start  8: studio-calibration-qml
+6/7 Test  #8: studio-calibration-qml ...........   Passed    0.83 sec
+    Start 47: acceptance
+7/7 Test #47: acceptance .......................   Passed    4.34 sec
+
+100% tests passed, 0 tests failed out of 7
+
+Total Test time (real) =  50.15 sec
