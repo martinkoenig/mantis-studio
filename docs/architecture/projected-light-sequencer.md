@@ -39,7 +39,13 @@ steps, cameras, per-step duration, command/event/byte/in-flight limits and all
 selected modes/participants. Obvious inaccessible evidence methods/scopes and
 trigger endpoints are rejected before calling the executor. Device-specific
 combinations still require executor validation and preparation. Advertisement is
-availability, not physical proof.
+availability, not physical proof. Commanded-only feasibility uses accessible power
+control and requested-state support, without requiring a dispatch evidence method
+on the emitter. Acknowledged feasibility searches explicit participating control
+authorities, including a parent ID explicitly declared as a controller participant.
+Exposure-effective feasibility searches all graph-owned sources using the same
+method/scope and object-authority rules as runtime validation; an optical source
+need not be the emitter or its controller.
 
 Configuration declares positive finite operation, abort, cleanup and publication
 bounds (at most 60 seconds), a positive queue capacity no larger than the graph's
@@ -59,8 +65,9 @@ AcquisitionBundles. It has no drop/latest policy. Images remain shared BufferVie
 no payload copy is introduced. `next(timeout_ms)` drains publications, also after
 terminal cleanup, and has a finite consumer deadline (zero polls). Queue diagnostics
 report capacity, occupancy, high water, accepted/produced publications, consumed
-publications and saturation failures. An unqueued or rejected publication is retained
-in the terminal summary, with its initiating fault. Full-queue publication waits have
+publications and saturation failures. An admitted unqueued or rejected publication
+is retained in the terminal summary with its initiating fault. An over-budget
+publication is released and leaves a bounded initiating-error summary instead. Full-queue publication waits have
 a finite bound and wake immediately on stop/fault; saturation aborts and fails the
 run. A wait interrupted by daemon stop/cancel/fault retains the in-flight bundle
 without recording saturation or replacing its cause; actual run expiration wins,
@@ -76,7 +83,13 @@ capacity, child/attribute vector storage and shared ownership structures. Shared
 pixels are never copied; attribute payload is charged once per publication, not
 again for successor/correlation views. FrameSet structures shared by those views
 are likewise charged with the publication. Drained publications remain charged
-conservatively for the run. There is no whole-bundle multiplication heuristic.
+conservatively for the run. Complete metadata and bulk charges are checked and
+committed together before semantic, source or negative-outcome validation can
+retain a bundle. Payload is charged exactly once. A failed admission cannot retain
+the full bundle as terminal or unqueued evidence. Packet traversal is restricted
+to the bounded nonrecursive L1 shape before computing its cost. Partial private
+correlation copies are released on terminal validation failure, preserving the
+original admitted publications. There is no whole-bundle multiplication heuristic.
 Each allocation's structural admission charge adds maximum ordinary alignment
 padding and two pointer-sized bookkeeping slots; map nodes additionally charge
 three tree links plus a pointer-sized color/padding slot. Small-string capacity
@@ -123,11 +136,18 @@ requirements at completed terminal evidence fails the run.
 Every interpreted typed EvidenceSource resolves to the selected graph and advertises
 its claimed method and, where applicable, scope. Emitter acknowledgements require
 an explicit `controls` relation from a power-capable controller (listed in the
-program's controller participants), or a power-capable integrated parent authority.
+program's controller participants), or a power-capable integrated parent authority
+also explicitly included in those controller participants by its parent ID.
 Controller/register/electrical emitter facts come from that control authority or
 the emitter itself; graph-owned optical sources may establish their advertised
 optical evidence without being controllers. Foreign/unadvertised provenance is
 rejected. Camera exposure and trigger/association sources are checked too.
+`camera_metadata` exposure proof belongs to the exact frame's camera; association
+metadata belongs to the exact association frame's camera. Controller-report trigger
+and association facts belong to the corresponding participating, trigger-capable
+controller. Graph-owned validated-executor proof can come from an advertised
+executor/parent/controller source without being relabeled as camera metadata.
+Trigger acknowledgement still identifies its exact trigger controller.
 
 Commanded-only requires an established matching emitter command. Controller-
 acknowledged requires that command and matching successful acknowledgement at the

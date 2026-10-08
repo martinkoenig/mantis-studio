@@ -407,7 +407,7 @@ void preflight_tests() {
     }
     {
         auto s = std::make_shared<FakeState>();
-        s->selected.components[1].evidence_methods = {EvidenceMethod::software_dispatch};
+        s->selected.components[3].evidence_methods = {EvidenceMethod::software_dispatch};
         auto acknowledged_program = program();
         acknowledged_program.steps[0].evidence_requirement = EvidenceRequirement::controller_acknowledged;
         auto r = run(s, acknowledged_program);
@@ -861,9 +861,11 @@ void additional_contract_tests() {
         auto state = std::make_shared<FakeState>();
         auto q = captured(EvidenceRequirement::exposure_effective, true);
         if (mode == 0)
-            state->selected.components[1].evidence_scopes.clear();
+            for (auto &component : state->selected.components)
+                component.evidence_scopes.clear();
         if (mode == 1)
-            state->selected.components[1].evidence_methods = {EvidenceMethod::software_dispatch};
+            for (auto &component : state->selected.components)
+                component.evidence_methods = {EvidenceMethod::software_dispatch};
         if (mode == 2)
             state->selected.components[3].trigger_endpoints.clear();
         auto r = run(state, q);
@@ -1520,6 +1522,19 @@ void review_source_tests() {
         if (mode == 1) state->selected.components[3].controls.clear();
         if (mode == 3) state->selected.components[3].evidence_methods = {EvidenceMethod::software_dispatch};
         if (mode == 4) state->selected.components[3].evidence_scopes = {EvidenceScope::electrical_enable};
+        if (mode >= 1 && mode <= 4) {
+            // Preflight has a legitimate authority; publication still names the
+            // wrong/unadvertised/non-participating timer instead of this controller.
+            auto authority = graph().components[3];
+            authority.descriptor.id = {"control-authority"};
+            authority.descriptor.capabilities = {"org.mantis.emitter.power-control.v1"};
+            authority.trigger_modes.clear(); authority.trigger_endpoints.clear();
+            state->selected.components[3].controls.clear();
+            state->selected.components[0].participants.push_back(authority.descriptor.id);
+            state->selected.components.push_back(authority); ++state->selected.limits.max_components;
+            p.participants.controllers.push_back(ComponentId{authority.descriptor.id});
+            b.evidence.participants = p.participants;
+        }
         b.evidence.emitters[0].acknowledged = ack;
         state->emit(b); state->emit(bundle(p, 1, AcquisitionDisposition::completed));
         auto r = run(state, p); CHECK(r->prepare()); (void)r->start();
@@ -1527,11 +1542,11 @@ void review_source_tests() {
         CHECK(end.state == (mode == 5 ? ProjectedState::completed : ProjectedState::failed));
         if (mode != 5) CHECK(end.terminal.reason == AcquisitionReason::contradictory_evidence);
     }
-    // Integrated parent authority follows L2's power capability and explicit controls;
-    // it need not be separately listed as a controller child.
+    // Integrated parent control authority is an explicit controller participant;
+    // it uses the parent ID rather than inventing a separate child.
     {
         auto state = std::make_shared<FakeState>();
-        auto p = q; p.participants.controllers.clear();
+        auto p = q; p.participants.controllers = {ComponentId{state->selected.parent}};
         auto &parent = state->selected.components[0];
         parent.descriptor.capabilities.push_back("org.mantis.emitter.power-control.v1");
         parent.controls = {emitter.id};
@@ -1694,7 +1709,6 @@ void review_resource_tests() {
         auto p = captured(); p.bounds.max_bytes = 8 * 1024 * 1024;
         auto b = capture(p); Packet image; image.type = schema::image; image.header.sequence.value = 42;
         memory::BufferBuilder pixels(4); auto storage = std::move(pixels).publish();
-        auto backing = storage.identity();
         image.attributes.push_back({{"org.mantis.pixels", schema::ScalarType::u8, {2,2}, {2,1}, "intensity"}, storage});
         Packet set; set.type = schema::frameset; set.header.sequence.value = 0;
         const size_t huge = p.bounds.max_bytes + 1;
@@ -1711,8 +1725,322 @@ void review_resource_tests() {
         auto state = std::make_shared<FakeState>(); state->emit(b); auto r = run(state, p);
         CHECK(r->prepare()); (void)r->start(); auto end = finish(*r);
         CHECK(end.state == ProjectedState::failed && end.terminal.reason == AcquisitionReason::resource_limit);
+        CHECK(end.queue.produced == 0 && !end.terminal.unqueued_bundle);
+        CHECK(!end.terminal.executor_terminal);
+    }
+}
+
+void final_preflight_tests() {
+    // Dispatch feasibility follows accessible power control, not a dispatch-proof
+    // advertisement on the emitter itself.
+    {
+        auto state = std::make_shared<FakeState>();
+        for (auto &component : state->selected.components)
+            component.evidence_methods.clear();
+        auto r = run(state);
+        CHECK(r->prepare());
+        CHECK(r->snapshot().state == ProjectedState::ready);
+        CHECK(state->validations == 1 && state->preparations == 1 && state->starts == 0);
+    }
+    for (int mode = 0; mode < 7; ++mode) {
+        auto p = program();
+        p.steps[0].evidence_requirement = EvidenceRequirement::controller_acknowledged;
+        auto state = std::make_shared<FakeState>();
+        state->selected.components[1].evidence_methods.clear();
+        auto &controller = state->selected.components[3];
+        controller.evidence_methods = {EvidenceMethod::controller_report};
+        controller.evidence_scopes = {EvidenceScope::controller_register};
+        if (mode == 1)
+            controller.controls.clear();
+        if (mode == 2)
+            p.participants.controllers.clear();
+        if (mode == 3 || mode == 4) {
+            auto &parent = state->selected.components[0];
+            parent.descriptor.capabilities.push_back("org.mantis.emitter.power-control.v1");
+            parent.controls = {emitter.id};
+            parent.evidence_methods = controller.evidence_methods;
+            parent.evidence_scopes = controller.evidence_scopes;
+            controller.controls.clear();
+            p.participants.controllers = mode == 3 ? std::vector<ComponentId>{ComponentId{parent.descriptor.id}}
+                                                 : std::vector<ComponentId>{};
+        }
+        if (mode == 5)
+            controller.evidence_scopes = {EvidenceScope::electrical_enable};
+        if (mode == 6)
+            controller.evidence_methods = {EvidenceMethod::camera_metadata};
+        auto r = run(state, p);
+        bool feasible = mode == 0 || mode == 3;
+        CHECK(static_cast<bool>(r->prepare()) == feasible);
+        CHECK(state->validations == (feasible ? 1u : 0u));
+        CHECK(state->preparations == (feasible ? 1u : 0u));
+        CHECK(state->starts == 0);
+        if (feasible)
+            CHECK(r->snapshot().state == ProjectedState::ready);
+        else
+            CHECK(finish(*r).terminal.reason == AcquisitionReason::rejected);
+    }
+    // A graph-owned optical source supplies feasibility and synthetic proof;
+    // no optical evidence method is needed on the emitter or its controller.
+    {
+        auto p = captured(EvidenceRequirement::exposure_effective);
+        p.steps[0].required_scope = EvidenceScope::optical_emission;
+        auto state = std::make_shared<FakeState>();
+        for (auto &component : state->selected.components)
+            component.evidence_methods.clear();
+        state->selected.components[2].evidence_methods = {EvidenceMethod::camera_metadata};
+        ProjectedComponent optical;
+        optical.kind = ParticipantKind::controller;
+        optical.descriptor.id = {"optical-proof-source"};
+        optical.descriptor.parent = state->selected.parent;
+        optical.evidence_methods = {EvidenceMethod::optical_sensor};
+        optical.evidence_scopes = {EvidenceScope::optical_emission};
+        state->selected.components[0].participants.push_back(optical.descriptor.id);
+        state->selected.components.push_back(optical);
+        ++state->selected.limits.max_components;
+        auto b = capture(p);
+        effective(b, EvidenceScope::optical_emission);
+        auto value = *b.evidence.emitters[0].exposure_effective[0].state.get();
+        value.evidence = {ComponentId{optical.descriptor.id}, EvidenceMethod::optical_sensor, Unavailable{}};
+        b.evidence.emitters[0].exposure_effective[0].state = value;
+        CHECK(data::validate(b));
+        state->emit(b);
+        state->emit(bundle(p, 1, AcquisitionDisposition::completed));
+        auto r = run(state, p);
+        CHECK(r->prepare());
+        CHECK(r->start());
+        CHECK(finish(*r).state == ProjectedState::completed);
+    }
+}
+const ComponentId other_camera{{"other-sensor"}};
+void add_other_camera(FakeState &state, AcquisitionProgram &p) {
+    auto source = state.selected.components[2];
+    source.descriptor.id = other_camera.id;
+    source.role = "other-measurement";
+    source.image_source->stream = {{"other-image-output"}};
+    source.image_source->physical_identity = "other-physical-camera";
+    source.evidence_methods.push_back(EvidenceMethod::controller_report);
+    state.selected.components[0].participants.push_back(other_camera.id);
+    state.selected.components.push_back(source);
+    state.selected.components[3].trigger_endpoints.push_back(other_camera.id);
+    ++state.selected.limits.max_components;
+    p.participants.cameras.push_back({other_camera, source.image_source->stream, source.role});
+}
+void final_provenance_tests() {
+    for (bool correct : {false, true}) {
+        auto state = std::make_shared<FakeState>();
+        auto p = captured();
+        add_other_camera(*state, p);
+        auto b = capture(p);
+        auto exposure = *b.evidence.frames[0].exposure.get();
+        exposure.evidence.source = correct ? camera : other_camera;
+        b.evidence.frames[0].exposure = exposure;
+        CHECK(data::validate(b));
+        state->emit(b);
+        state->emit(bundle(p, 1, AcquisitionDisposition::completed));
+        auto r = run(state, p);
+        CHECK(r->prepare());
+        (void)r->start();
+        auto end = finish(*r);
+        CHECK(end.state == (correct ? ProjectedState::completed : ProjectedState::failed));
+        if (!correct) {
+            CHECK(end.terminal.reason == AcquisitionReason::contradictory_evidence);
+            CHECK(end.terminal.unqueued_bundle->evidence.frames[0].exposure.get()->evidence.source == other_camera);
+        }
+    }
+    // Both frame hardware-sync and TriggerEvent association paths bind camera
+    // metadata to that exact source. Controller reports bind to the trigger's
+    // controller; immutable executor proof may come from the graph-owned parent.
+    for (bool in_trigger : {false, true})
+        for (int source = 0; source < 5; ++source) {
+            auto state = std::make_shared<FakeState>();
+            auto p = captured(EvidenceRequirement::commanded_only, true);
+            add_other_camera(*state, p);
+            state->selected.components[0].evidence_methods = {EvidenceMethod::validated_executor};
+            auto b = capture(p);
+            auto requested = trigger(p, 0);
+            auto observed = trigger(p, 1);
+            observed.kind = TriggerEvent::Kind::observed;
+            observed.evidence = proof();
+            ExposureAssociation association;
+            association.frame = b.evidence.frames[0].frame;
+            association.trigger = observed.key;
+            association.method = AssociationMethod::native_trigger;
+            association.native_trigger = NativeTriggerIdentity{controller_id, controller_generation, 12};
+            association.evidence = {source == 1 || source == 3 ? other_camera : camera,
+                                    EvidenceMethod::camera_metadata, Unavailable{}};
+            if (source == 2 || source == 3)
+                association.evidence = {source == 2 ? controller_id : other_camera,
+                                        EvidenceMethod::controller_report, Unavailable{}};
+            if (source == 4) {
+                association.method = AssociationMethod::validated_executor;
+                association.evidence = proof(EvidenceMethod::validated_executor);
+                association.evidence.source = ComponentId{state->selected.parent};
+            }
+            if (in_trigger)
+                observed.exposure_association = association;
+            else
+                b.evidence.frames[0].sync = SyncEvidence{{{"synthetic-sync"}, 0}, time::SyncQuality::hardware,
+                                                        association};
+            b.triggers = {requested, observed};
+            b.evidence.triggers = {requested.key, observed.key};
+            CHECK(data::validate(b));
+            state->emit(b);
+            state->emit(bundle(p, 1, AcquisitionDisposition::completed));
+            auto r = run(state, p);
+            CHECK(r->prepare());
+            (void)r->start();
+            auto end = finish(*r);
+            bool valid = source == 0 || source == 2 || source == 4;
+            CHECK(end.state == (valid ? ProjectedState::completed : ProjectedState::failed));
+            if (!valid) {
+                CHECK(end.terminal.reason == AcquisitionReason::contradictory_evidence);
+                CHECK(end.terminal.unqueued_bundle);
+            }
+        }
+}
+void attach_frame(AcquisitionBundle &b, size_t bytes, size_t metadata = 0) {
+    Packet image;
+    image.type = schema::image;
+    image.header.sequence.value = b.evidence.frames[0].frame.native_sequence;
+    memory::BufferBuilder pixels(bytes);
+    image.attributes.push_back({{"org.mantis.pixels", schema::ScalarType::u8, {2, 2}, {2, 1}, "intensity"},
+                                std::move(pixels).publish()});
+    Packet set;
+    set.type = schema::frameset;
+    set.header.sequence.value = b.evidence.frameset.get()->sequence;
+    if (metadata)
+        set.header.metadata["org.example.retention-test"] = std::string(metadata, 'x');
+    set.frames = {data::publish(std::move(image))};
+    b.frameset = data::publish(std::move(set));
+}
+void final_admission_tests() {
+    for (bool oversized : {false, true})
+        for (bool rejected : {false, true}) {
+            auto p = captured(EvidenceRequirement::controller_acknowledged);
+            p.bounds.max_bytes = 8 * 1024 * 1024;
+            auto b = capture(p);
+            acknowledged(b);
+            if (rejected) {
+                auto ack = *b.evidence.emitters[0].acknowledged.get();
+                ack.result = AcknowledgementResult::rejected;
+                b.evidence.emitters[0].acknowledged = ack;
+            } else {
+                auto exposure = *b.evidence.frames[0].exposure.get();
+                exposure.evidence.source = {{"foreign-exposure-source"}};
+                b.evidence.frames[0].exposure = exposure;
+            }
+            attach_frame(b, oversized ? p.bounds.max_bytes + 1 : 4);
+            CHECK(data::validate(b));
+            auto original = b.frameset.get();
+            auto backing = b.frameset->frames[0]->attributes[0].buffer.identity();
+            std::weak_ptr<const Packet> weak_set = b.frameset, weak_image = b.frameset->frames[0];
+            auto state = std::make_shared<FakeState>();
+            state->emit(std::move(b));
+            auto r = run(state, p);
+            CHECK(r->prepare());
+            (void)r->start();
+            auto end = finish(*r);
+            CHECK(end.state == ProjectedState::failed);
+            CHECK(end.queue.produced == 0 && end.queue.saturation_failures == 0);
+            CHECK(state->aborts == 1);
+            if (oversized) {
+                CHECK(end.terminal.reason == AcquisitionReason::resource_limit);
+                CHECK(end.terminal.initiating_error && end.terminal.initiating_error->message.size() < 256);
+                CHECK(!end.terminal.unqueued_bundle && !end.terminal.executor_terminal);
+                CHECK(weak_set.expired() && weak_image.expired());
+            } else {
+                CHECK(end.terminal.reason == (rejected ? AcquisitionReason::rejected
+                                                      : AcquisitionReason::contradictory_evidence));
+                CHECK(end.terminal.unqueued_bundle->frameset.get() == original);
+                CHECK(end.terminal.unqueued_bundle->frameset->frames[0]->attributes[0].buffer.identity() == backing);
+                if (rejected)
+                    CHECK(end.terminal.unqueued_bundle->evidence.emitters[0].acknowledged.get()->result == AcknowledgementResult::rejected);
+            }
+        }
+    // Metadata also precedes negative-outcome validation in admission.
+    {
+        auto p = captured(EvidenceRequirement::controller_acknowledged);
+        p.bounds.max_bytes = 8 * 1024 * 1024;
+        auto b = capture(p);
+        acknowledged(b);
+        auto ack = *b.evidence.emitters[0].acknowledged.get();
+        ack.result = AcknowledgementResult::rejected;
+        b.evidence.emitters[0].acknowledged = ack;
+        attach_frame(b, 4, p.bounds.max_bytes + 1);
+        CHECK(data::validate(b));
+        std::weak_ptr<const Packet> weak_set = b.frameset;
+        auto state = std::make_shared<FakeState>();
+        state->emit(std::move(b));
+        auto r = run(state, p);
+        CHECK(r->prepare());
+        (void)r->start();
+        auto end = finish(*r);
+        CHECK(end.terminal.reason == AcquisitionReason::resource_limit);
+        CHECK(!end.terminal.unqueued_bundle && weak_set.expired());
+    }
+    // The budget fits one 4-MiB payload and structural charges, but would not fit
+    // two payload charges. Successful capture proves exactly-once admission.
+    {
+        auto p = captured();
+        p.bounds.max_bytes = 8 * 1024 * 1024;
+        auto b = capture(p);
+        attach_frame(b, 4 * 1024 * 1024);
+        auto backing = b.frameset->frames[0]->attributes[0].buffer.identity();
+        auto state = std::make_shared<FakeState>();
+        state->emit(std::move(b));
+        state->emit(bundle(p, 1, AcquisitionDisposition::completed));
+        auto r = run(state, p);
+        CHECK(r->prepare());
+        CHECK(r->start());
+        auto end = finish(*r);
+        CHECK(end.state == ProjectedState::completed && end.queue.produced == 2);
+        auto retained = **r->next(0);
+        CHECK(retained->frameset->frames[0]->attributes[0].buffer.identity() == backing);
+    }
+    // An admitted publication can exhaust the space for private correlation copies.
+    // Those partial copies are discarded; the original admitted bundle stays available.
+    {
+        auto p = captured(EvidenceRequirement::controller_acknowledged);
+        p.bounds.max_commands = 1;
+        p.bounds.max_events = 2;
+        p.bounds.max_bytes = 768 * 1024;
+        auto b = capture(p);
+        b.evidence.implementations.clear();
+        for (size_t i = 0; i < max_participants; ++i)
+            b.evidence.implementations.push_back({
+                {"producer-" + std::to_string(i) + std::string(200, 'p')}, {1, 0, 0},
+                std::string(1024, 'b'), ContentReference{
+                    {"configuration-" + std::string(200, 'c')},
+                    {"org.example." + std::string(1000, 't'), 1}, Hash{"sha256", "aabb"}, 1}});
+        CHECK(data::validate(b));
+        auto state = std::make_shared<FakeState>();
+        state->emit(std::move(b));
+        state->emit(bundle(p, 1, AcquisitionDisposition::completed));
+        auto r = run(state, p);
+        CHECK(r->prepare());
+        (void)r->start();
+        auto end = finish(*r);
+        CHECK(end.terminal.reason == AcquisitionReason::resource_limit);
         CHECK(end.queue.produced == 0 && end.terminal.unqueued_bundle);
-        CHECK(end.terminal.unqueued_bundle->frameset->frames[0]->attributes[0].buffer.identity() == backing);
+        CHECK(end.terminal.unqueued_bundle->evidence.implementations.size() == max_participants);
+    }
+    // Admission bounds malformed packet traversal before any recursive accounting.
+    {
+        auto p = captured();
+        auto b = capture(p);
+        Packet malformed;
+        malformed.type = schema::frameset;
+        malformed.frames = {nullptr};
+        b.frameset = std::make_shared<const Packet>(std::move(malformed));
+        std::weak_ptr<const Packet> weak_set = b.frameset;
+        auto state = std::make_shared<FakeState>();
+        state->emit(std::move(b));
+        auto r = run(state, p);
+        CHECK(r->prepare());
+        (void)r->start();
+        auto end = finish(*r);
+        CHECK(end.terminal.reason == AcquisitionReason::contradictory_evidence);
+        CHECK(!end.terminal.unqueued_bundle && weak_set.expired());
     }
 }
 
@@ -1762,6 +2090,9 @@ void concurrency_tests() {
 } // namespace
 int main() {
     try {
+        final_preflight_tests();
+        final_provenance_tests();
+        final_admission_tests();
         review_queue_tests();
         review_source_tests();
         review_outcome_tests();

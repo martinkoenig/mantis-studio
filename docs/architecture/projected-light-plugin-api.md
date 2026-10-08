@@ -356,7 +356,7 @@ frozen-l2-abi, projected-light-contract, c-abi, legacy-abi, projected-light-sema
 acquisition-qos and core. The final fixture changes were retested under both ordinary
 and sanitizer builds. No use-after-free, undefined behavior or leak was reported.
 Native ARM64/cross-toolchain execution was unavailable locally; those results are
-not claimed. L2 acceptance remains pending.
+not claimed. L2 is FINAL ACCEPTED.
 
 Deliberately mutated SDK copies under the ignored build directory were rejected:
 the C probe detected image-dimension layout and status-enum value changes, and the

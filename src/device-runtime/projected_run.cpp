@@ -339,25 +339,18 @@ struct ProjectedRun::Impl {
                 require(has_capability(emitter.descriptor, "org.mantis.emitter.power-control.v1") &&
                             contains(emitter.emitter_states, intent.state),
                         AcquisitionReason::rejected, "Inaccessible emitter state");
-                auto available = [&](EvidenceMethod method) {
-                    return contains(emitter.evidence_methods, method);
-                };
-                bool command = available(EvidenceMethod::software_dispatch) ||
-                               available(EvidenceMethod::validated_executor);
-                bool ack = available(EvidenceMethod::controller_report) ||
-                           available(EvidenceMethod::validated_executor);
-                bool effective = available(EvidenceMethod::validated_executor) ||
-                                 available(EvidenceMethod::register_readback) ||
-                                 available(EvidenceMethod::electrical_readback) ||
-                                 available(EvidenceMethod::optical_sensor);
-                require(
-                    command &&
-                        (*step.evidence_requirement != EvidenceRequirement::controller_acknowledged || ack) &&
-                        (*step.evidence_requirement != EvidenceRequirement::exposure_effective ||
-                         effective) &&
-                        (*step.evidence_requirement == EvidenceRequirement::commanded_only ||
-                         contains(emitter.evidence_scopes, step.required_scope)),
-                    AcquisitionReason::rejected, "Inaccessible evidence requirement/scope");
+                if (*step.evidence_requirement != EvidenceRequirement::commanded_only) {
+                    bool acknowledgement = *step.evidence_requirement == EvidenceRequirement::controller_acknowledged;
+                    bool feasible = std::any_of(graph.components.begin(), graph.components.end(), [&](const auto &source) {
+                        return std::any_of(source.evidence_methods.begin(), source.evidence_methods.end(), [&](auto method) {
+                            return compatible_emitter_method(method, step.required_scope, acknowledgement) &&
+                                   emitter_source_allowed(source, method, step.required_scope, intent.emitter,
+                                                          acknowledgement);
+                        });
+                    });
+                    require(feasible, AcquisitionReason::rejected,
+                            "No accessible evidence authority for required method/scope");
+                }
             }
         }
         // Run-global identities must fit the *declared* command/event maxima, not
@@ -518,19 +511,52 @@ struct ProjectedRun::Impl {
                 AcquisitionReason::contradictory_evidence, "Foreign or unadvertised evidence source/method/scope");
         return *it;
     }
-    void emitter_source(const EvidenceSource &source, EvidenceScope scope, ComponentId target,
-                        bool acknowledgement = false) const {
-        const auto &c = evidence_source(source, scope);
+    static bool compatible_emitter_method(EvidenceMethod method, EvidenceScope scope, bool acknowledgement) {
+        if (method == EvidenceMethod::controller_report)
+            return scope == EvidenceScope::controller_register;
+        if (method == EvidenceMethod::validated_executor || method == EvidenceMethod::imported)
+            return true; // Availability only; L1 validates the actual typed proof at publication.
+        if (acknowledgement)
+            return false;
+        if (method == EvidenceMethod::register_readback)
+            return scope == EvidenceScope::controller_register;
+        if (method == EvidenceMethod::electrical_readback)
+            return scope == EvidenceScope::electrical_enable;
+        return method == EvidenceMethod::optical_sensor && scope == EvidenceScope::optical_emission;
+    }
+    bool emitter_source_allowed(const ProjectedComponent &c, EvidenceMethod method, EvidenceScope scope,
+                                ComponentId target, bool acknowledgement) const {
+        if (!contains(c.evidence_methods, method) || !contains(c.evidence_scopes, scope) ||
+            !compatible_emitter_method(method, scope, acknowledgement))
+            return false;
         bool authority = (c.kind == ParticipantKind::controller || c.kind == ParticipantKind::parent) &&
                          has_capability(c.descriptor, "org.mantis.emitter.power-control.v1") &&
                          contains(c.controls, target.id);
-        if (acknowledgement) {
-            require(authority && (c.kind == ParticipantKind::parent ||
-                                 contains(program.participants.controllers, source.source)),
-                    AcquisitionReason::contradictory_evidence, "Acknowledgement lacks participating control authority");
-        } else if (scope != EvidenceScope::optical_emission)
-            require(c.descriptor.id == target.id || authority,
-                    AcquisitionReason::contradictory_evidence, "Emitter readback from unrelated component");
+        if (acknowledgement)
+            return authority && contains(program.participants.controllers, ComponentId{c.descriptor.id});
+        return scope == EvidenceScope::optical_emission || c.descriptor.id == target.id || authority;
+    }
+    void emitter_source(const EvidenceSource &source, EvidenceScope scope, ComponentId target,
+                        bool acknowledgement = false) const {
+        const auto &c = evidence_source(source, scope);
+        require(emitter_source_allowed(c, source.method, scope, target, acknowledgement),
+                AcquisitionReason::contradictory_evidence, "Emitter evidence lacks object/control authority");
+    }
+    void controller_source(const EvidenceSource &source, ComponentId controller) const {
+        const auto &c = evidence_source(source);
+        require(source.source == controller &&
+                    (c.kind == ParticipantKind::controller || c.kind == ParticipantKind::parent) &&
+                    has_capability(c.descriptor, "org.mantis.trigger.hardware.v1") &&
+                    contains(program.participants.controllers, controller),
+                AcquisitionReason::contradictory_evidence, "Trigger fact lacks corresponding controller authority");
+    }
+    void association_source(const ExposureAssociation &association) const {
+        (void)evidence_source(association.evidence);
+        if (association.evidence.method == EvidenceMethod::camera_metadata)
+            require(association.evidence.source == association.frame.camera,
+                    AcquisitionReason::contradictory_evidence, "Association metadata belongs to another camera");
+        if (association.evidence.method == EvidenceMethod::controller_report)
+            controller_source(association.evidence, association.trigger.source);
     }
     void validate_sources(const AcquisitionBundle &bundle) const {
         for (const auto &emitter : bundle.evidence.emitters) {
@@ -543,21 +569,27 @@ struct ProjectedRun::Impl {
                     emitter_source(value->evidence, value->scope, emitter.emitter);
         }
         for (const auto &frame : bundle.evidence.frames) {
-            if (auto exposure = frame.exposure.get())
+            if (auto exposure = frame.exposure.get()) {
                 (void)evidence_source(exposure->evidence);
+                if (exposure->evidence.method == EvidenceMethod::camera_metadata)
+                    require(exposure->evidence.source == frame.frame.camera,
+                            AcquisitionReason::contradictory_evidence, "Exposure metadata belongs to another camera");
+            }
             if (auto sync = frame.sync.get())
                 if (auto association = sync->hardware_association.get())
-                    (void)evidence_source(association->evidence);
+                    association_source(*association);
         }
         for (const auto &trigger : bundle.triggers) {
             (void)evidence_source(trigger.evidence);
+            if (trigger.evidence.method == EvidenceMethod::controller_report)
+                controller_source(trigger.evidence, trigger.key.source);
             if (auto ack = trigger.acknowledgement.get()) {
                 const auto &source = evidence_source(ack->evidence, ack->scope);
                 require(source.descriptor.id == trigger.key.source.id,
                         AcquisitionReason::contradictory_evidence, "Trigger acknowledgement from unrelated authority");
             }
             if (auto association = trigger.exposure_association.get())
-                (void)evidence_source(association->evidence);
+                association_source(*association);
         }
     }
     static void acknowledgement_outcome(const Acknowledgement &ack) {
@@ -584,11 +616,6 @@ struct ProjectedRun::Impl {
         for (const auto &emitter : e.emitters)
             if (auto ack = emitter.acknowledged.get())
                 acknowledgement_outcome(*ack);
-        auto publication_charge = detail::allocation_bytes(sizeof(AcquisitionBundle) + 2 * sizeof(void *));
-        publication_charge = detail::add_bytes(publication_charge, detail::heap_bytes(bundle));
-        if (bundle.frameset)
-            publication_charge = detail::add_bytes(publication_charge, detail::packet_metadata_bytes(*bundle.frameset));
-        charge(publication_metadata_bytes, publication_charge);
         for (const auto &p : e.causal_predecessors)
             require(std::binary_search(evidence_keys.begin(), evidence_keys.end(), p.ordinal),
                     AcquisitionReason::contradictory_evidence, "Causal predecessor was never published");
@@ -782,14 +809,6 @@ struct ProjectedRun::Impl {
                     }
                 }
         }
-        if (bundle.frameset)
-            for (const auto &image : bundle.frameset->frames)
-                for (const auto &attribute : image->attributes) {
-                    require(attribute.buffer.size() <=
-                                remaining_bytes(),
-                            AcquisitionReason::resource_limit, "Published bulk payload budget exceeded");
-                    payload_bytes += attribute.buffer.size();
-                }
         if (const auto *instance = e.step.get())
             step_evidence(slot(*instance), e);
         previous = bundle; // Pixels remain shared and immutable.
@@ -801,9 +820,48 @@ struct ProjectedRun::Impl {
         require(used <= program.bounds.max_bytes, AcquisitionReason::resource_limit, "In-memory resource budget exceeded");
         return program.bounds.max_bytes - used;
     }
-    void charge(uint64_t &counter, uint64_t bytes) {
-        require(bytes <= remaining_bytes(), AcquisitionReason::resource_limit, "In-memory metadata budget exceeded");
-        counter = detail::add_bytes(counter, bytes);
+    void admit(const AcquisitionBundle &bundle) {
+        // Cost is established before semantic/source/outcome checks can retain this
+        // publication. Restrict traversal to the L1 bounded, nonrecursive shape.
+        uint64_t bulk = 0;
+        if (bundle.frameset) {
+            require(bundle.frameset->frames.size() <= 16 &&
+                        bundle.frameset->attributes.size() <= data::max_semantic_attributes,
+                    AcquisitionReason::contradictory_evidence, "Unbounded FrameSet structure at admission");
+            auto payload = [&](const Packet &packet) {
+                require(packet.attributes.size() <= data::max_semantic_attributes,
+                        AcquisitionReason::contradictory_evidence, "Unbounded image attributes at admission");
+                for (const auto &attribute : packet.attributes)
+                    bulk = detail::add_bytes(bulk, attribute.buffer.size());
+            };
+            payload(*bundle.frameset);
+            for (const auto &image : bundle.frameset->frames) {
+                require(image && image->frames.empty(), AcquisitionReason::contradictory_evidence,
+                        "Null/recursive image at admission");
+                payload(*image);
+            }
+        }
+        auto publication = detail::allocation_bytes(sizeof(AcquisitionBundle) + 2 * sizeof(void *));
+        publication = detail::add_bytes(publication, detail::heap_bytes(bundle));
+        if (bundle.frameset)
+            publication = detail::add_bytes(publication, detail::packet_metadata_bytes(*bundle.frameset));
+        auto total = detail::add_bytes(publication, bulk);
+        auto available = remaining_bytes();
+        auto internal = internal_metadata_bytes();
+        require(internal <= available && total <= available - internal, AcquisitionReason::resource_limit,
+                "Publication cannot fit finite in-memory resource budget");
+        // Commit both counters only after the complete checked admission succeeds.
+        publication_metadata_bytes = detail::add_bytes(publication_metadata_bytes, publication);
+        payload_bytes = detail::add_bytes(payload_bytes, bulk);
+    }
+    void discard_faulted_correlations() {
+        // A terminal fault cannot use these worker-only facts again. Release any
+        // partially updated dynamic copies, including growth that failed admission;
+        // preallocated table storage remains charged and original publications stay immutable.
+        previous.reset();
+        pending.clear(); frames.clear(); commands.clear(); trigger_keys.clear(); pending_triggers.clear();
+        pending_frames.clear(); unresolved_requests.clear(); resolved_requests.clear(); trigger_steps.clear();
+        associations.clear(); native_generations.clear(); stream_generations.clear(); controllers.clear();
     }
     uint64_t internal_metadata_bytes() const {
         // Vector object storage was reserved/charged before start. Charge dynamic
@@ -1114,15 +1172,23 @@ struct ProjectedRun::Impl {
                 continue;
             }
             auto bundle = std::make_shared<const AcquisitionBundle>(std::move(**output));
+            bool admitted = false;
             try {
+                admit(*bundle);
+                admitted = true;
                 require(
                     std::none_of(pending.begin(), pending.end(), [&](auto &p) { return now() >= p.expires; }),
                     AcquisitionReason::evidence_missing, "Late evidence arrived after step window");
                 correlate(*bundle);
                 resolve_pending();
             } catch (...) {
-                std::lock_guard lock(mutex);
-                view.terminal.unqueued_bundle = bundle;
+                discard_faulted_correlations();
+                if (admitted) {
+                    std::lock_guard lock(mutex);
+                    view.terminal.unqueued_bundle = bundle;
+                }
+                // An unadmitted bundle leaves only the bounded initiating error;
+                // stack unwinding releases its buffers instead of retaining it.
                 throw;
             }
             if (now() >= run_deadline) {
