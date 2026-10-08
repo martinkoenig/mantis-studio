@@ -82,8 +82,8 @@ ApplicationWindow {
                     }
                 }
                 Item { Layout.fillHeight: true }
-                Label { text: "WORKSPACE FOUNDATION"; font.pixelSize: 9; color: Theme.muted; Layout.leftMargin: 10 }
-                Label { text: "UI-M1"; font.pixelSize: 12; color: Theme.secondary; Layout.leftMargin: 10; Layout.bottomMargin: 12 }
+                Label { text: "MANTIS STUDIO"; font.pixelSize: 9; color: Theme.muted; Layout.leftMargin: 10 }
+                Label { text: "Workspace"; font.pixelSize: 12; color: Theme.secondary; Layout.leftMargin: 10; Layout.bottomMargin: 12 }
             }
         }
         ColumnLayout {

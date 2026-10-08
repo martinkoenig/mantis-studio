@@ -4,12 +4,15 @@ import "../design"
 import "../components"
 Column {
     id: root
+    objectName: "homeProjectGallery"
     required property var projects
     spacing: 10
+    Accessible.role: Accessible.Pane
+    Accessible.name: "Illustrative recent projects, read-only"
     RowLayout {
         width: parent.width
-        HomeText { text: "Example projects"; color: Theme.text; font.bold: true; Layout.fillWidth: true }
-        SourceBadge { source: "mock" }
+        HomeText { text: "Recent Projects"; font.pixelSize: 16; color: Theme.text; font.bold: true; Layout.fillWidth: true }
+        HomeText { text: "Illustrative · read-only"; font.pixelSize: 11; color: Theme.warning }
     }
     Grid {
         id: cards
@@ -19,18 +22,27 @@ Column {
             delegate: Panel {
                 required property var modelData
                 required property int index
+                objectName: "homeProjectCard" + index
                 width: (cards.width - (cards.columns - 1) * cards.spacing) / cards.columns
-                implicitHeight: 142
+                implicitHeight: 198
                 clip: true
+                border.color: root.activeFocus ? Theme.focus : Theme.border
                 Column {
-                    width: parent.width; spacing: 6
-                    Rectangle {
-                        width: parent.width; height: 78
-                        color: Theme.raised
-                        ProjectIllustration { objectName: "homeProjectArt" + index; anchors.fill: parent; shape: modelData.shape }
+                    width: parent.width; spacing: 0
+                    Image {
+                        objectName: "homeProjectArt" + index
+                        width: parent.width; height: 120
+                        source: visible ? "assets/" + modelData.shape + ".jpg" : ""
+                        sourceSize.width: 640; sourceSize.height: 380
+                        fillMode: Image.PreserveAspectFit
+                        Accessible.ignored: true
                     }
-                    HomeText { width: parent.width - 24; x: 12; text: modelData.name; font.bold: true; color: Theme.text; maximumLineCount: 1 }
-                    HomeText { width: parent.width - 24; x: 12; text: "Demo / Mock · read-only"; font.pixelSize: 10; color: Theme.warning; maximumLineCount: 1 }
+                    Column {
+                        width: parent.width - 28; x: 14; topPadding: 10; spacing: 6
+                        HomeText { width: parent.width; text: modelData.name; font.pixelSize: 14; font.bold: true; color: Theme.text; maximumLineCount: 1 }
+                        HomeText { width: parent.width; text: modelData.description; font.pixelSize: 11; maximumLineCount: 1 }
+                        HomeText { width: parent.width; text: modelData.stats; font.pixelSize: 11; color: Theme.secondary; maximumLineCount: 1 }
+                    }
                 }
             }
         }

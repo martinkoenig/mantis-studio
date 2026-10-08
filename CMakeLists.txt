@@ -167,11 +167,17 @@ if(MANTIS_BUILD_STUDIO)
   ui/components/StudioIcon.qml
   ui/home/HomeText.qml
   ui/home/HomeCard.qml
-  ui/home/GeometryArt.qml
-  ui/home/ProjectIllustration.qml
   ui/home/HomeDemo.qml
   ui/home/HomeRows.qml
   ui/home/HomeProjects.qml
+  ui/home/HomeActivity.qml
+  ui/home/HomeGuide.qml
+  ui/home/assets/hero.jpg
+  ui/home/assets/scanner.jpg
+  ui/home/assets/housing.jpg
+  ui/home/assets/rotor.jpg
+  ui/home/assets/bracket.jpg
+  ui/home/assets/cover.jpg
   ui/home/HomeDashboard.qml
   ui/workspaces/HomeWorkspace.qml
   ui/state/AppUiState.qml

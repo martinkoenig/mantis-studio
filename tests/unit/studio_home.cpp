@@ -56,9 +56,27 @@ QQuickItem *item(QQuickWindow *window, const QString &name) {
 void settle() {
     QTest::qWait(35);
 }
+void scrollTo(QQuickWindow *window, QQuickItem *target) {
+    auto *home = item(window, "homeWorkspace");
+    auto *flick = qobject_cast<QQuickItem *>(home->property("contentItem").value<QObject *>());
+    require(flick, "Home scrolling unavailable");
+    const auto y = target->mapToItem(flick, QPointF(0, target->height() / 2)).y();
+    if (y < 0 || y > flick->height()) {
+        const auto maximum = std::max(0.0, flick->property("contentHeight").toDouble() - flick->height());
+        flick->setProperty(
+            "contentY",
+            std::clamp(flick->property("contentY").toDouble() + y - flick->height() / 2, 0.0, maximum));
+        settle();
+    }
+}
+void resetScroll(QQuickWindow *window) {
+    item(window, "homeWorkspace")->property("contentItem").value<QObject *>()->setProperty("contentY", 0);
+    settle();
+}
 void click(QQuickWindow *window, const QString &name, bool keyboard = false) {
     auto *button = item(window, name);
     require(button->isVisible() && button->isEnabled(), "CTA unavailable");
+    scrollTo(window, button);
     if (keyboard) {
         button->forceActiveFocus(Qt::TabFocusReason);
         // Exercise actual tab traversal even when a persistent control retained mouse focus.
@@ -274,14 +292,17 @@ void bounds(QQuickWindow *window) {
             "Hero actions collapsed");
     auto *path = item(window, "homeProjectPath");
     require(path->property("textFormat").toInt() == 0, "Runtime path uses rich text");
-    require(item(window, "homeMetrics")->property("text") == "Metrics not available from this runtime",
+    require(item(window, "homeMetrics")->property("text") ==
+                (window->property("uiMode") == "mock" ? "Illustrative gauges · Demo / Mock"
+                                                      : "Metrics not available from this runtime"),
             "Unsupported telemetry invented");
 }
 void projectIllustrations(QQuickWindow *window) {
-    const auto frame = window->grabWindow();
     QList<QImage> thumbnails;
     for (int i = 0; i < 4; ++i) {
         auto *art = item(window, "homeProjectArt" + QString::number(i));
+        scrollTo(window, art);
+        const auto frame = window->grabWindow();
         const auto topLeft = art->mapToScene(QPointF{});
         // Compare the artwork's fitted viewport, excluding unused wide-card margins and text.
         const int fittedWidth = qRound(std::min(art->width(), art->height() * 300 / 140));
@@ -290,6 +311,7 @@ void projectIllustrations(QQuickWindow *window) {
         require(art->isVisible() && frame.rect().contains(crop), "Project illustration clipped");
         thumbnails.push_back(frame.copy(crop));
     }
+    resetScroll(window);
     for (qsizetype i = 0; i < thumbnails.size(); ++i)
         for (qsizetype j = i + 1; j < thumbnails.size(); ++j) {
             require(thumbnails[i].size() == thumbnails[j].size(), "Thumbnail viewports differ");
@@ -313,8 +335,7 @@ void detailActions(QQuickWindow *window, ObservedBridge &bridge) {
     for (const auto &mode : QStringList{"live", "mock", "hybrid", "mock", "live"}) {
         window->setProperty("uiMode", mode);
         settle();
-        for (const auto &[buttonName, reasonName] :
-             {std::pair{"homeJobs", "homeJobsUnavailable"}, {"homeArtifacts", "homeArtifactsUnavailable"}}) {
+        for (const auto &[buttonName, reasonName] : {std::pair{"homeJobs", "homeJobsUnavailable"}}) {
             auto *button = item(window, buttonName);
             auto *reason = item(window, reasonName);
             const bool demo = mode == "mock";
@@ -326,10 +347,11 @@ void detailActions(QQuickWindow *window, ObservedBridge &bridge) {
             require(accessible && accessible->role() == QAccessible::Button,
                     "Detail action accessible role missing");
             if (demo) {
-                require(reason->property("text").toString().contains("illustrative") &&
+                require(reason->property("text").toString().contains("Illustrative") &&
                             accessible->text(QAccessible::Description).contains("unavailable"),
                         "Mock detail action missing visible or accessible explanation");
                 QSignalSpy clicks(button, SIGNAL(clicked()));
+                scrollTo(window, button);
                 const auto point = button->mapToScene(QPointF(button->width() / 2, button->height() / 2));
                 require(window->contentItem()->contains(point), "Disabled detail control clipped");
                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
@@ -356,6 +378,198 @@ void detailActions(QQuickWindow *window, ObservedBridge &bridge) {
         }
     }
 }
+void fidelity(QQuickWindow *window) {
+    auto *home = item(window, "homeWorkspace");
+    require(!find(home, "homeArtifacts") && !find(home, "homeArtifactsUnavailable"),
+            "Obsolete Home artifact CTA retained");
+    QList<QQuickItem *> pending{home};
+    while (!pending.empty()) {
+        auto *node = pending.takeLast();
+        const auto text = node->property("text").toString();
+        require(text != "Example artifacts" && text != "Current project artifacts",
+                "Standalone artifact card retained");
+        for (auto *child : node->childItems())
+            pending.push_back(child);
+    }
+    auto *hero = item(window, "homeHero");
+    require(hero->height() >= 270 && hero->height() <= 310, "Hero lost substantive height");
+    const auto mock = window->property("uiMode") == "mock";
+    require(item(window, "homeCurrentProjectCard")->isVisible() != mock,
+            "Live current project confused with history");
+    require(item(window, "homeProjectGallery")->isVisible() == mock,
+            "Sample gallery leaked into live history");
+    for (int i = 0; i < 4; ++i) {
+        auto *card = item(window, "homeActionCard" + QString::number(i));
+        require(card->height() >= 140, "Quick Action collapsed");
+        for (auto *button : card->childItems()) {
+            // Actual controls are inside the body; check descendants recursively below.
+            QList<QQuickItem *> children{button};
+            while (!children.empty()) {
+                auto *child = children.takeLast();
+                if (child->property("text").isValid() && child->property("background").isValid()) {
+                    const auto rect = child->mapRectToItem(card, child->boundingRect());
+                    require(card->boundingRect().adjusted(-1, -1, 1, 1).contains(rect),
+                            "Quick Action control clipped within card");
+                }
+                for (auto *descendant : child->childItems())
+                    children.push_back(descendant);
+            }
+        }
+    }
+    if (window->width() == 1536 && mock) {
+        require(hero->width() >= 900, "Primary hero narrowed");
+        for (int i = 0; i < 4; ++i) {
+            auto *card = item(window, "homeProjectCard" + QString::number(i));
+            require(card->height() >= 185 && card->width() >= 200, "Project card too small");
+        }
+        auto *actions = item(window, "homeQuickActions");
+        auto *activity = item(window, "homeActivityHeading");
+        auto *firstRow = item(window, "home_activity_0_mock");
+        const auto actionBottom = actions->mapToScene(QPointF(0, actions->height())).y();
+        const auto activityTop = activity->mapToScene(QPointF{}).y();
+        require(activityTop > actionBottom && activityTop - actionBottom < 40,
+                "Activity does not directly follow actions");
+        const auto rowBottom = firstRow->mapToScene(QPointF(0, firstRow->height())).y();
+        const auto homeBottom = home->mapToScene(QPointF(0, home->height())).y();
+        require(rowBottom < homeBottom, "No actual Activity row in first primary viewport");
+        std::cout << "Primary layout: hero " << hero->width() << "x" << hero->height() << ", actions bottom "
+                  << actionBottom << ", activity " << activityTop << ", first row bottom " << rowBottom
+                  << ", viewport bottom " << homeBottom << '\n';
+    }
+}
+void activityContract(QQuickWindow *window) {
+    const bool mock = window->property("uiMode") == "mock";
+    if (mock) {
+        auto *row = item(window, "home_activity_0_mock");
+        require(find(row, "homeActivityType")->property("text") == "Scan" &&
+                    find(row, "homeActivityDate")->property("text").toString().startsWith("2026-") &&
+                    find(row, "homeActivitySize")->property("text") == "2.1 GB",
+                "Illustrative Activity fields missing");
+        return;
+    }
+    for (const auto &[name, type] :
+         {std::pair{"home_events_0_live", "Runtime event"}, {"home_artifacts_0_live", "Project artifact"}}) {
+        auto *row = find(window->contentItem(), name);
+        if (!row)
+            continue; // Empty states are exercised separately.
+        require(find(row, "homeActivityType")->property("text") == type &&
+                    find(row, "homeActivityDate")->property("text") == "—" &&
+                    find(row, "homeActivitySize")->property("text") == "—",
+                "Live Activity invented provenance/date/size");
+        require(find(row, "homeRowName")->property("textFormat").toInt() == 0 &&
+                    find(row, "homeActivityDetail")->property("textFormat").toInt() == 0,
+                "Activity interprets runtime markup");
+    }
+}
+void activityEdgeCases(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
+    window->setProperty("uiMode", "live");
+    window->setProperty("workspace", "home");
+    auto result = snapshot(0);
+    result.snapshot->clear_events();
+    result.snapshot->clear_artifacts();
+    for (const auto seq : {2, 99, 12, 0}) {
+        auto *event = result.snapshot->add_events();
+        event->set_sequence(seq);
+        event->set_component("<b>literal</b>" + std::string(10000, 'c'));
+        event->set_message(std::string(10000, 'm'));
+    }
+    for (const auto id : {"artifact-b", "artifact-a"}) {
+        auto *artifact = result.snapshot->add_artifacts();
+        artifact->set_id(id);
+        artifact->set_type("<b>literal</b>" + std::string(10000, 't'));
+    }
+    bridge.applyResult(result);
+    resetScroll(window);
+    activityContract(window);
+    auto *event = item(window, "home_events_0_live");
+    auto *artifact = item(window, "home_artifacts_0_live");
+    require(find(event, "homeRowName")->property("text").toString().size() <= 193 &&
+                find(event, "homeActivityDetail")->property("text").toString().startsWith("#99 · ") &&
+                find(event, "homeActivityDetail")->property("text").toString().size() <= 520,
+            "Activity lost bounded event text or sequence ordering");
+    require(find(artifact, "homeActivityDetail")->property("text") == "Chunks unavailable · artifact-a" &&
+                find(artifact, "homeActivityStatus")->property("text") == "Unknown",
+            "Activity lost artifact identity / ordering / unknown state");
+    require(event->mapToScene(QPointF{}).y() < artifact->mapToScene(QPointF{}).y(),
+            "Event/artifact groups were chronologically interleaved");
+    window->resize(1080, 720);
+    settle();
+    scrollTo(window, artifact);
+    capture(window, output, "live-long-activity");
+    StudioResult lost;
+    lost.issues.push_back({"snapshot", "Fixture peer closed",
+                           mantis::Error{mantis::Status::io, "Fixture peer closed", "platform"}});
+    bridge.applyResult(lost);
+    settle();
+    require(item(window, "homeActivity")->property("freshness") == "Last known · current state unconfirmed",
+            "Activity stale provenance missing");
+    StudioResult empty;
+    empty.snapshot.emplace();
+    bridge.applyResult(empty);
+    settle();
+    require(!find(window->contentItem(), "home_events_0_live") &&
+                !find(window->contentItem(), "home_artifacts_0_live"),
+            "Activity retained removed runtime rows");
+    require(bridge.artifacts().empty(), "Activity corrupted bridge empty-artifact semantics");
+    bridge.applyResult(snapshot());
+    require(!bridge.artifacts().empty(), "Real artifact data removed with Home card");
+    window->resize(1536, 1024);
+    resetScroll(window);
+}
+void localActions(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
+    for (const auto &mode : QStringList{"live", "mock", "hybrid"}) {
+        window->setProperty("uiMode", mode);
+        window->setProperty("workspace", "home");
+        resetScroll(window);
+        for (bool keyboard : {false, true}) {
+            click(window, "homeLearn", keyboard);
+            auto *guide = window->findChild<QObject *>("homeGuide");
+            require(guide && guide->property("opened").toBool(), "Local learning view did not open");
+            require(window->property("workspace") == "home" && !bridge.busy(),
+                    "Learning dispatched runtime work");
+            if (mode == "mock" && !keyboard)
+                capture(window, output, "mock-workflow-guide");
+            click(window, "homeGuideClose", keyboard);
+            require(!guide->property("opened").toBool(), "Guide did not close");
+            click(window, "homeLearn", keyboard);
+            click(window, "homeGuideDevices", keyboard);
+            require(window->property("workspace") == "devices" && !bridge.busy(),
+                    "Guide device routing dispatched an operation");
+            window->setProperty("workspace", "home");
+            resetScroll(window);
+        }
+        if (mode != "live") {
+            click(window, "homeExamples", true);
+            require(window->activeFocusItem() &&
+                        window->activeFocusItem()->objectName() == "homeProjectGallery",
+                    "Example action failed to focus showcase");
+            require(window->property("workspace") == "home" && !bridge.busy(), "Examples dispatched import");
+            capture(window, output, mode + "-example-focus");
+        }
+        resetScroll(window);
+        for (const auto &name : QStringList{"homePlanned", "homeExamples"}) {
+            auto *button = item(window, name);
+            if (button->isEnabled())
+                continue;
+            auto *accessible = QAccessible::queryAccessibleInterface(button);
+            require(accessible && accessible->text(QAccessible::Description).contains("unavailable"),
+                    "Disabled action explanation missing");
+            scrollTo(window, button);
+            QSignalSpy clicks(button, SIGNAL(clicked()));
+            const auto point = button->mapToScene(QPointF(button->width() / 2, button->height() / 2));
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
+            button->forceActiveFocus(Qt::TabFocusReason);
+            QTest::keyClick(window, Qt::Key_Space);
+            QTest::keyClick(window, Qt::Key_Return);
+            accessible->actionInterface()->doAction(QAccessibleActionInterface::pressAction());
+            settle();
+            require(clicks.empty() && window->property("workspace") == "home" && !bridge.busy(),
+                    "Disabled action dispatched");
+        }
+    }
+    window->setProperty("uiMode", "live");
+    resetScroll(window);
+}
 void components(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
     // Local route intent only. Even with a confirmed capture-capable snapshot,
     // the runtime-disabled bridge cannot hide an accidental command behind busy state.
@@ -373,7 +587,6 @@ void components(QQuickWindow *window, ObservedBridge &bridge, const QString &out
                                           {"homeCalibration", "calibration"},
                                           {"homeCurrentProject", "acquisition"},
                                           {"homeDeviceDetails", "devices"},
-                                          {"homeArtifacts", "acquisition"},
                                           {"homeJobs", "acquisition"}}) {
             window->setProperty("workspace", "home");
             window->resize(1536, 1024);
@@ -400,12 +613,15 @@ void components(QQuickWindow *window, ObservedBridge &bridge, const QString &out
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, point.toPoint());
     require(clicks.empty(), "Disabled CTA clicked");
     detailActions(window, bridge);
+    activityEdgeCases(window, bridge, output);
+    localActions(window, bridge, output);
     for (const QSize size : {QSize(1080, 720), QSize(1536, 1024), QSize(1920, 1080)}) {
         window->resize(size);
         for (const auto &mode : QStringList{"mock", "live", "hybrid"}) {
             window->setProperty("uiMode", mode);
             bridge.applyResult(snapshot(3));
             settle();
+            resetScroll(window);
             bounds(window);
             auto *model = qobject_cast<HomeModel *>(
                 item(window, "homeWorkspace")->property("liveModel").value<QObject *>());
@@ -417,13 +633,15 @@ void components(QQuickWindow *window, ObservedBridge &bridge, const QString &out
                     "Demo exposes command API");
             const auto demoData = fixture->property("data").value<QJSValue>().toVariant().toMap();
             require(demoData.value("source") == "mock", "Demo source label lost");
-            for (const char *section : {"devices", "jobs", "artifacts", "events"})
+            for (const char *section : {"devices", "jobs", "artifacts", "events", "activity"})
                 for (const auto &value : demoData.value(section).toList())
                     require(value.toMap().value("id").toString().isEmpty() &&
                                 value.toMap().value("source") == "mock",
                             "Demo identity became actionable or live");
             require(model->data()["devicesCount"].toInt() == (mode == "mock" ? 0 : 3),
                     "Demo merged into live count");
+            fidelity(window);
+            activityContract(window);
             capture(window, output, mode + "-populated");
             if (mode == "mock")
                 projectIllustrations(window);
@@ -528,7 +746,6 @@ void wire(QQuickWindow *window, ObservedBridge &observed, const QString &output)
     for (const auto &[name, route] : {std::pair{"homeGoScan", "acquisition"},
                                       {"homeDevices", "devices"},
                                       {"homeProjects", "projects"},
-                                      {"homeArtifacts", "acquisition"},
                                       {"homeJobs", "acquisition"}}) {
         window->setProperty("workspace", "home");
         settle();
@@ -537,6 +754,8 @@ void wire(QQuickWindow *window, ObservedBridge &observed, const QString &output)
         require(!bridge.capturing(), "Home started a capture");
     }
     window->setProperty("workspace", "home");
+    resetScroll(window);
+    activityContract(window);
     wait("idle watcher", [&] { return !bridge.busy(); });
     bridge.runPipeline("reject-home");
     // Deliberately hold GUI event delivery after the bounded fixture worker replies.
@@ -575,6 +794,7 @@ void wire(QQuickWindow *window, ObservedBridge &observed, const QString &output)
         window->resize(size);
         capture(window, output, "wire-connected-live");
         bounds(window);
+        activityContract(window);
     }
     require(!bridge.capturing(), "Fixture Home changed scanner state");
     window->setProperty("studioBridge", QVariant::fromValue(&observed));

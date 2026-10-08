@@ -25,6 +25,8 @@ Canvas {
         case "home": line([3,11,12,3,21,11]); line([5,10,5,21,10,21,10,15,14,15,14,21,19,21,19,10]); break
         case "scan": circle(12,11,5); line([3,8,3,3,8,3]); line([16,3,21,3,21,8]); line([3,16,3,21,8,21]); line([16,21,21,21,21,16]); line([12,8,12,14]); break
         case "process": line([6,6,18,6,18,10]); line([18,18,6,18,6,14]); line([15,8,18,11,21,8]); line([3,16,6,13,9,16]); circle(12,12,2); break
+        case "learn": line([3,4,10,4,12,6,14,4,21,4,21,20,14,20,12,22,10,20,3,20,3,4]); line([12,6,12,22]); break
+        case "quickscan": line([13,2,5,14,11,14,10,22,19,10,13,10,13,2]); break
         case "inspect": circle(10,10,6); line([15,15,21,21]); line([10,7,10,13]); line([7,10,13,10]); break
         case "reverse": circle(6,6,3); circle(18,6,3); circle(6,18,3); circle(18,18,3); break
         case "automate": case "plugins": circle(12,5,3); circle(5,18,3); circle(19,18,3); line([12,8,12,12,5,12,5,15]); line([12,12,19,12,19,15]); break

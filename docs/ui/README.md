@@ -17,13 +17,21 @@ remote support or release versions. In particular, the canonical convention is
 **mm, right-handed +X right / +Y forward / +Z up**, regardless of reference text.
 
 The nine M0 foundation routes retain their existing workflows and planned panels.
-Home now presents bounded current project, logical device, job, artifact and
+Home presents bounded current project, logical device, job, artifact and
 event summaries. Readiness, project history and utilization remain explicitly
 unknown/unavailable. Mock has a clearly labelled deterministic showcase; hybrid
 places illustrative projects below the live dashboard, never in its counts.
-The showcase uses four distinct locally rendered technical shapes: housing,
-rotor, bracket and cover. Mock job/artifact detail actions are explicitly disabled
-with visible explanations; live/hybrid detail routes still open Acquisition.
+The main column now follows the approved composition: a substantive scanner/casting
+hero, four substantial read-only mechanical studies in mock, four distinct Quick
+Actions and one compact Recent Activity table. The standalone Home artifacts card
+and its CTA are removed in every mode. Live artifacts remain grouped with events
+inside Activity, with explicit provenance and unavailable dates/sizes; acquisition
+artifact workflows are unchanged. Mock job details and unsupported project imports
+are disabled with visible/accessibility explanations. Learn/Tips open a working
+local read-only guide; Browse examples focuses the mock/hybrid showcase.
+Six original offline Blender/JPEG assets replace the earlier small Canvas studies;
+see [asset provenance and reproduction](../../ui/home/assets/README.md) and the
+[reference/before/after inventory](evidence/m1-fidelity-delta.md).
 
 ## Launch and data sources
 
@@ -119,7 +127,7 @@ true only for Devices/Calibration in live/hybrid; mock never starts its polling.
 - `HomeWorkspace.qml` composes the dedicated dashboard and separately labelled
   hybrid showcase. `HomeModel` owns bounded, read-only snapshot formatting and
   emits no notification for equal normalized results; mock detaches it from the
-  bridge. `ui/home/` contains original procedural artwork and reusable cards.
+  bridge. `ui/home/` contains original static illustrations, the single activity table, local guide and reusable cards.
 - `FoundationWorkspace.qml` renders route descriptors and provider data through
   the shared components. New full workspaces should receive presentation models
   and emit intents; runtime commands belong in frontend controllers using the

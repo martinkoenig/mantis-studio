@@ -1,0 +1,104 @@
+Internal ctest changing into directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+Test project /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+      Start  1: studio-bridge-errors
+ 1/49 Test  #1: studio-bridge-errors ...............   Passed    0.20 sec
+      Start  2: studio-home-qml
+ 2/49 Test  #2: studio-home-qml ....................   Passed   18.40 sec
+      Start  3: studio-home-wire
+ 3/49 Test  #3: studio-home-wire ...................   Passed    2.07 sec
+      Start  4: studio-ui-m0-qml
+ 4/49 Test  #4: studio-ui-m0-qml ...................   Passed    8.02 sec
+      Start  5: studio-ui-m0-cli
+ 5/49 Test  #5: studio-ui-m0-cli ...................   Passed   20.23 sec
+      Start  6: studio-calibration-controller
+ 6/49 Test  #6: studio-calibration-controller ......   Passed    0.43 sec
+      Start  7: studio-calibration-daemon
+ 7/49 Test  #7: studio-calibration-daemon ..........   Passed   14.13 sec
+      Start  8: studio-calibration-qml
+ 8/49 Test  #8: studio-calibration-qml .............   Passed    0.96 sec
+      Start  9: calibration-service-protocol
+ 9/49 Test  #9: calibration-service-protocol .......   Passed   28.60 sec
+      Start 10: calibration-client-integration
+10/49 Test #10: calibration-client-integration .....   Passed   18.88 sec
+      Start 11: python-calibration
+11/49 Test #11: python-calibration .................   Passed    0.06 sec
+      Start 12: protocol-field-compatibility
+12/49 Test #12: protocol-field-compatibility .......   Passed    0.06 sec
+      Start 13: calibration-artifacts
+13/49 Test #13: calibration-artifacts ..............   Passed   11.08 sec
+      Start 14: active-calibration-binding
+14/49 Test #14: active-calibration-binding .........   Passed   11.36 sec
+      Start 15: calibration-revision-store
+15/49 Test #15: calibration-revision-store .........   Passed    0.04 sec
+      Start 16: project-migration-v1-v2
+16/49 Test #16: project-migration-v1-v2 ............   Passed    0.03 sec
+      Start 17: provenance-calibration-reference
+17/49 Test #17: provenance-calibration-reference ...   Passed    0.03 sec
+      Start 18: calibration-solver-opencv
+18/49 Test #18: calibration-solver-opencv ..........   Passed    1.86 sec
+      Start 19: calibration-solve
+19/49 Test #19: calibration-solve ..................   Passed    0.10 sec
+      Start 20: calibration-dataset
+20/49 Test #20: calibration-dataset ................   Passed    0.04 sec
+      Start 21: calibration-dataset-ingestion
+21/49 Test #21: calibration-dataset-ingestion ......   Passed   27.34 sec
+      Start 22: calibration-opencv
+22/49 Test #22: calibration-opencv .................   Passed    3.50 sec
+      Start 23: calibration-observation
+23/49 Test #23: calibration-observation ............   Passed    0.01 sec
+      Start 24: calibration-target
+24/49 Test #24: calibration-target .................   Passed    0.01 sec
+      Start 25: legacy-abi
+25/49 Test #25: legacy-abi .........................   Passed    0.01 sec
+      Start 26: frozen-l2-abi
+26/49 Test #26: frozen-l2-abi ......................   Passed    0.01 sec
+      Start 27: frozen-l2-catalog
+27/49 Test #27: frozen-l2-catalog ..................   Passed    0.04 sec
+      Start 28: calibration-service-activation
+28/49 Test #28: calibration-service-activation .....   Passed   13.84 sec
+      Start 29: capture-calibration-binding
+29/49 Test #29: capture-calibration-binding ........   Passed   29.39 sec
+      Start 30: x1-pairing
+30/49 Test #30: x1-pairing .........................   Passed    1.67 sec
+      Start 31: x1-pairing-stream
+31/49 Test #31: x1-pairing-stream ..................   Passed   22.33 sec
+      Start 32: x1-media
+32/49 Test #32: x1-media ...........................   Passed    0.03 sec
+      Start 33: acquisition
+33/49 Test #33: acquisition ........................   Passed    1.51 sec
+      Start 34: acquisition-integration
+34/49 Test #34: acquisition-integration ............   Passed   11.93 sec
+      Start 35: acquisition-y10p-integration
+35/49 Test #35: acquisition-y10p-integration .......   Passed   12.65 sec
+      Start 36: control-listener
+36/49 Test #36: control-listener ...................   Passed    6.35 sec
+      Start 37: acquisition-qos
+37/49 Test #37: acquisition-qos ....................   Passed    0.07 sec
+      Start 38: raw-capture
+38/49 Test #38: raw-capture ........................   Passed    0.11 sec
+      Start 39: projected-sequencer
+39/49 Test #39: projected-sequencer ................   Passed    0.53 sec
+      Start 40: projected-light-semantics
+40/49 Test #40: projected-light-semantics ..........   Passed    0.13 sec
+      Start 41: packed-image
+41/49 Test #41: packed-image .......................   Passed    0.01 sec
+      Start 42: core
+42/49 Test #42: core ...............................   Passed    0.24 sec
+      Start 43: projected-light-contract
+43/49 Test #43: projected-light-contract ...........   Passed    0.26 sec
+      Start 44: c-abi
+44/49 Test #44: c-abi ..............................   Passed    0.00 sec
+      Start 45: boundaries
+45/49 Test #45: boundaries .........................   Passed    0.03 sec
+      Start 46: python-capture
+46/49 Test #46: python-capture .....................   Passed    0.09 sec
+      Start 47: acceptance
+47/49 Test #47: acceptance .........................   Passed    4.41 sec
+      Start 48: q6a-validation-harness
+48/49 Test #48: q6a-validation-harness .............   Passed    0.90 sec
+      Start 49: x1-calibration-validation
+49/49 Test #49: x1-calibration-validation ..........   Passed   98.97 sec
+
+100% tests passed, 0 tests failed out of 49
+
+Total Test time (real) = 372.94 sec

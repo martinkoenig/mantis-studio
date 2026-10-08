@@ -7,7 +7,98 @@ client/protocol or plugin ABI change. Capture and calibration retain daemon auth
 The [binding reliability standard](../architecture/reliability-performance-and-validation.md)
 and [M0 validation](validation.md) remain authoritative.
 
-## Executed local checks
+## Visual fidelity completion (supersedes earlier presentation)
+
+The approved [1536×1024 concept](reference/01-home.webp) was inspected before
+coding, alongside an actual application baseline at reviewed `090fa25`. The
+[numbered delta inventory and viewport sketch](evidence/m1-fidelity-delta.md)
+preceded implementation. The retained [full-size comparison](evidence/fidelity/reference-before-after.jpg)
+contains reference / old / new, with [old](evidence/fidelity/before-mock-1536.png)
+and [new](evidence/fidelity/after-mock-1536.png) separate PNGs.
+
+The standalone Home artifacts card and `homeArtifacts` CTA are absent in all
+three modes. Recent Activity now directly follows four distinct Quick Actions.
+Mock renders Scan/Mesh/Texture/Export rows as a compact five-column table; live
+renders descending-sequence events and separately grouped deterministic-ID
+artifacts, with row provenance, state, chunks/identity and unknown Date/Size.
+There is no synthesized joint chronological order or Home artifact loading.
+Bridge/model data and Acquisition workflows remain unchanged.
+
+Final Qt 6.4 primary mock measurements: hero **972×280**, project cards **234×198**,
+Quick Actions **150px**, action grid bottom **y803**, Activity heading **y815**,
+first actual row bottom **y905**, content edge **y982**. Three complete Activity
+rows and the beginning of a fourth fit before the footer. The scanner, system,
+compact jobs and illustrated tips rail is visible in this viewport. Original
+scanner/casting and four distinct shaded mechanical renders replace tiny art;
+[sources, licence and reproduction](../../ui/home/assets/README.md) are included.
+Six JPEGs total **221,020 bytes**; no image plugin/build dependency is introduced.
+
+Iteration corrected the first render's cropped bracket, sample grain, Qt 6.4's
+unavailable WebP decoder (using its existing JPEG decoder), local-guide tab focus,
+and 1920px hero cropping. Screenshot review covered mock/live/hybrid at all three
+sizes, primary no-runtime/stale states, 1080 long/empty live and hybrid showcase
+scroll, plus real public-wire rejection/access failure/loss/reconnect. Details and
+remaining visual differences are checklisted in the inventory. There are **38 M1
+PNGs**, plus all existing M0 evidence, under the unchanged CI upload paths.
+
+A normal native host Qt 6.9.2 **Wayland/OpenGL QRhi** window was also rendered and
+[inspected](evidence/fidelity/native-wayland-1536-logical.png): 1536×1024 logical,
+1920×1280 device pixels at desktop scale 1.25. The scenegraph log confirms OpenGL
+QRhi creation and no QML warning. This single-window presentation check does not
+certify GPU driver stability, native accessibility or physical scanner acceptance.
+Primary size assertions and the full state matrix remain Qt 6.4 offscreen/software.
+[Reproduction commands and evidence scope](evidence/fidelity/README.md).
+
+`studio-home-qml` preserves existing bounded-model, no-equal-update, malformed
+input, bridge lifetime, state, routing, source/identity and Qt 6.4 removal/resize
+regressions. New coverage checks artifacts-card/CTA absence in mock/live/hybrid;
+substantive primary geometry and visible first row; controls inside action cards;
+truthful Activity Date/Size/provenance/group order, huge literal strings and
+missing state/chunks, removal/retention/source changes; current-project vs sample
+history; illustrative vs unavailable telemetry; working guide and example focus.
+Disabled import/examples/jobs reject mouse, Space, Return and accessible press.
+Enabled controls preserve tab/backtab focus and accessible names. No route starts
+capture, activates calibration or imports a project. `studio-home-wire` still
+uses the production public client/async bridge; its command log contains only
+the deliberate fixture faults and restoration, with no Home mutations.
+
+Complete local suites passed using the supported build options and environments
+recorded below. Complete runs were followed by final resource/test-fixture checks
+(including the corrected wide hero and settled long-activity scroll). No test is
+skipped, removed or weakened; the obsolete artifact-button test is replaced by
+all-mode absence and real artifact-data preservation coverage.
+
+| Fidelity suite | Result | Log under `build/ui-m1-fidelity/` |
+| --- | --- | --- |
+| Qt 6.4 complete Studio | 49/49, 178.43s | `qt64-full.log` |
+| Qt-free complete headless | 41/41, 127.29s | `headless-full.log` |
+| Complete headless ASan/UBSan/LSan | 41/41, 286.37s | `headless-sanitizers-full.log` |
+| Additional Qt 6.9 complete Studio ASan/UBSan/LSan | 49/49, 372.94s | `qt69-sanitizers-full.log` |
+| Final Qt 6.4 bridge/Home/M0/CLI/calibration-QML/acceptance | 7/7, 38.15s | `qt64-final-regressions.log` |
+| Final Qt 6.9 sanitizer same regressions | 7/7, 52.07s | `qt69-final-regressions.log` |
+| Home/public-wire repetition | Each passed 3 consecutive times, 40.54s | `qt64-repeat.log` |
+
+The three repeated 90-transition Home workloads observed 3186 / 3088 / 3208ms,
+including event handling/settling, not an invented performance budget. The
+accepted 500ms bridge update cadence and GUI-result-delivery busy lease remain
+unchanged. The separate pre-UI-M3 unreadable PointCloud retry/backoff issue remains
+tracked in [Home](home.md#known-follow-ups). The earlier Qt 6.4 software-renderer
+LSan dependency leak remains documented below; it is not declared fixed or hidden
+with suppressions. Final Qt 6.9 and required headless sanitizers keep leak detection.
+
+**Final commit gate:** these changes require all five mandatory architecture jobs
+on the pushed exact final SHA (x86_64/ARM64 Studio ON/OFF and headless sanitizers).
+The final handoff must supply that SHA, successful run and artifact URLs after
+reading complete results. Earlier CI links below belong to earlier accepted
+commits and cannot satisfy this change's gate. No branch merge is authorized.
+
+## Earlier accepted implementation checks (retained history)
+
+All remaining sections preserve prior validation history, including superseded
+Canvas artwork and the separate artifacts/events presentation. The fidelity
+completion above and current [Home contract](home.md) describe the final layout.
+
+
 
 Ubuntu 24.04 x86_64 container `mantis-ui-m0-qt64`: GCC 13.3.0,
 CMake 3.28.3, Python 3.12.3, Qt 6.4.2 (base package

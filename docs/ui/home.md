@@ -4,86 +4,73 @@ Home is a presentation-only dashboard above the public Studio bridge. It preserv
 [Architecture v1](../../MANTIS_STUDIO_ARCHITECTURE.md), [ADR-002](../adr/002-frontends-are-clients-rather-than-engine-owners.md),
 [ADR-036](../adr/036-studio-calibration-workspace-uses-public-calibration-api.md)
 and the binding [reliability standard](../architecture/reliability-performance-and-validation.md).
-The [approved Home reference](reference/01-home.webp) guides composition, never data authority.
+The [approved Home reference](reference/01-home.webp) is the composition target;
+its fictional product data never establishes runtime authority.
 
-Implementation plan: (1) bounded read-only snapshot presentation, (2) dedicated
-Home with original geometric hero and small reusable cards, (3) component,
-public-wire integration, interaction, resize and screenshot regressions, (4)
-manual visual review, full local checks and exact-final-commit five-job CI gate.
+The main column contains a 280px illustrated hero, Recent Projects (four 198px
+read-only sample cards in mock), four 150px Quick Actions, then **one Recent Activity
+table**. The standalone Example artifacts / Current project artifacts card and
+`homeArtifacts` CTA are removed in **mock, live and hybrid**. No replacement
+artifacts panel is added elsewhere on Home. Artifacts remain in the bridge/model
+and in Acquisition's working browsing, replay, processing and export controls.
 
-| Section | Inspected authority / available fields | Absent, stale or failed | Mock / hybrid | Click intent |
-| --- | --- | --- | --- | --- |
-| Hero | Local typography and geometric illustration | No hardware claim | Same art, explicitly illustrative | Go to Scan opens Acquisition; never starts capture |
-| Runtime | StudioBridge.connected, hasSnapshot, busy, errorDetails (phase/kind/code/component/message) | Awaiting first confirmation; failed confirmation unconfirmed; previously confirmed snapshot last known. Operation rejection retains confirmation when snapshot succeeds | Mock never consumes bridge; hybrid real summary | Read-only diagnostics |
-| Project | Snapshot project_path through bridge.project | Path unavailable; no history, sizes or dates. Retained path labelled last known | Deterministic showcase projects only in separate demo area | Current project opens Acquisition; Projects opens UI-M2 foundation |
-| Devices | Bridge top-level logical descriptors: id/name/plugin/capabilities | Empty discovered list distinct from unconfirmed state; physical availability/readiness unknown | Demo scanner has no runtime capabilities or actionable identity | Devices route; calibration stays in controller-verified Devices workflow |
-| Jobs | id/name/state/progress/diagnostics | Queued/Running/Completed/Failed/Cancelled explicit; missing/nonfinite/out-of-range/zero progress unavailable (proto3 scalar has no presence bit); last-known label on failure | Demo jobs separate from live counts and lists; detail action disabled with visible/accessible explanation | Live/hybrid View jobs opens Acquisition, without selection or cancellation; mock has no detail navigation |
-| Artifacts | id/type/state/chunks (zero cannot establish scalar presence) | Empty/unknown/stale explicit; no timestamps, size or geometry inferred | Demo rows labelled; detail action disabled with visible/accessible explanation | Live/hybrid View artifacts opens Acquisition, without loading an ID; mock has no detail navigation |
-| Events | sequence/kind/component/message | Ordered by sequence, not invented dates; unavailable sequence explicit | Separate deterministic illustrative events | View runtime opens Acquisition |
-| System | No bridge CPU/GPU/RAM/storage metrics | Metrics not available from this runtime | Demo remains honest about unsupported telemetry | Read-only |
-| Quick Actions | Existing local routes | New/Open/Import unavailable with visible UI-M2 explanation | Navigation only; acquisition/calibration controls remain disabled in mock | Acquisition, Devices, Calibration, Projects foundation |
-| Help | Static workflow guidance | No packaged tutorial browser or release feed | Identical information, no fictitious releases | Read-only |
+The right rail contains differentiated Scanner, System Status, Running Jobs and
+Tips & Updates cards. Below 1100 content pixels it stacks beneath the main
+column. Home scrolls vertically, with no horizontal scroll. At 1536×1024 populated
+mock, the Activity heading and actual rows appear above the shell footer. The
+[visual delta inventory](evidence/m1-fidelity-delta.md) records the before/after
+comparison; [validation](validation-m1.md) scopes executed checks and screenshots.
 
-Home owns no session, transport, command method, watcher or polling timer.
-Enabled CTAs emit local route intent without any device/job/artifact identity. Calibration
-entry selects no device and activates no revision. Actual recording, cancellation,
-artifact loading and calibration operations remain in their existing workspaces.
+| Section | Live authority / unavailable fields | Mock / hybrid | Click intent |
+| --- | --- | --- | --- |
+| Hero | Static original scanner/casting art; explicitly illustrative, never a feed or connected-hardware claim | Same art | Go to Scan → Acquisition; Browse Projects → UI-M2 foundation; Import disabled with visible/planned and accessible explanation |
+| Runtime | `connected`, `hasSnapshot`, `busy`, structured errors; confirmed vs never-confirmed vs last known | Global mode label; mock detaches HomeModel and never polls runtime | Read-only diagnostics |
+| Projects | Current `project_path` only; history, dates, sizes unavailable. Substantial current-project feature and UI-M2 history explanation | Mock has four explicitly illustrative read-only mechanical studies; hybrid samples remain below the live dashboard in a separate labelled area | Current runtime → Acquisition; sample cards have no menus/open/import IDs |
+| Scanner | Bounded logical descriptors and advertised capabilities; discovery does not prove physical readiness. Firmware, serial, calibration validity, temperature unknown | Scanner picture only in explicitly illustrative mock summary, with no runtime identity/capabilities | Devices → Devices; Calibration → existing guided workflow, without selection or activation |
+| System | No utilization API: gauges empty, values em dash, explanation visible | Mock-only illustrative gauges; hybrid uses live unavailable values | Read-only, no OS polling |
+| Jobs | Real name/state/progress/diagnostics. Zero, nonfinite or out-of-range progress unavailable; failure/cancellation distinct; stale labelled | Bounded illustrative jobs with empty IDs; mock detail button disabled with visible/accessibility reason | Live/hybrid View jobs → Acquisition, without cancellation/selection |
+| Activity | Events `(sequence, kind, component, message)` ordered by descending sequence, then separate artifacts `(id, type, state, chunks)` in deterministic ID order. Date/Size em dash; row types and group order explicit, no combined chronology | Mock Scan/Mesh/Texture/Export rows have fictional dates/sizes only inside the illustrative table; no actionable IDs. Hybrid table stays live | Read-only; no artifact loading from Home |
+| Quick Actions | Devices and Scan are navigation; Learn opens a packaged read-only guide; Example Projects unavailable in live with visible/accessibility reason | Mock/hybrid Browse examples scrolls to and focuses labelled sample gallery | No capture, pairing, calibration activation or import |
+| Tips | Static workflow guidance and decorative local object thumbnail; no video/release-feed claims | Same real guidance | Opens the same local guide; guide's Devices button routes only |
 
-Live shows only snapshot data. On loss of confirmation cached fields are retained
-and explicitly labelled **Last known · current state unconfirmed**; connection is
-never inferred from an error code or discovered descriptor. Structured errors
-remain intact in the bridge; Home renders bounded plain-text previews by phase.
-Hybrid renders live data first and a separate **Demo / Mock showcase** below; demo
-counts never enter live totals. Mock has no runtime dependency or command authority.
+Home owns no session, client transport, watcher, timer or polling. Enabled runtime
+CTAs emit only route strings, without device/job/artifact identity. Actual commands
+remain in existing workspaces, including mock command gating. Guide/examples
+controls preserve keyboard focus and accessible names. Unsupported controls
+resist mouse, keyboard and accessibility press invocation.
 
-The wide layout uses a main column (hero, project, quick actions, artifacts/events)
-and a right rail (devices, system, jobs, guidance). Below 1100 content pixels the
-rail stacks beneath the main column. Content scrolls vertically with an explicit
-indicator; no Home horizontal scrolling. Text wraps or elides, paths and all
-runtime strings use PlainText. Shared buttons retain hover/pressed/focus/disabled
-states and accessible names/descriptions. Unsupported controls explain their
-reason in adjacent visible text. Dynamic rows live in Qt Quick Columns/Grids
-behind stable Items, outside nested Layout caches (Qt 6.4 M0 regression).
+Live never replaces unavailable data with samples. On loss of confirmation,
+retained fields say **Last known · current state unconfirmed**, alongside bounded
+structured diagnostics. Operation rejection with successful snapshot confirmation
+retains connected state. Runtime-controlled strings use PlainText, wrap/elide
+and retain accessible bounded text. Dynamic delegates stay behind stable Items
+outside nested Layout caches, preserving the Qt 6.4 removal/resize workaround.
+
+## Presentation bounds and assets
+
+The accepted HomeModel is unchanged: each notification inspects at most 256 rows
+per section, orders that bounded sample and displays 3 devices / 4 jobs / 6 artifacts /
+4 events. Counts describe snapshot entries. Invalid lists are unavailable, never
+fabricated zero. Text bounds: 192 compact characters, 512 diagnostics, 4096 project
+path characters, eight device capabilities, three structured issues. Equal normalized
+snapshots emit no update. Proto3 zero progress/chunks/sequence cannot prove presence.
+The bridge retains its GUI-result-delivery busy lease, one watcher and no queue.
+
+Six [original offline assets](../../ui/home/assets/README.md) replace the small
+procedural gear/sketch art. The source modelling and packaging scripts are included;
+JPEGs total 221,020 bytes, with fixed dimensions and decode bounds. No reference
+pixels, stock/vendor CAD, other-worktree dependency, image plugin, runtime image
+generation, extra rendering thread or animation timer is added. QML/resources use
+the shared `MANTIS_STUDIO_QML_FILES` list in application and relevant test bundles.
+Studio OFF remains Qt-free.
 
 ## Known follow-ups
 
-- Before UI-M3: the existing bridge may retry automatic loading of a permanently
-  unreadable PointCloud every 500 ms. Home introduces no data-plane call or retry;
-  acquisition retry/backoff needs a separate reliability/performance correction.
-- UI-M2 project history/browser/control, telemetry, tutorial browser and native
-  desktop accessibility/hardware validation remain separate work. No calibration
-  quality, scanner accuracy, firmware or physical readiness is inferred here.
-
-## Presentation bounds
-
-Each update inspects at most 256 rows per section, sorts that bounded sample by
-stable identity (active jobs first) or descending event sequence, and displays
-3 devices / 4 jobs / 6 artifacts / 4 events. Counts refer to snapshot entries,
-not inferred active/connected hardware. Oversized sections announce a limited
-sample; existing acquisition exposes the complete list. Optional/malformed lists
-are unavailable rather than fabricated zero. Text is bounded to 192 characters
-for compact fields, 512 for diagnostics, 4096 for project paths and 8 capabilities
-per device, with an ellipsis for truncation. Original bridge diagnostics/data remain
-intact. Zero scalar progress/chunk/sequence values are conservatively unavailable
-where proto3 cannot prove presence. Runtime-controlled strings are plain text.
-
-The bridge's additive hasSnapshot flag records whether this bridge has ever
-received a confirmed snapshot, preserving last-known semantics across a mock/live
-mode swap. Its busy lease lasts until worker completion is applied on the GUI
-thread: a completed-but-undelivered result cannot be replaced by a subsequent
-request. This narrow delivery fix preserves one watcher and no request queue.
-
-## Reviewed visual and mock-action corrections
-
-The four showcase thumbnails are original local `ProjectIllustration` Canvas
-studies: an open cast housing with flange/ribs, a swept-blade rotor with central
-hub, an angular L bracket with upright flange/gusset, and a shallow closed ribbed
-cover. Named shapes have distinct geometry and silhouettes, using one projection
-and the existing dark/mint material palette. Fixed bounded geometry, no timers,
-randomness, external assets or reference-image rendering; every card retains its
-Demo / Mock read-only label. The accepted hero artwork is unchanged.
-
-Mock jobs/artifacts have no detail browser. Both detail buttons are disabled,
-with adjacent visible explanations and accessible descriptions; their handlers
-also reject illustrative-source navigation. Live/hybrid controls still navigate
-to real Acquisition data. No browser, deep link or new runtime operation is added.
+- Before UI-M3: the bridge may retry automatic loading of a permanently unreadable
+  PointCloud every 500ms. Home adds no loading/retry; bounded retry/backoff remains
+  a separate acquisition reliability correction.
+- UI-M2 project history/browser/control and telemetry remain planned. This task
+  adds a static local guide, not a tutorial browser, marketplace or release feed.
+- Physical scanner, optical accuracy, calibration quality, native OS screen-reader,
+  Windows/macOS and metrology acceptance remain separately scoped. Software
+  screenshots and logical discovery establish none of those claims.
