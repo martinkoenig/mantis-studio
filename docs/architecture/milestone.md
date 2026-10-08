@@ -125,16 +125,17 @@ milestone intent and deferred work. Current implementation state:
 M0–M7 are implemented. This does not claim full v0.3 hardware acceptance.
 M8 real-hardware calibration acceptance remains pending. Architecture v1 remains frozen; these are additive extensions.
 
-## v0.4 — Laser Acquisition Foundation (L3 implemented; acceptance pending)
+## v0.4 — Laser Acquisition Foundation (L4 implemented; acceptance pending)
 
 [L0](v0.4-laser-acquisition.md) and ADRs
 [040](../adr/040-projected-light-programs-and-safe-state-ownership.md)–[043](../adr/043-versioned-projected-light-recording-and-replay.md)
 freeze projected-light program/state ownership, typed acquisition evidence and
 LaserObservation semantics, additive plugin contracts and opt-in recording/replay.
-L0 architecture, L1 canonical domain semantics and L2 plugin contracts are
-**FINAL ACCEPTED**. L3 deterministic run supervision is **implemented, acceptance
-pending**, with hardware-free lifecycle/evidence/resource/concurrency tests.
-L4–L8 remain planned; no real laser acceptance is claimed. Production L1/L7
+L0 architecture, L1 canonical domain semantics, L2 plugin contracts and L3
+deterministic run supervision are **FINAL ACCEPTED**. L4 storage/evidence is
+**implemented, acceptance pending**: exact typed pre-run headers, MANTIS03 bundles,
+MRAWREC3 recovery and deterministic mapped replay. See [the exact storage format](rawcapture-v3.md).
+L5–L8 remain planned; no real laser acceptance is claimed. Production L1/L7
 extraction, subpixel localization and laser geometry/triangulation remain v0.5;
 ADR-031 describes their final deployment partition. L0 does not complete v0.3 M8.
 

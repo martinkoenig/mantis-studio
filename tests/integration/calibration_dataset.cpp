@@ -1,9 +1,10 @@
+#include "../unit/projected_storage_values.hpp"
+#include <iostream>
 #include <mantis/calibration_dataset_builder.hpp>
 #include <mantis/image_layout.hpp>
 #include <opencv2/aruco/charuco.hpp>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
-#include <iostream>
 
 using namespace mantis;
 using namespace mantis::calibration;
@@ -243,8 +244,19 @@ void changed_image(data::Packet &packet, size_t index, Change change) {
 void source_and_camera_errors() {
     Fixture fixture; const cv::Mat blank(height, width, CV_8UC1, cv::Scalar(255));
     const auto base = frameset(17, blank, blank); const auto good = capture(fixture, {base});
-    for (const auto &type : {artifact::ArtifactType{"org.mantis.fixture", 1}, artifact::ArtifactType{"org.mantis.RawCapture", 1}, artifact::ArtifactType{"org.mantis.RawCapture", 3}})
+    for (const auto &type : {artifact::ArtifactType{"org.mantis.fixture", 1},
+                             artifact::ArtifactType{"org.mantis.RawCapture", 1}})
         builder_error(fixture, {capture(fixture, {base}, type)}, Status::incompatible);
+    // Schema 3 now has an explicit bundle authoring path. Ingestion still rejects it.
+    auto projected = fixture.store->begin_projected_capture(storage_fixture::header());
+    fixture.store->append_bundle(projected, storage_fixture::bundle(0));
+    auto terminal = storage_fixture::bundle(3);
+    terminal.key.sequence.value = 1;
+    terminal.evidence.key.ordinal.value = 4;
+    terminal.evidence.causal_predecessors = {{storage_fixture::run, {0}}};
+    fixture.store->append_bundle(projected, terminal);
+    fixture.store->finalize(projected);
+    builder_error(fixture, {projected}, Status::incompatible);
     const auto open = fixture.store->begin({"org.mantis.RawCapture", 2}, {}); fixture.store->append(open, *base);
     builder_error(fixture, {open}, Status::incompatible);
     fixture.store->prepare_finalize(open); builder_error(fixture, {open}, Status::incompatible);

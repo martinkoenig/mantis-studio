@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <mantis/artifact_api.hpp>
+#include <mantis/projected_light_io.hpp>
 namespace mantis::artifact {
 struct CalibrationRevision {
     calibration::Reference reference;
@@ -14,6 +15,7 @@ struct ActiveCalibration {
 class Store {
     struct Impl;
     std::unique_ptr<Impl> impl_;
+    ArtifactDescriptor finalize_impl(const Id &, const CancellationToken &, bool recovery);
 
   public:
     explicit Store(std::filesystem::path);
@@ -22,6 +24,19 @@ class Store {
     const std::filesystem::path &root() const;
     ArtifactId begin(ArtifactType, Provenance);
     void append(const ArtifactId &, const data::Packet &);
+    // Synchronous durable pre-run initialization; never starts hardware.
+    ArtifactId begin_projected_capture(data::ProjectedCaptureHeader, Provenance = {});
+    void append_bundle(const ArtifactId &, const data::AcquisitionBundle &);
+    data::ProjectedCaptureHeader capture_header(const ArtifactId &) const;
+    data::AcquisitionBundle bundle(const ArtifactId &, uint64_t record = 0) const;
+    void replay_bundles(const ArtifactId &, const std::function<void(data::AcquisitionBundle)> &,
+                        const CancellationToken & = {}) const;
+    struct BundleSummary {
+        uint64_t records{};
+        std::optional<data::AcquisitionDisposition> terminal; // absent = unknown/incomplete
+        data::AcquisitionReason reason{data::AcquisitionReason::none};
+    };
+    BundleSummary bundle_summary(const ArtifactId &, const CancellationToken & = {}) const;
     // Reservation and artifact creation are one transaction; reserved revisions are never reused.
     CalibrationRevision begin_calibration(ArtifactType, Provenance, std::optional<Id> series = {});
     CalibrationRevision calibration_revision(const Id &, uint64_t revision) const;
@@ -35,7 +50,8 @@ class Store {
     // Failed/incomplete live writers must be abandoned before explicit recovery.
     void abandon(const ArtifactId &);
     void prepare_finalize(const ArtifactId &);
-    void replay(const ArtifactId &, const std::function<void(data::Published)> &, const CancellationToken & = {}) const;
+    void replay(const ArtifactId &, const std::function<void(data::Published)> &,
+                const CancellationToken & = {}) const;
     uint64_t record_count(const ArtifactId &) const;
     ArtifactDescriptor finalize(const ArtifactId &, const CancellationToken & = {});
     std::vector<ArtifactDescriptor> list() const;
@@ -45,10 +61,21 @@ class Store {
     // Startup classifies provisional state; explicit recovery finalizes only verified, committed chunks.
     ArtifactDescriptor recover(const ArtifactId &, const CancellationToken & = {});
 };
+class BundleCaptureReader {
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+
+  public:
+    BundleCaptureReader(std::shared_ptr<const Store>, Id);
+    ~BundleCaptureReader();
+    const data::ProjectedCaptureHeader &header() const;
+    std::optional<data::AcquisitionBundle> next(const CancellationToken & = {});
+};
 // Generic reader/source seam: parser remains in storage, callers receive Published.
 class CaptureReader {
     struct Impl;
     std::unique_ptr<Impl> impl_;
+
   public:
     CaptureReader(std::shared_ptr<const Store>, Id);
     ~CaptureReader();

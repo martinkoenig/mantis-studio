@@ -1,6 +1,7 @@
 #pragma once
 #include <chrono>
 #include <mantis/projected_light_device.hpp>
+#include <mantis/projected_light_io.hpp>
 
 namespace mantis::device {
 // Daemon state, deliberately separate from the executor's resource lifecycle.
@@ -18,6 +19,10 @@ struct ProjectedRunConfig {
     // Explicit bounded correlation reservation; exhaustion is a resource fault.
     uint32_t max_correlation_entries{4096};
 };
+inline data::RecordedRunConfig recorded_run_config(const ProjectedRunConfig &c) {
+    return {c.queue_capacity,     c.operation_timeout_ms,   c.abort_timeout_ms,
+            c.cleanup_timeout_ms, c.publication_timeout_ms, c.max_correlation_entries};
+}
 struct ProjectedQueueMetrics {
     size_t capacity{}, occupancy{}, high_water{};
     uint64_t produced{}, consumed{}, saturation_failures{};
