@@ -202,6 +202,15 @@ existing completion latch; FAILED state during preflight alone does not permit
 recording a final outcome. `recorded_run_outcome(snapshot)` requires that latch
 and copies the resolved state/reason/errors/AbortOutcome without hardware actions.
 
+The persistable terminal snapshot is immutable after cleanup_resolved. If an
+abort callback violates its finite deadline, FAILED, the deadline/refusal errors
+and absent abort outcome are latched. A late callback return only retires internal
+bookkeeping. The caller must still retire its concurrent public invocation before
+destruction. recorded_run_outcome returns the typed ProjectedCaptureOutcome with
+queue.produced as the expected authoritative publication count; absent optional
+errors and abort outcome remain absent. Store rejects an undrained prefix while
+keeping OPEN writable, allowing the same final result to be retried after draining.
+
 An executor must honor its L2 synchronous finite-call contract. In-process C++ code
 cannot forcibly preempt a plugin that violates it; ordinary worker destruction joins
 its calls, and L2 retains/quarantines refused destruction ownership. Callers must

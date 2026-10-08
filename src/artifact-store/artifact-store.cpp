@@ -176,11 +176,48 @@ struct Store::Impl {
         writer.last_sequence = packet.header.sequence.value; ++writer.records;
         if (static_cast<uint64_t>(writer.output.tellp()) >= writer.limit || writer.records >= 100000) seal(id, writer);
     }
+    void verify_projected_identity(const ArtifactDescriptor &a) const {
+        if (a.state != ArtifactState::finalized || a.type.name != "org.mantis.RawCapture" ||
+            a.type.schema_version != 3)
+            return;
+        const auto directory = root / "objects" / a.id.value;
+        const auto header = directory / "run.header", outcome = directory / "run.outcome";
+        if (!std::filesystem::exists(header) ||
+            std::filesystem::file_size(header) > data::max_semantic_payload ||
+            (std::filesystem::exists(outcome) &&
+             std::filesystem::file_size(outcome) > data::max_run_outcome_bytes))
+            fail(Status::corrupt, "Invalid finalized projected sidecar membership/size");
+        uint64_t aggregate = 14695981039346656037ull;
+        auto combine = [&](const std::string &hash) {
+            for (unsigned char byte : hash)
+                aggregate = (aggregate ^ byte) * 1099511628211ull;
+        };
+        combine(file_hash(header).hex);
+        // Reconstruct identity with indexed hashes; object_path checks actual segment bytes on access.
+        Statement chunks(db, "SELECT idx,hash FROM chunks WHERE artifact=? ORDER BY idx");
+        chunks.text(1, a.id.value);
+        uint64_t index{};
+        while (chunks.row()) {
+            if (chunks.integer(0) != index || index >= a.chunks)
+                fail(Status::corrupt, "Finalized projected chunk index mismatch");
+            combine(chunks.text(1));
+            ++index;
+        }
+        if (index != a.chunks)
+            fail(Status::corrupt, "Finalized projected chunk count mismatch");
+        if (std::filesystem::exists(outcome))
+            combine(file_hash(outcome).hex);
+        std::ostringstream hex;
+        hex << std::hex << std::setfill('0') << std::setw(16) << aggregate;
+        if (a.hash.algorithm != "fnv1a64" || a.hash.hex != hex.str())
+            fail(Status::corrupt, "Finalized projected aggregate identity mismatch");
+    }
     data::ProjectedCaptureHeader read_header(const Id &id) const {
         std::lock_guard guard(mutex);
         auto a = get(id);
         if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3)
             fail(Status::incompatible, "Capture header requires RawCapture 3");
+        verify_projected_identity(a);
         auto path = root / "objects" / id.value / "run.header";
         if (std::filesystem::file_size(path) > data::max_semantic_payload)
             fail(Status::corrupt, "Capture header exceeds bound");
@@ -640,7 +677,8 @@ void Store::append_bundle(const Id &id, const data::AcquisitionBundle &bundle) {
         throw;
     }
 }
-void Store::record_run_outcome(const Id &id, const data::ProjectedRunOutcome &outcome) {
+void Store::record_run_outcome(const Id &id, const data::ProjectedCaptureOutcome &record) {
+    const auto &outcome = record.outcome;
     data::validate_run_outcome(outcome);
     std::lock_guard guard(impl_->mutex);
     auto a = impl_->get(id);
@@ -657,6 +695,8 @@ void Store::record_run_outcome(const Id &id, const data::ProjectedRunOutcome &ou
         fail(Status::invalid_argument, "Final daemon outcome is immutable and unique");
     if (outcome.run != w.bundles->header.run || outcome.generation != w.bundles->header.generation)
         fail(Status::invalid_argument, "Final daemon outcome belongs to another run/generation");
+    if (record.bundle_count != w.bundles->count)
+        fail(Status::invalid_argument, "Authoritative L3 publication count differs from recorded prefix");
     try {
         // Publish all preceding evidence durably before the outcome commits its prefix.
         impl_->seal(id, w);
@@ -664,7 +704,7 @@ void Store::record_run_outcome(const Id &id, const data::ProjectedRunOutcome &ou
         if (std::filesystem::exists(part))
             fail(Status::busy, "Provisional daemon outcome requires explicit recovery");
         std::ofstream out(part, std::ios::binary);
-        data::write_run_outcome(out, {w.bundles->count, outcome});
+        data::write_run_outcome(out, record);
         out.flush();
         if (!out)
             fail(Status::io, "Daemon outcome flush failed");
@@ -962,6 +1002,7 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
 ArtifactDescriptor Store::get(const Id &id) const {
     std::lock_guard guard(impl_->mutex);
     auto result = impl_->get(id);
+    impl_->verify_projected_identity(result);
     if (auto writer = impl_->writers.find(id); writer != impl_->writers.end() && writer->second->output.is_open()) {
         auto position = writer->second->output.tellp();
         if (position >= 0) result.bytes += static_cast<uint64_t>(position);
@@ -1023,10 +1064,22 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
             else if (a.type.schema_version != 1)
                 fail(Status::incompatible, "Unknown RawCapture schema");
         }
-        return finalize_impl(id, token, true);
+        auto finalized = finalize_impl(id, token, true);
+        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3) {
+            const auto part = impl_->root / "objects" / id.value / "run.outcome.part";
+            // A structurally incomplete provisional outcome was deliberately excluded from identity.
+            // Remove it only after that decision is durably committed; complete corruption never gets here.
+            if (std::filesystem::exists(part)) {
+                std::filesystem::remove(part);
+                platform::durable_directory(part.parent_path());
+            }
+        }
+        return finalized;
     } catch (...) {
         guard.lock();
-        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?"); update.text(1, id.value); update.row();
+        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
+        update.text(1, id.value);
+        update.row();
         throw;
     }
 }

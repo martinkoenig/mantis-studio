@@ -255,7 +255,7 @@ void source_and_camera_errors() {
     terminal.evidence.key.ordinal.value = 4;
     terminal.evidence.causal_predecessors = {{storage_fixture::run, {0}}};
     fixture.store->append_bundle(projected, terminal);
-    fixture.store->record_run_outcome(projected, storage_fixture::outcome());
+    fixture.store->record_run_outcome(projected, {2, storage_fixture::outcome()});
     fixture.store->finalize(projected);
     builder_error(fixture, {projected}, Status::incompatible);
     const auto open = fixture.store->begin({"org.mantis.RawCapture", 2}, {}); fixture.store->append(open, *base);

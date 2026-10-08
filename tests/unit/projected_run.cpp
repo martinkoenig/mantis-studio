@@ -1,10 +1,12 @@
 #include <atomic>
 #include <condition_variable>
+#include <fstream>
 #include <future>
 #include <iostream>
 #include <mantis/artifact_store.hpp>
 #include <mantis/projected_run.hpp>
 #include <mutex>
+#include <sstream>
 #include <thread>
 using namespace mantis;
 using namespace mantis::data;
@@ -194,7 +196,8 @@ struct FakeState {
     std::atomic_bool next_active{}, abort_active{}, abort_overlapped_next{};
     bool reject_validation{}, reject_prepare{}, fail_validation{}, fail_prepare{}, fail_start{}, fail_abort{},
         fail_stop{}, fail_close{};
-    bool block{}, entered{}, inhibit{}, abort_block{}, abort_entered{}, abort_release{};
+    bool block{}, entered{}, inhibit{}, abort_block{}, abort_entered{}, abort_release{},
+        abort_violates_deadline{};
     std::function<void(uint32_t)> on_next;
     std::function<void()> on_stop;
     std::vector<uint32_t> next_timeouts;
@@ -299,7 +302,9 @@ class Fake final : public ProjectedExecutor {
         s->abort_entered = true;
         s->inhibit = true;
         s->cv.notify_all();
-        if (s->abort_block)
+        if (s->abort_violates_deadline)
+            s->cv.wait(lock, [&] { return s->abort_release; });
+        else if (s->abort_block)
             s->cv.wait_for(lock, std::chrono::milliseconds(timeout), [&] { return s->abort_release; });
         if (s->fail_abort)
             return std::unexpected(injected());
@@ -2158,6 +2163,8 @@ void terminal_recording_tests() {
         }
         auto end = finish(*r);
         CHECK(end.cleanup_resolved);
+        const auto out = recorded_run_outcome(end);
+        CHECK(out.bundle_count == end.queue.produced);
         uint64_t records{};
         for (;;) {
             auto next = r->next(0);
@@ -2166,9 +2173,27 @@ void terminal_recording_tests() {
                 break;
             store->append_bundle(id, ***next);
             ++records;
+            if (mode == 2 && records == 1) {
+                CHECK(end.queue.produced == 2);
+                bool mismatch = false;
+                try {
+                    store->record_run_outcome(id, out);
+                } catch (const Failure &e) {
+                    mismatch = e.error.code == Status::invalid_argument;
+                }
+                CHECK(mismatch && store->get(id).state == artifact::ArtifactState::open);
+                CHECK(!store->run_outcome(id));
+                CHECK(!std::filesystem::exists(root / "objects" / id.value / "run.outcome.part"));
+            }
         }
-        auto out = recorded_run_outcome(end);
         store->record_run_outcome(id, out);
+        {
+            std::ifstream sidecar(root / "objects" / id.value / "run.outcome", std::ios::binary);
+            std::string bytes{std::istreambuf_iterator<char>(sidecar), {}};
+            auto decoded = data::read_run_outcome(
+                memory::copy({reinterpret_cast<const std::byte *>(bytes.data()), bytes.size()}));
+            CHECK(decoded && decoded->bundle_count == end.queue.produced && decoded->bundle_count == records);
+        }
         CHECK(store->finalize(id).state == artifact::ArtifactState::finalized);
         auto summary = store->bundle_summary(id);
         CHECK(summary.records == records && summary.final_outcome);
@@ -2184,19 +2209,66 @@ void terminal_recording_tests() {
             CHECK(end.terminal.executor_terminal && records == 2);
             CHECK(store->bundle(id, 1).evidence.disposition == AcquisitionDisposition::completed);
             CHECK(recorded->reason == AcquisitionReason::cleanup_failure);
-            CHECK(mode == 3 ? recorded->stop_error.get() != nullptr : recorded->close_error.get() != nullptr);
+            CHECK(mode == 3 ? bool(recorded->stop_error) : bool(recorded->close_error));
         }
         if (cancel)
             CHECK(!end.terminal.executor_terminal && records == 0 &&
                   recorded->reason == AcquisitionReason::user_cancel);
         if (mode == 0)
-            CHECK(records == 0 && s->starts == 0 && s->aborts == 0 && recorded->initiating_error.get());
+            CHECK(records == 0 && s->starts == 0 && s->aborts == 0 && recorded->initiating_error);
+        auto same_error = [](const auto &a, const auto &b) {
+            return bool(a) == bool(b) &&
+                   (!a || (a->code == b->code && a->message == b->message && a->component == b->component));
+        };
+        CHECK(same_error(recorded->initiating_error, end.terminal.initiating_error) &&
+              same_error(recorded->abort_error, end.terminal.abort_error) &&
+              same_error(recorded->stop_error, end.terminal.stop_error) &&
+              same_error(recorded->close_error, end.terminal.close_error));
+        if (mode == 0)
+            CHECK(!recorded->abort_outcome && out.bundle_count == 0);
         if (mode != 0) {
-            CHECK(recorded->abort_outcome.get());
-            CHECK(recorded->abort_outcome.get()->stale_work_fenced.presence() ==
+            CHECK(recorded->abort_outcome);
+            CHECK(recorded->abort_outcome->stale_work_fenced.presence() ==
                   (mode == 6 ? Presence::unavailable : Presence::unknown));
         }
     }
+}
+void late_abort_snapshot_test() {
+    auto s = std::make_shared<FakeState>();
+    s->block = true;
+    s->abort_violates_deadline = true;
+    auto cfg = config();
+    cfg.operation_timeout_ms = 1000;
+    cfg.abort_timeout_ms = 20;
+    auto r = run(s, program(), cfg);
+    CHECK(r->prepare() && r->start());
+    CHECK(s->await([&] { return s->entered; }));
+    auto cancellation = std::async(std::launch::async, [&] { r->cancel(); });
+    CHECK(s->await([&] { return s->abort_entered; }));
+    // The callback is still gated when the finite daemon deadline resolves cleanup.
+    auto a = finish(*r);
+    CHECK(a.cleanup_resolved && a.state == ProjectedState::failed);
+    CHECK(a.terminal.abort_error && a.terminal.close_error && !a.terminal.abort_outcome);
+    CHECK(s->abort_active && s->stops == 0 && s->closes == 0);
+    auto canonical = [](const auto &snapshot) {
+        std::ostringstream out;
+        data::write_run_outcome(out, recorded_run_outcome(snapshot));
+        return out.str();
+    };
+    const auto before = canonical(a);
+    {
+        std::lock_guard lock(s->mutex);
+        s->abort_release = true;
+        s->cv.notify_all();
+    }
+    CHECK(cancellation.wait_for(1s) == std::future_status::ready);
+    cancellation.get(); // Retire the caller's concurrent invocation before destroying the run.
+    const auto b = r->snapshot();
+    CHECK(!s->abort_active && b.cleanup_resolved && b.state == a.state);
+    CHECK(b.transitions == a.transitions && b.terminal.reason == a.terminal.reason);
+    CHECK(b.terminal.executor_terminal == a.terminal.executor_terminal &&
+          b.terminal.unqueued_bundle == a.terminal.unqueued_bundle);
+    CHECK(canonical(b) == before);
 }
 int main() {
     try {
@@ -2216,6 +2288,7 @@ int main() {
         additional_contract_tests();
         reservation_and_terminal_tests();
         terminal_recording_tests();
+        late_abort_snapshot_test();
         std::cout << checks << " deterministic sequencer checks passed\n";
         return 0;
     } catch (const std::exception &e) {

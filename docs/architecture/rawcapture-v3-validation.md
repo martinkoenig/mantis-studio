@@ -80,7 +80,9 @@ L5–L8 remain planned. The final pushed SHA is supplied in the delivery report.
     sidecar. The original nine binary fixtures remain unchanged. C++ tests use
     independently declared semantic values and compare both decode and encode.
     reference_v3.py imports no codec/catalog, runs only explicitly and refuses
-    overwriting existing expected bytes. No fixture was blessed after codec changes.
+    overwriting existing expected bytes. Final hardening corrected only the acceptance-
+    pending daemon-outcome fixture to explicit optional outer presence; the nine
+    accepted legacy/bundle/header/framing fixtures were not regenerated.
 15. Negative tests cover magic/version/presence/optional/enum/member/count/length/
     overflow/nesting failures, every byte-boundary truncation, duplicate/missing
     evidence, repeated FrameSets, schema-2/3 record mismatch, >128-MiB framing,
@@ -97,8 +99,10 @@ L5–L8 remain planned. The final pushed SHA is supplied in the delivery report.
     header and canonical bundles. ASAP and paced replay bytes match. Replacing and
     clearing the project's active calibration does not change this digest or
     recorded camera/rig references.
-18. Legacy data.cpp/data_io.hpp/data.hpp and the accepted L1 models/validators are
-    untouched. Independent MANTIS01/MANTIS02/MRAWREC2 fixtures remain identical.
+18. Legacy data.cpp/data_io.hpp/data.hpp are untouched. Accepted L1 model fields
+    and bundle validation behavior remain unchanged; a shared emitter structural
+    validator now supports abort-record validation without invented exposure context.
+    Independent MANTIS01/MANTIS02/MRAWREC2 fixtures remain identical.
     Existing raw-capture tests retain schemas 1/2 semantics and pass. Their normal
     aggregate hashing and live packet append performance remain unchanged.
 19. CalibrationDataset ingestion remains schema-2-only. Its rejection fixture now
@@ -117,14 +121,12 @@ L5–L8 remain planned. The final pushed SHA is supplied in the delivery report.
   This includes raw-capture, all four storage/terminal tests, projected-sequencer,
   projected-light-semantics/contract, frozen-l2-abi/catalog, c-abi, legacy-abi,
   core, acquisition/acquisition-qos and all calibration-dataset regressions.
-- ASan + UBSan: **21/21 selected tests passed**, including all new codec/store/
-  replay tests and legacy storage, sequencer,
-  semantic/contract, frozen ABI/catalog, C/legacy ABI, core and acquisition checks
-  passed with leak detection and halt-on-error. Calibration-dataset ingestion
-  also passed with leak detection after disabling unrelated host OpenCL discovery.
-  The actual L3-to-L4 cleanup tests and projected-run-outcome integration test
-  also pass with ASan/UBSan. No storage use-after-unmap, lifetime, overflow, leak or
-  undefined-behavior report occurred. Legacy semantic-to-bytes checks also pass.
+- ASan + UBSan: full non-hardware CTest **45/45 passed**, with leak detection
+  and halt-on-error enabled. The run includes late/blocked abort terminal freezing,
+  L3-produced versus recorded-prefix mismatch and retry, finalized sidecar deletion/
+  replacement after reopen, incomplete outcome.part recovery, all codec/store/replay
+  tests, legacy formats, ABI/catalog and acquisition/calibration regressions.
+  No sanitizer, undefined-behavior or leak report occurred.
 - Tests used worktree-local TMPDIR. LD_LIBRARY_PATH selected a consistent system
   OpenCV 4.10 library family; this resolves the pre-existing mixed SDK/system
   imgcodecs loader error. OPENCV_OPENCL_RUNTIME=disabled prevents the host NVIDIA
@@ -132,11 +134,12 @@ L5–L8 remain planned. The final pushed SHA is supplied in the delivery report.
   regression. Leak detection remained enabled; no suppression was installed.
 - `git diff --check` and `python3 tests/contract/boundaries.py .` passed.
 
-The available [L3 CI run](https://github.com/martinkoenig/mantis-studio/actions/runs/37758487073)
-on the starting SHA is green for x86_64 Studio ON/OFF, ARM64 Studio ON/OFF and
-ASan/UBSan. The L4 matrix will run after the normal branch push; no L4 ARM64 or
-Studio-ON result is claimed locally. L4 acceptance remains pending that matrix
-and review. There is no known unresolved implementation blocker from local tests.
+The available [previous L4 CI run](https://github.com/martinkoenig/mantis-studio/actions/runs/37785486189)
+on `a8f2f6b1357dad11e37dd7245d52b33ba27a8c5d` is green for x86_64 Studio
+ON/OFF, ARM64 Studio ON/OFF and ASan/UBSan. This hardening follow-up's matrix
+is pending its normal push; previous results are not claimed for the new SHA.
+No ARM64 or Studio-ON result is claimed locally. L4 acceptance remains pending
+matrix results and review.
 
 ## Final daemon-outcome review correction
 
@@ -190,6 +193,55 @@ Follow-up files changed:
 - `tests/unit/projected_raw_capture.cpp`
 - `tests/unit/projected_run.cpp`
 - `tests/unit/projected_storage_values.hpp`
+
+## Final hardening review
+
+The accepted executor/daemon outcome separation, mapped bundle codec, header and
+segment formats remain intact. The follow-up closes these archive boundaries:
+
+- recorded_run_outcome returns ProjectedCaptureOutcome with the exact final
+  snapshot queue.produced count. Store verifies expected publications against
+  received bundles before sealing or writing. A 2/1 mismatch leaves OPEN and the
+  writer usable, with no outcome files; draining bundle 1 permits the same final
+  result to be retried as 2/2. The actual L3 integration also verifies the sidecar
+  count and valid zero-publication 0/0 failed/cancelled captures.
+- Finalized semantic reads reconstruct aggregate identity from bounded current
+  header/outcome hashes and ordered expected SQLite chunk hashes. Missing, added
+  or internally checksum-valid changed sidecars are corrupt. Tests reopen Store
+  after deletion/replacement and exercise header, outcome, bundle, summary,
+  reader and replay access. A recovered prefix hashed without an outcome remains
+  valid and unknown/incomplete. Segment content checks still run on access;
+  aggregate reconstruction does not reread all pixels.
+- The finite abort-deadline path freezes FAILED, the deadline/refusal errors and
+  absent abort outcome. A gated late callback can retire only internal bookkeeping.
+  The test encodes the final snapshot while the callback is blocked, releases it,
+  retires the concurrent caller, then proves canonical outcome bytes and the
+  authoritative terminal state/reason/bundle references unchanged.
+- The four outer error fields and optional abort outcome use explicit one-byte
+  optional tags, 0 absent and 1 present. The conversion copies exact L3 absence
+  and complete structured errors. AbortOutcome internal Evidence retains all
+  three states and established false. Only run-outcome3.bin was corrected during
+  acceptance; all nine accepted fixture binaries were compared byte-for-byte
+  with the reviewed HEAD and remain unchanged.
+- Checked event accounting counts every bundle plus actual TriggerEvents, never
+  references alone. Bounded unique established command identities count once
+  for identical late evidence and reject contradictions. Append, finalization,
+  recovery and replay share this validation. Tests cover exact event/command
+  limits, one event/command beyond, duplicate identical/contradictory commands,
+  checksum-valid out-of-bound recovery records and final verification limits.
+  Recorded executor errors obey the frozen category/code invariant; abort commands
+  are OFF-only, with structural L1 emitter validation reused without fabricated
+  exposure context. Unknown/Unavailable command states remain representable.
+- Recovery removes structurally incomplete run.outcome.part only after the
+  outcome-less verified prefix is durably FINALIZED. Complete corrupt sidecars
+  refuse recovery and remain available for diagnosis. Tests check every partial
+  envelope boundary and require no active-looking outcome.part after recovery.
+
+The full ordinary and ASan/UBSan non-hardware suites each passed 45/45.
+The ordinary suite took 105.75 seconds; the sanitizer suite took 250.12 seconds.
+Architecture boundaries and whitespace checks passed. Legacy formats, frozen L2 ABI, calibration ingestion and L5 scope
+remain unchanged. No known local implementation blocker remains; acceptance is
+pending the new CI matrix and review.
 
 ## Original L4 exact changed files
 

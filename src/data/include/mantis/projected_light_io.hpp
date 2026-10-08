@@ -30,11 +30,11 @@ struct ProjectedRunOutcome {
     GenerationId generation;
     RecordedRunDisposition disposition{RecordedRunDisposition::failed};
     AcquisitionReason reason{AcquisitionReason::none};
-    Evidence<Error> initiating_error, abort_error, stop_error, close_error;
-    Evidence<RecordedAbortOutcome> abort_outcome;
+    std::optional<Error> initiating_error, abort_error, stop_error, close_error;
+    std::optional<RecordedAbortOutcome> abort_outcome;
     std::string diagnostic;
 };
-// Binds the separately published outcome to the exact preceding bundle prefix.
+// L3 queue.produced supplies the expected authoritative prefix; Store must not invent this count.
 struct ProjectedCaptureOutcome {
     uint64_t bundle_count{};
     ProjectedRunOutcome outcome;
@@ -53,5 +53,6 @@ AcquisitionBundle read_bundle(memory::BufferView);
 uint64_t bundle_encoded_size(const AcquisitionBundle &);
 // Canonical typed values, useful for exact storage identity comparisons.
 bool same_program_reference(const ProgramReference &, const ProgramReference &);
+bool same_emitter_command(const EmitterCommand &, const EmitterCommand &);
 bool same_participants(const Participants &, const Participants &);
 } // namespace mantis::data

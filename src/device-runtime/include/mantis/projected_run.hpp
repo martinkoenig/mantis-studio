@@ -45,8 +45,9 @@ struct ProjectedRunSnapshot {
     // FAILED may be visible during preflight cleanup; state alone is not completion.
     bool cleanup_resolved{};
 };
-// Rejects non-final snapshots; performs no cleanup, reason/state inference or hardware work.
-data::ProjectedRunOutcome recorded_run_outcome(const ProjectedRunSnapshot &);
+// Rejects non-final snapshots; copies queue.produced, exact optional errors and final cleanup facts.
+// Performs no cleanup, reason/state inference or hardware work.
+data::ProjectedCaptureOutcome recorded_run_outcome(const ProjectedRunSnapshot &);
 // Owns one executor and an immutable program snapshot. Only its worker makes ordinary
 // executor calls. Abort bypasses that worker and the authoritative queue.
 class ProjectedRun {

@@ -301,7 +301,8 @@ void implementation(const ImplementationIdentity &v) {
     text(v.build);
     present(v.configuration, reference);
 }
-void emitter(const EmitterEvidence &v, const std::vector<CameraFrameEvidence> &frames) {
+void emitter(const EmitterEvidence &v, const std::vector<CameraFrameEvidence> &frames,
+             bool require_exposure_context = true) {
     id(v.emitter);
     bound(v.exposure_effective, 16);
     present(v.commanded, [&](const auto &c) {
@@ -330,7 +331,8 @@ void emitter(const EmitterEvidence &v, const std::vector<CameraFrameEvidence> &f
         require(seen.insert(x.frame).second, "Duplicate camera effective-state association");
         auto found =
             std::find_if(frames.begin(), frames.end(), [&](const auto &f) { return f.frame == x.frame; });
-        require(found != frames.end(), "Effective-state camera has no source frame evidence");
+        require(!require_exposure_context || found != frames.end(),
+                "Effective-state camera has no source frame evidence");
         present(x.state, [&](const auto &s) {
             require(s.frame == x.frame, "Effective-state frame mismatch");
             require(s.state.has_value(), "Effective state value is required; absence is not OFF");
@@ -338,6 +340,8 @@ void emitter(const EmitterEvidence &v, const std::vector<CameraFrameEvidence> &f
             source(s.evidence);
             scope(s.scope, s.evidence);
             interval(s.coverage);
+            if (!require_exposure_context)
+                return; // Abort records retain structure without inventing an exposure context.
             auto e = found->exposure.get();
             auto i = e ? e->interval.get() : nullptr;
             require(i && same_clock(i->start.clock, s.coverage.start.clock) &&
@@ -867,6 +871,9 @@ schema::AttributeDescriptor quality_flags_descriptor(uint64_t n) {
     return {std::string(quality_flags), schema::ScalarType::u32, {n}, {4}, ""};
 }
 } // namespace laser
+Result<void> validate(const EmitterEvidence &v) {
+    return checked([&] { emitter(v, {}, false); });
+}
 Result<void> validate(const AcquisitionProgram &v) {
     return checked([&] { validate_program(v); });
 }

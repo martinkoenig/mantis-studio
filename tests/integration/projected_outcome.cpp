@@ -1,3 +1,4 @@
+#include "../../src/artifact-store/segments.hpp"
 #include "../unit/projected_storage_values.hpp"
 #include <fstream>
 #include <iostream>
@@ -16,6 +17,15 @@ template <class F> void rejects(F f) {
         f();
     } catch (const Failure &) {
         rejected = true;
+    }
+    CHECK(rejected);
+}
+template <class F> void corrupt(F f) {
+    bool rejected = false;
+    try {
+        f();
+    } catch (const Failure &e) {
+        rejected = e.error.code == Status::corrupt;
     }
     CHECK(rejected);
 }
@@ -51,6 +61,174 @@ AcquisitionBundle completed(uint64_t seq = 0) {
     b.evidence.disposition = AcquisitionDisposition::completed;
     return b;
 }
+void finalized_identity_tests(const std::filesystem::path &root) {
+    const auto project = root / "finalized-identity";
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        auto store = std::make_shared<artifact::Store>(project);
+        auto id = store->begin_projected_capture(header());
+        store->append_bundle(id, completed());
+        const auto original = outcome(RecordedRunDisposition::completed, AcquisitionReason::none);
+        store->record_run_outcome(id, {1, original});
+        store->finalize(id);
+        CHECK(store->run_outcome(id) && store->bundle_summary(id).records == 1);
+        const auto directory = project / "objects" / id.value;
+        const auto h = file(directory / "run.header"), o = file(directory / "run.outcome");
+        if (mode == 0)
+            std::filesystem::remove(directory / "run.outcome");
+        if (mode == 1) {
+            auto changed = original;
+            changed.diagnostic = "internally valid replacement";
+            const auto bytes = encode(ProjectedCaptureOutcome{1, changed});
+            CHECK(read_run_outcome(view(bytes)));
+            write(directory / "run.outcome", bytes);
+        }
+        if (mode == 2) {
+            auto changed = header();
+            ++changed.config.queue_capacity;
+            const auto bytes = encode(changed);
+            CHECK(read_capture_header(view(bytes)).config.queue_capacity == changed.config.queue_capacity);
+            write(directory / "run.header", bytes);
+        }
+        if (mode == 3) {
+            // Adding a valid outcome to an intentionally outcome-less recovered artifact is also corruption.
+            auto recovered = store->begin_projected_capture(header());
+            store->append_bundle(recovered, completed());
+            store->abandon(recovered);
+            store->recover(recovered);
+            CHECK(!store->run_outcome(recovered) && !store->bundle_summary(recovered).final_outcome);
+            write(project / "objects" / recovered.value / "run.outcome",
+                  encode(ProjectedCaptureOutcome{1, original}));
+            corrupt([&] { (void)store->run_outcome(recovered); });
+            continue;
+        }
+        store.reset();
+        store = std::make_shared<artifact::Store>(project);
+        corrupt([&] { (void)store->run_outcome(id); });
+        corrupt([&] { (void)store->capture_header(id); });
+        corrupt([&] { (void)store->bundle_summary(id); });
+        corrupt([&] { (void)store->bundle(id); });
+        corrupt([&] { artifact::BundleCaptureReader reader(store, id); });
+        corrupt([&] { device::BundleReplay replay(store, id, false); });
+        corrupt([&] { store->replay_bundles(id, [](auto) {}); });
+        write(directory / "run.header", h);
+        write(directory / "run.outcome", o);
+        CHECK(store->run_outcome(id) && store->bundle_summary(id).records == 1);
+    }
+}
+void persisted_bound_tests(const std::shared_ptr<artifact::Store> &store, const std::filesystem::path &root) {
+    // Exactly six events: three bundles plus three actual triggers. References in bundle 1 add none.
+    auto h = header();
+    h.program.bounds.max_events = 6;
+    auto id = store->begin_projected_capture(h);
+    store->append_bundle(id, bundle(0));
+    store->append_bundle(id, bundle(1));
+    auto extra = bundle(2);
+    auto t = extra.triggers.front();
+    t.key.sequence.value = 3;
+    extra.triggers.push_back(t);
+    extra.evidence.triggers.push_back(t.key);
+    CHECK(data::validate(extra));
+    rejects([&] { store->append_bundle(id, extra); });
+    CHECK(store->get(id).state == artifact::ArtifactState::open);
+    store->append_bundle(id, bundle(2));
+    store->record_run_outcome(id, {3, outcome()});
+    store->finalize(id);
+    CHECK(store->bundle_summary(id).records == 3);
+    // A valid byte codec cannot bypass event bounds during recovery or final verification.
+    auto bad = store->begin_projected_capture(h);
+    store->append_bundle(bad, bundle(0));
+    store->append_bundle(bad, bundle(1));
+    store->abandon(bad);
+    auto path = root / "objects" / bad.value / "0.segment.part";
+    {
+        std::ofstream out(path, std::ios::binary | std::ios::app);
+        artifact::segments::append(out, extra);
+    }
+    auto before = file(path);
+    rejects([&] { store->recover(bad); });
+    CHECK(file(path) == before && store->get(bad).state == artifact::ArtifactState::recoverable);
+    h.program.bounds.max_events = 7;
+    auto final = store->begin_projected_capture(h);
+    for (unsigned n = 0; n < 4; ++n)
+        store->append_bundle(final, bundle(n));
+    store->record_run_outcome(final, {4, outcome()});
+    store->prepare_finalize(final);
+    h.program.bounds.max_events = 6;
+    write(root / "objects" / final.value / "run.header", encode(h));
+    rejects([&] { store->finalize(final); });
+    CHECK(store->get(final).state == artifact::ArtifactState::recoverable);
+    // Unique command IDs, including late identical evidence; rejected input leaves count/state untouched.
+    h = header();
+    h.program.bounds.max_commands = 2;
+    auto command_bundle = [](uint64_t n, const char *request) {
+        auto b = completed(n);
+        b.evidence.disposition = AcquisitionDisposition::startup;
+        b.evidence.emitters[0].commanded = EmitterCommand{{{request}}, emitter, EmitterState::off, host()};
+        return b;
+    };
+    id = store->begin_projected_capture(h);
+    store->append_bundle(id, command_bundle(0, "one"));
+    store->append_bundle(id, command_bundle(1, "two"));
+    store->append_bundle(id, command_bundle(2, "one"));
+    auto contradictory = command_bundle(3, "one");
+    auto changed_command = *contradictory.evidence.emitters[0].commanded.get();
+    changed_command.state = EmitterState::on;
+    contradictory.evidence.emitters[0].commanded = changed_command;
+    rejects([&] { store->append_bundle(id, contradictory); });
+    auto third = command_bundle(3, "three");
+    rejects([&] { store->append_bundle(id, third); });
+    CHECK(store->get(id).state == artifact::ArtifactState::open);
+    store->append_bundle(id, command_bundle(3, "two"));
+    store->record_run_outcome(id, {4, outcome()});
+    store->finalize(id);
+    CHECK(store->bundle_summary(id).records == 4);
+    bad = store->begin_projected_capture(h);
+    store->append_bundle(bad, command_bundle(0, "one"));
+    store->append_bundle(bad, command_bundle(1, "two"));
+    store->append_bundle(bad, command_bundle(2, "one"));
+    store->abandon(bad);
+    path = root / "objects" / bad.value / "0.segment.part";
+    {
+        std::ofstream out(path, std::ios::binary | std::ios::app);
+        artifact::segments::append(out, third);
+    }
+    before = file(path);
+    rejects([&] { store->recover(bad); });
+    CHECK(file(path) == before);
+}
+void abort_semantic_tests() {
+    for (const auto error :
+         {RecordedExecutorError{0, 1}, RecordedExecutorError{8, 1}, RecordedExecutorError{7, 0}}) {
+        auto o = detailed_outcome();
+        o.abort_outcome->error = error;
+        rejects([&] { (void)encode(ProjectedCaptureOutcome{0, o}); });
+        // Recompute checksum over independently malformed executor-error fields; decode must still reject.
+        auto b = encode(ProjectedCaptureOutcome{0, detailed_outcome()});
+        const auto category = b.find("cleanup fault") - 24;
+        u64(b, category, error.category);
+        u64(b, category + 8, error.code);
+        checksum(b);
+        rejects([&] { (void)read_run_outcome(view(b)); });
+    }
+    auto on = detailed_outcome();
+    auto changed_command = *on.abort_outcome->emitters[0].commanded.get();
+    changed_command.state = EmitterState::on;
+    on.abort_outcome->emitters[0].commanded = changed_command;
+    rejects([&] { (void)encode(ProjectedCaptureOutcome{0, on}); });
+    auto b = encode(ProjectedCaptureOutcome{0, detailed_outcome()});
+    b[b.find("off-request") + std::string_view("off-request").size() + 8 + 4] = char(1);
+    checksum(b);
+    rejects([&] { (void)read_run_outcome(view(b)); });
+    for (unsigned presence = 0; presence < 3; ++presence) {
+        auto o = detailed_outcome();
+        if (presence == 0)
+            o.abort_outcome->emitters[0].commanded = Unknown{};
+        if (presence == 1)
+            o.abort_outcome->emitters[0].commanded = Unavailable{};
+        auto encoded = encode(ProjectedCaptureOutcome{0, o});
+        CHECK(encode(*read_run_outcome(view(encoded))) == encoded);
+    }
+}
 int main(int argc, char **argv) {
     try {
         CHECK(argc == 2);
@@ -64,7 +242,7 @@ int main(int argc, char **argv) {
         CHECK(golden == encode(ProjectedCaptureOutcome{4, detailed_outcome()}));
         auto decoded = read_run_outcome(view(golden));
         CHECK(decoded && encode(*decoded) == golden);
-        const auto &abort = *decoded->outcome.abort_outcome.get();
+        const auto &abort = *decoded->outcome.abort_outcome;
         CHECK(abort.run.get() && *abort.run.get() == run);
         CHECK(abort.fenced_generation.presence() == Presence::unavailable);
         CHECK(abort.inhibited.get() && *abort.inhibited.get());
@@ -84,7 +262,7 @@ int main(int argc, char **argv) {
         // Established false and Unknown/Unavailable are all independently representable.
         for (unsigned p = 0; p < 3; ++p) {
             auto value = detailed_outcome();
-            auto a = *value.abort_outcome.get();
+            auto a = *value.abort_outcome;
             if (p == 0) {
                 a.inhibited = false;
                 a.stale_work_fenced = false;
@@ -106,15 +284,14 @@ int main(int argc, char **argv) {
             auto round = read_run_outcome(view(bytes));
             CHECK(round && encode(*round) == bytes);
             if (p == 0)
-                CHECK(round->outcome.abort_outcome.get()->off_requested.get() &&
-                      !*round->outcome.abort_outcome.get()->off_requested.get());
+                CHECK(round->outcome.abort_outcome->off_requested.get() &&
+                      !*round->outcome.abort_outcome->off_requested.get());
         }
-        for (auto p : {Presence::unknown, Presence::unavailable}) {
-            auto o = detailed_outcome();
-            o.abort_outcome = p == Presence::unknown ? Evidence<RecordedAbortOutcome>{Unknown{}}
-                                                     : Evidence<RecordedAbortOutcome>{Unavailable{}};
-            auto b = encode(ProjectedCaptureOutcome{0, o});
-            CHECK(encode(*read_run_outcome(view(b))) == b);
+        { // Outer absence is structural; it is never Unknown evidence.
+            auto o = outcome(RecordedRunDisposition::completed, AcquisitionReason::none);
+            auto round = read_run_outcome(view(encode(ProjectedCaptureOutcome{0, o})));
+            CHECK(round && !round->outcome.initiating_error && !round->outcome.abort_error &&
+                  !round->outcome.stop_error && !round->outcome.close_error && !round->outcome.abort_outcome);
         }
         // An exact L3 snapshot fixture cannot be serialized while FAILED cleanup is still pending.
         device::ProjectedRunSnapshot snapshot;
@@ -124,7 +301,7 @@ int main(int argc, char **argv) {
         snapshot.terminal.initiating_error = Error{Status::incompatible, "prepare", "executor"};
         rejects([&] { (void)device::recorded_run_outcome(snapshot); });
         snapshot.cleanup_resolved = true;
-        CHECK(device::recorded_run_outcome(snapshot).initiating_error.get()->code == Status::incompatible);
+        CHECK(device::recorded_run_outcome(snapshot).outcome.initiating_error->code == Status::incompatible);
         auto store = std::make_shared<artifact::Store>(root);
         auto empty = store->begin_projected_capture(header());
         rejects([&] { store->finalize(empty); });
@@ -146,10 +323,10 @@ int main(int argc, char **argv) {
         auto o = detailed_outcome();
         auto wrong = o;
         wrong.generation = {{"foreign"}};
-        rejects([&] { store->record_run_outcome(id, wrong); });
+        rejects([&] { store->record_run_outcome(id, {2, wrong}); });
         CHECK(store->get(id).state == artifact::ArtifactState::open);
-        store->record_run_outcome(id, o);
-        rejects([&] { store->record_run_outcome(id, o); });
+        store->record_run_outcome(id, {2, o});
+        rejects([&] { store->record_run_outcome(id, {2, o}); });
         rejects([&] { store->append_bundle(id, completed(2)); });
         CHECK(store->get(id).state == artifact::ArtifactState::open);
         store->finalize(id);
@@ -160,7 +337,7 @@ int main(int argc, char **argv) {
             artifact::BundleCaptureReader reader(store, id);
             device::BundleReplay replay(store, id, false);
             CHECK(reader.final_outcome() && replay.final_outcome());
-            CHECK(reader.final_outcome()->abort_outcome.get()->emitters[0].observed.presence() ==
+            CHECK(reader.final_outcome()->abort_outcome->emitters[0].observed.presence() ==
                   Presence::unknown);
         }
         // Changing only daemon outcome changes aggregate hash and byte accounting, not bundle bytes.
@@ -176,7 +353,7 @@ int main(int argc, char **argv) {
                 value.stop_error = Error{Status::io, "stop failed", "executor"};
             }
             const auto before = encode(completed());
-            store->record_run_outcome(capture, value);
+            store->record_run_outcome(capture, {1, value});
             auto a = store->finalize(capture);
             CHECK(a.bytes == encode(header()).size() +
                                  std::filesystem::file_size(store->object_path(capture)) +
@@ -207,6 +384,9 @@ int main(int argc, char **argv) {
             CHECK(!summary.final_outcome && summary.last_executor_disposition == disposition);
             CHECK(encode(store->bundle(capture)) == encode(executor));
         }
+        finalized_identity_tests(root);
+        persisted_bound_tests(store, root);
+        abort_semantic_tests();
         store.reset();
         // Complete corrupted outcomes are refused; incomplete provisional envelopes remain absent.
         for (unsigned mode = 0; mode < 19; ++mode) {
@@ -305,8 +485,10 @@ int main(int argc, char **argv) {
             CHECK(summary.last_executor_disposition == AcquisitionDisposition::completed);
             CHECK(bool(summary.final_outcome) == (cut == complete.size()));
             CHECK(encode(s.bundle(capture)) == encode(completed()));
-            if (cut != complete.size())
+            if (cut != complete.size()) {
                 CHECK(!std::filesystem::exists(directory / "run.outcome"));
+                CHECK(!std::filesystem::exists(directory / "run.outcome.part"));
+            }
         }
         std::cout << "Final daemon outcome, full AbortOutcome, immutable integrity, prefix binding and exact "
                      "bundle preservation passed\n";

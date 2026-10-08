@@ -515,33 +515,32 @@ void validate_run_outcome(const ProjectedRunOutcome &v) {
             "Invalid outcome identity");
     bool fault = false;
     for (const auto *e : {&v.initiating_error, &v.abort_error, &v.stop_error, &v.close_error})
-        if (e->get()) {
-            require(e->get()->code != Status::ok, "An established error cannot report OK");
+        if (*e) {
+            require((*e)->code != Status::ok, "A present error cannot report OK");
             fault = true;
         }
-    if (const auto *a = v.abort_outcome.get()) {
+    if (const auto &a = v.abort_outcome) {
         if (a->run.get())
             require(*a->run.get() == v.run, "Abort RunId mismatch");
         if (a->fenced_generation.get())
             require(*a->fenced_generation.get() == v.generation, "Abort generation mismatch");
+        // Frozen L2 ContractError categories: NONE=0 through CLEANUP=7.
+        require(a->error.category <= 7 && ((a->error.category == 0) == (a->error.code == 0)),
+                "Invalid recorded executor error category/code");
         fault |= a->error.category != 0;
         for (const auto *flag : {&a->inhibited, &a->stale_work_fenced, &a->off_requested})
             fault |= flag->get() && !*flag->get();
         require(a->emitters.size() <= max_participants, "Too many abort emitters");
         std::vector<ComponentId> emitters;
         for (const auto &e : a->emitters) {
+            auto valid = validate(e);
+            if (!valid)
+                throw Failure(valid.error());
             require(std::find(emitters.begin(), emitters.end(), e.emitter) == emitters.end(),
                     "Duplicate abort emitter");
             emitters.push_back(e.emitter);
-            require(e.exposure_effective.size() <= 16, "Too many abort effective-state entries");
             if (e.commanded.get())
-                require(e.commanded.get()->target == e.emitter, "Abort command target mismatch");
-            if (e.observed.get())
-                require(e.observed.get()->state.has_value(), "Missing abort observed state");
-            for (const auto &s : e.exposure_effective)
-                if (s.state.get())
-                    require(s.state.get()->state.has_value() && s.state.get()->frame == s.frame,
-                            "Invalid abort effective-state association");
+                require(e.commanded.get()->state == EmitterState::off, "Abort command must request OFF");
         }
     }
     require(!fault || v.disposition == RecordedRunDisposition::failed,
@@ -608,6 +607,13 @@ std::optional<ProjectedCaptureOutcome> read_run_outcome(memory::BufferView b, bo
     return v;
 }
 bool same_program_reference(const ProgramReference &a, const ProgramReference &b) {
+    std::ostringstream x, y;
+    Writer wx{x}, wy{y};
+    put(wx, a);
+    put(wy, b);
+    return x.str() == y.str();
+}
+bool same_emitter_command(const EmitterCommand &a, const EmitterCommand &b) {
     std::ostringstream x, y;
     Writer wx{x}, wy{y};
     put(wx, a);

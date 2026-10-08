@@ -199,20 +199,23 @@ struct ProjectedRun::Impl {
         auto result = guarded([&] { return executor->abort(reason, bound(config.abort_timeout_ms)); });
         {
             std::lock_guard lock(mutex);
-            if (result) {
-                view.terminal.abort_outcome = std::move(*result);
-                if (view.terminal.abort_outcome->error.category)
-                    view.terminal.abort_error = error(Status::plugin_failed, "Structured abort failure");
-                const auto &outcome = *view.terminal.abort_outcome;
-                auto negative = [](const auto &value) { return value.get() && !*value.get(); };
-                if (negative(outcome.inhibited) || negative(outcome.stale_work_fenced) ||
-                    negative(outcome.off_requested))
-                    view.terminal.abort_error = error(
-                        Status::plugin_failed, "Executor reports an unsuccessful inhibit/fence/OFF request");
-            } else
-                view.terminal.abort_error = result.error();
-            if (view.terminal.abort_error)
-                fault = true;
+            if (!finished) {
+                if (result) {
+                    view.terminal.abort_outcome = std::move(*result);
+                    if (view.terminal.abort_outcome->error.category)
+                        view.terminal.abort_error = error(Status::plugin_failed, "Structured abort failure");
+                    const auto &outcome = *view.terminal.abort_outcome;
+                    auto negative = [](const auto &value) { return value.get() && !*value.get(); };
+                    if (negative(outcome.inhibited) || negative(outcome.stale_work_fenced) ||
+                        negative(outcome.off_requested))
+                        view.terminal.abort_error =
+                            error(Status::plugin_failed,
+                                  "Executor reports an unsuccessful inhibit/fence/OFF request");
+                } else
+                    view.terminal.abort_error = result.error();
+                if (view.terminal.abort_error)
+                    fault = true;
+            } // Late callbacks only retire bookkeeping after the terminal snapshot is frozen.
             abort_done = true;
             signal();
         }
@@ -1437,7 +1440,7 @@ ProjectedRunSnapshot ProjectedRun::snapshot() const {
     snapshot.cleanup_resolved = impl_->finished;
     return snapshot;
 }
-data::ProjectedRunOutcome recorded_run_outcome(const ProjectedRunSnapshot &s) {
+data::ProjectedCaptureOutcome recorded_run_outcome(const ProjectedRunSnapshot &s) {
     if (!s.cleanup_resolved || !terminal(s.state))
         fail(Status::invalid_argument, "Final daemon cleanup snapshot required", "recorded-run-outcome");
     data::ProjectedRunOutcome out;
@@ -1447,13 +1450,10 @@ data::ProjectedRunOutcome recorded_run_outcome(const ProjectedRunSnapshot &s) {
                       : s.state == ProjectedState::cancelled ? data::RecordedRunDisposition::cancelled
                                                              : data::RecordedRunDisposition::failed;
     out.reason = s.terminal.reason; // Preserve the initiating reason even when cleanup faults win state.
-    auto copy = [](const std::optional<Error> &error) -> data::Evidence<Error> {
-        return error ? data::Evidence<Error>{*error} : data::Evidence<Error>{data::Unknown{}};
-    };
-    out.initiating_error = copy(s.terminal.initiating_error);
-    out.abort_error = copy(s.terminal.abort_error);
-    out.stop_error = copy(s.terminal.stop_error);
-    out.close_error = copy(s.terminal.close_error);
+    out.initiating_error = s.terminal.initiating_error;
+    out.abort_error = s.terminal.abort_error;
+    out.stop_error = s.terminal.stop_error;
+    out.close_error = s.terminal.close_error;
     if (const auto &a = s.terminal.abort_outcome)
         out.abort_outcome = data::RecordedAbortOutcome{a->run,
                                                        a->fenced_generation,
@@ -1463,7 +1463,7 @@ data::ProjectedRunOutcome recorded_run_outcome(const ProjectedRunSnapshot &s) {
                                                        a->emitters,
                                                        {a->error.category, a->error.code}};
     data::validate_run_outcome(out);
-    return out;
+    return {s.queue.produced, std::move(out)};
 }
 void ProjectedRun::notify_clock_advanced() {
     std::lock_guard lock(impl_->mutex);

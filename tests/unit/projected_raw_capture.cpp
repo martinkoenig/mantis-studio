@@ -92,7 +92,7 @@ int main() {
             rejects([&] { store->begin({"org.mantis.RawCapture", 4}, {}); });
             for (unsigned n = 0; n < 4; ++n)
                 store->append_bundle(finalized, bundle(n));
-            store->record_run_outcome(finalized, outcome());
+            store->record_run_outcome(finalized, {4, outcome()});
             auto a = store->finalize(finalized);
             CHECK(a.state == artifact::ArtifactState::finalized && a.chunks > 1);
             uint64_t bytes = encode(header()).size() + encode(ProjectedCaptureOutcome{4, outcome()}).size();
@@ -145,7 +145,7 @@ int main() {
             for (unsigned n = 0; n < 4; ++n)
                 store->append_bundle(control, evidence_only(n, n == 3));
             store->record_run_outcome(
-                control, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel));
+                control, {4, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel)});
             store->prepare_finalize(control);
             store->finalize(control);
             CHECK(store->bundle_summary(control).final_outcome->disposition ==
@@ -189,7 +189,7 @@ int main() {
             store->append_bundle(invalid, bundle(1));
             store->append_bundle(invalid, bundle(2));
             store->append_bundle(invalid, bundle(3));
-            store->record_run_outcome(invalid, outcome());
+            store->record_run_outcome(invalid, {4, outcome()});
             rejects([&] { store->append_bundle(invalid, evidence_only(4)); });
             store->finalize(invalid);
             // Storage errors are separately reported; the verified prefix has no invented outcome.
@@ -296,7 +296,7 @@ int main() {
             store.append_bundle(id, bundle(0));
             auto conflict = root / "objects" / id.value / "0.segment";
             std::filesystem::create_directory(conflict);
-            rejects([&] { store.record_run_outcome(id, outcome()); });
+            rejects([&] { store.record_run_outcome(id, {1, outcome()}); });
             CHECK(store.get(id).state == artifact::ArtifactState::recoverable);
             std::filesystem::remove(conflict);
             store.recover(id);
@@ -489,7 +489,7 @@ int main() {
             store->append_bundle(id, first);
             store->append_bundle(id, last);
             store->record_run_outcome(
-                id, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel));
+                id, {2, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel)});
             store->finalize(id);
             device::BundleReplay paced(store, id, true);
             CHECK(paced.next());
@@ -528,7 +528,7 @@ int main() {
             auto terminal = evidence_only(1, true);
             store.append_bundle(id, terminal);
             store.record_run_outcome(
-                id, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel));
+                id, {2, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel)});
             store.finalize(id);
             auto replay = store.bundle(id);
             auto bytes = replay.frameset->frames[0]->attributes[0].buffer.map_read();

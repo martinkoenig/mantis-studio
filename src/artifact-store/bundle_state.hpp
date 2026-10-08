@@ -7,10 +7,13 @@ struct BundleState {
     data::ProjectedCaptureHeader header;
     std::optional<data::AcquisitionBundle> previous; // Semantic context only; no mapped pixels retained.
     std::vector<uint64_t> ordinals;
-    uint64_t bytes{}, count{};
+    std::vector<data::EmitterCommand> commands;
+    uint64_t bytes{}, count{}, events{};
     explicit BundleState(data::ProjectedCaptureHeader h) : header(std::move(h)) {
         data::validate_capture_header(header);
         ordinals.reserve(header.config.max_correlation_entries);
+        commands.reserve(
+            std::min<uint64_t>(header.config.max_correlation_entries, header.program.bounds.max_commands));
     }
     void accept(const data::AcquisitionBundle &b) {
         auto check = [](bool ok, const char *s) {
@@ -49,17 +52,43 @@ struct BundleState {
         for (const auto &t : b.triggers)
             step(t.step);
         check(ordinals.size() < header.config.max_correlation_entries &&
-                  count < header.program.bounds.max_events,
+                  b.triggers.size() < header.program.bounds.max_events &&
+                  events <= header.program.bounds.max_events - 1 - b.triggers.size(),
               "Recorded correlation/event bound exceeded");
+        std::vector<data::EmitterCommand> added;
+        for (const auto &emitter : b.evidence.emitters) {
+            if (const auto *command = emitter.commanded.get()) {
+                auto find = [&](const auto &values) {
+                    return std::find_if(values.begin(), values.end(),
+                                        [&](const auto &old) { return old.request == command->request; });
+                };
+                const auto old = find(commands), pending = find(added);
+                if (old != commands.end())
+                    check(data::same_emitter_command(*old, *command),
+                          "Contradictory recorded command identity");
+                else if (pending != added.end())
+                    check(data::same_emitter_command(*pending, *command), "Contradictory command identity");
+                else {
+                    check(commands.size() < header.program.bounds.max_commands &&
+                              added.size() < header.program.bounds.max_commands - commands.size() &&
+                              commands.size() + added.size() < header.config.max_correlation_entries,
+                          "Recorded command/correlation bound exceeded");
+                    added.push_back(*command);
+                }
+            }
+        }
         auto n = data::bundle_encoded_size(b);
         check(n <= header.program.bounds.max_bytes && bytes <= header.program.bounds.max_bytes - n,
               "Recorded byte bound exceeded");
         auto context = b;
         context.frameset.reset(); // retain only semantic successor context
+        commands.insert(commands.end(), std::make_move_iterator(added.begin()),
+                        std::make_move_iterator(added.end()));
         previous = std::move(context);
         ordinals.push_back(b.evidence.key.ordinal.value);
         bytes += n;
         ++count;
+        events += 1 + b.triggers.size();
     }
 };
 } // namespace mantis::artifact

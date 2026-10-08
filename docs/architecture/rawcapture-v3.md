@@ -179,8 +179,14 @@ L1 validate_successor checks publication clock/time and adjacent source generati
 event ordering. Established step instances must name a persisted declared step
 index and valid repetition. Trigger/frame references may resolve late; storage
 does not reinterpret them as hardware policy or require earlier TriggerEvents.
-The ordinal set is bounded by recorded correlation-entry reservation and program
-max_events; canonical bundle payload bytes are cumulatively bounded by max_bytes.
+The ordinal set is bounded by recorded correlation-entry reservation. Checked event
+accounting is one event per bundle plus every actual TriggerEvent, bounded by
+program max_events; TriggerKey references alone do not count. Unique established
+EmitterCommand request identities are bounded by max_commands and the finite
+correlation reservation. Identical repeated command evidence counts once;
+contradictory duplicate identities are corrupt. These checks apply to append,
+final verification and recovery. Canonical bundle payload bytes are cumulatively
+bounded by max_bytes.
 Header/framing overhead is accounted in artifact bytes separately. One previous
 bundle's semantic context is retained without its mapped FrameSet. No pixel buffer
 or capture-sized record index is retained for continuity.
@@ -263,7 +269,8 @@ Body field order:
 - `ProjectedCaptureOutcome`: uint64 `bundle_count`, `outcome`.
 - `ProjectedRunOutcome`: `run`, `generation`, `disposition`, `reason`,
   `initiating_error`, `abort_error`, `stop_error`, `close_error`, `abort_outcome`,
-  `diagnostic`. The four errors and abort outcome use the three-state Evidence tags.
+  `diagnostic`. The four errors and abort outcome use one-byte optional tags:
+  0 absent, 1 present followed by the typed value. Structural absence is never Unknown.
 - `Error`: one-byte explicit Status tag, `message`, `component`.
 - `RecordedAbortOutcome`: `run`, `fenced_generation`, `inhibited`,
   `stale_work_fenced`, `off_requested`, `emitters`, `error`. The first five fields
@@ -271,25 +278,41 @@ Body field order:
   typed field order; at most 64 emitters and 16 effective-state entries per emitter.
 - `RecordedExecutorError`: uint32 `category`, uint32 `code` (each encoded in eight
   bytes with uint32 overflow rejection). These are exact structured executor values.
+  Frozen L2 categories are NONE=0 through CLEANUP=7; category must be <=7
+  and (category==0)==(code==0).
 
 Run disposition tags are 0 completed, 1 cancelled, 2 failed. AcquisitionReason
 uses the existing table. Status tags are 0 ok, 1 invalid_argument, 2 not_found,
 3 incompatible, 4 cancelled, 5 io, 6 busy, 7 plugin_failed, 8 unsupported,
 9 corrupt. Unknown tags are corrupt. IDs, strings, semantic vectors and doubles
-retain the existing explicit bounds and representations. An established Error
-cannot have status ok. Recorded errors, negative established software abort flags
-or nonzero abort error category require FAILED, without rewriting any facts/reason.
+retain the existing explicit bounds and representations. A present Error
+cannot have status ok. Established abort commands must target their emitter and
+request OFF; Unknown/Unavailable remain unchanged. Structural emitter validation
+reuses L1 validation without inventing a camera exposure context. Recorded errors,
+negative established software abort flags or nonzero abort error category require
+FAILED, without rewriting any facts/reason.
 OFF-request success never establishes observed, effective, optical or physical OFF.
 
 `device::recorded_run_outcome(snapshot)` explicitly converts the final L3 model;
 it requires `cleanup_resolved` and a final state. The snapshot flag exposes L3's
-existing completion latch because preflight FAILED can precede stop/close cleanup.
+completion latch because preflight FAILED can precede stop/close cleanup.
 It preserves the final state/reason and errors, and copies full AbortOutcome
-semantics. Missing optional L3 errors/outcome become Unknown; Unavailable remains
-representable in the lower storage model. The conversion neither commands hardware
-nor recalculates L3 policy. L2 ABI and L3 execution/cleanup policy are unchanged.
+semantics. Missing optional L3 errors/outcome stay absent; present values stay
+present. Inside AbortOutcome, Unknown/Unavailable/Established remain exact.
+The conversion returns ProjectedCaptureOutcome, copying queue.produced to
+bundle_count. queue.consumed and unqueued/faulting bundles do not define this count.
+The conversion neither commands hardware nor recalculates L3 policy. L2 ABI and
+L3 cleanup precedence are unchanged. Once cleanup_resolved is true,
+terminal facts are frozen. A callback returning after an abort deadline may
+retire bookkeeping only; it cannot replace the latched FAILED deadline/refusal
+errors or absent abort outcome. Callers still retire concurrent public invocations
+before destroying a run.
 
-`Store::record_run_outcome` verifies run/execution generation, rejects duplicates,
+`Store::record_run_outcome` accepts that explicit counted value, verifies
+expected L3 bundle_count equals the received prefix before any seal/write,
+and verifies run/execution generation and rejects duplicates. Count mismatch
+rejects with invalid_argument, leaves OPEN and publishes no sidecar; draining
+the missing bundles permits retry with the same counted result. It then
 seals and durably indexes preceding bundle segments, then writes run.outcome.part,
 flushes/closes/fsyncs it, renames to run.outcome and fsyncs the directory before
 returning. Its bundle_count binds the exact prefix and rejects later records.
@@ -301,17 +324,26 @@ no outcome keeps the header/segments-only aggregate formula.
 Recovery checks outcome envelope integrity and identity before mutating active
 segments. Complete invalid outcome bytes (including a .part with a complete
 footer) are corruption, never absence. Structurally incomplete run.outcome.part
-is retained for diagnosis and treated as absent. A truncated published run.outcome
-is corruption. Complete checksum/semantic-valid provisional outcomes are published
-only after the verified bundle count matches. Unexpected extra/missing bundles
-are corrupt, and no later records are accepted. Cancellation remains retryable.
+is treated as absent and removed only after the verified prefix is durably
+FINALIZED without an outcome. Complete corruption is refused and retained. A
+truncated published run.outcome is corruption. Complete checksum/semantic-valid
+provisional outcomes are published only after the verified bundle count matches.
+Unexpected extra/missing bundles are corrupt, and no later records are accepted. Cancellation remains retryable.
 Reopened outcome access validates checksum, typed fields and header identity;
 finalization/recovery and sequential replay additionally verify prefix count.
+Every finalized schema-3 semantic access (header, outcome, reader/replay, summary
+and descriptor get) reconstructs aggregate identity from current header hash,
+ordered indexed expected segment hashes and current outcome hash if present,
+and compares it with the persisted descriptor hash. This reads only bounded
+sidecars and SQLite hash rows; actual segment bytes remain verified on access.
+Deleted/added/changed outcomes and changed headers are corruption even when
+internally checksum-valid. A recovered prefix intentionally hashed without an
+outcome remains valid and unknown/incomplete. Legacy aggregate behavior is unchanged.
 
 The independent `run-outcome3.bin` fixture freezes a FAILED daemon outcome with
-all presence states, exact structured errors, commanded OFF, unavailable ack,
-unknown observation and unknown/unavailable effective state. Existing nine fixture
-binaries remain byte-identical. Tests include every byte-boundary truncation,
+optional error absence/presence, internal three-state evidence, exact structured
+errors, commanded OFF, unavailable ack, unknown observation and unknown/unavailable
+effective state. Existing nine fixture binaries remain byte-identical. Tests include every byte-boundary truncation,
 corrupt complete outcomes, prefix/identity/enum/boolean/overflow errors, actual L3
 cleanup precedence, zero-bundle failure/cancellation, real SIGKILL after executor
 completion, retry after early finalize, hash coverage and unchanged bundle digest.

@@ -29,7 +29,7 @@ class Store {
     ArtifactId begin_projected_capture(data::ProjectedCaptureHeader, Provenance = {});
     void append_bundle(const ArtifactId &, const data::AcquisitionBundle &);
     // Call only with the final daemon snapshot, after cleanup and draining bundles.
-    void record_run_outcome(const ArtifactId &, const data::ProjectedRunOutcome &);
+    void record_run_outcome(const ArtifactId &, const data::ProjectedCaptureOutcome &);
     std::optional<data::ProjectedRunOutcome> run_outcome(const ArtifactId &) const;
     data::ProjectedCaptureHeader capture_header(const ArtifactId &) const;
     data::AcquisitionBundle bundle(const ArtifactId &, uint64_t record = 0) const;

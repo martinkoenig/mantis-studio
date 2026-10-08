@@ -461,6 +461,8 @@ struct LaserObservation {
     Evidence<ImplementationIdentity> confidence_interpretation;
     std::string diagnostic;
 };
+// Structural emitter semantics; exposure coverage against camera frames is checked by bundle validation.
+Result<void> validate(const EmitterEvidence &);
 Result<void> validate(const AcquisitionProgram &);
 Result<void> validate(const TriggerEvent &);
 Result<void> validate(const AcquisitionEvidence &);

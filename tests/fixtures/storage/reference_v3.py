@@ -98,7 +98,7 @@ def run_outcome():
             A([frame + unknown, S('cam') + S('stream') + S('gen') + U(8) + unavailable]))
     abort = E(S('run')) + unavailable + E(b'\1') + unknown + E(b'\1') + A([emit]) + U(7) + U(23)
     # state failed=2, reason device_failure=3; structured Error status plugin_failed=7.
-    out = (S('run') + S('execution') + b'\2' + b'\3' + unavailable +
-           E(b'\7' + S('abort failed') + S('executor')) + unknown + unavailable + E(abort) + S('cleanup fault'))
+    out = (S('run') + S('execution') + b'\2' + b'\3' + O(None) +
+           O(b'\7' + S('abort failed') + S('executor')) + O(None) + O(None) + O(abort) + S('cleanup fault'))
     body = U(4) + out
     return b'MRUNOUT3' + U(1) + U(len(body)) + U(fnv(body)) + body + b'MOUTEND3' + U(~len(body))

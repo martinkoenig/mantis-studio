@@ -228,10 +228,10 @@ inline std::string encode(const ProjectedCaptureOutcome &o) {
 namespace storage_fixture {
 inline ProjectedRunOutcome detailed_outcome() {
     auto o = outcome();
-    o.initiating_error = Unavailable{};
+    o.initiating_error.reset();
     o.abort_error = Error{Status::plugin_failed, "abort failed", "executor"};
-    o.stop_error = Unknown{};
-    o.close_error = Unavailable{};
+    o.stop_error.reset();
+    o.close_error.reset();
     RecordedAbortOutcome a;
     a.run = run;
     a.fenced_generation = Unavailable{};
