@@ -14,3 +14,8 @@ in tests/unit/projected_storage_values.hpp. Four bundles cover no-image presence
 full captured emitter/exposure/calibration state, three trigger stages and an
 explicit failed terminal. run-header3.bin contains a complete program/configuration;
 mrawrec3.bin frames the exact evidence-only bundle. Expected data is immutable.
+
+The follow-up run-outcome3.bin independently freezes the final daemon outcome
+sidecar (MRUNOUT3/MOUTEND3), including full AbortOutcome presence and emitter
+semantics. Its run_outcome() derivation is separate from all existing fixtures;
+no previous fixture bytes changed. It does not stand in for an executor bundle.

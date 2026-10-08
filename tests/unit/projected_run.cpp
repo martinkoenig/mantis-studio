@@ -2,6 +2,7 @@
 #include <condition_variable>
 #include <future>
 #include <iostream>
+#include <mantis/artifact_store.hpp>
 #include <mantis/projected_run.hpp>
 #include <mutex>
 #include <thread>
@@ -195,6 +196,7 @@ struct FakeState {
         fail_stop{}, fail_close{};
     bool block{}, entered{}, inhibit{}, abort_block{}, abort_entered{}, abort_release{};
     std::function<void(uint32_t)> on_next;
+    std::function<void()> on_stop;
     std::vector<uint32_t> next_timeouts;
     AbortOutcome outcome;
     FakeState() {
@@ -306,6 +308,8 @@ class Fake final : public ProjectedExecutor {
     Result<void> stop(uint32_t timeout) override {
         CHECK(timeout <= 1000);
         CHECK(!s->next_active && !s->abort_active);
+        if (s->on_stop)
+            s->on_stop();
         ++s->stops;
         if (s->fail_stop)
             return std::unexpected(injected());
@@ -2088,6 +2092,112 @@ void concurrency_tests() {
     }
 }
 } // namespace
+void terminal_recording_tests() {
+    auto root = std::filesystem::temp_directory_path() / Id::random().value;
+    struct Cleanup {
+        std::filesystem::path p;
+        ~Cleanup() { std::filesystem::remove_all(p); }
+    } cleanup{root};
+    auto store = std::make_shared<artifact::Store>(root);
+    // Actual L3 execution: preflight/prepare failure, pending-next cancellation,
+    // normal executor completion, stop/close failure, cancellation with cleanup fault.
+    for (unsigned mode = 0; mode < 7; ++mode) {
+        auto s = std::make_shared<FakeState>();
+        std::promise<void> stop_entered, release_stop;
+        auto released = release_stop.get_future().share();
+        if (mode == 0)
+            s->on_stop = [&] {
+                stop_entered.set_value();
+                CHECK(released.wait_for(1s) == std::future_status::ready);
+            };
+        const bool cancel = mode == 1 || mode == 5;
+        s->fail_prepare = mode == 0;
+        s->fail_stop = mode == 3 || mode == 5;
+        s->fail_close = mode == 4;
+        s->block = cancel;
+        auto p = program();
+        if (mode >= 2 && !cancel) {
+            s->emit(bundle(p, 0, AcquisitionDisposition::control_only));
+            s->emit(bundle(p, 1, AcquisitionDisposition::completed));
+        }
+        if (mode == 6) {
+            s->outcome.inhibited = false;
+            s->outcome.stale_work_fenced = Unavailable{};
+        }
+        auto r = run(s, p);
+        auto id = store->begin_projected_capture(
+            {p, identity.run, identity.generation, recorded_run_config(config())});
+        bool rejected = false;
+        try {
+            (void)recorded_run_outcome(r->snapshot());
+        } catch (const Failure &) {
+            rejected = true;
+        }
+        CHECK(rejected);
+        if (mode == 0) {
+            auto preparing = std::async(std::launch::async, [&] { return r->prepare(); });
+            CHECK(stop_entered.get_future().wait_for(1s) == std::future_status::ready);
+            auto pending = r->snapshot();
+            CHECK(pending.state == ProjectedState::failed && !pending.cleanup_resolved);
+            bool pending_rejected = false;
+            try {
+                (void)recorded_run_outcome(pending);
+            } catch (const Failure &) {
+                pending_rejected = true;
+            }
+            CHECK(pending_rejected);
+            release_stop.set_value();
+            CHECK(preparing.wait_for(1s) == std::future_status::ready && !preparing.get());
+        } else {
+            CHECK(r->prepare());
+            (void)r->start();
+            if (cancel) {
+                CHECK(s->await([&] { return s->entered; }));
+                r->cancel();
+            }
+        }
+        auto end = finish(*r);
+        CHECK(end.cleanup_resolved);
+        uint64_t records{};
+        for (;;) {
+            auto next = r->next(0);
+            CHECK(next);
+            if (!*next)
+                break;
+            store->append_bundle(id, ***next);
+            ++records;
+        }
+        auto out = recorded_run_outcome(end);
+        store->record_run_outcome(id, out);
+        CHECK(store->finalize(id).state == artifact::ArtifactState::finalized);
+        auto summary = store->bundle_summary(id);
+        CHECK(summary.records == records && summary.final_outcome);
+        auto recorded = summary.final_outcome;
+        CHECK(recorded->reason == end.terminal.reason);
+        if (mode == 2)
+            CHECK(recorded->disposition == RecordedRunDisposition::completed);
+        else if (mode == 1)
+            CHECK(recorded->disposition == RecordedRunDisposition::cancelled);
+        else
+            CHECK(recorded->disposition == RecordedRunDisposition::failed);
+        if (mode == 3 || mode == 4) {
+            CHECK(end.terminal.executor_terminal && records == 2);
+            CHECK(store->bundle(id, 1).evidence.disposition == AcquisitionDisposition::completed);
+            CHECK(recorded->reason == AcquisitionReason::cleanup_failure);
+            CHECK(mode == 3 ? recorded->stop_error.get() != nullptr : recorded->close_error.get() != nullptr);
+        }
+        if (cancel)
+            CHECK(!end.terminal.executor_terminal && records == 0 &&
+                  recorded->reason == AcquisitionReason::user_cancel);
+        if (mode == 0)
+            CHECK(records == 0 && s->starts == 0 && s->aborts == 0 && recorded->initiating_error.get());
+        if (mode != 0) {
+            CHECK(recorded->abort_outcome.get());
+            CHECK(recorded->abort_outcome.get()->stale_work_fenced.presence() ==
+                  (mode == 6 ? Presence::unavailable : Presence::unknown));
+        }
+    }
+}
 int main() {
     try {
         final_preflight_tests();
@@ -2105,6 +2215,7 @@ int main() {
         concurrency_tests();
         additional_contract_tests();
         reservation_and_terminal_tests();
+        terminal_recording_tests();
         std::cout << checks << " deterministic sequencer checks passed\n";
         return 0;
     } catch (const std::exception &e) {

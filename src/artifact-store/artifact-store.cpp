@@ -110,6 +110,7 @@ struct Store::Impl {
         uint64_t index{}, limit{segments::max_segment_bytes}, records{};
         std::optional<uint64_t> last_sequence;
         std::unique_ptr<BundleState> bundles;
+        bool outcome_published{};
     };
     std::map<Id, std::unique_ptr<Writer>> writers;
     void seal(const Id &id, Writer &writer) {
@@ -192,13 +193,57 @@ struct Store::Impl {
         storage->domain = memory::MemoryDomain::shared_memory;
         return data::read_capture_header({storage, 0, m.size});
     }
+    std::optional<data::ProjectedCaptureOutcome> read_outcome(const Id &id, bool provisional = false) const {
+        std::lock_guard guard(mutex);
+        const auto header = read_header(id);
+        auto path = root / "objects" / id.value / "run.outcome";
+        auto part = path;
+        part += ".part";
+        if (std::filesystem::exists(path) && std::filesystem::exists(part))
+            fail(Status::corrupt, "Conflicting published/provisional daemon outcomes");
+        bool partial = false;
+        if (!std::filesystem::exists(path)) {
+            if (!provisional || !std::filesystem::exists(part))
+                return {};
+            path = part;
+            partial = true;
+        }
+        const auto size = std::filesystem::file_size(path);
+        if (size > data::max_run_outcome_bytes)
+            fail(Status::corrupt, "Run outcome exceeds bound");
+        if (!size) {
+            if (partial)
+                return {};
+            fail(Status::corrupt, "Empty published daemon outcome");
+        }
+        const auto m = platform::map_read(path);
+        auto storage = std::make_shared<memory::Storage>();
+        storage->owner = m.owner;
+        storage->host = m.data;
+        storage->size = m.size;
+        storage->alignment = 1;
+        auto record = data::read_run_outcome({storage, 0, m.size}, partial);
+        if (record && (record->outcome.run != header.run || record->outcome.generation != header.generation ||
+                       record->bundle_count > header.program.bounds.max_events ||
+                       record->bundle_count > header.config.max_correlation_entries))
+            fail(Status::corrupt, "Daemon outcome binding differs from persisted run");
+        return record;
+    }
     void recover_segments(const Id &id, const CancellationToken &token) {
         ArtifactDescriptor a;
         { std::lock_guard guard(mutex); a = get(id); }
         const bool projected = a.type.schema_version == 3;
         std::optional<BundleState> bundles;
+        std::optional<data::ProjectedCaptureOutcome> outcome;
         if (projected)
             bundles.emplace(read_header(id));
+        if (projected)
+            outcome = read_outcome(id, true); // complete corruption is rejected before tail mutation
+        auto accept = [&](const data::AcquisitionBundle &b) {
+            if (outcome && bundles->count >= outcome->bundle_count)
+                fail(Status::corrupt, "Bundle data follows final daemon outcome prefix");
+            bundles->accept(b);
+        };
         const auto directory = root / "objects" / id.value;
         if (projected) {
             std::set<uint64_t> closed, parts;
@@ -256,7 +301,7 @@ struct Store::Impl {
                     fail(Status::corrupt, "Invalid indexed segment");
                 for (size_t n = 0; n < scan.records.size(); ++n) {
                     token.check();
-                    bundles->accept(segments::bundle(scan, n));
+                    accept(segments::bundle(scan, n));
                 }
             }
         }
@@ -275,8 +320,12 @@ struct Store::Impl {
             if (projected)
                 for (size_t n = 0; n < scanned.records.size(); ++n) {
                     token.check();
-                    bundles->accept(segments::bundle(scanned, n));
+                    accept(segments::bundle(scanned, n));
                 }
+            if (outcome && !std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment")) &&
+                !std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment.part")) &&
+                outcome->bundle_count != bundles->count)
+                fail(Status::corrupt, "Bundle prefix differs from final daemon outcome");
             if (scanned.incomplete && !partial) fail(Status::corrupt, "Closed segment is incomplete");
             if (partial) {
                 if (std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment")) ||
@@ -306,6 +355,17 @@ struct Store::Impl {
             if (name.ends_with(".segment") || name.ends_with(".segment.part")) {
                 auto number = std::stoull(name);
                 if (number > index) fail(Status::corrupt, "Missing segment / index mismatch");
+            }
+        }
+        if (outcome) {
+            if (outcome->bundle_count != bundles->count)
+                fail(Status::corrupt, "Bundle prefix differs from final daemon outcome");
+            const auto part = directory / "run.outcome.part";
+            if (std::filesystem::exists(part)) {
+                token.check();
+                platform::durable_file(part);
+                std::filesystem::rename(part, directory / "run.outcome");
+                platform::durable_directory(directory);
             }
         }
     }
@@ -404,6 +464,9 @@ struct Store::Impl {
             auto header = root / "objects" / id.value / "run.header";
             if (std::filesystem::exists(header))
                 result.bytes += std::filesystem::file_size(header);
+            const auto outcome = header.parent_path() / "run.outcome";
+            if (std::filesystem::exists(outcome))
+                result.bytes += std::filesystem::file_size(outcome);
         }
         return result;
     }
@@ -551,6 +614,8 @@ void Store::append_bundle(const Id &id, const data::AcquisitionBundle &bundle) {
     // Writer lifetime follows OPEN: abandon/finalization/failure remove it.
     // No SQLite access or transaction is performed for each live bundle.
     auto &w = *it->second;
+    if (w.outcome_published)
+        fail(Status::invalid_argument, "Bundles cannot follow the final daemon outcome");
     // All semantic rejection happens before filesystem writes and does not poison the writer.
     w.bundles->accept(bundle);
     try {
@@ -574,6 +639,55 @@ void Store::append_bundle(const Id &id, const data::AcquisitionBundle &bundle) {
         failed.row();
         throw;
     }
+}
+void Store::record_run_outcome(const Id &id, const data::ProjectedRunOutcome &outcome) {
+    data::validate_run_outcome(outcome);
+    std::lock_guard guard(impl_->mutex);
+    auto a = impl_->get(id);
+    if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3)
+        fail(Status::incompatible, "Daemon outcome requires RawCapture 3");
+    if (a.state != ArtifactState::open)
+        fail(Status::invalid_argument, "Only OPEN captures accept a daemon outcome");
+    auto it = impl_->writers.find(id);
+    if (it == impl_->writers.end() || !it->second->bundles)
+        fail(Status::invalid_argument, "Missing live projected writer; recover explicitly");
+    auto &w = *it->second;
+    auto directory = impl_->root / "objects" / id.value;
+    if (w.outcome_published || std::filesystem::exists(directory / "run.outcome"))
+        fail(Status::invalid_argument, "Final daemon outcome is immutable and unique");
+    if (outcome.run != w.bundles->header.run || outcome.generation != w.bundles->header.generation)
+        fail(Status::invalid_argument, "Final daemon outcome belongs to another run/generation");
+    try {
+        // Publish all preceding evidence durably before the outcome commits its prefix.
+        impl_->seal(id, w);
+        const auto part = directory / "run.outcome.part";
+        if (std::filesystem::exists(part))
+            fail(Status::busy, "Provisional daemon outcome requires explicit recovery");
+        std::ofstream out(part, std::ios::binary);
+        data::write_run_outcome(out, {w.bundles->count, outcome});
+        out.flush();
+        if (!out)
+            fail(Status::io, "Daemon outcome flush failed");
+        out.close();
+        if (!out)
+            fail(Status::io, "Daemon outcome close failed");
+        platform::durable_file(part);
+        std::filesystem::rename(part, directory / "run.outcome");
+        platform::durable_directory(directory);
+        w.outcome_published = true;
+    } catch (...) {
+        impl_->writers.erase(id);
+        Statement failed(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+        failed.text(1, id.value);
+        failed.row();
+        throw;
+    }
+}
+std::optional<data::ProjectedRunOutcome> Store::run_outcome(const Id &id) const {
+    auto record = impl_->read_outcome(id);
+    if (record)
+        return std::move(record->outcome);
+    return {};
 }
 CalibrationRevision Store::begin_calibration(ArtifactType type, Provenance provenance,
                                              std::optional<Id> series) {
@@ -751,6 +865,12 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
     if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version != 1 && a.type.schema_version != 2 &&
         a.type.schema_version != 3)
         fail(Status::incompatible, "Unknown RawCapture schema");
+    const bool projected = a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3;
+    // A missing cleanup outcome is an ordinary sequencing error, not a storage failure.
+    // Reject before sealing/removing a healthy live writer or changing OPEN.
+    if (projected && !recovery &&
+        !std::filesystem::exists(impl_->root / "objects" / id.value / "run.outcome"))
+        fail(Status::invalid_argument, "Normal finalization requires final daemon outcome");
     bool entered_verification = false;
     try {
         if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
@@ -758,7 +878,7 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
             impl_->writers.erase(writer);
             a = impl_->get(id);
         }
-        if (!a.chunks && !(recovery && a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3))
+        if (!a.chunks && !projected)
             fail(Status::invalid_argument, "Cannot finalize an artifact with no committed chunks");
         {
             Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?");
@@ -771,8 +891,10 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
         // multi-gigabyte verification must not block daemon snapshots/commands.
         uint64_t aggregate = 14695981039346656037ULL;
         std::optional<BundleState> bundles;
-        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3) {
+        std::optional<data::ProjectedCaptureOutcome> outcome;
+        if (projected) {
             bundles.emplace(capture_header(id));
+            outcome = impl_->read_outcome(id);
             auto hash = file_hash(impl_->root / "objects" / id.value / "run.header");
             for (unsigned char byte : hash.hex) {
                 aggregate ^= byte;
@@ -808,8 +930,15 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
                 aggregate ^= byte; aggregate *= 1099511628211ULL;
             }
         }
-        if (bundles && !recovery && !bundles->terminal)
-            fail(Status::invalid_argument, "Normal projected finalization requires terminal evidence");
+        if (projected) {
+            if ((!outcome && !recovery) || (outcome && outcome->bundle_count != bundles->count))
+                fail(Status::corrupt, "Final daemon outcome/prefix mismatch");
+            if (outcome)
+                for (unsigned char byte : file_hash(impl_->root / "objects" / id.value / "run.outcome").hex) {
+                    aggregate ^= byte;
+                    aggregate *= 1099511628211ull;
+                }
+        }
         std::ostringstream digest;
         digest << std::hex << std::setfill('0') << std::setw(16) << aggregate;
         Hash hash{"fnv1a64", digest.str()};
@@ -903,15 +1032,21 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
 }
 void Store::prepare_finalize(const Id &id) {
     std::lock_guard guard(impl_->mutex);
-    if (impl_->get(id).state != ArtifactState::open) fail(Status::invalid_argument, "Only OPEN captures can begin finalization");
+    const auto a = impl_->get(id);
+    if (a.state != ArtifactState::open)
+        fail(Status::invalid_argument, "Only OPEN captures can begin finalization");
+    const bool projected = a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3;
+    if (projected && !std::filesystem::exists(impl_->root / "objects" / id.value / "run.outcome"))
+        fail(Status::invalid_argument, "Prepare-finalize requires final daemon outcome");
     try {
+        if (projected)
+            (void)impl_->read_outcome(id);
         if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
             impl_->seal(id, *writer->second);
             impl_->writers.erase(writer);
         }
     } catch (...) {
-        auto a = impl_->get(id);
-        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3) {
+        if (projected) {
             impl_->writers.erase(id);
             Statement failed(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
             failed.text(1, id.value);
@@ -983,6 +1118,8 @@ struct BundleCaptureReader::Impl {
     std::shared_ptr<const Store> store;
     ArtifactDescriptor artifact;
     BundleState state;
+    std::optional<data::ProjectedCaptureOutcome> outcome;
+    std::optional<data::ProjectedRunOutcome> final;
     uint64_t segment{};
     size_t record{};
     std::optional<segments::Scan> scan;
@@ -991,19 +1128,28 @@ struct BundleCaptureReader::Impl {
         if (artifact.state != ArtifactState::finalized || artifact.type.name != "org.mantis.RawCapture" ||
             artifact.type.schema_version != 3)
             fail(Status::incompatible, "BundleCaptureReader requires finalized RawCapture 3");
+        outcome = store->impl_->read_outcome(id);
+        if (outcome)
+            final = outcome->outcome;
     }
 };
 BundleCaptureReader::BundleCaptureReader(std::shared_ptr<const Store> s, Id id)
     : impl_(std::make_unique<Impl>(std::move(s), std::move(id))) {}
 BundleCaptureReader::~BundleCaptureReader() = default;
 const data::ProjectedCaptureHeader &BundleCaptureReader::header() const { return impl_->state.header; }
+const std::optional<data::ProjectedRunOutcome> &BundleCaptureReader::final_outcome() const {
+    return impl_->final;
+}
 std::optional<data::AcquisitionBundle> BundleCaptureReader::next(const CancellationToken &token) {
     auto &r = *impl_;
     token.check();
     while (!r.scan || r.record == r.scan->records.size()) {
         r.scan.reset(); // release previous mapping/index before opening the next segment
-        if (r.segment == r.artifact.chunks)
+        if (r.segment == r.artifact.chunks) {
+            if (r.outcome && r.state.count != r.outcome->bundle_count)
+                fail(Status::corrupt, "Replay prefix differs from final daemon outcome");
             return {};
+        }
         auto scan = segments::scan(r.store->object_path(r.artifact.id, r.segment), 3, token);
         if (scan.incomplete || !scan.corruption.empty() || scan.records.empty())
             fail(Status::corrupt, "Bundle replay segment integrity failure");
@@ -1012,6 +1158,8 @@ std::optional<data::AcquisitionBundle> BundleCaptureReader::next(const Cancellat
         ++r.segment;
     }
     auto b = segments::bundle(*r.scan, r.record);
+    if (r.outcome && r.state.count == r.outcome->bundle_count)
+        fail(Status::corrupt, "Bundle data follows final daemon outcome");
     r.state.accept(b);
     ++r.record;
     return b;
@@ -1033,16 +1181,12 @@ data::AcquisitionBundle Store::bundle(const Id &id, uint64_t record) const {
 }
 Store::BundleSummary Store::bundle_summary(const Id &id, const CancellationToken &token) const {
     BundleSummary summary;
+    summary.final_outcome = run_outcome(id);
     replay_bundles(
         id,
         [&](data::AcquisitionBundle b) {
             ++summary.records;
-            auto d = *b.evidence.disposition;
-            if (d == data::AcquisitionDisposition::completed || d == data::AcquisitionDisposition::failed ||
-                d == data::AcquisitionDisposition::stopped || d == data::AcquisitionDisposition::cancelled) {
-                summary.terminal = d;
-                summary.reason = b.evidence.reason;
-            }
+            summary.last_executor_disposition = b.evidence.disposition;
         },
         token);
     return summary;

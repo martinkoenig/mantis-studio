@@ -13,6 +13,7 @@ struct ActiveCalibration {
     ArtifactReference artifact;
 };
 class Store {
+    friend class BundleCaptureReader;
     struct Impl;
     std::unique_ptr<Impl> impl_;
     ArtifactDescriptor finalize_impl(const Id &, const CancellationToken &, bool recovery);
@@ -27,14 +28,17 @@ class Store {
     // Synchronous durable pre-run initialization; never starts hardware.
     ArtifactId begin_projected_capture(data::ProjectedCaptureHeader, Provenance = {});
     void append_bundle(const ArtifactId &, const data::AcquisitionBundle &);
+    // Call only with the final daemon snapshot, after cleanup and draining bundles.
+    void record_run_outcome(const ArtifactId &, const data::ProjectedRunOutcome &);
+    std::optional<data::ProjectedRunOutcome> run_outcome(const ArtifactId &) const;
     data::ProjectedCaptureHeader capture_header(const ArtifactId &) const;
     data::AcquisitionBundle bundle(const ArtifactId &, uint64_t record = 0) const;
     void replay_bundles(const ArtifactId &, const std::function<void(data::AcquisitionBundle)> &,
                         const CancellationToken & = {}) const;
     struct BundleSummary {
         uint64_t records{};
-        std::optional<data::AcquisitionDisposition> terminal; // absent = unknown/incomplete
-        data::AcquisitionReason reason{data::AcquisitionReason::none};
+        std::optional<data::ProjectedRunOutcome> final_outcome; // absent = unknown/incomplete
+        std::optional<data::AcquisitionDisposition> last_executor_disposition;
     };
     BundleSummary bundle_summary(const ArtifactId &, const CancellationToken & = {}) const;
     // Reservation and artifact creation are one transaction; reserved revisions are never reused.
@@ -69,6 +73,7 @@ class BundleCaptureReader {
     BundleCaptureReader(std::shared_ptr<const Store>, Id);
     ~BundleCaptureReader();
     const data::ProjectedCaptureHeader &header() const;
+    const std::optional<data::ProjectedRunOutcome> &final_outcome() const;
     std::optional<data::AcquisitionBundle> next(const CancellationToken & = {});
 };
 // Generic reader/source seam: parser remains in storage, callers receive Published.

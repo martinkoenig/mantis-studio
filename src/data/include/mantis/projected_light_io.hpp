@@ -13,6 +13,37 @@ struct ProjectedCaptureHeader {
     GenerationId generation;
     RecordedRunConfig config;
 };
+// Daemon cleanup result, deliberately separate from executor bundle dispositions.
+enum class RecordedRunDisposition { completed, cancelled, failed };
+struct RecordedExecutorError {
+    uint32_t category{}, code{};
+};
+struct RecordedAbortOutcome {
+    Evidence<RunId> run;
+    Evidence<GenerationId> fenced_generation;
+    Evidence<bool> inhibited, stale_work_fenced, off_requested;
+    std::vector<EmitterEvidence> emitters;
+    RecordedExecutorError error;
+};
+struct ProjectedRunOutcome {
+    RunId run;
+    GenerationId generation;
+    RecordedRunDisposition disposition{RecordedRunDisposition::failed};
+    AcquisitionReason reason{AcquisitionReason::none};
+    Evidence<Error> initiating_error, abort_error, stop_error, close_error;
+    Evidence<RecordedAbortOutcome> abort_outcome;
+    std::string diagnostic;
+};
+// Binds the separately published outcome to the exact preceding bundle prefix.
+struct ProjectedCaptureOutcome {
+    uint64_t bundle_count{};
+    ProjectedRunOutcome outcome;
+};
+inline constexpr uint64_t max_run_outcome_bytes = 1024 * 1024;
+void validate_run_outcome(const ProjectedRunOutcome &);
+void write_run_outcome(std::ostream &, const ProjectedCaptureOutcome &);
+// Only a provisional .part may opt into incomplete-envelope detection.
+std::optional<ProjectedCaptureOutcome> read_run_outcome(memory::BufferView, bool allow_incomplete = false);
 void validate_capture_header(const ProjectedCaptureHeader &);
 void write_capture_header(std::ostream &, const ProjectedCaptureHeader &);
 ProjectedCaptureHeader read_capture_header(memory::BufferView);

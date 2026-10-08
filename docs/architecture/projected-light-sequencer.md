@@ -196,7 +196,11 @@ unqueued/faulting bundle. Fault/cleanup failure takes precedence over cancellati
 which takes precedence over natural completion/normal stop. Cleanup never overwrites
 the initiating fault. User stop remains a nonfault termination reason. Completed
 executor evidence cannot bypass coverage checks or the common inhibit/OFF cleanup.
-No terminal AcquisitionBundle is fabricated by the daemon.
+No terminal AcquisitionBundle is fabricated by the daemon. L4 persists the final daemon
+snapshot in a separate typed run.outcome sidecar. `cleanup_resolved` exposes the
+existing completion latch; FAILED state during preflight alone does not permit
+recording a final outcome. `recorded_run_outcome(snapshot)` requires that latch
+and copies the resolved state/reason/errors/AbortOutcome without hardware actions.
 
 An executor must honor its L2 synchronous finite-call contract. In-process C++ code
 cannot forcibly preempt a plugin that violates it; ordinary worker destruction joins

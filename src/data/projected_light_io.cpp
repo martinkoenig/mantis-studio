@@ -1,4 +1,5 @@
 #include <bit>
+#include <cmath>
 #include <limits>
 #include <mantis/data_io.hpp>
 #include <mantis/projected_light_io.hpp>
@@ -140,6 +141,8 @@ struct Input {
     template <class... T> void operator()(T &...v) { ((v = get<T>(r)), ...); }
 };
 template <class T> void put(Writer &w, const T &v) {
+    if constexpr (std::is_same_v<T, Id>)
+        require(!v.value.empty() && v.value.size() <= max_semantic_id, "Invalid semantic ID");
     if constexpr (std::is_same_v<T, std::string>) {
         require(v.size() <= max_semantic_string, "String too long");
         w.number(v.size());
@@ -148,7 +151,10 @@ template <class T> void put(Writer &w, const T &v) {
         w.number(std::bit_cast<uint64_t>(v.count()));
     else if constexpr (std::is_same_v<T, double>) {
         static_assert(sizeof(double) == 8 && std::numeric_limits<double>::is_iec559);
+        require(std::isfinite(v), "Nonfinite semantic number");
         w.number(std::bit_cast<uint64_t>(v));
+    } else if constexpr (std::is_same_v<T, bool>) {
+        w.byte(v ? 1 : 0);
     } else if constexpr (std::is_integral_v<T>) {
         if constexpr (std::is_signed_v<T>)
             w.number(std::bit_cast<uint64_t>(static_cast<int64_t>(v)));
@@ -191,7 +197,11 @@ template <class T> T get(Reader &r) {
         v = Duration{std::bit_cast<int64_t>(r.number())};
     else if constexpr (std::is_same_v<T, double>)
         v = std::bit_cast<double>(r.number());
-    else if constexpr (std::is_integral_v<T>) {
+    else if constexpr (std::is_same_v<T, bool>) {
+        auto tag = r.byte();
+        require(tag <= 1, "Invalid boolean tag");
+        v = tag == 1;
+    } else if constexpr (std::is_integral_v<T>) {
         auto n = r.number();
         if constexpr (std::is_signed_v<T>)
             v = std::bit_cast<int64_t>(n);
@@ -498,6 +508,104 @@ ProjectedCaptureHeader read_capture_header(memory::BufferView b) {
     fields.end();
     validate_capture_header(h);
     return h;
+}
+void validate_run_outcome(const ProjectedRunOutcome &v) {
+    require(v.run.id.value.size() <= max_semantic_id && !v.run.id.value.empty() &&
+                v.generation.id.value.size() <= max_semantic_id && !v.generation.id.value.empty(),
+            "Invalid outcome identity");
+    bool fault = false;
+    for (const auto *e : {&v.initiating_error, &v.abort_error, &v.stop_error, &v.close_error})
+        if (e->get()) {
+            require(e->get()->code != Status::ok, "An established error cannot report OK");
+            fault = true;
+        }
+    if (const auto *a = v.abort_outcome.get()) {
+        if (a->run.get())
+            require(*a->run.get() == v.run, "Abort RunId mismatch");
+        if (a->fenced_generation.get())
+            require(*a->fenced_generation.get() == v.generation, "Abort generation mismatch");
+        fault |= a->error.category != 0;
+        for (const auto *flag : {&a->inhibited, &a->stale_work_fenced, &a->off_requested})
+            fault |= flag->get() && !*flag->get();
+        require(a->emitters.size() <= max_participants, "Too many abort emitters");
+        std::vector<ComponentId> emitters;
+        for (const auto &e : a->emitters) {
+            require(std::find(emitters.begin(), emitters.end(), e.emitter) == emitters.end(),
+                    "Duplicate abort emitter");
+            emitters.push_back(e.emitter);
+            require(e.exposure_effective.size() <= 16, "Too many abort effective-state entries");
+            if (e.commanded.get())
+                require(e.commanded.get()->target == e.emitter, "Abort command target mismatch");
+            if (e.observed.get())
+                require(e.observed.get()->state.has_value(), "Missing abort observed state");
+            for (const auto &s : e.exposure_effective)
+                if (s.state.get())
+                    require(s.state.get()->state.has_value() && s.state.get()->frame == s.frame,
+                            "Invalid abort effective-state association");
+        }
+    }
+    require(!fault || v.disposition == RecordedRunDisposition::failed,
+            "Recorded faults require the daemon's FAILED disposition");
+    // Applies the explicit enum/string/ID/vector bounds without creating a large buffer.
+    require(measure(v).size <= max_run_outcome_bytes - 56, "Outcome exceeds bound");
+}
+void write_run_outcome(std::ostream &out, const ProjectedCaptureOutcome &v) {
+    validate_run_outcome(v.outcome);
+    auto c = measure(v);
+    require(c.size <= max_run_outcome_bytes - 48, "Outcome exceeds bound");
+    Writer w{out};
+    w.raw("MRUNOUT3");
+    w.number(1);
+    w.number(c.size);
+    w.number(c.hash);
+    put(w, v);
+    w.raw("MOUTEND3");
+    w.number(~c.size);
+    check_write(out);
+}
+std::optional<ProjectedCaptureOutcome> read_run_outcome(memory::BufferView b, bool allow_incomplete) {
+    Reader r(std::move(b));
+    require(r.bytes.size() <= max_run_outcome_bytes, "Outcome exceeds bound");
+    constexpr std::string_view magic = "MRUNOUT3";
+    const auto prefix = std::min(r.bytes.size(), magic.size());
+    require(prefix == 0 || !std::memcmp(r.bytes.data(), magic.data(), prefix), "Invalid outcome magic");
+    if (r.bytes.size() >= 16) {
+        r.pos = 8;
+        require(r.number() == 1, "Unsupported outcome version");
+    }
+    std::optional<uint64_t> size;
+    if (r.bytes.size() >= 24) {
+        r.pos = 16;
+        size = r.number();
+        require(*size > 0 && *size <= max_run_outcome_bytes - 48, "Invalid outcome length");
+    }
+    if (r.bytes.size() < 32 || (size && r.bytes.size() < *size + 48)) {
+        // A complete footer at EOF is evidence of completion even if length is corrupt.
+        // Never turn such a complete provisional outcome into absence.
+        if (r.bytes.size() >= 48)
+            require(std::memcmp(r.bytes.data() + r.bytes.size() - 16, "MOUTEND3", 8) != 0,
+                    "Complete outcome footer conflicts with envelope length");
+        require(allow_incomplete, "Incomplete published outcome");
+        return {};
+    }
+    r.pos = 24;
+    auto expected = r.number();
+    auto body = r.take(*size);
+    r.magic("MOUTEND3");
+    require(r.number() == ~*size, "Invalid outcome footer");
+    r.end();
+    uint64_t actual = 14695981039346656037ull;
+    auto bytes = body.map_read();
+    if (!bytes)
+        throw Failure(bytes.error());
+    for (auto x : *bytes)
+        actual = (actual ^ std::to_integer<uint8_t>(x)) * 1099511628211ull;
+    require(actual == expected, "Outcome integrity mismatch");
+    Reader fields(body);
+    auto v = get<ProjectedCaptureOutcome>(fields);
+    fields.end();
+    validate_run_outcome(v.outcome);
+    return v;
 }
 bool same_program_reference(const ProgramReference &a, const ProgramReference &b) {
     std::ostringstream x, y;

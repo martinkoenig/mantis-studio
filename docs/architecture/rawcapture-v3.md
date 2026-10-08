@@ -80,11 +80,11 @@ One checksum read pass precedes direct sequential writes; structural nested
 length calculation reads no pixels. Segment verification reads them again as
 in schema 2. No entire-bundle staging allocation or pixel conversion is used.
 
-Schema-3 ArtifactDescriptor.bytes counts exact durable header plus indexed segment
-bytes, with live active bytes added by get(). chunks remains segment count.
+Schema-3 ArtifactDescriptor.bytes counts exact durable header, published daemon-outcome
+sidecar (when present) and indexed segment bytes, with live active bytes added by get(). chunks remains segment count.
 The aggregate FNV-1a-64 starts with the ASCII lowercase hexadecimal file hash of
-run.header, then the file hash of each contiguous segment in index order. Each
-file hash covers every file byte. Legacy aggregate hashes remain unchanged.
+run.header, then the file hash of each contiguous segment in index order, then
+the file hash of run.outcome when present. Each file hash covers every file byte. Legacy aggregate hashes remain unchanged.
 FNV detects accidental corruption; it is not authentication.
 
 ## Exact typed field order
@@ -185,13 +185,21 @@ Header/framing overhead is accounted in artifact bytes separately. One previous
 bundle's semantic context is retained without its mapped FrameSet. No pixel buffer
 or capture-sized record index is retained for continuity.
 
-Normal finalization requires recorded completed/failed/stopped/cancelled evidence.
-Any such outcome may be FINALIZED. Only one terminal record is allowed, last.
-Recovery can finalize a verified prefix without terminal evidence, including just
-a durable header with zero records. Summary terminal absence means unknown/incomplete;
-its reason is meaningful only when terminal is present. No run reason is invented
-for a storage error, and no completed/OFF/safe outcome is inferred. Storage failures
-mark the artifact RECOVERABLE and report their own error independently.
+Executor completed/failed/stopped/cancelled AcquisitionBundles remain unchanged ordinary
+recorded evidence. They neither establish the final daemon outcome nor close the
+recording path. Further valid evidence may be appended until the separate final
+daemon-outcome sidecar is published. The final outcome is copied from L3's resolved
+cleanup snapshot; fault beats cancellation, which beats normal completion/user stop.
+The initiating reason remains exact even when a cleanup fault overrides state.
+
+Normal finalization and prepare-finalize require a published final daemon outcome.
+Absence is an invalid operation and leaves a healthy OPEN writer intact. Header plus
+outcome with zero bundles is valid, including preparation failure or cancellation
+without an executor terminal bundle. FAILED/CANCELLED runs can be FINALIZED.
+Recovery can finalize a verified prefix with no final daemon outcome, even when its
+last executor bundle says completed. This means unknown/incomplete daemon outcome.
+No daemon terminal bundle, reason, OFF observation or safe state is manufactured.
+Storage errors remain separately reported and actual storage failure is RECOVERABLE.
 
 Recovery validates header integrity first, checks indexed segment hashes, rejects
 ambiguous/conflicting/gapped filenames, discovers closed unindexed segments and
@@ -200,7 +208,7 @@ before publishing each recovered segment. Only structurally incomplete trailing
 bytes are truncated. Complete corruption preserves the bytes and verified prefix
 for diagnosis. Cancellation checks occur between segments/records and remain
 retryable. FINALIZING verification rechecks immutable header, segment hashes,
-record checksums, semantics, order and terminal constraints before FINALIZED.
+record checksums, semantics, order and the outcome prefix binding before FINALIZED.
 Recovery never resumes a run, sends a trigger or issues an emitter command.
 
 ## Readers and delivery pacing
@@ -209,7 +217,10 @@ BundleCaptureReader retains Store ownership and at most one bounded mapped segme
 and record index. A returned bundle owns its semantic values and each pixel view
 retains the segment mapping independently after advance/destruction. Header access
 is independent of records and available after reopening before the first bundle.
-Summary scans recorded dispositions only, without deriving hardware evidence.
+Summary returns final_outcome only from the sidecar and separately names
+last_executor_disposition. No bundle disposition establishes the daemon outcome.
+Store::run_outcome, BundleCaptureReader::final_outcome and BundleReplay::final_outcome
+expose the typed sidecar independently of bundle replay.
 
 `device::BundleReplay` is independent of ImageStream/ProjectedExecutor. ASAP and
 receive-paced delivery return identical original bundle values and timestamps.
@@ -228,7 +239,79 @@ up project calibration, re-pair images, replace evidence or open an executor.
 
 Checked-in independent binary fixtures under tests/fixtures/storage freeze
 MANTIS01, MANTIS02 and MRAWREC2 before storage refactoring, then four MANTIS03
-values (evidence-only, captured, trigger-bearing, failed terminal), one capture
-header and one MRAWREC3 record. Expected bytes are never regenerated by tests.
+values (evidence-only, captured, trigger-bearing, failed executor terminal), one capture
+header, one MRAWREC3 record and a separate daemon-outcome fixture. Expected bytes are never regenerated by tests.
 reference_v3.py documents independent explicit construction, imports no C++ codec
 or field catalog, is never a test step and refuses overwriting existing fixtures.
+
+## Final daemon outcome sidecar (L4 review correction)
+
+`objects/ID/run.outcome` is an immutable, small typed record published only after
+L3 cleanup has resolved and callers have drained the authoritative bundle queue.
+Its existence is distinct from an executor terminal AcquisitionBundle.
+No MANTIS03/MRAWREC3, MRUNHDR3 or legacy bytes change.
+
+Exact envelope: `MRUNOUT3` (8 bytes), uint64 encoding version 1, uint64 body length,
+uint64 FNV-1a-64 body checksum, body, `MOUTEND3` (8 bytes), uint64 complemented body
+length. Total file bound is 1 MiB, so body length is at most 1 MiB minus 48 bytes.
+All integers use the existing explicit little-endian primitive encoding. Booleans
+use exactly one byte, 0 false and 1 true. Established false differs from Unknown.
+Error values are typed; no authoritative JSON or diagnostic text interpretation.
+
+Body field order:
+
+- `ProjectedCaptureOutcome`: uint64 `bundle_count`, `outcome`.
+- `ProjectedRunOutcome`: `run`, `generation`, `disposition`, `reason`,
+  `initiating_error`, `abort_error`, `stop_error`, `close_error`, `abort_outcome`,
+  `diagnostic`. The four errors and abort outcome use the three-state Evidence tags.
+- `Error`: one-byte explicit Status tag, `message`, `component`.
+- `RecordedAbortOutcome`: `run`, `fenced_generation`, `inhibited`,
+  `stale_work_fenced`, `off_requested`, `emitters`, `error`. The first five fields
+  use three-state Evidence. Emitters retain the existing full EmitterEvidence
+  typed field order; at most 64 emitters and 16 effective-state entries per emitter.
+- `RecordedExecutorError`: uint32 `category`, uint32 `code` (each encoded in eight
+  bytes with uint32 overflow rejection). These are exact structured executor values.
+
+Run disposition tags are 0 completed, 1 cancelled, 2 failed. AcquisitionReason
+uses the existing table. Status tags are 0 ok, 1 invalid_argument, 2 not_found,
+3 incompatible, 4 cancelled, 5 io, 6 busy, 7 plugin_failed, 8 unsupported,
+9 corrupt. Unknown tags are corrupt. IDs, strings, semantic vectors and doubles
+retain the existing explicit bounds and representations. An established Error
+cannot have status ok. Recorded errors, negative established software abort flags
+or nonzero abort error category require FAILED, without rewriting any facts/reason.
+OFF-request success never establishes observed, effective, optical or physical OFF.
+
+`device::recorded_run_outcome(snapshot)` explicitly converts the final L3 model;
+it requires `cleanup_resolved` and a final state. The snapshot flag exposes L3's
+existing completion latch because preflight FAILED can precede stop/close cleanup.
+It preserves the final state/reason and errors, and copies full AbortOutcome
+semantics. Missing optional L3 errors/outcome become Unknown; Unavailable remains
+representable in the lower storage model. The conversion neither commands hardware
+nor recalculates L3 policy. L2 ABI and L3 execution/cleanup policy are unchanged.
+
+`Store::record_run_outcome` verifies run/execution generation, rejects duplicates,
+seals and durably indexes preceding bundle segments, then writes run.outcome.part,
+flushes/closes/fsyncs it, renames to run.outcome and fsyncs the directory before
+returning. Its bundle_count binds the exact prefix and rejects later records.
+No further bundle or outcome append is allowed. No SQLite migration or manifest
+version change occurs. Descriptor bytes includes the published sidecar; aggregate
+hash coverage is header, ordered segments, then outcome. A recovered capture with
+no outcome keeps the header/segments-only aggregate formula.
+
+Recovery checks outcome envelope integrity and identity before mutating active
+segments. Complete invalid outcome bytes (including a .part with a complete
+footer) are corruption, never absence. Structurally incomplete run.outcome.part
+is retained for diagnosis and treated as absent. A truncated published run.outcome
+is corruption. Complete checksum/semantic-valid provisional outcomes are published
+only after the verified bundle count matches. Unexpected extra/missing bundles
+are corrupt, and no later records are accepted. Cancellation remains retryable.
+Reopened outcome access validates checksum, typed fields and header identity;
+finalization/recovery and sequential replay additionally verify prefix count.
+
+The independent `run-outcome3.bin` fixture freezes a FAILED daemon outcome with
+all presence states, exact structured errors, commanded OFF, unavailable ack,
+unknown observation and unknown/unavailable effective state. Existing nine fixture
+binaries remain byte-identical. Tests include every byte-boundary truncation,
+corrupt complete outcomes, prefix/identity/enum/boolean/overflow errors, actual L3
+cleanup precedence, zero-bundle failure/cancellation, real SIGKILL after executor
+completion, retry after early finalize, hash coverage and unchanged bundle digest.

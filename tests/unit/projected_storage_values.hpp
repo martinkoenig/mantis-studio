@@ -207,4 +207,47 @@ inline std::string encode(const ProjectedCaptureHeader &h) {
     write_capture_header(out, h);
     return out.str();
 }
+inline ProjectedRunOutcome outcome(RecordedRunDisposition disposition = RecordedRunDisposition::failed,
+                                   AcquisitionReason reason = AcquisitionReason::device_failure) {
+    ProjectedRunOutcome o;
+    o.run = run;
+    o.generation = header().generation;
+    o.disposition = disposition;
+    o.reason = reason;
+    if (disposition == RecordedRunDisposition::failed)
+        o.initiating_error = Error{Status::plugin_failed, "device failed", "executor"};
+    return o;
+}
+inline std::string encode(const ProjectedCaptureOutcome &o) {
+    std::ostringstream out;
+    write_run_outcome(out, o);
+    return out.str();
+}
+} // namespace storage_fixture
+
+namespace storage_fixture {
+inline ProjectedRunOutcome detailed_outcome() {
+    auto o = outcome();
+    o.initiating_error = Unavailable{};
+    o.abort_error = Error{Status::plugin_failed, "abort failed", "executor"};
+    o.stop_error = Unknown{};
+    o.close_error = Unavailable{};
+    RecordedAbortOutcome a;
+    a.run = run;
+    a.fenced_generation = Unavailable{};
+    a.inhibited = true;
+    a.stale_work_fenced = Unknown{};
+    a.off_requested = true;
+    auto e = bundle(0).evidence.emitters[0];
+    e.commanded = EmitterCommand{{{"off-request"}}, emitter, EmitterState::off, host()};
+    e.acknowledged = Unavailable{};
+    e.observed = Unknown{};
+    e.exposure_effective = {{frame(), Unknown{}},
+                            {SourceFrameKey{camera, {{{"stream"}}, gen}, 8}, Unavailable{}}};
+    a.emitters = {e};
+    a.error = {7, 23};
+    o.abort_outcome = a;
+    o.diagnostic = "cleanup fault";
+    return o;
+}
 } // namespace storage_fixture

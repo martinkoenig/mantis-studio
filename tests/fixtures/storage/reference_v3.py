@@ -91,3 +91,14 @@ if __name__=='__main__':
     b=bundle(0)
     with (P/'mrawrec3.bin').open('xb') as f:
         f.write(b'MRAWREC3'+U(len(b))+U(fnv(b))+U(~len(b))+b+U(len(b)^0x4d414e5449533033))
+
+# Follow-up final daemon outcome fixture. Existing bundle/header/legacy fixtures stay frozen.
+def run_outcome():
+    emit = (S('emit') + E(S('off-request') + S('emit') + b'\0' + host()) + unavailable + unknown +
+            A([frame + unknown, S('cam') + S('stream') + S('gen') + U(8) + unavailable]))
+    abort = E(S('run')) + unavailable + E(b'\1') + unknown + E(b'\1') + A([emit]) + U(7) + U(23)
+    # state failed=2, reason device_failure=3; structured Error status plugin_failed=7.
+    out = (S('run') + S('execution') + b'\2' + b'\3' + unavailable +
+           E(b'\7' + S('abort failed') + S('executor')) + unknown + unavailable + E(abort) + S('cleanup fault'))
+    body = U(4) + out
+    return b'MRUNOUT3' + U(1) + U(len(body)) + U(fnv(body)) + body + b'MOUTEND3' + U(~len(body))

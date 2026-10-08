@@ -281,3 +281,33 @@ template <> struct Tags<LossKind> {
                                        LossKind::exposure,      LossKind::bundle,  LossKind::record,
                                        LossKind::excluded_frame};
 };
+template <> struct Fields<Error> {
+    template <class A, class V> static void apply(A &a, V &v) { a(v.code, v.message, v.component); }
+};
+template <> struct Fields<RecordedExecutorError> {
+    template <class A, class V> static void apply(A &a, V &v) { a(v.category, v.code); }
+};
+template <> struct Fields<RecordedAbortOutcome> {
+    template <class A, class V> static void apply(A &a, V &v) {
+        a(v.run, v.fenced_generation, v.inhibited, v.stale_work_fenced, v.off_requested, v.emitters, v.error);
+    }
+};
+template <> struct Fields<ProjectedRunOutcome> {
+    template <class A, class V> static void apply(A &a, V &v) {
+        a(v.run, v.generation, v.disposition, v.reason, v.initiating_error, v.abort_error, v.stop_error,
+          v.close_error, v.abort_outcome, v.diagnostic);
+    }
+};
+template <> struct Fields<ProjectedCaptureOutcome> {
+    template <class A, class V> static void apply(A &a, V &v) { a(v.bundle_count, v.outcome); }
+};
+template <> struct Tags<RecordedRunDisposition> {
+    static constexpr std::array values{RecordedRunDisposition::completed, RecordedRunDisposition::cancelled,
+                                       RecordedRunDisposition::failed};
+};
+template <> struct Tags<Status> {
+    static constexpr std::array values{Status::ok,           Status::invalid_argument, Status::not_found,
+                                       Status::incompatible, Status::cancelled,        Status::io,
+                                       Status::busy,         Status::plugin_failed,    Status::unsupported,
+                                       Status::corrupt};
+};

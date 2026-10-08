@@ -86,6 +86,9 @@ BundleReplay::BundleReplay(std::shared_ptr<const artifact::Store> s, Id id, bool
     : impl_(std::make_unique<Impl>(std::move(s), std::move(id), p, std::move(c))) {}
 BundleReplay::~BundleReplay() = default;
 const data::ProjectedCaptureHeader &BundleReplay::header() const { return impl_->reader.header(); }
+const std::optional<data::ProjectedRunOutcome> &BundleReplay::final_outcome() const {
+    return impl_->reader.final_outcome();
+}
 bool BundleReplay::finished() const { return impl_->ended.load(); }
 void BundleReplay::stop() {
     impl_->cancellation.cancel();

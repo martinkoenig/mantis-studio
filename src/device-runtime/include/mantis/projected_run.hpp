@@ -42,7 +42,11 @@ struct ProjectedRunSnapshot {
     ProjectedQueueMetrics queue;
     uint64_t covered_steps{}, expected_steps{}, late_evidence{};
     ProjectedTerminal terminal;
+    // FAILED may be visible during preflight cleanup; state alone is not completion.
+    bool cleanup_resolved{};
 };
+// Rejects non-final snapshots; performs no cleanup, reason/state inference or hardware work.
+data::ProjectedRunOutcome recorded_run_outcome(const ProjectedRunSnapshot &);
 // Owns one executor and an immutable program snapshot. Only its worker makes ordinary
 // executor calls. Abort bypasses that worker and the authoritative queue.
 class ProjectedRun {

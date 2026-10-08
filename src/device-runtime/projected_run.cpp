@@ -1433,7 +1433,37 @@ bool ProjectedRun::wait_terminal(uint32_t timeout_ms) const {
 }
 ProjectedRunSnapshot ProjectedRun::snapshot() const {
     std::lock_guard lock(impl_->mutex);
-    return impl_->view;
+    auto snapshot = impl_->view;
+    snapshot.cleanup_resolved = impl_->finished;
+    return snapshot;
+}
+data::ProjectedRunOutcome recorded_run_outcome(const ProjectedRunSnapshot &s) {
+    if (!s.cleanup_resolved || !terminal(s.state))
+        fail(Status::invalid_argument, "Final daemon cleanup snapshot required", "recorded-run-outcome");
+    data::ProjectedRunOutcome out;
+    out.run = s.identity.run;
+    out.generation = s.identity.generation;
+    out.disposition = s.state == ProjectedState::completed   ? data::RecordedRunDisposition::completed
+                      : s.state == ProjectedState::cancelled ? data::RecordedRunDisposition::cancelled
+                                                             : data::RecordedRunDisposition::failed;
+    out.reason = s.terminal.reason; // Preserve the initiating reason even when cleanup faults win state.
+    auto copy = [](const std::optional<Error> &error) -> data::Evidence<Error> {
+        return error ? data::Evidence<Error>{*error} : data::Evidence<Error>{data::Unknown{}};
+    };
+    out.initiating_error = copy(s.terminal.initiating_error);
+    out.abort_error = copy(s.terminal.abort_error);
+    out.stop_error = copy(s.terminal.stop_error);
+    out.close_error = copy(s.terminal.close_error);
+    if (const auto &a = s.terminal.abort_outcome)
+        out.abort_outcome = data::RecordedAbortOutcome{a->run,
+                                                       a->fenced_generation,
+                                                       a->inhibited,
+                                                       a->stale_work_fenced,
+                                                       a->off_requested,
+                                                       a->emitters,
+                                                       {a->error.category, a->error.code}};
+    data::validate_run_outcome(out);
+    return out;
 }
 void ProjectedRun::notify_clock_advanced() {
     std::lock_guard lock(impl_->mutex);

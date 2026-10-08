@@ -8,8 +8,6 @@ struct BundleState {
     std::optional<data::AcquisitionBundle> previous; // Semantic context only; no mapped pixels retained.
     std::vector<uint64_t> ordinals;
     uint64_t bytes{}, count{};
-    std::optional<data::AcquisitionDisposition> terminal;
-    data::AcquisitionReason reason{data::AcquisitionReason::none};
     explicit BundleState(data::ProjectedCaptureHeader h) : header(std::move(h)) {
         data::validate_capture_header(header);
         ordinals.reserve(header.config.max_correlation_entries);
@@ -22,7 +20,6 @@ struct BundleState {
         auto valid = data::validate(b);
         if (!valid)
             throw Failure(valid.error());
-        check(!terminal, "Record after terminal bundle");
         check(b.key.run_id == header.run, "Recorded RunId changed");
         check(data::same_program_reference(b.evidence.program, header.program.identity),
               "Recorded program reference changed");
@@ -63,12 +60,6 @@ struct BundleState {
         ordinals.push_back(b.evidence.key.ordinal.value);
         bytes += n;
         ++count;
-        auto d = *b.evidence.disposition;
-        if (d == data::AcquisitionDisposition::completed || d == data::AcquisitionDisposition::failed ||
-            d == data::AcquisitionDisposition::stopped || d == data::AcquisitionDisposition::cancelled) {
-            terminal = d;
-            reason = b.evidence.reason;
-        }
     }
 };
 } // namespace mantis::artifact

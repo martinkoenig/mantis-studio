@@ -17,6 +17,7 @@ class BundleReplay {
     BundleReplay(std::shared_ptr<const artifact::Store>, Id, bool receive_paced, Clock = {});
     ~BundleReplay();
     const data::ProjectedCaptureHeader &header() const;
+    const std::optional<data::ProjectedRunOutcome> &final_outcome() const;
     // One next caller at a time; concurrent calls report busy.
     // Empty on bounded poll timeout or EOF; finished() distinguishes EOF/stop.
     Result<std::optional<data::AcquisitionBundle>> next(uint32_t timeout_ms = 0);

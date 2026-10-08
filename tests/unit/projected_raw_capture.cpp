@@ -92,9 +92,10 @@ int main() {
             rejects([&] { store->begin({"org.mantis.RawCapture", 4}, {}); });
             for (unsigned n = 0; n < 4; ++n)
                 store->append_bundle(finalized, bundle(n));
+            store->record_run_outcome(finalized, outcome());
             auto a = store->finalize(finalized);
             CHECK(a.state == artifact::ArtifactState::finalized && a.chunks > 1);
-            uint64_t bytes = encode(header()).size();
+            uint64_t bytes = encode(header()).size() + encode(ProjectedCaptureOutcome{4, outcome()}).size();
             std::string hashes = content_hash({reinterpret_cast<const std::byte *>(encode(header()).data()),
                                                encode(header()).size()})
                                      .hex;
@@ -103,12 +104,17 @@ int main() {
                 bytes += b.size();
                 hashes += content_hash({reinterpret_cast<const std::byte *>(b.data()), b.size()}).hex;
             }
+            auto outcome_bytes = file(root / "objects" / finalized.value / "run.outcome");
+            hashes += content_hash(
+                          {reinterpret_cast<const std::byte *>(outcome_bytes.data()), outcome_bytes.size()})
+                          .hex;
             CHECK(a.bytes == bytes);
             CHECK(a.hash ==
                   content_hash({reinterpret_cast<const std::byte *>(hashes.data()), hashes.size()}));
             auto summary = store->bundle_summary(finalized);
-            CHECK(summary.records == 4 && summary.terminal == AcquisitionDisposition::failed &&
-                  summary.reason == AcquisitionReason::device_failure);
+            CHECK(summary.records == 4 &&
+                  summary.final_outcome->disposition == RecordedRunDisposition::failed &&
+                  summary.final_outcome->reason == AcquisitionReason::device_failure);
             before = digest(*store, finalized);
             CHECK(before == digest(*store, finalized));
             // Activate, replace, then clear a project binding. None can alter recorded references.
@@ -138,9 +144,12 @@ int main() {
             auto control = store->begin_projected_capture(header());
             for (unsigned n = 0; n < 4; ++n)
                 store->append_bundle(control, evidence_only(n, n == 3));
+            store->record_run_outcome(
+                control, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel));
             store->prepare_finalize(control);
             store->finalize(control);
-            CHECK(store->bundle_summary(control).terminal == AcquisitionDisposition::cancelled);
+            CHECK(store->bundle_summary(control).final_outcome->disposition ==
+                  RecordedRunDisposition::cancelled);
             store->replay_bundles(
                 control, [](AcquisitionBundle b) { CHECK(!b.frameset && b.evidence.frames.empty()); });
             // Appending invalid input never renumbers it or commits bytes.
@@ -180,6 +189,7 @@ int main() {
             store->append_bundle(invalid, bundle(1));
             store->append_bundle(invalid, bundle(2));
             store->append_bundle(invalid, bundle(3));
+            store->record_run_outcome(invalid, outcome());
             rejects([&] { store->append_bundle(invalid, evidence_only(4)); });
             store->finalize(invalid);
             // Storage errors are separately reported; the verified prefix has no invented outcome.
@@ -188,14 +198,14 @@ int main() {
             rejects([&] { store->append_bundle(failure, bundle(0)); });
             CHECK(store->get(failure).state == artifact::ArtifactState::recoverable);
             store->recover(failure);
-            CHECK(!store->bundle_summary(failure).terminal);
+            CHECK(!store->bundle_summary(failure).final_outcome);
         }
         {
             auto store = std::make_shared<artifact::Store>(root);
             CHECK(encode(store->capture_header(empty)) == encode(header()));
             CHECK(store->get(empty).chunks == 0);
             store->recover(empty);
-            CHECK(!store->bundle_summary(empty).terminal);
+            CHECK(!store->bundle_summary(empty).final_outcome);
             CHECK(digest(*store, finalized) == before);
             AcquisitionBundle retained;
             {
@@ -276,36 +286,34 @@ int main() {
                 auto a = store.recover(id);
                 CHECK(a.state == artifact::ArtifactState::finalized);
                 CHECK(file(store.object_path(id)) == prefix);
-                CHECK(store.bundle_summary(id).records == 1 && !store.bundle_summary(id).terminal);
+                CHECK(store.bundle_summary(id).records == 1 && !store.bundle_summary(id).final_outcome);
             }
         }
         // Sealing failure reports storage failure, releases live writers and permits explicit retry.
-        for (bool prepare : {false, true}) {
+        {
             artifact::Store store(root);
             auto id = store.begin_projected_capture(header());
             store.append_bundle(id, bundle(0));
             auto conflict = root / "objects" / id.value / "0.segment";
             std::filesystem::create_directory(conflict);
-            rejects([&] {
-                if (prepare)
-                    store.prepare_finalize(id);
-                else
-                    store.finalize(id);
-            });
+            rejects([&] { store.record_run_outcome(id, outcome()); });
             CHECK(store.get(id).state == artifact::ArtifactState::recoverable);
             std::filesystem::remove(conflict);
             store.recover(id);
-            CHECK(!store.bundle_summary(id).terminal && store.bundle_summary(id).records == 1);
+            CHECK(!store.bundle_summary(id).final_outcome && store.bundle_summary(id).records == 1);
         }
-        // Normal finalization requires terminal evidence; explicit recovery can preserve its absence.
+        // Normal finalization requires the daemon outcome; early rejection keeps OPEN writable.
         {
             artifact::Store store(root);
             auto id = store.begin_projected_capture(header());
             store.append_bundle(id, bundle(0));
             rejects([&] { store.finalize(id); });
-            CHECK(store.get(id).state == artifact::ArtifactState::recoverable);
+            CHECK(store.get(id).state == artifact::ArtifactState::open);
+            rejects([&] { store.prepare_finalize(id); });
+            CHECK(store.get(id).state == artifact::ArtifactState::open);
+            store.abandon(id);
             store.recover(id);
-            CHECK(!store.bundle_summary(id).terminal);
+            CHECK(!store.bundle_summary(id).final_outcome);
         }
         // Closed unindexed segment, retryable cancellation, terminal and no-terminal recovery.
         for (bool terminal : {false, true}) {
@@ -321,6 +329,10 @@ int main() {
             auto closed = part;
             closed.replace_extension();
             std::filesystem::rename(part, closed);
+            if (terminal)
+                write(closed.parent_path() / "run.outcome.part",
+                      encode(ProjectedCaptureOutcome{
+                          4, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel)}));
             {
                 artifact::Store store(root);
                 CancellationToken token;
@@ -329,7 +341,7 @@ int main() {
                 CHECK(store.get(id).state == artifact::ArtifactState::recoverable);
                 store.recover(id);
                 CHECK(store.bundle_summary(id).records == 4);
-                CHECK(bool(store.bundle_summary(id).terminal) == terminal);
+                CHECK(bool(store.bundle_summary(id).final_outcome) == terminal);
             }
         }
         // In-flight recovery cancellation leaves the same verified records retryable.
@@ -361,7 +373,7 @@ int main() {
                   recovering.get() == Status::cancelled);
             CHECK(store->get(id).state == artifact::ArtifactState::recoverable);
             store->recover(id);
-            CHECK(store->bundle_summary(id).records == 5000 && !store->bundle_summary(id).terminal);
+            CHECK(store->bundle_summary(id).records == 5000 && !store->bundle_summary(id).final_outcome);
         }
         // Corrupt complete records, semantic discontinuities and header corruption never get truncated.
         for (unsigned mode = 0; mode < 10; ++mode) {
@@ -423,6 +435,7 @@ int main() {
             if (mode == 9) {
                 auto b = evidence_only(1, true);
                 write(path, record(b), true);
+                write(path.parent_path() / "run.outcome", encode(ProjectedCaptureOutcome{2, outcome()}));
                 bad = record(evidence_only(2));
             }
             if (mode != 8)
@@ -475,6 +488,8 @@ int main() {
             last.published = host(INT64_MAX);
             store->append_bundle(id, first);
             store->append_bundle(id, last);
+            store->record_run_outcome(
+                id, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel));
             store->finalize(id);
             device::BundleReplay paced(store, id, true);
             CHECK(paced.next());
@@ -512,6 +527,8 @@ int main() {
             CHECK(std::filesystem::file_size(store.object_path(id)) > artifact::segments::max_segment_bytes);
             auto terminal = evidence_only(1, true);
             store.append_bundle(id, terminal);
+            store.record_run_outcome(
+                id, outcome(RecordedRunDisposition::cancelled, AcquisitionReason::user_cancel));
             store.finalize(id);
             auto replay = store.bundle(id);
             auto bytes = replay.frameset->frames[0]->attributes[0].buffer.map_read();
@@ -530,8 +547,12 @@ int main() {
             try {
                 artifact::Store store(killroot);
                 auto id = store.begin_projected_capture(header());
-                for (unsigned n = 0; n < 4; ++n)
-                    store.append_bundle(id, evidence_only(n));
+                for (unsigned n = 0; n < 4; ++n) {
+                    auto b = evidence_only(n);
+                    if (n == 3)
+                        b.evidence.disposition = AcquisitionDisposition::completed;
+                    store.append_bundle(id, b);
+                }
                 auto text = id.value;
                 CHECK(::write(channel[1], text.data(), text.size()) == static_cast<ssize_t>(text.size()));
                 for (;;)
@@ -553,7 +574,9 @@ int main() {
             Id id{std::string(identity, static_cast<size_t>(size))};
             CHECK(store.get(id).state == artifact::ArtifactState::recoverable);
             store.recover(id);
-            CHECK(store.bundle_summary(id).records == 4 && !store.bundle_summary(id).terminal);
+            CHECK(store.bundle_summary(id).records == 4 && !store.bundle_summary(id).final_outcome);
+            CHECK(store.bundle_summary(id).last_executor_disposition == AcquisitionDisposition::completed);
+            CHECK(store.bundle(id, 3).evidence.disposition == AcquisitionDisposition::completed);
         }
 #endif
         std::cout << "Schema-3 durability, mapped lifetime, continuity, recovery, process kill, calibration "
