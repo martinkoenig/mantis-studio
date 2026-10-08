@@ -32,7 +32,9 @@ jobs:
         run: ctest --test-dir build/ci --output-on-failure
       - name: Repeat Home transition regression
         if: ${{ matrix.studio == 'ON' }}
-        run: ctest --test-dir build/ci -R '^studio-home-qml$' --repeat until-fail:3 --output-on-failure
+        run: |
+          cp build/ci/Testing/Temporary/LastTest.log build/ci/ui-m1/full-ctest.log
+          ctest --test-dir build/ci -R '^studio-home-qml$' --repeat until-fail:3 --output-on-failure
       - name: Upload UI review evidence
         if: ${{ always() && matrix.studio == 'ON' }}
         uses: actions/upload-artifact@v4
