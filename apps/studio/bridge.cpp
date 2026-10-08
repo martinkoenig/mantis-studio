@@ -6,8 +6,11 @@
 StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled)
     : QObject(parent), runtime_enabled_(runtimeEnabled),
       client_(runtimeEnabled ? mantis::client::Endpoint::environment() : mantis::client::Endpoint{}) {
-    connect(&watcher_, &QFutureWatcher<StudioResult>::finished, this,
-            [this] { applyResult(watcher_.result()); });
+    connect(&watcher_, &QFutureWatcher<StudioResult>::finished, this, [this] {
+        const auto result = watcher_.result();
+        request_pending_ = false;
+        applyResult(result);
+    });
     connect(&preview_watcher_, &QFutureWatcher<PreviewResult>::finished, this, [this] {
         auto result = preview_watcher_.result();
         if (!connected_)
@@ -67,6 +70,7 @@ void StudioBridge::applyResult(const StudioResult &result) {
         emit changed();
         return; // Keep the authoritative last-known state; send no runtime command.
     }
+    has_snapshot_ = true;
     const auto &snapshot = *result.snapshot;
     emit snapshotReady(snapshot);
     if (!result.newest_id.empty())
@@ -178,10 +182,11 @@ void StudioBridge::attachView(QObject *object) {
     view_ = qobject_cast<mantis::render::PointCloudView *>(object);
 }
 void StudioBridge::execute(std::function<void(const mantis::client::Client &)> action) {
-    if (!runtime_enabled_ || watcher_.isRunning())
+    if (!runtime_enabled_ || request_pending_)
         return;
     auto client = client_;
     auto selected = newest_.toStdString();
+    request_pending_ = true; // The lease includes queued GUI completion, not just worker execution.
     watcher_.setFuture(QtConcurrent::run(
         [client, action, selected] { return collectResult(client, action, {}, selected); }));
     emit changed();
@@ -278,9 +283,10 @@ void StudioBridge::cancelJob(QString id) {
     });
 }
 void StudioBridge::selectArtifact(QString id) {
-    if (!runtime_enabled_ || !connected_ || watcher_.isRunning())
+    if (!runtime_enabled_ || !connected_ || request_pending_)
         return;
     auto client = client_;
+    request_pending_ = true; // The lease includes queued GUI completion, not just worker execution.
     watcher_.setFuture(
         QtConcurrent::run([client, id] { return collectResult(client, {}, id.toStdString()); }));
     emit changed();

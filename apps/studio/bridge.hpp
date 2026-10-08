@@ -33,6 +33,7 @@ class StudioBridge : public QObject {
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(QVariantList errorDetails READ errorDetails NOTIFY changed)
     Q_PROPERTY(bool connected READ connected NOTIFY changed)
+    Q_PROPERTY(bool hasSnapshot READ hasSnapshot NOTIFY changed)
     Q_PROPERTY(bool capturing READ capturing NOTIFY changed)
     Q_PROPERTY(bool lastKnownCapturing READ lastKnownCapturing NOTIFY changed)
     Q_PROPERTY(QString captureStatusText READ captureStatusText NOTIFY changed)
@@ -41,7 +42,7 @@ class StudioBridge : public QObject {
     QVariantList devices_, artifacts_, jobs_, plugins_, diagnostics_;
     QString project_, error_, capture_, selected_, newest_;
     QVariantList error_details_;
-    bool connected_{};
+    bool connected_{}, has_snapshot_{}, request_pending_{};
     const bool runtime_enabled_;
     mantis::client::Client client_;
     QFutureWatcher<StudioResult> watcher_;
@@ -92,6 +93,9 @@ class StudioBridge : public QObject {
     bool connected() const {
         return connected_;
     }
+    bool hasSnapshot() const {
+        return has_snapshot_;
+    }
     bool capturing() const {
         return connected_ && lastKnownCapturing();
     }
@@ -105,7 +109,7 @@ class StudioBridge : public QObject {
         return capturing() ? "Streaming · raw recording" : "No active capture in latest snapshot";
     }
     bool busy() const {
-        return watcher_.isRunning();
+        return request_pending_;
     }
     QString selectedArtifact() const {
         return selected_;
