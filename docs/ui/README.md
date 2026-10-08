@@ -44,8 +44,13 @@ Both `--option=value` and `--option value` are supported. `--workspace` accepts 
 ten route IDs below, plus `acquisition` and `calibration`. `--window-size` accepts
 1080x720 through 7680x4320; defaults to 1536x1024. Invalid arguments exit with code
 2 and usage guidance before loading QML. `--quit-after` requires positive integer
-milliseconds. A screenshot is taken after 3500 ms, or 100 ms before a shorter quit
-timeout. Screenshot save failures exit with code 1.
+milliseconds. Combining it with `--screenshot` requires at least **100 ms**;
+shorter combinations exit with code 2 before loading QML. A screenshot is requested
+after 3500 ms, or immediately for a quit deadline of 3500 ms or less, and saved only after
+`QQuickWindow::afterFrameEnd` confirms rendering (queued to the GUI thread).
+Missing rendered frames, scene graph errors and PNG save failures exit with code 1.
+The screenshot deadline is `--quit-after`, or 10 seconds when no quit time is set.
+An ordinary rapid quit without a screenshot still accepts any positive timeout.
 
 `--acceptance-export PATH` retains the asynchronous real capture → pipeline → PLY
 workflow and overrides the initial route to `acquisition`, including when
@@ -76,7 +81,10 @@ states are explicit. Accessible names are set on navigation and shared controls.
 its M0 foundation, with an explicit action to inspect the disabled existing view.
 `acquisition` remains a supported internal alias and initial live route.
 Devices exposes the existing calibration workflow by an explicit action, plus
-calibration actions for advertised FrameSet-capable live devices. `calibration`
+calibration actions for devices validated by `CalibrationController`: a composite
+FrameSet-stream parent with image-stream children. A discovered parent or isolated
+capability string grants no calibration permission. The separate offline entry
+remains available for existing captures even without connected hardware. `calibration`
 remains a supported internal route. The root `workspace`, context objects
 `studio`/`calibration`, `calibrationWorkspace`, all seven `calibrationStage0…6`,
 `pointCloudView`, `leftPreview` and `rightPreview` hooks are retained.
@@ -98,7 +106,8 @@ true only for Devices/Calibration in live/hybrid; mock never starts its polling.
   24-unit coordinate space; they scale without network assets, icon fonts,
   Qt SVG or new dependencies.
 - `ui/state/AppUiState.qml` maps the existing bridge into presentation metadata
-  (`source`, `synthetic`, `actionable`, explicit capability lists) and holds compact
+  (`source`, `synthetic`, discovery, unknown availability/readiness,
+  action-specific permissions and explicit capability lists) and holds compact
   route descriptors. It owns no capture state, client transport or polling timer.
 - `ui/state/MockFixtures.qml` owns the deterministic illustrative fixture. It is
   isolated from `StudioBridge`; it has no command methods.
@@ -106,6 +115,11 @@ true only for Devices/Calibration in live/hybrid; mock never starts its polling.
   the shared components. New full workspaces should receive presentation models
   and emit intents; runtime commands belong in frontend controllers using the
   public client API.
+- Snapshot failures preserve project/artifact data and last-known capture metadata.
+  `StudioBridge.capturing` requires a current connection; acquisition labels cached
+  state and diagnostics as last-known and disables runtime intents. Reconnection
+  refreshes from the daemon, including active/idle transitions. Client disconnect
+  sends no stop/cancel command and adds no polling path.
 - `AcquisitionWorkspace.qml` is the compatibility workspace until UI-M3.
   Calibration continues using its existing client/controller seam.
 
@@ -149,8 +163,11 @@ ctest --preset headless --output-on-failure
 
 `studio-ui-m0-qml` tests real mouse and keyboard navigation, all route titles,
 source/capability transitions with a presentation stub, disconnected live/hybrid
-behavior, mock action boundaries, calibration accessibility, preserved viewport
-hooks and absence of QML warnings. It writes PNGs for all ten mock routes, live
+behavior, mock action boundaries, calibration eligibility/intent routing, preserved viewport
+hooks, last-known disconnect/reconnect transitions, shared-button interaction
+and contrast, rendered-frame screenshot deadlines and absence of QML warnings.
+Immediate device-model changes followed by resize cover the proven Qt 6.4 layout
+cache regression; malformed/empty property lists produce diagnostic failures. It writes PNGs for all ten mock routes, live
 and hybrid Home, and Home/acquisition/calibration at 1080x720, 1536x1024 and
 1920x1080 to `build/debug/ui-m0/screenshots/`.
 
@@ -164,3 +181,10 @@ comparison against illustrative concept imagery.
 See [the M0 validation record](validation.md) for checks actually executed and
 remaining limits. Linux ARM64 remains an architectural target; this local run
 provides x86_64 evidence only.
+
+
+Correction evidence is in [validation.md](validation.md#additional-correction-record--2026-10-08-review-gate)
+and [the retained Qt 6.4 backtrace](evidence/qt64-baseline-crash.txt).
+Studio ON CI jobs upload generated screenshots and CTest diagnostics as
+`ui-m0-ubuntu-24.04` and `ui-m0-ubuntu-24.04-arm` artifacts on the matching Actions run.
+These captures are software presentation evidence, never physical scanner results.

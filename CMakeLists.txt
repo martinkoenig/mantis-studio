@@ -138,7 +138,7 @@ if(MANTIS_BUILD_STUDIO)
  set_target_properties(mantis-studio-calibration PROPERTIES AUTOMOC ON)
  target_include_directories(mantis-studio-calibration PUBLIC apps/studio)
  target_link_libraries(mantis-studio-calibration PUBLIC mantis-client Qt6::Core Qt6::Concurrent)
- add_executable(mantis-studio apps/studio/main.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+ add_executable(mantis-studio apps/studio/main.cpp apps/studio/screenshot.hpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
  set_target_properties(mantis-studio PROPERTIES AUTOMOC ON)
  target_link_libraries(mantis-studio PRIVATE mantis-studio-calibration mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
  set(MANTIS_STUDIO_QML_FILES

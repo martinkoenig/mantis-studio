@@ -1,5 +1,6 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
+#include "screenshot.hpp"
 #include <QCommandLineParser>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -8,7 +9,6 @@
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QTimer>
-#include <algorithm>
 #include <iostream>
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
           "route"},
          {"window-size", "Initial viewport WIDTHxHEIGHT (minimum 1080x720).", "size", "1536x1024"},
          {"screenshot", "Save the rendered window as a PNG.", "path"},
-         {"quit-after", "Exit after a positive number of milliseconds.", "milliseconds"},
+         {"quit-after", "Exit after positive milliseconds (minimum 100 with --screenshot).", "milliseconds"},
          {"acceptance-export", "Run the real asynchronous capture/pipeline/PLY acceptance workflow.",
           "path"}});
     auto invalid = [&](const QString &message) {
@@ -71,6 +71,8 @@ int main(int argc, char **argv) {
     const auto screenshot = parser.value("screenshot");
     if (parser.isSet("screenshot") && screenshot.isEmpty())
         return invalid("--screenshot requires a path");
+    if (!screenshot.isEmpty() && quitMs > 0 && quitMs < 100)
+        return invalid("--screenshot with --quit-after requires at least 100 milliseconds");
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
     StudioBridge bridge(nullptr, mode != "mock");
@@ -89,16 +91,27 @@ int main(int argc, char **argv) {
     engine.load(QUrl("qrc:/ui/shell/Main.qml"));
     if (engine.rootObjects().isEmpty())
         return 1;
-    if (!screenshot.isEmpty())
-        QTimer::singleShot(quitMs > 0 ? std::min(3500, std::max(0, quitMs - 100)) : 3500, &app, [&] {
-            auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
-            if (!window || !window->grabWindow().save(screenshot)) {
-                std::cerr << "Screenshot failed\n";
+    std::unique_ptr<ScreenshotRequest> screenshotRequest;
+    if (!screenshot.isEmpty()) {
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        screenshotRequest = std::make_unique<ScreenshotRequest>(
+            window, screenshot, quitMs > 0 && quitMs <= 3500 ? 0 : 3500, quitMs > 0 ? quitMs : 10000,
+            [&](bool success, const QString &error) {
+                if (!success) {
+                    std::cerr << error.toStdString() << std::endl;
+                    app.exit(1);
+                }
+            });
+    }
+    if (quitMs > 0)
+        QTimer::singleShot(quitMs, &app, [&] {
+            if (screenshotRequest && !screenshotRequest->succeeded()) {
+                std::cerr << "Screenshot incomplete at --quit-after deadline" << std::endl;
                 app.exit(1);
+            } else {
+                app.quit();
             }
         });
-    if (quitMs > 0)
-        QTimer::singleShot(quitMs, &app, &QCoreApplication::quit);
     // Acceptance harness drives the same asynchronous client commands as the QML controls.
     QTimer automation;
     int stage = 0;

@@ -188,7 +188,7 @@ Reproduce the reviewed baseline in an isolated directory inside this worktree:
 
 ```bash
 mkdir -p build/ui-m0-review/baseline
- git archive 618e03eef584a729b0036c9ec73eabf567d76183 | tar -x -C build/ui-m0-review/baseline
+git archive 618e03eef584a729b0036c9ec73eabf567d76183 | tar -x -C build/ui-m0-review/baseline
 # In Ubuntu 24.04 with BUILDING.md/CI packages plus gdb:
 cmake -S build/ui-m0-review/baseline -B build/ui-m0-review/baseline-build -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug -DPython3_EXECUTABLE=/usr/bin/python3
@@ -204,5 +204,134 @@ red-regression.log,layout-fix-tests.log,root-regression-tests.log}`.
 Instrumentation affects scheduling: the unchanged full test passed under
 Valgrind and breakpoint-heavy tracing; neither is used as acceptance evidence.
 
-The remaining review corrections and final exact-SHA CI matrix are pending.
-This intermediate correction record does **not** assert READY FOR REVIEW.
+The [retained symbolic backtrace](evidence/qt64-baseline-crash.txt) includes the
+original test and matching standalone crash. The [standalone reproducer](evidence/qt64-layout-reproducer.cpp)
+can be compiled in Ubuntu 24.04 with:
+
+```bash
+g++ -g docs/ui/evidence/qt64-layout-reproducer.cpp -o /tmp/mantis-layout-reproducer \
+  $(pkg-config --cflags --libs Qt6Quick Qt6Qml Qt6Gui Qt6Core)
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+  gdb -batch -ex run -ex bt --args /tmp/mantis-layout-reproducer
+```
+
+### Other review corrections and regression evidence
+
+| Finding | Correction | Meaningful coverage |
+| --- | --- | --- |
+| Unsafe fixture decoding | Check actual QVariant/QJSValue types, array shape, nonempty map rows and a 65,536-row limit before conversion/access; name the failed property in diagnostics | Native and JS lists; missing/invalid, scalar, non-array, empty, non-map and oversized array inputs |
+| Every discovered device actionable | Consume `CalibrationController.devices`, which validates the complete parent/child graph; separate discovery, unknown availability/readiness and calibration permission | Eligible FrameSet parent with image child, childless parent, emitter-only child, single image, disconnected runtime, live/hybrid/mock, button enablement and eligible ID intent |
+| Cached capture presented as current | `capturing` requires connection; retain last-known capture and authoritative project/artifacts/devices; explicitly label stale capture, descriptors, preview and diagnostics; disable offline intents | Active → transport failure → active reconnect → idle; data retention, UI labels/action state and idle telemetry reset; no stop/cancel on disconnect |
+| Render attachment lifetime | Use `QPointer` for non-owning render attachments; discard preview completion while disconnected | Destroy attachment, apply late cloud result, verify retained artifact identity and no dangling access; desktop ASan/UBSan |
+| Primary hover/pressed contrast | Add two Theme accent states, retain dark foreground on light primary fills, explicit disabled text/fill and keyboard focus border | Actual mouse hover/press/release, Space activation, keyboard focus, disabled no-click; enabled-state text contrast at least 4.5:1 for both button variants |
+| Screenshot before rendering | One bounded request waits for queued `QQuickWindow::afterFrameEnd`; GUI-thread readback, explicit errors, minimum screenshot/quit combination 100 ms | Three 100-ms CLI launches with PNG dimensions/content, normal 600-ms path, 7680×4320 maximum viewport, save failure, unrendered-window deadline, missing window, rejected 1/99-ms combinations and ordinary 1-ms quit |
+
+All ten routes, three source modes, seven calibration stages, immutable artifact
+semantics, dual preview and point-cloud hooks remain covered by existing tests.
+The CLI socket trap still exercises all twelve initial routes with usable
+credentials and rejects any mock connection. Existing calibration, acquisition,
+replay, acceptance, client/SDK boundary and headless tests remain enabled.
+No protocol, runtime, SDK, storage, calibration algorithm or hardware interlock
+changes were made. The existing bridge refresh intervals are unchanged.
+
+### Local verification
+
+The reproducible baseline container uses Ubuntu 24.04 image digest
+`sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55`,
+GCC 13 and Qt 6.4.2 (`6.4.2+dfsg-4build3`). The host uses Ubuntu 25.10,
+GCC 15 and Qt 6.9.2. All runs use offscreen/software Qt rendering and Debug builds.
+
+| Configuration | Outcome | Local log in `build/ui-m0-review/` |
+| --- | --- | --- |
+| Ubuntu 24.04 / Qt 6.4 desktop | PASS, 46/46 | `qt64-final-ctest.log` |
+| Ubuntu 25.10 / Qt 6.9 desktop | PASS, 46/46 | `qt69-final-ctest.log` |
+| Ubuntu 24.04 / Qt disabled | PASS, 41/41 | `headless-final-ctest.log` |
+| Ubuntu 25.10 / Qt 6.9 desktop ASan/UBSan, leak detection enabled | PASS, 46/46 | `qt69-sanitizers-ctest.log` |
+| Qt 6.4 focused QML after bounded conversion addition | PASS, three consecutive runs | `qt64-bounded-ctest.log` |
+| Qt 6.9 desktop ASan/UBSan affected QML/CLI after final additions | PASS, 2/2 | `qt69-sanitizers-bounded-ctest.log` |
+| Ubuntu 24.04 / Qt disabled ASan/UBSan, leak detection enabled | Pending | `headless-sanitizers-ctest.log` |
+| Additional Ubuntu 24.04 / Qt 6.4 desktop ASan/UBSan | FAIL, pre-existing Qt software texture leaks; see below | `sanitizers-ctest.log` |
+
+The host OpenCV packages were extracted locally because installed development
+packages were unavailable; `OpenCV_DIR` and `LD_LIBRARY_PATH` point into ignored
+`build/deps/root`. Host sanitizer tests use `OPENCV_OPENCL_RUNTIME=disabled` to
+avoid the previously documented installed CUDA/OpenCL loader leak while testing
+the unchanged CPU calibration path. No sanitizer suppression or disabled leak
+detection is used. The Ubuntu 24.04 CI-equivalent run uses normal distribution
+dependencies and no OpenCL override.
+
+Two initial environment/timing failures were investigated and retained: the
+container lacked `git` and its read-only worktree administrative directory for
+the validation harness; supplying both restored that test. An initial Qt 6.9
+maximum-size screenshot exhausted the old 100-ms margin under concurrent build
+load. Requesting short-deadline screenshots immediately while waiting for a
+rendered frame fixed it; the original timing assertions remain enabled.
+
+Edited C/C++ files were formatted with the repository `.clang-format` and checked
+with `clang-format --dry-run --Werror`; `git diff --check` passes. The supplied
+`.ui-m0-review-task.md` was removed before the first correction commit.
+
+### Explicit Qt 6.4 software-renderer sanitizer limitation
+
+The additional Studio ON Qt 6.4 sanitizer suite is **not green**. Qt Quick's
+software render context retains cached control-image textures at shutdown.
+The unchanged reviewed SHA reproduces the same failure in the unchanged
+`studio-calibration-qml`: **12,096 bytes in 18 allocations**, with allocation
+stacks in `QQuickDefaultTextureFactory`, `QSGSoftwarePixmapTexture` and
+`QSGRenderContext::textureForFactory`. The [complete baseline failure log](evidence/qt64-baseline-software-renderer-leak.txt)
+is retained for independent review. Reproduce with:
+
+```bash
+cmake -S build/ui-m0-review/baseline -B build/ui-m0-review/baseline-asan -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug -DMANTIS_SANITIZE=ON -DMANTIS_BUILD_STUDIO=ON \
+  -DPython3_EXECUTABLE=/usr/bin/python3
+cmake --build build/ui-m0-review/baseline-asan --target mantis-studio-calibration-qml --parallel 4
+ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
+  ctest --test-dir build/ui-m0-review/baseline-asan -R '^studio-calibration-qml$' --output-on-failure
+```
+
+Source inspection provides a specific dependency explanation:
+[Qt 6.4.2 `QSGSoftwareRenderContext::invalidate`](https://github.com/qt/qtdeclarative/blob/v6.4.2/src/quick/scenegraph/adaptations/software/qsgsoftwarecontext.cpp)
+only emits `invalidated`; the
+[Qt 6.9.2 implementation](https://github.com/qt/qtdeclarative/blob/v6.9.2/src/quick/scenegraph/adaptations/software/qsgsoftwarecontext.cpp)
+explicitly deletes both cached texture collections and glyph caches. This is a
+pre-existing third-party shutdown leak, justified as a remaining platform limit,
+not suppressed or recorded as PASS. No Qt private cleanup, architecture change
+or newer-Qt pin was added. Ownership/lifetime changes additionally pass the full
+Qt 6.9 desktop sanitizer suite. The required, unchanged CI sanitizer job remains
+Qt disabled; regular Studio ON CI continues to test Qt 6.4 on both architectures.
+
+### Visual review and independently accessible captures
+
+Reviewed the approved ten concepts and generated Qt 6.4 captures: mock Devices,
+compact Home/calibration, disconnected acquisition, and both shared-button
+variants in default, hover, pressed, focus and disabled states. Primary text
+remains readable during press; hover has a distinct light accent, focus has a
+visible border, and disabled controls have muted text/fill. Stale acquisition
+uses a wrapping global capture-status label rather than implying every discovered
+device is streaming. Compact legacy acquisition still scrolls as documented.
+
+Reproduce all captures with the normal Studio build:
+
+```bash
+ctest --test-dir build/debug -R '^studio-ui-m0-(qml|cli)$' --output-on-failure
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+  build/debug/bin/mantis-studio --ui-mode=mock --workspace=devices \
+  --window-size=1536x1024 --quit-after=5000 --screenshot=/tmp/mantis-ui-m0-devices.png
+```
+
+CTest writes `ui-m0/screenshots/` and `ui-m0/cli/` beneath the selected build
+directory, including `button-{primary,secondary}-{default,hover,pressed,focus,disabled}.png`,
+`disconnected-last-known-acquisition.png`, all ten routes and three viewport sizes.
+Studio ON CI uploads these PNGs, `LastTest.log` and the retained crash/leak
+diagnostics as `ui-m0-ubuntu-24.04` and `ui-m0-ubuntu-24.04-arm` artifacts for
+30 days. Captures are software presentation evidence, not scanner measurements.
+
+### Exact-SHA CI release gate
+
+The correction implementation and full final pushed-SHA matrix are pending.
+This intermediate record does **not** assert READY FOR REVIEW. Native ARM64
+verification will come from that matrix; local evidence is x86_64 only.
+Physical scanner/laser, metrology precision, remote networking and native
+window-system accessibility acceptance remain outside this UI fixture evidence.
+Independent reviewer approval remains required after all five jobs pass.

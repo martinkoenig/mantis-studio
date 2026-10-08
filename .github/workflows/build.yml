@@ -30,6 +30,16 @@ jobs:
         run: cmake --build build/ci --parallel 4
       - name: Test
         run: ctest --test-dir build/ci --output-on-failure
+      - name: Upload UI review evidence
+        if: ${{ always() && matrix.studio == 'ON' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-m0-${{ matrix.runner }}
+          retention-days: 30
+          path: |
+            build/ci/ui-m0/
+            build/ci/Testing/Temporary/LastTest.log
+            docs/ui/evidence/
 
   sanitizers:
     runs-on: ubuntu-24.04

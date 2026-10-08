@@ -1,0 +1,137 @@
+Baseline SHA: 618e03eef584a729b0036c9ec73eabf567d76183
+Ubuntu 24.04 x86_64 / Qt 6.4.2 / GCC 13; offscreen, software.
+Unmodified baseline fails CTest and three direct runs (exit 139).
+
+g++	4:13.2.0-7ubuntu1
+libqt6quick6:amd64	6.4.2+dfsg-4build3
+libqt6quicklayouts6:amd64	6.4.2+dfsg-4build3
+
+warning: Error disabling address space randomization: Operation not permitted
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+[New Thread 0x78fb6d0956c0 (LWP 9748)]
+[New Thread 0x78fb672a86c0 (LWP 9749)]
+[New Thread 0x78fb66aa76c0 (LWP 9750)]
+[New Thread 0x78fb662a66c0 (LWP 9751)]
+[New Thread 0x78fb65aa56c0 (LWP 9752)]
+[New Thread 0x78fb652a46c0 (LWP 9753)]
+[New Thread 0x78fb64aa36c0 (LWP 9754)]
+[New Thread 0x78fb4ffff6c0 (LWP 9755)]
+[New Thread 0x78fb4f7fe6c0 (LWP 9756)]
+[New Thread 0x78fb4effd6c0 (LWP 9757)]
+[New Thread 0x78fb4e7fc6c0 (LWP 9758)]
+[New Thread 0x78fb4dffb6c0 (LWP 9759)]
+[New Thread 0x78fb4d7fa6c0 (LWP 9760)]
+
+Thread 1 "mantis-studio-u" received signal SIGSEGV, Segmentation fault.
+QQmlData::get (create=<optimized out>, object=<optimized out>, object=<optimized out>, create=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/obj-x86_64-linux-gnu/include/QtQml/6.4.2/QtQml/private/../../../../../../src/qml/qml/qqmldata_p.h:223
+warning: 223	/usr/src/qt6-declarative-6.4.2+dfsg-4build3/obj-x86_64-linux-gnu/include/QtQml/6.4.2/QtQml/private/../../../../../../src/qml/qml/qqmldata_p.h: No such file or directory
+#0  QQmlData::get (create=false, object=0x56a38461cbb0, object=<optimized out>, create=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/obj-x86_64-linux-gnu/include/QtQml/6.4.2/QtQml/private/../../../../../../src/qml/qml/qqmldata_p.h:223
+#1  qmlAttachedPropertiesObject (object=0x56a38461cbb0, func=0x78fb6c0800f0 <QQuickLayout::qmlAttachedProperties(QObject*)>, create=false) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqml.cpp:106
+#2  0x000078fb6c07e859 in qmlAttachedPropertiesObject<QQuickLayout> (obj=<optimized out>, create=create@entry=false) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqml.h:611
+#3  0x000078fb6c0856dc in attachedLayoutObject (create=false, item=<optimized out>, item=<optimized out>, create=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout_p.h:348
+#4  QQuickGridLayoutItem::sizePolicy (this=0x56a38423da40, orientation=Qt::Horizontal) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:68
+#5  0x000078fb727c562b in QGridLayoutItem::stretchFactor(Qt::Orientation) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#6  0x000078fb727c8767 in QGridLayoutEngine::fillRowData(QGridLayoutRowData*, double const*, double const*, Qt::Orientation, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#7  0x000078fb727c9aa6 in QGridLayoutEngine::ensureColumnAndRowData(QGridLayoutRowData*, QGridLayoutBox*, double const*, double const*, Qt::Orientation, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#8  0x000078fb727c9e7a in QGridLayoutEngine::sizeHint(Qt::SizeHint, QSizeF const&, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#9  0x000078fb6c07f276 in QQuickGridLayoutBase::sizeHint (this=<optimized out>, whichSizeHint=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklinearlayout.cpp:237
+#10 0x000078fb6c080187 in QQuickLayoutAttached::sizeHint (this=this@entry=0x56a3840504e0, which=which@entry=Qt::MaximumSize, orientation=orientation@entry=Qt::Vertical) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:630
+#11 0x000078fb6c085282 in QQuickLayoutAttached::maximumHeight (this=0x56a3840504e0) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout_p.h:198
+#12 QQuickLayoutAttached::maximumHeight (this=0x56a3840504e0) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout_p.h:198
+#13 combineImplicitHints (size=<optimized out>, which=Qt::MaximumSize, info=0x56a3840504e0) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:1011
+#14 QQuickLayout::effectiveSizeHints_helper (item=<optimized out>, cachedSizeHints=cachedSizeHints@entry=0x56a384240630, attachedInfo=attachedInfo@entry=0x0, useFallbackToWidthOrHeight=false) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:1099
+#15 0x000078fb6c085616 in QQuickGridLayoutItem::effectiveSizeHints (this=0x56a384240600) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:45
+#16 QQuickGridLayoutItem::sizeHint (this=0x56a384240600, which=Qt::PreferredSize, constraint=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:37
+#17 0x000078fb727c5826 in QGridLayoutItem::box(Qt::Orientation, bool, double) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#18 0x000078fb727c8b75 in QGridLayoutEngine::fillRowData(QGridLayoutRowData*, double const*, double const*, Qt::Orientation, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#19 0x000078fb727c9aa6 in QGridLayoutEngine::ensureColumnAndRowData(QGridLayoutRowData*, QGridLayoutBox*, double const*, double const*, Qt::Orientation, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#20 0x000078fb727c9e7a in QGridLayoutEngine::sizeHint(Qt::SizeHint, QSizeF const&, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#21 0x000078fb6c07f276 in QQuickGridLayoutBase::sizeHint (this=<optimized out>, whichSizeHint=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklinearlayout.cpp:237
+#22 0x000078fb6c080187 in QQuickLayoutAttached::sizeHint (this=this@entry=0x56a384050ae0, which=which@entry=Qt::MaximumSize, orientation=orientation@entry=Qt::Vertical) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:630
+#23 0x000078fb6c085282 in QQuickLayoutAttached::maximumHeight (this=0x56a384050ae0) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout_p.h:198
+#24 QQuickLayoutAttached::maximumHeight (this=0x56a384050ae0) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout_p.h:198
+#25 combineImplicitHints (size=<optimized out>, which=Qt::MaximumSize, info=0x56a384050ae0) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:1011
+#26 QQuickLayout::effectiveSizeHints_helper (item=<optimized out>, cachedSizeHints=cachedSizeHints@entry=0x56a384247250, attachedInfo=attachedInfo@entry=0x0, useFallbackToWidthOrHeight=false) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:1099
+#27 0x000078fb6c085616 in QQuickGridLayoutItem::effectiveSizeHints (this=0x56a384247220) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:45
+#28 QQuickGridLayoutItem::sizeHint (this=0x56a384247220, which=Qt::PreferredSize, constraint=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:37
+#29 0x000078fb727c5826 in QGridLayoutItem::box(Qt::Orientation, bool, double) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#30 0x000078fb727c8b75 in QGridLayoutEngine::fillRowData(QGridLayoutRowData*, double const*, double const*, Qt::Orientation, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#31 0x000078fb727c9aa6 in QGridLayoutEngine::ensureColumnAndRowData(QGridLayoutRowData*, QGridLayoutBox*, double const*, double const*, Qt::Orientation, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#32 0x000078fb727ca531 in QGridLayoutEngine::ensureGeometries(QSizeF const&, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#33 0x000078fb727caadc in QGridLayoutEngine::setGeometries(QRectF const&, QAbstractLayoutStyleInfo const*) () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#34 0x000078fb6c087105 in QQuickGridLayoutBase::rearrange (this=0x56a3840300d0, size=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklinearlayout.cpp:471
+#35 0x000078fb6c081f32 in QQuickLayout::geometryChange (this=0x56a3840300d0, newGeometry=..., oldGeometry=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:851
+#36 0x000078fb731ef939 in QQuickItem::setWidth (this=0x56a3840300d0, w=856) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:7077
+#37 0x000078fb73208944 in QQuickItemPrivate::setWidth (width=<optimized out>, this=0x56a3840305b0) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/obj-x86_64-linux-gnu/include/QtQuick/6.4.2/QtQuick/private/../../../../../../src/quick/items/qquickitem_p.h:218
+#38 QObjectCompatProperty<QQuickItemPrivate, double, &QQuickItemPrivate::_qt_property_width_offset, &QQuickItemPrivate::setWidth, &QQuickItemPrivate::widthChanged, decltype(nullptr)>::bindingWrapper (type=..., dataPtr=0x56a384030700, binding=...) at /usr/include/x86_64-linux-gnu/qt6/QtCore/6.4.2/QtCore/private/qproperty_p.h:490
+#39 0x000078fb7225ecdd in ??? () at /lib/x86_64-linux-gnu/libQt6Core.so.6
+#40 0x000078fb72053523 in QtPrivate::QPropertyBindingData::notifyObserver_helper(QUntypedPropertyData*, QBindingStorage*, QPropertyObserverPointer, QVarLengthArray<QBindingObserverPtr, 256ll>&) const () at /lib/x86_64-linux-gnu/libQt6Core.so.6
+#41 0x000078fb731facb5 in QObjectCompatProperty<QQuickItemPrivate, double, &QQuickItemPrivate::_qt_property_width_offset, &QQuickItemPrivate::setWidth, &QQuickItemPrivate::widthChanged, decltype(nullptr)>::notify (this=0x56a38402a480) at /usr/include/x86_64-linux-gnu/qt6/QtCore/6.4.2/QtCore/private/qproperty_p.h:620
+#42 0x000078fb731e2f08 in QQuickItem::geometryChange (this=0x56a38402a250, newGeometry=<optimized out>, oldGeometry=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:3786
+#43 0x000078fb717bfb51 in QQuickControl::geometryChange(QRectF const&, QRectF const&) () at /lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6
+#44 0x000078fb731f103a in QQuickItem::setSize (this=0x56a38402a250, size=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:7457
+#45 0x000078fb6c0849da in QQuickGridLayoutItem::setGeometry (this=0x56a3844471b0, rect=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:85
+#46 0x000078fb727cad1c in QGridLayoutEngine::setGeometries(QRectF const&, QAbstractLayoutStyleInfo const*) () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#47 0x000078fb6c087105 in QQuickGridLayoutBase::rearrange (this=0x56a383ea7880, size=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklinearlayout.cpp:471
+#48 0x000078fb6c081f32 in QQuickLayout::geometryChange (this=0x56a383ea7880, newGeometry=..., oldGeometry=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:851
+#49 0x000078fb731f103a in QQuickItem::setSize (this=0x56a383ea7880, size=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:7457
+#50 0x000078fb6c0849da in QQuickGridLayoutItem::setGeometry (this=0x56a384453320, rect=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:85
+#51 0x000078fb727cad1c in QGridLayoutEngine::setGeometries(QRectF const&, QAbstractLayoutStyleInfo const*) () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#52 0x000078fb6c087105 in QQuickGridLayoutBase::rearrange (this=0x56a383e9d010, size=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklinearlayout.cpp:471
+#53 0x000078fb6c081f32 in QQuickLayout::geometryChange (this=0x56a383e9d010, newGeometry=..., oldGeometry=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:851
+#54 0x000078fb731f103a in QQuickItem::setSize (this=0x56a383e9d010, size=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:7457
+#55 0x000078fb6c0849da in QQuickGridLayoutItem::setGeometry (this=0x56a384457720, rect=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:85
+#56 0x000078fb727cad1c in QGridLayoutEngine::setGeometries(QRectF const&, QAbstractLayoutStyleInfo const*) () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#57 0x000078fb6c087105 in QQuickGridLayoutBase::rearrange (this=0x56a383de4aa0, size=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklinearlayout.cpp:471
+#58 0x000078fb6c081f32 in QQuickLayout::geometryChange (this=0x56a383de4aa0, newGeometry=..., oldGeometry=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:851
+#59 0x000078fb731f103a in QQuickItem::setSize (this=0x56a383de4aa0, size=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:7457
+#60 0x000078fb731b94fa in QQuickAnchorsPrivate::setItemSize (v=..., this=0x56a384059450) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickanchors.cpp:399
+#61 QQuickAnchorsPrivate::fillChanged (this=0x56a384059450) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickanchors.cpp:175
+#62 0x000078fb731e2e86 in operator() (listener=..., __closure=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:3776
+#63 QQuickItemPrivate::notifyChangeListeners<QQuickItem::geometryChange(const QRectF&, const QRectF&)::<lambda(const QQuickItemPrivate::ChangeListener&)> > (function=<optimized out>, changeTypes=..., this=0x56a383e8a7d0) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/obj-x86_64-linux-gnu/include/QtQuick/6.4.2/QtQuick/private/../../../../../../src/quick/items/qquickitem_p.h:355
+#64 QQuickItem::geometryChange (this=0x56a383e8a7a0, newGeometry=<optimized out>, oldGeometry=...) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:3774
+#65 0x000078fb731ef939 in QQuickItem::setWidth (this=0x56a383e8a7a0, w=1080) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickitem.cpp:7077
+#66 0x000078fb717a4fb4 in QQuickApplicationWindowPrivate::relayout() () at /lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6
+#67 0x000078fb725bdef0 in QWindow::event(QEvent*) () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#68 0x000078fb7200e448 in QCoreApplication::notifyInternal2(QObject*, QEvent*) () at /lib/x86_64-linux-gnu/libQt6Core.so.6
+#69 0x000078fb7257a497 in QGuiApplicationPrivate::processGeometryChangeEvent(QWindowSystemInterfacePrivate::GeometryChangeEvent*) () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#70 0x000078fb725c35cc in QWindowSystemInterface::sendWindowSystemEvents(QFlags<QEventLoop::ProcessEventsFlag>) () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#71 0x000078fb728f72b4 in ??? () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#72 0x000078fb71120635 in ??? () at /lib/x86_64-linux-gnu/libglib-2.0.so.0
+#73 0x000078fb7117fbf7 in ??? () at /lib/x86_64-linux-gnu/libglib-2.0.so.0
+#74 0x000078fb7111fad3 in g_main_context_iteration () at /lib/x86_64-linux-gnu/libglib-2.0.so.0
+#75 0x000078fb722075ef in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () at /lib/x86_64-linux-gnu/libQt6Core.so.6
+#76 0x000078fb720189a3 in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () at /lib/x86_64-linux-gnu/libQt6Core.so.6
+#77 0x000056a34c87a3e4 in settle () at /work/tests/unit/studio_ui_m0.cpp:50
+#78 0x000056a34c87c504 in main (argc=2, argv=0x7ffd98cd9ba8) at /work/tests/unit/studio_ui_m0.cpp:156
+
+Standalone matching reproducer stack:
+warning: Error disabling address space randomization: Operation not permitted
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+[New Thread 0x7f073764e6c0 (LWP 9941)]
+
+Thread 1 "layout-reproduc" received signal SIGSEGV, Segmentation fault.
+QQmlData::get (create=<optimized out>, object=<optimized out>, object=<optimized out>, create=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/obj-x86_64-linux-gnu/include/QtQml/6.4.2/QtQml/private/../../../../../../src/qml/qml/qqmldata_p.h:223
+warning: 223	/usr/src/qt6-declarative-6.4.2+dfsg-4build3/obj-x86_64-linux-gnu/include/QtQml/6.4.2/QtQml/private/../../../../../../src/qml/qml/qqmldata_p.h: No such file or directory
+#0  QQmlData::get (create=false, object=0x618ec0160080, object=<optimized out>, create=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/obj-x86_64-linux-gnu/include/QtQml/6.4.2/QtQml/private/../../../../../../src/qml/qml/qqmldata_p.h:223
+#1  qmlAttachedPropertiesObject (object=0x618ec0160080, func=0x7f07363cb0f0 <QQuickLayout::qmlAttachedProperties(QObject*)>, create=false) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqml.cpp:106
+#2  0x00007f07363c9859 in qmlAttachedPropertiesObject<QQuickLayout> (obj=<optimized out>, create=create@entry=false) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqml.h:611
+#3  0x00007f07363d06dc in attachedLayoutObject (create=false, item=<optimized out>, item=<optimized out>, create=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout_p.h:348
+#4  QQuickGridLayoutItem::sizePolicy (this=0x618ec01617b0, orientation=Qt::Horizontal) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:68
+#5  0x00007f073cb1162b in QGridLayoutItem::stretchFactor(Qt::Orientation) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#6  0x00007f073cb14767 in QGridLayoutEngine::fillRowData(QGridLayoutRowData*, double const*, double const*, Qt::Orientation, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#7  0x00007f073cb15aa6 in QGridLayoutEngine::ensureColumnAndRowData(QGridLayoutRowData*, QGridLayoutBox*, double const*, double const*, Qt::Orientation, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#8  0x00007f073cb15e7a in QGridLayoutEngine::sizeHint(Qt::SizeHint, QSizeF const&, QAbstractLayoutStyleInfo const*) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6
+#9  0x00007f07363ca276 in QQuickGridLayoutBase::sizeHint (this=<optimized out>, whichSizeHint=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklinearlayout.cpp:237
+#10 0x00007f07363cb187 in QQuickLayoutAttached::sizeHint (this=this@entry=0x618ec014d950, which=which@entry=Qt::MaximumSize, orientation=orientation@entry=Qt::Vertical) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:630
+#11 0x00007f07363d0282 in QQuickLayoutAttached::maximumHeight (this=0x618ec014d950) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout_p.h:198
+#12 QQuickLayoutAttached::maximumHeight (this=0x618ec014d950) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout_p.h:198
+#13 combineImplicitHints (size=<optimized out>, which=Qt::MaximumSize, info=0x618ec014d950) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:1011
+#14 QQuickLayout::effectiveSizeHints_helper (item=<optimized out>, cachedSizeHints=cachedSizeHints@entry=0x618ec0161a90, attachedInfo=attachedInfo@entry=0x0, useFallbackToWidthOrHeight=false) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquicklayout.cpp:1099
+#15 0x00007f07363d0616 in QQuickGridLayoutItem::effectiveSizeHints (this=0x618ec0161a60) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:45
+#16 QQuickGridLayoutItem::sizeHint (this=0x618ec0161a60, which=Qt::PreferredSize, constraint=<optimized out>) at /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quicklayouts/qquickgridlayoutengine_p.h:37
+#17 0x00007f073cb11826 in QGridLayoutItem::box(Qt::Orientation, bool, double) const () at /lib/x86_64-linux-gnu/libQt6Gui.so.6

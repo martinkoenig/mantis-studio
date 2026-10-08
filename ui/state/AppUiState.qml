@@ -2,22 +2,40 @@ import QtQuick
 QtObject {
     id: root
     required property var bridge
+    property var calibrationProvider: null
     property string mode: "live"
     readonly property MockFixtures fixtures: MockFixtures {}
-    readonly property bool runtimeConnected: mode !== "mock" && bridge.connected
+    readonly property bool runtimeConnected: mode !== "mock" && !!bridge && bridge.connected === true
     readonly property var runtime: ({
         source: mode === "mock" ? "mock" : "live", connected: runtimeConnected,
         actionable: runtimeConnected,
         label: mode === "mock" ? "Mock · runtime not used" : runtimeConnected ? "Runtime connected" : "Runtime disconnected"
     })
+    // Qt 6.4 exposes typed sequences (notably QStringList) as array-like objects.
+    // Accept bounded sequences explicitly; strings and malformed data are not lists.
+    function sequence(value) {
+        if (!value || typeof value !== "object" || !Number.isInteger(value.length) || value.length < 0 || value.length > 65536) return []
+        return Array.prototype.slice.call(value)
+    }
     readonly property var devices: {
         if (mode === "mock") return fixtures.devices
         if (!runtimeConnected) return []
-        return bridge.devices.map(function(device) {
+        const eligible = calibrationProvider ? sequence(calibrationProvider.devices) : []
+        return sequence(bridge.devices).filter(function(device) {
+            return device && typeof device.id === "string" && device.id.length > 0 && typeof device.name === "string"
+        }).map(function(device) {
+            const capabilities = sequence(device.capabilities).filter(function(capability) {
+                return typeof capability === "string"
+            })
+            // Eligibility is validated by CalibrationController against the complete Device Graph.
+            // Opening that workflow is permission to inspect/attempt, never proof of readiness.
+            const calibrate = eligible.some(function(candidate) { return candidate && candidate.id === device.id })
             return { id: device.id, name: device.name, source: "live", synthetic: false,
-                connected: null, actionable: true, status: "Discovered by runtime · readiness not assessed",
-                capabilities: device.capabilities || [],
-                capabilityLabel: (device.capabilities || []).join(" · ") || "No capabilities advertised" }
+                discovered: true, connected: null, availability: "unknown", readiness: "unknown",
+                actionable: calibrate, actions: { calibration: calibrate },
+                status: "Discovered by runtime · availability and readiness unknown",
+                capabilities: capabilities,
+                capabilityLabel: capabilities.join(" · ") || "No capabilities advertised" }
         })
     }
     // Hybrid fixtures stay separate even when real devices are available.

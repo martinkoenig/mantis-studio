@@ -34,7 +34,7 @@ ApplicationWindow {
     palette.disabled.text: Theme.muted
     palette.disabled.buttonText: Theme.muted
 
-    AppUiState { id: state; bridge: window.studioBridge; mode: window.uiMode }
+    AppUiState { id: state; bridge: window.studioBridge; calibrationProvider: calibration; mode: window.uiMode }
     function updateCalibrationVisibility() {
         calibration.visible = uiMode !== "mock" && (workspace === "devices" || workspace === "calibration")
     }

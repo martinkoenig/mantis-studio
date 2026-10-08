@@ -8,19 +8,18 @@ Button {
     horizontalPadding: Theme.gap
     hoverEnabled: true
     activeFocusOnTab: true
-    opacity: enabled ? 1 : 0.45
     contentItem: Text {
         text: control.text
         font: control.font
-        color: control.primary ? Theme.canvas : Theme.text
+        color: !control.enabled ? Theme.muted : control.primary ? Theme.canvas : Theme.text
         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
     background: Rectangle {
         radius: Theme.radius
-        color: control.down ? Theme.pressed : control.primary ? Theme.accent : control.hovered ? Theme.hover : Theme.raised
+        color: !control.enabled ? Theme.raised : control.primary ? (control.down ? Theme.accentPressed : control.hovered ? Theme.accentHover : Theme.accent) : control.down ? Theme.pressed : control.hovered ? Theme.hover : Theme.raised
         border.width: control.visualFocus ? 2 : 1
-        border.color: control.visualFocus ? Theme.focus : control.primary ? Theme.accent : Theme.border
+        border.color: control.enabled && control.visualFocus ? Theme.focus : control.enabled && control.primary ? color : Theme.border
     }
     Accessible.name: text
 }

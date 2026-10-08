@@ -10,6 +10,8 @@ QtObject {
     readonly property color secondary: "#a5b6ba"
     readonly property color muted: "#7e949a"
     readonly property color accent: "#28e0a5"
+    readonly property color accentHover: "#66ecc1"
+    readonly property color accentPressed: "#19b887"
     readonly property color selection: "#123a32"
     readonly property color hover: "#1b2e32"
     readonly property color pressed: "#245046"

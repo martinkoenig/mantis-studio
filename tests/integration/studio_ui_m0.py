@@ -4,6 +4,8 @@ import os
 import socket
 import subprocess
 import sys
+import struct
+import zlib
 
 binary = Path(sys.argv[1]).resolve()
 output = Path(sys.argv[2]).resolve()
@@ -11,10 +13,10 @@ output.mkdir(parents=True, exist_ok=True)
 env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
 env.pop("MANTIS_TOKEN", None)
 errors = ("ReferenceError", "TypeError", "Binding loop", "failed to load", "Cannot assign", "is not a type", "Unable to assign")
-def run(*args, success=True):
+def run(*args, success=True, exit_code=None):
     result = subprocess.run([str(binary), *args], env=env, text=True, capture_output=True, timeout=12)
     (output / "cli-last.log").write_text(result.stdout + result.stderr)
-    assert result.returncode == (0 if success else 2), (args, result.stdout, result.stderr)
+    assert result.returncode == (exit_code if exit_code is not None else 0 if success else 2), (args, result.stdout, result.stderr)
     assert not any(error in result.stderr for error in errors), result.stderr
     return result
 
@@ -28,6 +30,33 @@ for args in (("--ui-mode=invalid",), ("--workspace=missing",), ("--ui-mode",),
 picture = output / "cli-mock-home.png"
 run("--ui-mode=mock", "--workspace=home", "--quit-after=600", "--screenshot", str(picture))
 assert picture.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+# Pathological screenshot deadlines are rejected before loading QML, while ordinary
+# rapid exits remain valid. At the accepted minimum, readback must contain UI content.
+for timeout in (1, 99):
+    run("--ui-mode=mock", f"--quit-after={timeout}", "--screenshot", str(output / "rejected.png"), success=False)
+run("--ui-mode=mock", "--quit-after=1")
+def assert_rendered(path, dimensions):
+    data = path.read_bytes()
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert struct.unpack(">II", data[16:24]) == dimensions
+    offset, compressed = 8, bytearray()
+    while offset < len(data):
+        length = struct.unpack(">I", data[offset:offset+4])[0]
+        if data[offset+4:offset+8] == b"IDAT":
+            compressed.extend(data[offset+8:offset+8+length])
+        offset += length + 12
+    pixels = zlib.decompress(compressed)
+    assert len(set(pixels)) > 16, "Screenshot lacks rendered content"
+for iteration in range(3):
+    rapid = output / f"rapid-{iteration}.png"
+    run("--ui-mode=mock", "--window-size=1080x720", "--quit-after=100", "--screenshot", str(rapid))
+    assert_rendered(rapid, (1080, 720))
+large = output / "maximum-viewport.png"
+run("--ui-mode=mock", "--window-size=7680x4320", "--quit-after=1500", "--screenshot", str(large))
+assert_rendered(large, (7680, 4320))
+failed = run("--ui-mode=mock", "--quit-after=100", "--screenshot", str(output / "missing-directory" / "failed.png"), exit_code=1)
+assert "save failed" in failed.stderr, failed.stderr
+assert not (output / "rejected.png").exists()
 # Mock does not parse unrelated runtime endpoint configuration either.
 env["MANTIS_PORT"] = "not-a-runtime-port"
 run("--ui-mode=mock", "--quit-after=400")

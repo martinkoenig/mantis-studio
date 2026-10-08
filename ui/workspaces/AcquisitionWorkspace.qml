@@ -26,18 +26,30 @@ ScrollView {
                     ColumnLayout {
                         id: deviceColumn; anchors.fill: parent; anchors.margins: 16; spacing: 12
                         Caption { text: "ACQUISITION" }
+                        Label {
+                            objectName: "acquisitionFreshness"
+                            visible: !studio.connected
+                            text: "Runtime disconnected · last-known snapshot. Current capture and device availability are unknown."
+                            color: "#edc078"; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.Wrap
+                        }
+                        Label {
+                            objectName: "acquisitionCaptureStatus"
+                            text: studio.captureStatusText
+                            color: studio.connected ? "#6fe0bc" : "#edc078"; font.pixelSize: 11
+                            Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap
+                        }
                         Repeater {
                             model: studio.devices
                             delegate: ColumnLayout {
                                 required property var modelData
                                 Layout.fillWidth: true
-                                Label { text: modelData.name; font.pixelSize: 17; font.bold: true }
-                                Label { text: studio.capturing ? "● Streaming · raw recording" : "● Discovered · live source"; color: "#6fe0bc"; font.pixelSize: 11 }
-                                Action { text: "Start capture"; Layout.fillWidth: true; enabled: studio.connected && !studio.capturing && !studio.busy; onClicked: studio.startCapture(modelData.id) }
+                                Label { text: modelData.name; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                                Label { text: studio.connected ? "Discovered · readiness unknown" : "Last-known descriptor · availability unknown"; color: studio.connected ? "#6fe0bc" : "#edc078"; font.pixelSize: 11; Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap }
+                                Action { text: "Start capture"; Layout.fillWidth: true; objectName: "startCapture_" + modelData.id; enabled: studio.connected && modelData.captureSupported && !studio.capturing && !studio.busy; onClicked: studio.startCapture(modelData.id) }
                             }
                         }
                         Action { text: "Stop capture"; Layout.fillWidth: true; enabled: studio.connected && studio.capturing && !studio.busy; onClicked: studio.stopCapture() }
-                        Label { text: studio.acquisitionText; visible: text.length > 0; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 11; color: "#a8bbcb" }
+                        Label { text: (studio.connected ? "" : "Last-known acquisition diagnostics\n") + studio.acquisitionText; visible: studio.acquisitionText.length > 0; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 11; color: "#a8bbcb" }
                         Rectangle { Layout.fillWidth: true; height: 1; color: "#2b3945" }
                         Caption { text: "PROCESSING RECIPE" }
                         ComboBox { id: recipe; Layout.fillWidth: true; model: ["example", "crash-test"] }
@@ -73,12 +85,12 @@ ScrollView {
                         anchors.fill: parent; anchors.margins: 12; spacing: 12
                         ColumnLayout {
                             Layout.fillWidth: true; Layout.fillHeight: true
-                            Caption { text: "LEFT · NATIVE GRAYSCALE" }
+                            Caption { text: "LEFT · " + (studio.connected ? "NATIVE GRAYSCALE" : "LAST-KNOWN PREVIEW") }
                             MeasurementView { id: leftPreview; objectName: "leftPreview"; Layout.fillWidth: true; Layout.fillHeight: true }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true; Layout.fillHeight: true
-                            Caption { text: "RIGHT · NATIVE GRAYSCALE" }
+                            Caption { text: "RIGHT · " + (studio.connected ? "NATIVE GRAYSCALE" : "LAST-KNOWN PREVIEW") }
                             MeasurementView { id: rightPreview; objectName: "rightPreview"; Layout.fillWidth: true; Layout.fillHeight: true }
                         }
                     }
@@ -183,7 +195,7 @@ ScrollView {
                                 ProgressBar { value: modelData.progress; Layout.fillWidth: true }
                                 RowLayout {
                                     Label { text: modelData.state; color: modelData.state === "Failed" ? "#fa9298" : "#95adbc"; font.pixelSize: 11 }
-                                    Button { text: "Cancel"; visible: modelData.state === "Running" || modelData.state === "Queued"; onClicked: studio.cancelJob(modelData.id) }
+                                    Button { text: "Cancel"; visible: modelData.state === "Running" || modelData.state === "Queued"; enabled: studio.connected && !studio.busy; onClicked: studio.cancelJob(modelData.id) }
                                 }
                             }
                         }

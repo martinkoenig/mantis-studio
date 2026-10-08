@@ -100,7 +100,8 @@ ScrollView {
                                 DeviceSummary { width: parent.width; device: modelData }
                                 StudioButton {
                                     visible: root.page.route === "devices" && !modelData.synthetic
-                                    enabled: modelData.actionable && modelData.capabilities.indexOf("org.mantis.camera.frameset-stream.v1") !== -1
+                                    objectName: "calibrate_" + modelData.id
+                                    enabled: modelData.actions.calibration
                                     text: "Calibrate " + modelData.name
                                     onClicked: root.openCalibration(modelData.id)
                                 }
