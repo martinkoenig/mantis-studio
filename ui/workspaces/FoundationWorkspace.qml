@@ -84,23 +84,33 @@ ScrollView {
                         Label { visible: root.state.mode !== "mock" && root.state.devices.length === 0; text: root.state.runtimeConnected ? "No devices discovered." : "No live device data available."; color: Theme.muted }
                     }
                 }
-                Repeater {
-                    model: root.state.devices
-                    delegate: ColumnLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        DeviceSummary { Layout.fillWidth: true; device: modelData }
-                        StudioButton {
-                            visible: root.page.route === "devices" && !modelData.synthetic
-                            enabled: modelData.actionable && modelData.capabilities.indexOf("org.mantis.camera.frameset-stream.v1") !== -1
-                            text: "Calibrate " + modelData.name
-                            onClicked: root.openCalibration(modelData.id)
+                // Keep dynamic delegates outside the surrounding Layout's item cache.
+                // Qt 6.4 can query a removed Repeater item before its next layout polish.
+                Item {
+                    Layout.fillWidth: true
+                    implicitHeight: deviceRows.implicitHeight
+                    Column {
+                        id: deviceRows
+                        width: parent.width; spacing: Theme.gap
+                        Repeater {
+                            model: root.state.devices
+                            delegate: Column {
+                                required property var modelData
+                                width: deviceRows.width; spacing: Theme.small
+                                DeviceSummary { width: parent.width; device: modelData }
+                                StudioButton {
+                                    visible: root.page.route === "devices" && !modelData.synthetic
+                                    enabled: modelData.actionable && modelData.capabilities.indexOf("org.mantis.camera.frameset-stream.v1") !== -1
+                                    text: "Calibrate " + modelData.name
+                                    onClicked: root.openCalibration(modelData.id)
+                                }
+                            }
+                        }
+                        Repeater {
+                            model: root.state.demoDevices
+                            delegate: DeviceSummary { required property var modelData; width: deviceRows.width; device: modelData }
                         }
                     }
-                }
-                Repeater {
-                    model: root.state.demoDevices
-                    delegate: DeviceSummary { required property var modelData; Layout.fillWidth: true; device: modelData }
                 }
             }
         }

@@ -65,7 +65,48 @@ static void click(QQuickWindow *window, QQuickItem *item) {
     settle();
 }
 static QVariantList list(QObject *object, const char *property) {
-    return object->property(property).value<QJSValue>().toVariant().toList();
+    require(object, "Missing list provider");
+    auto value = object->property(property);
+    if (value.metaType() == QMetaType::fromType<QJSValue>()) {
+        const auto js = value.value<QJSValue>();
+        if (!js.isArray())
+            throw std::runtime_error(std::string(property) + ": expected JavaScript array");
+        value = js.toVariant();
+    }
+    if (value.metaType() != QMetaType::fromType<QVariantList>())
+        throw std::runtime_error(std::string(property) + ": expected QVariantList, got " +
+                                 (value.typeName() ? value.typeName() : "invalid"));
+    return value.toList();
+}
+static QVariantMap firstMap(QObject *object, const char *property) {
+    const auto values = list(object, property);
+    if (values.empty() || values.front().metaType() != QMetaType::fromType<QVariantMap>())
+        throw std::runtime_error(std::string(property) + ": expected nonempty list of maps");
+    return values.front().toMap();
+}
+static QQuickItem *checkedItem(QQuickItem *parent, const QString &name) {
+    auto *item = findItem(parent, name);
+    if (!item)
+        throw std::runtime_error("Missing UI item: " + name.toStdString());
+    return item;
+}
+static void conversionRegression(QQmlEngine &engine) {
+    QObject fixture;
+    fixture.setProperty("rows", QVariantList{QVariantMap{{"id", "valid"}}});
+    require(firstMap(&fixture, "rows")["id"] == "valid", "Native list conversion failed");
+    fixture.setProperty("rows", QVariant::fromValue(engine.evaluate("[{id: 'js'}]")));
+    require(firstMap(&fixture, "rows")["id"] == "js", "JS list conversion failed");
+    for (const auto &invalid : {QVariant{}, QVariant("malformed"), QVariant(QVariantList{}),
+                                QVariant(QVariantList{42}), QVariant::fromValue(engine.evaluate("({})"))}) {
+        fixture.setProperty("rows", invalid);
+        bool diagnosed = false;
+        try {
+            (void)firstMap(&fixture, "rows");
+        } catch (const std::runtime_error &error) {
+            diagnosed = std::string(error.what()).find("rows:") != std::string::npos;
+        }
+        require(diagnosed, "Malformed/empty list was not diagnosed");
+    }
 }
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
@@ -80,6 +121,7 @@ int main(int argc, char **argv) {
         StudioBridge studio(nullptr, false);
         CalibrationController calibration;
         QQmlApplicationEngine engine;
+        conversionRegression(engine);
         engine.rootContext()->setContextProperty("studio", &studio);
         engine.rootContext()->setContextProperty("calibration", &calibration);
         engine.setInitialProperties({{"uiMode", "mock"}, {"workspace", "home"}});
@@ -88,32 +130,32 @@ int main(int argc, char **argv) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().front());
         require(window, "Missing window");
         settle();
-        require(findItem(window->contentItem(), "modeBadge")->property("text") == "Demo / Mock",
+        require(checkedItem(window->contentItem(), "modeBadge")->property("text") == "Demo / Mock",
                 "Mock mode is not visibly labelled");
-        require(findItem(window->contentItem(), "runtimeStatusLabel")->property("text") ==
+        require(checkedItem(window->contentItem(), "runtimeStatusLabel")->property("text") ==
                     "Mock · runtime not used",
                 "Mock runtime label is misleading");
         auto *state = window->property("appUiState").value<QObject *>();
         require(state && !state->property("runtimeConnected").toBool(), "Mock claimed runtime connection");
-        require(list(state, "devices").front().toMap()["source"] == "mock", "Missing mock source metadata");
-        require(!list(state, "devices").front().toMap()["actionable"].toBool(), "Fixture is actionable");
+        require(firstMap(state, "devices")["source"] == "mock", "Missing mock source metadata");
+        require(!firstMap(state, "devices")["actionable"].toBool(), "Fixture is actionable");
         const QStringList routes{"home",     "scan",     "process", "inspect", "reverse",
                                  "automate", "projects", "devices", "plugins", "settings"};
         for (const auto &route : routes) {
-            auto *nav = findItem(window->contentItem(), "nav_" + route);
+            auto *nav = checkedItem(window->contentItem(), "nav_" + route);
             click(window, nav);
             require(window->property("workspace") == route, "Click did not change workspace");
             require(nav->property("selected").toBool(), "Missing active selection");
-            require(findItem(window->contentItem(), "workspaceTitle")->property("text") ==
+            require(checkedItem(window->contentItem(), "workspaceTitle")->property("text") ==
                         QString(route).replace(0, 1, route.left(1).toUpper()),
                     "Wrong workspace title");
             require(window->grabWindow().save(output + "/mock-" + route + ".png"), "Screenshot failed");
         }
-        auto *home = findItem(window->contentItem(), "nav_home");
+        auto *home = checkedItem(window->contentItem(), "nav_home");
         home->forceActiveFocus();
         QKeyEvent down(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &down);
-        require(window->activeFocusItem() == findItem(window->contentItem(), "nav_scan"),
+        require(window->activeFocusItem() == checkedItem(window->contentItem(), "nav_scan"),
                 "Arrow navigation failed");
         QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
         QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
@@ -121,25 +163,25 @@ int main(int argc, char **argv) {
         QCoreApplication::sendEvent(window, &release);
         settle();
         require(window->property("workspace") == "scan", "Keyboard activation failed");
-        click(window, findItem(window->contentItem(), "nav_devices"));
-        click(window, findItem(window->contentItem(), "openCalibration"));
+        click(window, checkedItem(window->contentItem(), "nav_devices"));
+        click(window, checkedItem(window->contentItem(), "openCalibration"));
         require(window->property("workspace") == "calibration", "Devices calibration route broken");
         require(!calibration.visible(), "Mock started calibration polling");
-        require(!findItem(window->contentItem(), "calibrationWorkspace")->isEnabled(),
+        require(!checkedItem(window->contentItem(), "calibrationWorkspace")->isEnabled(),
                 "Mock enabled calibration commands");
         window->setProperty("workspace", "acquisition");
         settle();
-        require(!findItem(window->contentItem(), "acquisitionWorkspace")->isEnabled(),
+        require(!checkedItem(window->contentItem(), "acquisitionWorkspace")->isEnabled(),
                 "Mock enabled acquisition commands");
-        require(findItem(window->contentItem(), "pointCloudView"), "Legacy render hook missing");
+        require(checkedItem(window->contentItem(), "pointCloudView"), "Legacy render hook missing");
         for (const auto &mode : QStringList{"live", "hybrid"}) {
             window->setProperty("uiMode", mode);
             window->setProperty("workspace", "home");
             settle();
-            require(findItem(window->contentItem(), "modeBadge")->property("text") ==
+            require(checkedItem(window->contentItem(), "modeBadge")->property("text") ==
                         (mode == "hybrid" ? "Hybrid" : "Live source"),
                     "Mode badge mismatch");
-            require(findItem(window->contentItem(), "runtimeStatusLabel")->property("text") ==
+            require(checkedItem(window->contentItem(), "runtimeStatusLabel")->property("text") ==
                         "Runtime disconnected",
                     "Disconnected runtime label missing");
             require(!state->property("runtimeConnected").toBool(), "Offline mode invented connection");
@@ -155,7 +197,7 @@ int main(int argc, char **argv) {
                 window->setProperty("workspace", route);
                 settle();
                 for (const auto &navRoute : routes) {
-                    auto *item = findItem(window->contentItem(), "nav_" + navRoute);
+                    auto *item = checkedItem(window->contentItem(), "nav_" + navRoute);
                     const auto position = item->mapToScene(QPointF(item->width(), item->height()));
                     require(position.x() <= size.width() && position.y() <= size.height(),
                             "Navigation clipped on resize");
@@ -167,6 +209,18 @@ int main(int argc, char **argv) {
                     "Resize screenshot failed");
             }
         }
+        std::cout << "STAGE: dynamic device removal followed by immediate resize" << std::endl;
+        window->setProperty("workspace", "home");
+        for (int iteration = 0; iteration < 8; ++iteration) {
+            // No settling between model mutation and resize: this reproduced the Qt 6.4 crash.
+            window->setProperty("uiMode", iteration % 2 ? "mock" : "hybrid");
+            window->resize(iteration % 2 ? QSize(1080, 720) : QSize(1920, 1080));
+            settle();
+            require(list(state, "devices").size() == (iteration % 2 ? 1 : 0),
+                    "Device removal/repopulation failed during resize");
+            require(!window->grabWindow().isNull(), "Transition failed to render");
+        }
+        std::cout << "STAGE: presentation provider" << std::endl;
         SnapshotStub snapshot;
         QQmlComponent provider(&engine, QUrl("qrc:/ui/state/AppUiState.qml"));
         std::unique_ptr<QObject> model(
@@ -176,7 +230,7 @@ int main(int argc, char **argv) {
             model->setProperty("mode", mode);
             snapshot.publish(true);
             settle();
-            auto device = list(model.get(), "devices").front().toMap();
+            auto device = firstMap(model.get(), "devices");
             require(device["source"] == (mode == "mock" ? "mock" : "live"),
                     "Connected provider source incorrect");
             require(device["actionable"].toBool() == (mode != "mock"), "Mock acquired live authority");

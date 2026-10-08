@@ -117,7 +117,9 @@ build/debug/ui-m0/screenshots/connected-live-{acquisition,calibration}.png
 
 ## Remaining scope and limits
 
-No known failing acceptance criterion or regression remains from this run.
+At this checkpoint, no failing criterion was known from the local Qt 6.9 run.
+That local-only conclusion did not establish Qt 6.4 acceptance: independent CI
+subsequently found the Studio QML SIGSEGV described below.
 UI-M1…M7 full workspaces remain planned as described in the
 [coverage/migration matrix](README.md#coverage-and-migration). The new Home is
 only the M0 foundation. Existing acquisition retains its earlier visual style
@@ -128,3 +130,79 @@ ARM64 builds, native window-system accessibility and physical Q6A scanner/laser
 behavior were not separately executed here. No physical scanner or laser was
 activated. Existing v0.2/v0.3/v0.4 hardware/evidence limitations and the master
 roadmap remain unchanged. Independent review remains the next step.
+
+
+## Additional correction record — 2026-10-08 (review gate)
+
+Starting SHA: `618e03eef584a729b0036c9ec73eabf567d76183`, branch
+`feature/ui-concept-mock`; no newer commits or unexpected tracked changes.
+[Original CI run](https://github.com/martinkoenig/mantis-studio/actions/runs/37760698948)
+confirmed Studio ON x86_64 and native ARM64 each failed `studio-ui-m0-qml`
+with SIGSEGV (45/46 tests passed); both Studio OFF jobs and ASan/UBSan passed.
+These outcomes supersede the earlier local-only acceptance statement, without
+changing its historical Qt 6.9 evidence.
+
+### Crash investigation and correction
+
+Unchanged source reproduced under a fresh Ubuntu 24.04 x86_64 container,
+GCC 13 and distribution Qt 6.4.2, with the CI dependency list. Verbose CTest
+failed in 1.98 seconds; three subsequent direct runs exited 139. GDB located
+the failure in `settle()` at original test line 156: Home resize to 1080×720
+after changing source mode. Navigation, grabs and the first fixture assertions
+had already executed; the later provider assertions had not.
+
+The cause is a Qt 6.4 layout cache retaining a removed Repeater delegate until
+layout polish. Repeater removal detaches the child (removing the layout's item
+change listener), then destroys it. A resize before polish queries nested layout
+size hints using the stale `QQuickGridLayoutItem::m_item`. The symbolic stack is:
+
+```text
+QQmlData::get / qmlAttachedPropertiesObject
+QQuickGridLayoutItem::sizePolicy (qquickgridlayoutengine_p.h:68)
+QGridLayoutItem::stretchFactor / QGridLayoutEngine::fillRowData
+QQuickGridLayoutBase::sizeHint (qquicklinearlayout.cpp:237)
+QQuickLayoutAttached::maximumHeight / effectiveSizeHints_helper
+QQuickGridLayoutBase::rearrange / QQuickItem::setWidth
+QGuiApplicationPrivate::processGeometryChangeEvent
+settle() (studio_ui_m0.cpp:50)
+main() (studio_ui_m0.cpp:156; Home, QSize(1080,720))
+```
+
+A standalone Window → ColumnLayout → ColumnLayout → Repeater of ColumnLayouts,
+with `rows: [1]`, reproduces the same stack when a single-shot changes rows to
+`[]` then resizes from 1536×1024 to 1080×720. Qt 6.4 source inspection confirms
+`sizeHint()` queries the engine without refreshing removed items; child removal
+invalidates for later polish. No Qt private API is used in the correction.
+
+`FoundationWorkspace` now places dynamic device rows in a Qt Quick `Column`
+behind a stable `Item` with explicit implicit height. Surrounding Layouts never
+cache the removable delegates. All source modes and responsive behavior remain.
+The layout-only change passed the unchanged test five consecutive times.
+The repaired test adds immediate model-change/resize sequences and type-aware
+QVariantList/QJSValue decoding with malformed, missing, non-array, empty and
+non-map negative inputs. Every first-element read and UI lookup is checked.
+The original layout still fails the repaired regression, proving the test repair
+did not hide the crash. The fixed regression passed three consecutive runs.
+
+Reproduce the reviewed baseline in an isolated directory inside this worktree:
+
+```bash
+mkdir -p build/ui-m0-review/baseline
+ git archive 618e03eef584a729b0036c9ec73eabf567d76183 | tar -x -C build/ui-m0-review/baseline
+# In Ubuntu 24.04 with BUILDING.md/CI packages plus gdb:
+cmake -S build/ui-m0-review/baseline -B build/ui-m0-review/baseline-build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug -DPython3_EXECUTABLE=/usr/bin/python3
+cmake --build build/ui-m0-review/baseline-build --target mantis-studio-ui-m0-tests --parallel 4
+ctest --test-dir build/ui-m0-review/baseline-build -R '^studio-ui-m0-qml$' -V
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software gdb -batch -ex run -ex bt \
+  --args build/ui-m0-review/baseline-build/bin/mantis-studio-ui-m0-tests
+```
+
+Local investigation logs: `build/ui-m0-review/{original-ci.log,original-ci.json,
+original-ctest.log,original-gdb.log,symbolic-gdb.log,minimal-gdb.log,
+red-regression.log,layout-fix-tests.log,root-regression-tests.log}`.
+Instrumentation affects scheduling: the unchanged full test passed under
+Valgrind and breakpoint-heavy tracing; neither is used as acceptance evidence.
+
+The remaining review corrections and final exact-SHA CI matrix are pending.
+This intermediate correction record does **not** assert READY FOR REVIEW.
