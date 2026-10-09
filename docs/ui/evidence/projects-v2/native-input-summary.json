@@ -1,0 +1,73 @@
+{
+  "qt": "6.9.2",
+  "platform": "Linux Wayland",
+  "device": "PIXA3854 touchpad",
+  "injected": false,
+  "phase_key": {
+    "1": "Begin",
+    "2": "Update",
+    "3": "End",
+    "4": "Momentum"
+  },
+  "duplicates": "Boundary events can be observed more than once through window bubbling. Raw observations are not distinct gesture counts.",
+  "final_user_feedback": "Yes, it starts promptly and coasts naturally",
+  "traces": {
+    "native-before-physical": {
+      "raw_window_wheel_observations": 1762,
+      "phases": {
+        "1": 140,
+        "2": 1482,
+        "3": 140
+      },
+      "pointer_in_gallery_observations": null,
+      "release_samples": 0,
+      "flicking_samples": 0,
+      "initial_release_speed_logical_px_per_s": null
+    },
+    "native-after-physical-central": {
+      "raw_window_wheel_observations": 754,
+      "phases": {
+        "1": 100,
+        "2": 554,
+        "3": 100
+      },
+      "pointer_in_gallery_observations": 567,
+      "release_samples": 703,
+      "flicking_samples": 440,
+      "initial_release_speed_logical_px_per_s": [
+        861.2748806856702,
+        2416.080562659848
+      ]
+    },
+    "native-speed-final": {
+      "raw_window_wheel_observations": 1696,
+      "phases": {
+        "1": 124,
+        "2": 1448,
+        "3": 124
+      },
+      "pointer_in_gallery_observations": 1574,
+      "release_samples": 903,
+      "flicking_samples": 600,
+      "initial_release_speed_logical_px_per_s": [
+        80.58540003397259,
+        4526.606459983611
+      ]
+    },
+    "native-immediate-final": {
+      "raw_window_wheel_observations": 919,
+      "phases": {
+        "1": 108,
+        "2": 703,
+        "3": 108
+      },
+      "pointer_in_gallery_observations": 919,
+      "release_samples": 809,
+      "flicking_samples": 646,
+      "initial_release_speed_logical_px_per_s": [
+        104.87583705357413,
+        5448.275862068971
+      ]
+    }
+  }
+}

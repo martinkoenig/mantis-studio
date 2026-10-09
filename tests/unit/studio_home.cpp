@@ -2,6 +2,7 @@
 #include "calibration_controller.hpp"
 #include "home_model.hpp"
 #include "projects_model.hpp"
+#include "projects_scroll.hpp"
 #include <QAccessible>
 #include <QDir>
 #include <QElapsedTimer>
@@ -1199,6 +1200,7 @@ int main(int argc, char **argv) {
     qInstallMessageHandler(messages);
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
+    qmlRegisterType<ProjectsScrollInput>("Mantis.Studio", 1, 0, "ProjectsScrollInput");
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
     try {

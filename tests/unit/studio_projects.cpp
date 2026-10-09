@@ -2,11 +2,14 @@
 #include "calibration_controller.hpp"
 #include "home_model.hpp"
 #include "projects_model.hpp"
+#include "projects_scroll.hpp"
 #include <QAccessible>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QJSValue>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -16,11 +19,66 @@
 #include <QQuickWindow>
 #include <QSignalSpy>
 #include <QTest>
+#include <QTimer>
+#include <QWheelEvent>
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
 namespace {
+class WheelTrace : public QObject {
+  public:
+    explicit WheelTrace(QQuickItem *viewport) : viewport_(viewport) {
+        timer_.setInterval(20);
+        connect(&timer_, &QTimer::timeout, this, [this] {
+            std::cout << QJsonDocument(
+                             QJsonObject{{"coastSample", ++samples_},
+                                         {"endTimestamp", static_cast<double>(lastEnd_)},
+                                         {"contentY", viewport_->property("contentY").toDouble()},
+                                         {"flicking", viewport_->property("flicking").toBool()},
+                                         {"velocity", viewport_->property("verticalVelocity").toDouble()}})
+                             .toJson(QJsonDocument::Compact)
+                             .constData()
+                      << std::endl;
+            if (samples_ == 15)
+                timer_.stop();
+        });
+    }
+
+  private:
+    QQuickItem *viewport_;
+    QTimer timer_;
+    int samples_ = 0;
+    quint64 lastEnd_ = 0;
+    bool eventFilter(QObject *, QEvent *event) override {
+        if (event->type() == QEvent::Wheel) {
+            const auto *wheel = static_cast<QWheelEvent *>(event);
+            const QJsonObject data{
+                {"timestamp", static_cast<double>(wheel->timestamp())},
+                {"pixelX", wheel->pixelDelta().x()},
+                {"pixelY", wheel->pixelDelta().y()},
+                {"angleX", wheel->angleDelta().x()},
+                {"angleY", wheel->angleDelta().y()},
+                {"phase", static_cast<int>(wheel->phase())},
+                {"source", static_cast<int>(wheel->source())},
+                {"inverted", wheel->inverted()},
+                {"deviceType", static_cast<int>(wheel->pointingDevice()->type())},
+                {"contentY", viewport_->property("contentY").toDouble()},
+                {"pointerX", wheel->position().x()},
+                {"pointerY", wheel->position().y()},
+                {"overViewport", viewport_->contains(viewport_->mapFromScene(wheel->position()))}};
+            std::cout << QJsonDocument(data).toJson(QJsonDocument::Compact).constData() << std::endl;
+            if (wheel->phase() == Qt::ScrollBegin)
+                timer_.stop();
+            if (wheel->phase() == Qt::ScrollEnd && lastEnd_ != wheel->timestamp()) {
+                lastEnd_ = wheel->timestamp();
+                samples_ = 0;
+                timer_.start();
+            }
+        }
+        return false;
+    }
+};
 QStringList warnings;
 void messages(QtMsgType type, const QMessageLogContext &, const QString &message) {
     if ((type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg) &&
@@ -258,7 +316,7 @@ void settle() {
     QTest::qWait(30);
 }
 QObject *flick(QQuickWindow *w) {
-    auto *p = item(w, "projectsScroll")->property("contentItem").value<QObject *>();
+    auto *p = item(w, "projectsGalleryViewport");
     check(p, "No vertical scroll");
     return p;
 }
@@ -266,13 +324,18 @@ void top(QQuickWindow *w) {
     flick(w)->setProperty("contentY", 0);
     settle();
 }
-void reach(QQuickWindow *w, QQuickItem *p) {
-    auto *f = qobject_cast<QQuickItem *>(flick(w));
-    const auto y = p->mapToItem(f, QPointF(0, p->height() / 2)).y();
-    if (y < 0 || y > f->height())
-        f->setProperty("contentY",
-                       std::clamp(f->property("contentY").toDouble() + y - f->height() / 2, 0.0,
-                                  std::max(0.0, f->property("contentHeight").toDouble() - f->height())));
+void reach(QQuickWindow *, QQuickItem *p) {
+    for (auto *ancestor = p->parentItem(); ancestor; ancestor = ancestor->parentItem()) {
+        if (!ancestor->objectName().endsWith("Viewport"))
+            continue;
+        const auto y = p->mapToItem(ancestor, QPointF(0, p->height() / 2)).y();
+        if (y < 0 || y > ancestor->height())
+            ancestor->setProperty(
+                "contentY",
+                std::clamp(
+                    ancestor->property("contentY").toDouble() + y - ancestor->height() / 2, 0.0,
+                    std::max(0.0, ancestor->property("contentHeight").toDouble() - ancestor->height())));
+    }
     settle();
 }
 void click(QQuickWindow *w, const QString &name, bool keyboard = false) {
@@ -339,7 +402,7 @@ void bounds(QQuickWindow *w) {
         const auto rect = inspector->mapRectToItem(root, inspector->boundingRect());
         check(inspector->isVisible() && std::abs(root->width() - rect.right()) <= 15,
               "Inspector not pinned to right usable edge");
-        check(inspector->width() >= 310 && inspector->width() <= 317, "Inspector proportions changed");
+        check(inspector->width() >= 320 && inspector->width() <= 420, "Inspector proportions changed");
         check(item(w, "projectsNavigator")->width() >= 187 && item(w, "projectsNavigator")->width() <= 189,
               "Navigator proportions changed");
     } else
@@ -347,10 +410,10 @@ void bounds(QQuickWindow *w) {
               "Collapsed panels undiscoverable");
     if (gallery->isVisible() && !root->property("listMode").toBool()) {
         const auto width = gallery->property("cardWidth").toDouble();
-        if (width < 165 || width > 380)
+        if (width < 165 || width > 420)
             std::cerr << "Gallery bounds at check: window=" << w->width() << " workspace=" << root->width()
                       << " gallery=" << gallery->width() << " card=" << width << '\n';
-        check(width >= 165 && width <= 380, "Gallery cards excessively narrow/wide");
+        check(width >= 165 && width <= 420, "Gallery cards excessively narrow/wide");
         for (int i = 0; i < 12; ++i) {
             auto *card = item(w, "projectsMockCard" + QString::number(i));
             if (card->isVisible())
@@ -365,12 +428,11 @@ void bounds(QQuickWindow *w) {
         const auto top = gallery->mapRectToItem(root, gallery->boundingRect()).top();
         check(std::abs(top - bottom - 10) <= 1, "Spanning navigator displaced gallery from filters");
     }
-    if (root->property("mode").toString() == "hybrid") {
-        auto *table = item(w, "projectsContents");
-        check(table->mapRectToItem(root, table->boundingRect()).bottom() <=
-                  gallery->mapRectToItem(root, gallery->boundingRect()).top(),
-              "Hybrid demo preceded authoritative runtime contents");
-    }
+    check(gallery->property("columns").toInt() >= 1 && gallery->property("columns").toInt() <= 6,
+          "Gallery exceeded six columns");
+    auto *table = item(w, "projectsContents");
+    check(std::abs(table->mapRectToItem(root, table->boundingRect()).bottom() - root->height()) <= 1,
+          "Contents left an unallocated strip above footer");
     for (const auto &n :
          QStringList{"projectsSearch", "projectsGrid", "projectsList", "projectsNew", "projectsOpen"}) {
         auto *p = item(w, n);
@@ -419,13 +481,18 @@ void interactions(QQuickWindow *w, Observed &b, const QString &out) {
     auto *model = qobject_cast<ProjectsModel *>(root->property("liveModel").value<QObject *>());
     check(model && model->bridge() == nullptr, "Mock model polls runtime");
     for (bool keyboard : {false, true}) {
+        const auto panelTop = item(w, "projectsContents")->mapToScene(QPointF()).y();
         click(w, "projectsMockCard1", keyboard);
+        check(std::abs(item(w, "projectsContents")->mapToScene(QPointF()).y() - panelTop) <= 1,
+              "Selection moved docked contents");
         check(root->property("sampleKey").toString() != "housing", "Demo selection failed");
         click(w, "projectsList", keyboard);
         check(root->property("listMode").toBool(), "List switch failed");
         capture(w, out, "mock-list");
         click(w, "projectsGrid", keyboard);
         click(w, "projectsFacetFavorites", keyboard);
+        check(std::abs(item(w, "projectsContents")->mapToScene(QPointF()).y() - panelTop) <= 1,
+              "Filter moved docked contents");
         check(root->property("sampleRows").value<QJSValue>().toVariant().toList().size() == 3,
               "Mock favorite filter failed");
         click(w, "projectsClear", keyboard);
@@ -562,6 +629,319 @@ void interactions(QQuickWindow *w, Observed &b, const QString &out) {
     QTest::keyClick(w, Qt::Key_Backtab, Qt::ShiftModifier);
     check(item(w, "projectsSearch")->hasActiveFocus(), "Tab traversal lost search");
 }
+void scrollContracts(QQuickWindow *w, Observed &bridge, const QString &out) {
+    auto *root = item(w, "projectsWorkspace");
+    auto *gallery = item(w, "projectsGallery");
+    auto *view = item(w, "projectsGalleryViewport");
+    auto *table = item(w, "projectsTableViewport");
+    auto *contents = item(w, "projectsContents");
+    auto *inspector = item(w, "projectsInspectorViewport");
+    const QStringList docks{"projectsNavigator", "projectsInspector", "projectsFiltersHeader",
+                            "projectsContents",  "projectsTabStrip",  "projectsSearch"};
+    const auto geometry = [&] {
+        QList<QRectF> result;
+        for (const auto &name : docks)
+            result.append(item(w, name)->mapRectToScene(item(w, name)->boundingRect()));
+        return result;
+    };
+    const auto stationary = [&](const QList<QRectF> &before) {
+        const auto after = geometry();
+        for (int i = 0; i < after.size(); ++i) {
+            if (std::abs(before[i].x() - after[i].x()) > 1 || std::abs(before[i].y() - after[i].y()) > 1 ||
+                std::abs(before[i].height() - after[i].height()) > 1)
+                std::cerr << "Dock drift " << docks[i].toStdString() << " before=" << before[i].x() << ":"
+                          << before[i].y() << ":" << before[i].width() << ":" << before[i].height()
+                          << " after=" << after[i].x() << ":" << after[i].y() << ":" << after[i].width()
+                          << ":" << after[i].height() << '\n';
+            check(std::abs(before[i].x() - after[i].x()) <= 1 &&
+                      std::abs(before[i].y() - after[i].y()) <= 1 &&
+                      std::abs(before[i].height() - after[i].height()) <= 1,
+                  "Scroll or tab change moved a docked region");
+        }
+    };
+    quint64 timestamp = 1000;
+    const auto wheel = [&](QQuickItem *target, const QPoint &pixel, const QPoint &angle,
+                           Qt::ScrollPhase phase, bool processRelease = true) {
+        const auto point = target->mapToScene(QPointF(target->width() - 25, target->height() / 2));
+        QWheelEvent event(point, w->mapToGlobal(point.toPoint()), pixel, angle, Qt::NoButton, Qt::NoModifier,
+                          phase, false,
+                          pixel.isNull() && phase == Qt::NoScrollPhase ? Qt::MouseEventNotSynthesized
+                                                                       : Qt::MouseEventSynthesizedBySystem);
+        event.setTimestamp(timestamp += 16);
+        QCoreApplication::sendEvent(w, &event);
+        if (processRelease)
+            QTest::qWait(20);
+    };
+    const auto gesture = [&](QQuickItem *target) {
+        wheel(target, {}, {}, Qt::ScrollBegin);
+        for (int i = 0; i < 4; ++i)
+            wheel(target, QPoint(0, -32), QPoint(0, -16), Qt::ScrollUpdate);
+        wheel(target, QPoint(0, -24), QPoint(0, -12), Qt::ScrollMomentum);
+        wheel(target, {}, {}, Qt::ScrollEnd);
+        settle();
+    };
+    // The measured Wayland device sends Begin/Update/End with no Momentum.
+    // Assert an actual native Flickable coast, once, with Qt's own trajectory.
+    w->setProperty("uiMode", "mock");
+    w->resize(1536, 1024);
+    root->setProperty("listMode", true);
+    settle();
+    auto *input = view->findChild<ProjectsScrollInput *>();
+    check(input, "Native scroll input adapter missing");
+    QSignalSpy coasts(input, &ProjectsScrollInput::nativeCoastStarted);
+    view->setProperty("contentY", 200);
+    wheel(view, {}, {}, Qt::ScrollBegin);
+    wheel(view, QPoint(0, -3), {}, Qt::ScrollUpdate);
+    check(std::abs(view->property("contentY").toDouble() - 203) <= 1,
+          "First precise touchpad pixel was delayed or discarded");
+    timestamp += 120; // No release coast for this deliberately paused probe.
+    wheel(view, {}, {}, Qt::ScrollEnd);
+    view->setProperty("contentY", 200);
+    wheel(view, {}, {}, Qt::ScrollBegin);
+    for (int i = 0; i < 4; ++i)
+        wheel(view, QPoint(0, -12), QPoint(0, -6), Qt::ScrollUpdate);
+    wheel(view, {}, {}, Qt::ScrollEnd);
+    const auto releaseY = view->property("contentY").toDouble();
+    QTest::qWait(100);
+    check(coasts.size() == 1 && view->property("contentY").toDouble() > releaseY + 2,
+          "Momentum-free phased touchpad release stopped abruptly");
+    QMetaObject::invokeMethod(view, "cancelFlick");
+    view->setProperty("contentY", 200);
+    gesture(view);
+    check(coasts.size() == 1, "Native platform momentum was overridden");
+    QMetaObject::invokeMethod(view, "cancelFlick");
+    wheel(view, {}, QPoint(0, -120), Qt::NoScrollPhase);
+    check(coasts.size() == 1, "Stepped wheel acquired an artificial release flick");
+    QMetaObject::invokeMethod(view, "cancelFlick");
+    view->setProperty("contentY", 200);
+    wheel(view, {}, {}, Qt::ScrollBegin);
+    for (int i = 0; i < 4; ++i)
+        wheel(view, QPoint(0, -12), QPoint(0, -6), Qt::ScrollUpdate);
+    timestamp += 120;
+    wheel(view, {}, {}, Qt::ScrollEnd);
+    check(coasts.size() == 1, "Paused fingers caused an unintended coast");
+    // Keyboard reveal / table context changes must also cancel an End callback
+    // already queued for this viewport, before it starts a new native trajectory.
+    wheel(view, {}, {}, Qt::ScrollBegin);
+    for (int i = 0; i < 4; ++i)
+        wheel(view, QPoint(0, -12), {}, Qt::ScrollUpdate);
+    wheel(view, {}, {}, Qt::ScrollEnd, false);
+    check(QMetaObject::invokeMethod(view, "cancelScroll"), "Viewport cancellation API missing");
+    settle();
+    check(coasts.size() == 1, "Queued release survived a focus/context cancellation");
+    const auto releaseAtSpeed = [&](int delta) {
+        QMetaObject::invokeMethod(view, "cancelFlick");
+        view->setProperty("contentY", 100);
+        const auto before = coasts.size();
+        wheel(view, {}, {}, Qt::ScrollBegin);
+        for (int i = 0; i < 4; ++i)
+            wheel(view, QPoint(0, -delta), QPoint(0, -delta), Qt::ScrollUpdate);
+        wheel(view, {}, {}, Qt::ScrollEnd);
+        check(coasts.size() == before + 1, "Speed-dependent release missing");
+        const auto velocity = std::abs(coasts.last()[0].toDouble());
+        const auto y = view->property("contentY").toDouble();
+        QTest::qWait(100);
+        return QPair<double, double>{velocity, view->property("contentY").toDouble() - y};
+    };
+    const auto gentle = releaseAtSpeed(8); // 500 logical px/s
+    const auto fast = releaseAtSpeed(64);  // 4000 logical px/s, measured on this touchpad
+    std::cout << "Native release gentle/fast: velocity=" << gentle.first << "/" << fast.first
+              << " travel=" << gentle.second << "/" << fast.second << '\n';
+    check(fast.first >= gentle.first * 6 && fast.second > gentle.second * 4,
+          "Distinct gentle/fast gestures collapsed into the same release speed");
+    QMetaObject::invokeMethod(view, "cancelFlick");
+    root->setProperty("listMode", false);
+    settle();
+    bridge.applyResult(snapshot("/runtime/Bounded.mantis", 128));
+    for (const auto &mode : QStringList{"mock", "live", "hybrid"}) {
+        w->setProperty("uiMode", mode);
+        w->resize(1536, 1024);
+        settle();
+        const auto sampleRows = root->property("sampleRows").value<QJSValue>().toVariant().toList();
+        for (const auto &size : sizes) {
+            w->resize(size);
+            settle();
+            check(!w->grabWindow().isNull(), "Count-matrix frame unavailable");
+            root->setProperty("listMode", false);
+            for (int count : {0, 1, 2, 3, 4, 5, 6, 12}) {
+                QVariantList rows;
+                for (int i = 0; i < count; ++i)
+                    rows.append(sampleRows[i]);
+                gallery->setProperty("rows", rows);
+                QTest::qWait(5);
+                check(gallery->property("columns").toInt() >= 1 && gallery->property("columns").toInt() <= 6,
+                      "Result-count/source/size matrix exceeded six columns");
+                check(gallery->property("cardWidth").toDouble() <= (count <= 2 ? 320 : 420),
+                      "Filtered card stretched");
+                root->setProperty("listMode", true);
+                check(gallery->property("columns").toInt() == 1, "List has multiple columns");
+                root->setProperty("listMode", false);
+            }
+        }
+        gallery->setProperty("rows", sampleRows);
+        w->resize(1536, 1024);
+        settle();
+        // Offscreen Qt 6.9 needs rendered frames to commit nested layout/anchor
+        // polish. Flush the resize before measuring tab-only stability.
+        const bool layoutSettled = QTest::qWaitFor(
+            [&] {
+                check(!w->grabWindow().isNull(), "Docked frame unavailable");
+                return std::abs(item(w, "projectsInspector")->width() -
+                                std::clamp(root->width() * .27, 320.0, 420.0)) <= 1;
+            },
+            2000);
+        check(layoutSettled, "Inspector did not settle after resize");
+        settle();
+        if (mode == "mock") {
+            const QList<QColor> expected{QColor("#3996ed"), QColor("#aa6de3"), QColor("#ef963e"),
+                                         QColor("#24c88d"), QColor("#edc94c"), QColor("#94a1aa")};
+            int total = 0;
+            for (int i = 0; i < 6; ++i) {
+                check(item(w, "projectsTagDot" + QString::number(i))->property("color").value<QColor>() ==
+                          expected[i],
+                      "Semantic tag dot color changed");
+                total +=
+                    item(w, "projectsTagCount" + QString::number(i))->property("text").toString().toInt();
+            }
+            check(total == 12, "Illustrative tag counts do not match local fixture");
+        } else if (mode == "live")
+            check(!item(w, "projectsTagDot0")->isVisible() &&
+                      item(w, "projectsTagCount0")->property("text").toString().isEmpty(),
+                  "Live invented persistent tags/counts");
+        root->setProperty("activeSource", mode == "mock" ? "mock" : "live");
+        view->setProperty("contentY", 0);
+        const auto docksBefore = geometry();
+        const auto panelY = contents->mapToScene(QPointF()).y();
+        for (int cycle = 0; cycle < 30; ++cycle) {
+            for (const auto &tab : QStringList{"Versions", "Scans", "Artifacts", "Meshes", "Textures",
+                                               "CAD Models", "Measurements", "Reports", "Notes"}) {
+                contents->setProperty("tab", tab);
+                QTest::qWait(5);
+                stationary(docksBefore);
+                check(std::abs(contents->mapToScene(QPointF()).y() - panelY) <= 1, "Tab bar drifted");
+            }
+        }
+        root->setProperty("mockSort", "Name");
+        root->setProperty("mockFacet", "Favorites");
+        root->setProperty("sampleKey", "rotor");
+        for (const auto &tab : QStringList{"Versions", "Scans", "Artifacts", "Meshes", "Textures",
+                                           "CAD Models", "Measurements", "Reports", "Notes"}) {
+            contents->setProperty("tab", tab);
+            settle();
+            stationary(docksBefore);
+        }
+        root->setProperty("mockSort", "Study order");
+        root->setProperty("mockFacet", "All");
+        root->setProperty("sampleKey", "housing");
+        contents->setProperty("tab", mode == "mock" ? "Versions" : "Artifacts");
+        settle();
+        bounds(w);
+        capture(w, out, mode + "-docked");
+        if (mode != "live") {
+            root->setProperty("activeSource", "mock");
+            for (bool list : {false, true}) {
+                root->setProperty("listMode", list);
+                settle();
+                check(view->property("clip").toBool(), "Gallery does not clip");
+                view->setProperty("contentY", 0);
+                capture(w, out, mode + (list ? "-list-top" : "-grid-top"));
+                const auto before = geometry();
+                const auto tableY = table->property("contentY").toDouble();
+                const auto inspectorY = inspector->property("contentY").toDouble();
+                gesture(view);
+                check(view->property("contentY").toDouble() > 1,
+                      "Precise phased touchpad wheel missed gallery");
+                stationary(before);
+                check(table->property("contentY").toDouble() == tableY &&
+                          inspector->property("contentY").toDouble() == inspectorY,
+                      "Gallery wheel escaped into other scrollers");
+                const auto updateY = view->property("contentY").toDouble();
+                wheel(view, {}, {}, Qt::ScrollBegin);
+                for (int i = 0; i < 4; ++i)
+                    wheel(view, QPoint(0, 24), QPoint(0, 12), Qt::ScrollUpdate);
+                wheel(view, {}, {}, Qt::ScrollEnd);
+                check(view->property("contentY").toDouble() < updateY,
+                      "Natural-direction pixel input was reversed or ignored");
+                check(std::abs(view->property("contentX").toDouble()) < 1, "Gallery scrolled horizontally");
+                // Measure tab displacement independently of an ongoing native coast.
+                QMetaObject::invokeMethod(view, "cancelFlick");
+                const auto galleryY = view->property("contentY").toDouble();
+                contents->setProperty("tab", "Notes");
+                settle();
+                check(std::abs(view->property("contentY").toDouble() - galleryY) <= 1,
+                      "Tab reset gallery position");
+                stationary(before);
+                contents->setProperty("tab", "Scans");
+                settle();
+                capture(w, out, mode + "-scans");
+                contents->setProperty("tab", "Measurements");
+                settle();
+                capture(w, out, mode + "-empty");
+                contents->setProperty("tab", "Versions");
+                settle();
+                view->setProperty("contentY",
+                                  std::max(0.0, view->property("contentHeight").toDouble() - view->height()));
+                settle();
+                capture(w, out, mode + (list ? "-list-last" : "-grid-last"));
+                stationary(before);
+                // Tabs deliberately reset their own table offset. Measure the boundary
+                // gesture after tab changes, separately from that context transition.
+                const auto boundaryTableY = table->property("contentY").toDouble();
+                gesture(view);
+                stationary(before);
+                check(table->property("contentY").toDouble() == boundaryTableY, "Boundary wheel moved table");
+                if (list) {
+                    auto *last = item(w, "projectsMockCard11");
+                    last->forceActiveFocus(Qt::TabFocusReason);
+                    settle();
+                    const auto r = last->mapRectToItem(view, last->boundingRect());
+                    check(r.top() >= -1 && r.bottom() <= view->height() + 1, "Last project inaccessible");
+                }
+            }
+        }
+        if (mode != "mock") {
+            root->setProperty("activeSource", "live");
+            contents->setProperty("tab", "Artifacts");
+            settle();
+            table->setProperty("contentY", 0);
+            capture(w, out, mode + "-table-top");
+            const auto galleryY = view->property("contentY").toDouble();
+            const auto before = geometry();
+            gesture(table);
+            check(table->property("contentY").toDouble() > 1, "Table did not own precise scroll input");
+            check(std::abs(view->property("contentY").toDouble() - galleryY) <= 1,
+                  "Table wheel moved gallery");
+            stationary(before);
+            wheel(table, {}, QPoint(0, -120), Qt::NoScrollPhase);
+            check(table->property("contentY").toDouble() > 1, "Stepped mouse wheel failed");
+            item(w, "projectsArtifactRow0")->forceActiveFocus(Qt::TabFocusReason);
+            for (int i = 0; i < 127; ++i)
+                QTest::keyClick(w, Qt::Key_Down);
+            auto *last = item(w, "projectsArtifactRow127");
+            settle();
+            check(last->hasActiveFocus(), "Artifact arrows lost stable delegate focus");
+            const auto r = last->mapRectToItem(table, last->boundingRect());
+            check(r.top() >= -1 && r.bottom() <= table->height() + 1,
+                  "Last bounded artifact inaccessible by keyboard");
+            capture(w, out, mode + "-table-last");
+            check(std::abs(view->property("contentY").toDouble() - galleryY) <= 1,
+                  "Table focus reveal moved gallery");
+            stationary(before);
+        }
+        inspector->setProperty("contentY", 0);
+        if (inspector->property("contentHeight").toDouble() > inspector->height()) {
+            const auto galleryY = view->property("contentY").toDouble();
+            const auto tableY = table->property("contentY").toDouble();
+            gesture(inspector);
+            check(inspector->property("contentY").toDouble() > 1, "Inspector overflow failed");
+            check(view->property("contentY").toDouble() == galleryY &&
+                      table->property("contentY").toDouble() == tableY,
+                  "Inspector wheel escaped");
+        }
+        std::cout << "Dock/scroll/tab/count routing passed: " << mode.toStdString() << '\n';
+    }
+}
+
 void native(QQuickWindow *w, Observed &b, const QString &out) {
     b.applyResult(snapshot());
     for (const auto &mode : QStringList{"mock", "live", "hybrid"}) {
@@ -580,9 +960,11 @@ void native(QQuickWindow *w, Observed &b, const QString &out) {
         capture(w, out, "native-maximized-" + mode);
         bounds(w);
         w->showNormal();
-        check(QTest::qWaitFor([&] { return w->isExposed() && w->visibility() == QWindow::Windowed &&
-                                             w->size() == normal; }, 5000),
-              "Native restore failed");
+        check(
+            QTest::qWaitFor(
+                [&] { return w->isExposed() && w->visibility() == QWindow::Windowed && w->size() == normal; },
+                5000),
+            "Native restore failed");
         capture(w, out, "native-restored-" + mode);
         bounds(w);
         auto *search = item(w, "projectsSearch");
@@ -621,7 +1003,7 @@ void responsive(QQuickWindow *w, Observed &b, const QString &out, bool dpi) {
             root->setProperty("mockQuery", "Engine Block");
             settle();
             bounds(w);
-            check(item(w, "projectsGallery")->property("cardWidth").toDouble() <= 300,
+            check(item(w, "projectsGallery")->property("cardWidth").toDouble() <= 320,
                   "Single search result stretched across ultrawide gallery");
             capture(w, out, "mock-single-result");
             root->setProperty("mockQuery", "");
@@ -781,6 +1163,7 @@ int main(int argc, char **argv) {
     qInstallMessageHandler(messages);
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
+    qmlRegisterType<ProjectsScrollInput>("Mantis.Studio", 1, 0, "ProjectsScrollInput");
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
     try {
@@ -799,14 +1182,47 @@ int main(int argc, char **argv) {
         engine.rootContext()->setContextProperty("studio", &b);
         engine.rootContext()->setContextProperty("calibration", &calibration);
         engine.setInitialProperties({{"uiMode", "live"}, {"workspace", "projects"}});
-        engine.load(QUrl("qrc:/ui/shell/Main.qml"));
+        engine.load(task == "trace-baseline" && argc > 3
+                        ? QUrl::fromLocalFile(QString::fromLocal8Bit(argv[3]))
+                        : QUrl("qrc:/ui/shell/Main.qml"));
         check(!engine.rootObjects().empty(), "Projects shell failed");
         auto *w = qobject_cast<QQuickWindow *>(engine.rootObjects().front());
         check(w, "No window");
         settle();
-        if (task == "inspect") {
-            for (const auto &n : QStringList{"projectsWorkspace", "projectsScroll", "projectsNavigator",
-                                             "projectsGallery", "projectsInspector", "projectsContents"}) {
+        if (task == "trace" || task == "trace-baseline") {
+            w->setProperty("uiMode", "mock");
+            w->resize(1536, 1024);
+            item(w, "projectsWorkspace")->setProperty("listMode", true);
+            auto *viewport = task == "trace-baseline"
+                                 ? item(w, "projectsScroll")->property("contentItem").value<QQuickItem *>()
+                                 : item(w, "projectsGalleryViewport");
+            WheelTrace trace(viewport);
+            w->installEventFilter(&trace);
+            std::cout << "Native input trace: Qt=" << qVersion()
+                      << " platform=" << QGuiApplication::platformName().toStdString() << " injected=false"
+                      << std::endl;
+            QTest::qWait(90000);
+            capture(w, out, task);
+        } else if (task == "fidelity") {
+            w->setProperty("uiMode", "mock");
+            w->resize(3440, 1440);
+            settle();
+            auto *gallery = item(w, "projectsGallery");
+            auto *panel = item(w, "projectsContents");
+            const auto initial = panel->mapToScene(QPointF());
+            const int columns = gallery->property("columns").toInt();
+            panel->setProperty("tab", "Scans");
+            settle();
+            const double drift = std::abs(panel->mapToScene(QPointF()).y() - initial.y());
+            const bool viewport = find(w->contentItem(), "projectsGalleryViewport") != nullptr;
+            std::cout << "Fidelity: columns=" << columns << " tab drift=" << drift
+                      << " independent gallery viewport=" << viewport << '\n';
+            check(columns <= 6 && drift <= 1 && viewport,
+                  "Column cap / stationary contents / independent gallery regression");
+        } else if (task == "inspect") {
+            for (const auto &n :
+                 QStringList{"projectsWorkspace", "projectsGalleryViewport", "projectsNavigator",
+                             "projectsGallery", "projectsInspector", "projectsContents"}) {
                 auto *p = item(w, n);
                 std::cout << n.toStdString() << " x=" << p->x() << " y=" << p->y() << " w=" << p->width()
                           << " h=" << p->height() << " iw=" << p->implicitWidth()
@@ -826,6 +1242,8 @@ int main(int argc, char **argv) {
             states(w, b, out);
         else if (task == "resize")
             resize(w, b, out);
+        else if (task == "scroll")
+            scrollContracts(w, b, out);
         else if (task == "native")
             native(w, b, out);
         else if (task == "wire")

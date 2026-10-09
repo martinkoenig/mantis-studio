@@ -1,0 +1,36 @@
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start  2: studio-projects-qml
+    Test  #2: studio-projects-qml ..............   Passed   10.59 sec
+    Start  2: studio-projects-qml
+    Test  #2: studio-projects-qml ..............   Passed   10.97 sec
+    Start  2: studio-projects-qml
+1/5 Test  #2: studio-projects-qml ..............   Passed   10.70 sec
+    Start  4: studio-projects-resize
+    Test  #4: studio-projects-resize ...........   Passed   10.64 sec
+    Start  4: studio-projects-resize
+    Test  #4: studio-projects-resize ...........   Passed   10.68 sec
+    Start  4: studio-projects-resize
+2/5 Test  #4: studio-projects-resize ...........   Passed   10.56 sec
+    Start  7: studio-projects-scroll
+    Test  #7: studio-projects-scroll ...........   Passed   22.41 sec
+    Start  7: studio-projects-scroll
+    Test  #7: studio-projects-scroll ...........   Passed   20.98 sec
+    Start  7: studio-projects-scroll
+3/5 Test  #7: studio-projects-scroll ...........   Passed   20.74 sec
+    Start 12: studio-home-qml
+    Test #12: studio-home-qml ..................   Passed   26.59 sec
+    Start 12: studio-home-qml
+    Test #12: studio-home-qml ..................   Passed   26.46 sec
+    Start 12: studio-home-qml
+4/5 Test #12: studio-home-qml ..................   Passed   26.76 sec
+    Start 18: studio-ui-m0-qml
+    Test #18: studio-ui-m0-qml .................   Passed    6.73 sec
+    Start 18: studio-ui-m0-qml
+    Test #18: studio-ui-m0-qml .................   Passed    6.74 sec
+    Start 18: studio-ui-m0-qml
+5/5 Test #18: studio-ui-m0-qml .................   Passed    6.77 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) = 228.34 sec

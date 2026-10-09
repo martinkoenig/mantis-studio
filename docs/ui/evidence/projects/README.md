@@ -51,3 +51,7 @@ The [later session query](native-session-final.txt) reports unlocked;
 All nine native normal/maximized/restored images were refreshed and inspected on
 the final application code. The separate [software DPR failure](native-software-dpr-failure.log)
 remains documented and no screenshot assertion was weakened.
+
+The superseding fidelity/docked-scrolling correction is recorded in
+[Projects V2 evidence](../projects-v2/README.md). This directory retains the reviewed
+UI-M2a baseline; its old column and page-scroll geometry is historical.

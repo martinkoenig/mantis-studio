@@ -48,7 +48,7 @@ jobs:
         if: ${{ matrix.studio == 'ON' }}
         run: |
           cp build/ci/Testing/Temporary/LastTest.log build/ci/ui-m1/full-ctest.log
-          ctest --test-dir build/ci -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize|studio-ui-m0-qml)$' --repeat until-fail:3 --output-on-failure
+          ctest --test-dir build/ci -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize|studio-projects-scroll|studio-ui-m0-qml)$' --repeat until-fail:3 --output-on-failure
       - name: Diagnose a failed UI route test
         if: ${{ failure() && matrix.studio == 'ON' }}
         env:

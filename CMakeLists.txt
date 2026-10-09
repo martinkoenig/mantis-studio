@@ -142,10 +142,10 @@ if(MANTIS_BUILD_STUDIO)
  set_target_properties(mantis-studio-home PROPERTIES AUTOMOC ON)
  target_include_directories(mantis-studio-home PUBLIC apps/studio)
  target_link_libraries(mantis-studio-home PUBLIC Qt6::Qml mantis-options)
- add_library(mantis-studio-projects STATIC apps/studio/projects_model.cpp apps/studio/projects_model.hpp)
+ add_library(mantis-studio-projects STATIC apps/studio/projects_model.cpp apps/studio/projects_model.hpp apps/studio/projects_scroll.cpp apps/studio/projects_scroll.hpp)
  set_target_properties(mantis-studio-projects PROPERTIES AUTOMOC ON)
  target_include_directories(mantis-studio-projects PUBLIC apps/studio)
- target_link_libraries(mantis-studio-projects PUBLIC Qt6::Qml mantis-options)
+ target_link_libraries(mantis-studio-projects PUBLIC Qt6::Quick mantis-options)
  add_executable(mantis-studio apps/studio/main.cpp apps/studio/screenshot.hpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
  set_target_properties(mantis-studio PROPERTIES AUTOMOC ON)
  target_link_libraries(mantis-studio PRIVATE mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
@@ -188,6 +188,9 @@ if(MANTIS_BUILD_STUDIO)
   ui/projects/ProjectsComboBox.qml
   ui/projects/ProjectsText.qml
   ui/projects/ProjectsDemo.qml
+  ui/projects/ProjectsViewport.qml
+  ui/projects/ProjectsTags.js
+  ui/projects/ProjectsChip.qml
   ui/projects/ProjectsGallery.qml
   ui/projects/ProjectsNavigator.qml
   ui/projects/ProjectsInspector.qml
@@ -222,13 +225,17 @@ if(MANTIS_BUILD_STUDIO)
   set_target_properties(mantis-studio-projects-tests PROPERTIES AUTOMOC ON)
   target_link_libraries(mantis-studio-projects-tests PRIVATE mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
   qt_add_resources(mantis-studio-projects-tests studio-projects-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
-  foreach(task qml states resize hidpi)
+  foreach(task qml states resize hidpi fidelity scroll)
    add_test(NAME studio-projects-${task} COMMAND mantis-studio-projects-tests ${CMAKE_BINARY_DIR}/ui-m2a/${task} ${task})
    set_tests_properties(studio-projects-${task} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 120)
   endforeach()
   set_tests_properties(studio-projects-hidpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=2")
   add_test(NAME studio-projects-fractional-dpi COMMAND mantis-studio-projects-tests ${CMAKE_BINARY_DIR}/ui-m2a/fractional-dpi hidpi)
   set_tests_properties(studio-projects-fractional-dpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=1.5" TIMEOUT 120)
+  foreach(scale 1.5 2)
+   add_test(NAME studio-projects-scroll-dpi-${scale} COMMAND mantis-studio-projects-tests ${CMAKE_BINARY_DIR}/ui-m2a/scroll-dpi-${scale} scroll)
+   set_tests_properties(studio-projects-scroll-dpi-${scale} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale}" TIMEOUT 120)
+  endforeach()
   add_test(NAME studio-projects-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_projects.py ${CMAKE_BINARY_DIR})
   set_tests_properties(studio-projects-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 45)
   add_executable(mantis-studio-home-tests tests/unit/studio_home.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)

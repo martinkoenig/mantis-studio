@@ -1,0 +1,13 @@
+{
+  "apps/studio/projects_scroll.cpp": "01897a587e7980cd46ade853014ac73bdfa8bfce0a1b8d12aff46af3ebb00dab",
+  "apps/studio/projects_scroll.hpp": "052d4329fface174e3ebd4e80707e6e664fc6eca6e897166ffd60d70abfb2a42",
+  "ui/workspaces/ProjectsWorkspace.qml": "d7d73feffaacf446b13c7d8a88facd3f7085c6d35f4a25a23d47704e1b0a03f4",
+  "ui/projects/ProjectsViewport.qml": "29ad145c7138d6341ad64a98ee7551925a44def4e5b319601fa853095a85ce2d",
+  "ui/projects/ProjectsContents.qml": "48023cc3d64c568aaa7193a9738533056a9a76a065b925992b2a5375a206b5e1",
+  "ui/projects/ProjectsGallery.qml": "940e11dd73df1c7625c55ddfa32384602a5990528f22ad15d4e024a0d68ee534",
+  "ui/projects/ProjectsInspector.qml": "ad4db0c404e3e8058d3cd7be7ff99cf277a80c5fe727684caa6b67f3743b24bc",
+  "ui/projects/ProjectsNavigator.qml": "6ac8b8cced6d53a41f03bfec8c1da5fc34302f40c2d269ce23a7d16e13aad893",
+  "ui/projects/ProjectsTags.js": "e6fca48c8b6164678aef2cc2204dcec0f0180f2d9cc2cebaf88706aa65551d91",
+  "ui/projects/ProjectsChip.qml": "b428089288e3fbf159319d642cb0ac624add1477b85f5b6269ee2dad3da1eed4",
+  "tests/unit/studio_projects.cpp": "41c478c44962dd065a6500546201422a6056429458f879334c2d186d1221251b"
+}

@@ -8,9 +8,10 @@ Item {
     property string selectedKey: ""
     property bool listMode: false
     property string prefix: "projectsMock"
-    readonly property int columns: listMode ? 1 : Math.max(1, Math.min(rows.length || 1, Math.floor((width + 12) / 190)))
-    readonly property real cardWidth: listMode ? width : Math.min(300, (width - (columns - 1) * 12) / columns)
-    readonly property real cardHeight: listMode ? 82 : 180
+    readonly property int columns: listMode ? 1 : Math.max(1, Math.min(6, rows.length || 1, Math.floor((width + 12) / 186)))
+    readonly property real cardWidth: listMode ? width : Math.min(rows.length <= 2 ? 320 : 420, (width - (columns - 1) * 12) / columns)
+    readonly property real previewHeight: Math.max(128, Math.min(230, cardWidth * .64))
+    readonly property real cardHeight: listMode ? 100 : previewHeight + 110
     implicitHeight: Math.ceil(rows.length / columns) * (cardHeight + 12) - (rows.length ? 12 : 0)
     signal select(string key)
     signal revealFocusedCard(var item)
@@ -43,29 +44,30 @@ Item {
             Keys.onUpPressed: if (index >= root.columns) cards.itemAt(index - root.columns).forceActiveFocus(Qt.TabFocusReason)
             Accessible.role: Accessible.Button
             Accessible.name: row.name + " · illustrative sample"
-            Accessible.description: "Select read-only demo details. No runtime project will be opened."
+            Accessible.description: row.type + " · " + row.tag + " · " + row.date + ". Illustrative metadata. Select read-only demo details. No runtime project will be opened."
             Accessible.onPressAction: if (enabled && visible) clicked()
             contentItem: Item {
                 HomePreview {
                     objectName: "projectsPreview"
                     x: 1; y: 1
-                    width: root.listMode ? 110 : parent.width - 2
-                    height: root.listMode ? parent.height - 2 : 110
+                    width: root.listMode ? 144 : parent.width - 2
+                    height: root.listMode ? parent.height - 2 : root.previewHeight
                     source: Qt.resolvedUrl(card.row.image)
-                    safePadding: 12
+                    safePadding: Math.max(12, Math.min(24, width * .07))
                 }
                 ProjectsText {
-                    x: root.listMode ? 124 : 10; y: root.listMode ? 13 : 118
-                    width: parent.width - x - 10; text: card.row.name; font.bold: true
+                    x: root.listMode ? 158 : 12; y: root.listMode ? 12 : root.previewHeight + 10
+                    width: parent.width - x - 10; text: card.row.name; font.bold: true; font.pixelSize: 13
+                }
+                Flow {
+                    x: root.listMode ? 158 : 12; y: root.listMode ? 37 : root.previewHeight + 32
+                    width: parent.width - x - 10; spacing: 5
+                    ProjectsChip { text: card.row.type }
+                    ProjectsChip { text: card.row.tag }
                 }
                 ProjectsText {
-                    x: root.listMode ? 124 : 10; y: root.listMode ? 37 : 139
-                    width: parent.width - x - 10
-                    text: card.row.type + "  ·  " + card.row.tag; color: "#9ccbdd"; font.pixelSize: 10
-                }
-                ProjectsText {
-                    x: root.listMode ? 124 : 10; y: root.listMode ? 59 : 160
-                    width: parent.width - x - 10; text: "Sample · " + card.row.date; color: Theme.secondary; font.pixelSize: 10
+                    x: root.listMode ? 158 : 12; y: root.listMode ? 72 : root.previewHeight + 88
+                    width: parent.width - x - 10; text: "Sample · " + card.row.date; color: Theme.secondary; font.pixelSize: 11
                 }
                 ProjectsText { x: 8; y: 7; text: card.row.favorite ? "★" : ""; color: Theme.warning; font.pixelSize: 18 }
             }

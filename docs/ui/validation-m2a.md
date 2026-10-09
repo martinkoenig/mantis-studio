@@ -1,5 +1,154 @@
 # UI-M2a Projects validation — 2026-10-09
 
+## V2 fidelity and docked scrolling correction — 2026-10-09
+
+This section supersedes the earlier geometry/scrolling decisions below, which
+remain as the reviewed UI-M2a baseline record. Starting revision:
+`5b68b580bb8f7d72df60c80eeaf970297dda6019`; branch `feature/ui-m2a-projects` only.
+The four supplied user images and assignment are local review inputs, not committed.
+
+Before editing, the approved 1536×1024 concept, all four user captures and actual
+Qt baseline frames at 1536×1024/3440×1440 were inspected. The initial regression
+failed with **12 columns, 54px Versions→Scans panel drift at 3440×1440, and no
+independent gallery viewport**. It now requires six or fewer columns, <=1px drift
+and a dedicated clipped browser viewport. New/Open remain blocked by the proven
+backend replay/preview isolation defect. No runtime/client/model/Home/Acquisition/
+Calibration behavior or global minimum window size changes are included.
+
+### Region audit: before / after / remaining difference
+
+1. **Header:** small subtitle and crowded controls / slightly larger subtitle,
+   unchanged honest disabled New/Open and clear source warning / unsupported
+   project operations remain disabled; reference's ready/scanner/user claims absent.
+2. **Navigator:** four gray bullets, no tag counts / six actual colored circles,
+   right-aligned counts from the twelve mock studies, source-scoped filters and
+   internal overflow / no live catalog, tags, persistent favorites or cloud counts.
+   Housing blue `#3996ed`, Prototype purple `#aa6de3`, Customer A orange `#ef963e`,
+   R&D green `#24c88d`, Quality Control yellow `#edc94c`, Tutorial gray `#94a1aa`.
+   The engine/cover mock studies illustrate Customer A/Tutorial respectively.
+3. **Gallery:** 12 narrow cards on ultrawide, 110px previews, tiny concatenated
+   metadata / width-derived grid capped at six, four at reference size, 128–230px
+   previews, 13px bold names, 11px dates and shared semantic tag/type pills /
+   original approved transparent technical studies retained; no fictional sync glyphs.
+   Wrapped chips have a reserved second line and never collide with the date.
+4. **Inspector:** fixed 316px, raw space-aligned multiline tree / adaptive
+   320–420px, larger preview/name, illustrative star, label/value metadata and
+   seven explicit icon/label/count rows, compact action grouping and its own
+   overflow / live preview, scanner, description and unsupported metadata remain
+   honestly unavailable. Runtime-wide jobs/events stay explicitly unassociated.
+5. **Contents:** height tied to rows, tab jumps, unallocated lower strip / fixed
+   placement with a bounded 31% body-height share (188–300px), readable columns,
+   four mock versions visible at reference size, weighted empty state and a clipped
+   independent 128-row table / nine tabs include authoritative Artifacts; no fake
+   revision/mutation controls or rows to fill unused table space.
+6. **Scrolling:** whole page moved / gallery/list, table, overflowing inspector
+   and navigator have separate native vertical Flickables; desktop chrome,
+   filters, rails and tab panel stay docked / compact Filters/Details stack inside
+   the browser's own viewport and may scroll there; table remains docked.
+7. **Space:** detached lower panel and narrow inspector / panel bottom matches
+   workspace bottom within 1px, retaining only the existing 12px shell/footer
+   inset; inspector right gap <=1px / tall windows retain intentional browser
+   breathing room, while table height is capped at 300px rather than stretched.
+
+### Ownership, focus, native input and bounded work
+
+`ProjectsViewport` clips vertical content and uses attached interactive scrollbars.
+There is no outer page ScrollView, horizontal scroller or global wheel handler.
+Events at desktop bounds have no scrollable page ancestor or sibling fallback.
+Focus reveal walks the focused item's enclosing viewport(s); compact stacked
+panes additionally reveal within the browser. Layout completion schedules the
+same bounded reveal method. The dock frame owns independent bounds around its
+RowLayout: Qt 6.9 otherwise retained an ultrawide rail allocation after resizing
+until a tab changed content hints. A strict sanitizer regression reproduced the
+420→360.72px shift; isolating the frame allows its own layout polish without
+private Qt APIs or delayed geometry mutations. Keyboard movement cancels a competing flick only
+when needed to reveal a row. No harmless snapshot resets an offset or selection.
+Grid/list keeps the numeric offset where possible, clamps it to new bounds, and
+anchors keyboard focus if needed. Tab/source changes reset their own table to
+its first row; the gallery retains its offset. Search, canonical identity and
+source authority survive resize. Twelve gallery, 128 table and six tag slots
+remain persistent outside Layout caches, including source/mode changes.
+
+Qt's [Flickable documentation](https://doc.qt.io/qt-6/qml-qtquick-flickable.html)
+and the exact
+[Qt 6.4.2 wheel/release implementation](https://code.qt.io/cgit/qt/qtdeclarative.git/tree/src/quick/items/qquickflickable.cpp?h=v6.4.2)
+were investigated. ScrollEnd ends the pixel drag but does not start a release
+flick; platform ScrollMomentum is handled separately. The native drag release
+uses a 100ms recent-motion cutoff. Changing flickDeceleration cannot create a
+missing OS momentum phase. ScrollView's mouse/touch defaults and filters were
+also checked against
+[Qt 6.4.2 source](https://code.qt.io/cgit/qt/qtdeclarative.git/tree/src/quicktemplates2/qquickscrollview.cpp?h=v6.4.2).
+
+Actual unlocked Linux Wayland input from the laptop's PIXA touchpad was captured
+with Qt 6.9.2. The baseline has 1762 raw window wheel observations: Begin 140,
+Update 1482, End 140, **Momentum 0**; duplicate bubbled boundary observations are
+retained rather than presented as distinct gestures. Updates are predominantly
+7–8ms apart and have pixel deltas and system natural-scroll inversion. This
+reproduces the platform's absence of native momentum, rather than a mouse-wheel
+or global zoom problem. Revised physical traces record pointer containment and
+20ms samples for 300ms after release. The first attempt occurred outside the
+browser and is not used to certify coasting. The central-list trace confirms
+native post-release motion with decreasing velocity; see the retained trace
+summary and raw wheel-only logs in `evidence/projects-v2/`.
+
+The presentation-only `ProjectsScrollInput` handles only its own Flickable.
+Phased Update/Momentum pixel deltas move that viewport immediately by the exact
+native delta, clamped to its bounds. Qt's wheel-as-drag path otherwise discards
+the first small movement while acquiring a drag. Direction is already adjusted
+by the platform and is not inverted again. OS Momentum uses the exact same
+pixel path and bypasses supplemental release. Mouse wheel, unphased input,
+touch dragging and phase boundaries retain Qt's native handler. A scrollable
+viewport accepts precise pixels even at its boundary; a compact stacked panel
+without overflow permits propagation to its enclosing browser.
+
+For recent phased motion without OS momentum, the adapter requests exactly one
+public Qt `flick(0, velocity)` after ScrollEnd. It averages at most four recent
+pixel/time samples and resets on reversal, pause and context changes. Qt owns
+the release trajectory, deceleration and bounds. The first physical revision
+coasted but compressed fast gestures against Qt's default 2500px/s ceiling.
+A failing gentle/fast regression measured velocities **500/2500**; the measured
+6000px/s ceiling now yields **500/4000** and distinct native travel. Physical
+speed-sensitive traces span approximately 80–4526px/s initial release velocity.
+The user confirmed speed dependence but reported a startup delay. Exact native
+pixels eliminate that acquisition delay: a first 3px Update moves the viewport
+3px immediately, while the same native flick owns release. The final physical
+test was explicitly accepted by the user: “Yes, it starts promptly and coasts
+naturally.” This acceptance concerns scrolling on the tested laptop, rather
+than a claim that automated geometry tests establish visual design acceptance.
+There are no product timers, per-wheel animations, global hooks, private Qt APIs,
+new backend methods, image requests or unbounded buffers. Four small input
+adapters are scoped to Projects viewports. Diagnostic timers sample only test
+windows and never drive their position. Other compositors/devices and physical
+Qt 6.4/ARM touchpads are not certified by this laptop session; phased routing,
+release/bounds and momentum bypass are tested with Qt 6.4 on both CI architectures.
+
+### Validation and exact-revision gate
+
+Added `studio-projects-fidelity`, `studio-projects-scroll`, and scroll runs at DPR
+1.5/2. Studio ON now registers **64 tests**, OFF/headless sanitizers **42**.
+Scroll regressions cover every result count `{0,1,2,3,4,5,6,12}`, nine viewports,
+all sources, six semantic colors/counts and absence of live tag/count claims.
+They cycle all nine tabs 30 times per source, then repeat with changed project,
+sort and facet. Scene bounds assert stationary navigator, inspector, gallery
+header, tab strip and bottom panel. Grid/list top/end, table-only 128-row scrolling,
+keyboard arrows through every artifact, inspector overflow, boundary routing,
+natural-direction pixel input, standard wheel and explicit platform momentum
+are exercised. A no-Momentum release must coast once; paused fingers and stepped
+wheel must not add a release. Injected tests prove routing/native mechanics;
+the separate physical trace supplies native laptop evidence.
+
+All final local suites passed: Qt 6.4 Studio **64/64**, Studio OFF **42/42**,
+headless ASan/UBSan/LSan **42/42**, Qt 6.9 Studio ASan/UBSan/LSan **64/64**,
+and five UI suites repeated three times (**15/15 invocations**). Native default-
+renderer normal/maximized/restored checks passed for all three sources. Home
+remains pixel-identical to the reviewed baseline. Logs, screenshots and physical
+input observations are retained in the [V2 evidence index](evidence/projects-v2/README.md).
+The existing five-job architecture matrix is retained; ON jobs also repeat the
+new scroll suite three times. CI generates exact `ui-m2a/revision.json` receipts
+and uploads all screenshots and full/repeated test logs. Final SHA/run are supplied
+in the review handoff after all five jobs succeed; no branch is merged.
+
+
 Branch: `feature/ui-m2a-projects`, created directly from accepted Home commit
 `6b07fd34ab193ee32dc52c6ffba76a22a59497ab`. No merge or other feature-branch change.
 The [action/authority matrix](projects.md) was published before implementation.

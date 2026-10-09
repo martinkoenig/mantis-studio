@@ -1,0 +1,4 @@
+Qt 6.4.2, offscreen/software, 1536x1024
+Reviewed baseline versus final Home screenshot
+RGBA difference bbox: None
+No Home production code or artwork changed.

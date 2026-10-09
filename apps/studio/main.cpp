@@ -2,6 +2,7 @@
 #include "calibration_controller.hpp"
 #include "home_model.hpp"
 #include "projects_model.hpp"
+#include "projects_scroll.hpp"
 #include "screenshot.hpp"
 #include <QCommandLineParser>
 #include <QGuiApplication>
@@ -18,6 +19,7 @@ int main(int argc, char **argv) {
     QQuickStyle::setStyle("Basic");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
+    qmlRegisterType<ProjectsScrollInput>("Mantis.Studio", 1, 0, "ProjectsScrollInput");
     QCommandLineParser parser;
     parser.setApplicationDescription("Mantis Studio desktop client · UI-M2a");
     parser.addHelpOption();
