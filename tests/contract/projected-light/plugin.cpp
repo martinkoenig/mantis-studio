@@ -16,6 +16,9 @@ std::atomic_uint fault{}, pending_calls{}, destroyed_instances{}, live_instances
 std::atomic_uint selected_shape{UINT32_MAX}, selected_publication{UINT32_MAX};
 std::mutex ownership;
 bool owned{};
+std::string image_role{"imaging"}, image_identity{"physical-camera-alpha"}, source_calibration_id;
+uint32_t image_width = 2, image_height = 2;
+uint64_t source_calibration_revision{};
 template <class T> T view() {
     T out{};
     out.struct_size = sizeof(T);
@@ -71,9 +74,9 @@ MantisEvidenceSourceV1 source(uint32_t method = MANTIS_EVIDENCE_METHOD_SOFTWARE_
 MantisCameraFrameEvidenceV1 camera_evidence() {
     auto out = view<MantisCameraFrameEvidenceV1>();
     out.frame = source_frame();
-    out.camera_role = "imaging";
-    out.width = 2;
-    out.height = 2;
+    out.camera_role = image_role.c_str();
+    out.width = image_width;
+    out.height = image_height;
     out.source_timestamp = absent<MantisEvidenceSemanticTimestampV1>();
     out.host_received = absent<MantisEvidenceRuntimeTimestampV1>(MANTIS_PRESENCE_UNAVAILABLE);
     out.timestamp_meaning = absent<MantisEvidenceTimestampMeaningV1>();
@@ -102,8 +105,9 @@ MantisPacketHeaderV1 packet_header(uint64_t sequence) {
     out.sync = view<MantisSyncGroupV1>();
     out.sync.id = "";
     out.calibration = view<MantisCalibrationReferenceV1>();
-    out.calibration.id = "";
+    out.calibration.id = source_calibration_id.c_str();
     out.calibration.schema_version = 1;
+    out.calibration.revision = source_calibration_revision;
     out.frame = view<MantisCoordinateFrameV1>();
     out.frame.id = "camera-optical";
     out.frame.name = "optical";
@@ -136,7 +140,7 @@ struct Graph {
             c.id = ids[i];
             c.parent_id = i ? ids[0] : "";
             c.name = ids[i];
-            c.role = i == 1 ? "imaging" : "presentation";
+            c.role = i == 1 ? image_role.c_str() : "presentation";
             c.participant_kind = static_cast<uint32_t>(i);
             c.pattern = absent<MantisEvidencePatternIdV1>(MANTIS_PRESENCE_UNAVAILABLE);
             c.pattern_revision = absent<MantisEvidenceUInt64V1>(MANTIS_PRESENCE_UNAVAILABLE);
@@ -156,8 +160,9 @@ struct Graph {
         c.capture_modes = captures;
         c.capture_mode_count = 2;
         image_source.stream_id = "image-stream";
-        image_source.physical_identity = "physical-camera-alpha";
-        image_source.width = image_source.height = 2;
+        image_source.physical_identity = image_identity.c_str();
+        image_source.width = image_width;
+        image_source.height = image_height;
         c.image_source = &image_source;
         auto &e = components[2];
         e.capabilities = emitter_caps;
@@ -452,6 +457,9 @@ struct Bundle {
     MantisAcquisitionBundleV1 bundle = view<MantisAcquisitionBundleV1>();
     MantisSemanticPacketV1 semantic = view<MantisSemanticPacketV1>();
     MantisEmitterCommandV1 command = view<MantisEmitterCommandV1>();
+    MantisExactCalibrationReferenceV1 source_calibration = view<MantisExactCalibrationReferenceV1>();
+    MantisContentReferenceV1 source_content = view<MantisContentReferenceV1>();
+    MantisHashV1 source_hash = view<MantisHashV1>();
     MantisCameraParticipantV1 camera = view<MantisCameraParticipantV1>();
     MantisEmitterEvidenceV1 emitter = emitter_evidence();
     MantisImplementationIdentityV1 implementation = view<MantisImplementationIdentityV1>();
@@ -467,7 +475,8 @@ struct Bundle {
     uint32_t trigger_kind = MANTIS_TRIGGER_KIND_REQUESTED;
     const char *emitters[1] = {"emitter-alpha"}, *controllers[1] = {"controller-alpha"},
                *endpoints[1] = {"camera-alpha"};
-    Bundle(Instance &s, uint32_t publication, uint32_t shape) : pixels(s.host, 4) {
+    Bundle(Instance &s, uint32_t publication, uint32_t shape)
+        : pixels(s.host, size_t(image_width) * image_height) {
         std::fill(pixels.writable().begin(), pixels.writable().end(), std::byte{42});
         pixels.publish();
         auto &b = bundle;
@@ -490,7 +499,7 @@ struct Bundle {
         e.participants = view<MantisParticipantsV1>();
         camera.component = "camera-alpha";
         camera.stream = "image-stream";
-        camera.role = "imaging";
+        camera.role = image_role.c_str();
         e.participants.cameras = &camera;
         e.participants.cameras_count = 1;
         e.participants.emitters = emitters;
@@ -530,12 +539,12 @@ struct Bundle {
             attribute.unit = "intensity";
             attribute.scalar_type = 1;
             attribute.rank = 2;
-            attribute.shape[0] = 2;
-            attribute.shape[1] = 2;
-            attribute.stride[0] = 2;
+            attribute.shape[0] = image_height;
+            attribute.shape[1] = image_width;
+            attribute.stride[0] = image_width;
             attribute.stride[1] = 1;
             attribute.buffer = pixels.get();
-            attribute.bytes = 4;
+            attribute.bytes = size_t(image_width) * image_height;
             image.attributes = &attribute;
             image.attribute_count = 1;
             frameset.type = type(MANTIS_FRAMESET);
@@ -543,6 +552,29 @@ struct Bundle {
             frameset.frames = &image;
             frameset.frame_count = 1;
             b.frameset = &frameset;
+            if (fault == TEST_SERVICE_CALIBRATION_MISMATCH)
+                ++image.header.calibration.revision;
+            if (fault == TEST_SERVICE_CALIBRATION_CHANGE && publication == 1) {
+                ++image.header.calibration.revision;
+                ++frameset.header.calibration.revision;
+                frameset_key.sequence += publication;
+                frame.frame.native_sequence += publication;
+                effective.frame = frame.frame;
+                image.header.sequence += publication;
+                frameset.header.sequence += publication;
+            }
+            if (fault == TEST_SERVICE_CALIBRATION_EXACT) {
+                source_calibration.calibration = frameset.header.calibration;
+                source_content.id = "source-rig-artifact";
+                source_content.type = type("org.mantis.RigCalibration");
+                source_content.revision = source_calibration_revision;
+                source_hash.algorithm = "sha256";
+                source_hash.hex = "abcd";
+                source_content.hash = present<MantisEvidenceHashV1>(&source_hash);
+                source_calibration.content = present<MantisEvidenceContentReferenceV1>(&source_content);
+                e.rig_calibration = present<MantisEvidenceExactCalibrationReferenceV1>(&source_calibration);
+                frame.rig_calibration = e.rig_calibration;
+            }
         }
         if (shape == 2) {
             trigger.type = type(MANTIS_TRIGGER_EVENT);
@@ -646,10 +678,15 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
                     : (f == TEST_RUN_MISMATCH) ? 2u
                                                : publication;
         if (f >= TEST_SERVICE_COMPLETE)
-            shape = publication == 0 ? (f == TEST_SERVICE_CAPTURE   ? 1
-                                        : f == TEST_SERVICE_TRIGGER ? 2
-                                                                    : 0)
-                                     : 0;
+            shape = publication == 0
+                        ? (f == TEST_SERVICE_CAPTURE || f == TEST_SERVICE_CALIBRATION_MISMATCH ||
+                                   f == TEST_SERVICE_CALIBRATION_CHANGE || f == TEST_SERVICE_CALIBRATION_EXACT
+                               ? 1
+                           : f == TEST_SERVICE_TRIGGER ? 2
+                                                       : 0)
+                        : 0;
+        if (f == TEST_SERVICE_CALIBRATION_CHANGE && publication == 1)
+            shape = 1;
         Bundle b(s, publication, shape);
         MantisHashV1 wrong_hash = view<MantisHashV1>();
         wrong_hash.algorithm = "sha256";
@@ -1072,23 +1109,34 @@ int processor_process(const MantisHostV1 *, const MantisSemanticPacketV1 *p, uin
 }
 const MantisProcessorV2 processor = {sizeof(processor), 1, Safe<processor_describe>::call,
                                      Safe<processor_process>::call};
-const TestProjectedControl control = {[](uint32_t f) { fault = f; },
-                                      [] { return pending_calls.load(); },
-                                      [] { return destroyed_instances.load(); },
-                                      [] { return live_instances.load(); },
-                                      [] { return initializations.load(); },
-                                      [] { return shutdowns.load(); },
-                                      [](uint32_t shape) { selected_shape = shape; },
-                                      [](uint32_t publication) { selected_publication = publication; },
-                                      [] { return opens.load(); },
-                                      [] { return validations.load(); },
-                                      [] { return prepares.load(); },
-                                      [] { return starts.load(); },
-                                      [] { return aborts.load(); },
-                                      [](void (*probe)(void *), void *ctx) {
-                                          prepare_probe = probe;
-                                          prepare_context = ctx;
-                                      }};
+const TestProjectedControl control = {
+    [](uint32_t f) { fault = f; },
+    [] { return pending_calls.load(); },
+    [] { return destroyed_instances.load(); },
+    [] { return live_instances.load(); },
+    [] { return initializations.load(); },
+    [] { return shutdowns.load(); },
+    [](uint32_t shape) { selected_shape = shape; },
+    [](uint32_t publication) { selected_publication = publication; },
+    [] { return opens.load(); },
+    [] { return validations.load(); },
+    [] { return prepares.load(); },
+    [] { return starts.load(); },
+    [] { return aborts.load(); },
+    [](void (*probe)(void *), void *ctx) {
+        prepare_probe = probe;
+        prepare_context = ctx;
+    },
+    [](const char *role, const char *identity, uint32_t width, uint32_t height) {
+        image_role = role;
+        image_identity = identity;
+        image_width = width;
+        image_height = height;
+    },
+    [](const char *id, uint64_t revision) {
+        source_calibration_id = id;
+        source_calibration_revision = revision;
+    }};
 int initialize(const MantisHostV1 *h) {
     if (!mantis::sdk::compatible(h))
         return 1;

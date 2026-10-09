@@ -85,7 +85,12 @@ enum {
     TEST_SERVICE_ABORT_STATES,
     TEST_SERVICE_RECORDING_FAILURE,
     TEST_SERVICE_CAPTURE,
-    TEST_SERVICE_ABORT_FALSE, TEST_SERVICE_TRIGGER, TEST_SERVICE_VALIDATE_FAILURE
+    TEST_SERVICE_ABORT_FALSE,
+    TEST_SERVICE_TRIGGER,
+    TEST_SERVICE_VALIDATE_FAILURE,
+    TEST_SERVICE_CALIBRATION_MISMATCH,
+    TEST_SERVICE_CALIBRATION_CHANGE,
+    TEST_SERVICE_CALIBRATION_EXACT
 };
 typedef struct TestProjectedControl {
     void (*fault)(uint32_t);
@@ -102,6 +107,8 @@ typedef struct TestProjectedControl {
     uint32_t (*starts)(void);
     uint32_t (*aborts)(void);
     void (*prepare_probe)(void (*)(void *), void *);
+    void (*image_geometry)(const char *role, const char *identity, uint32_t width, uint32_t height);
+    void (*source_calibration)(const char *id, uint64_t revision);
 } TestProjectedControl;
 #define TEST_PROJECTED_CONTROL "org.mantis.test.projected-control.v1"
 #endif

@@ -849,6 +849,38 @@ void Store::initialize_provenance(const ArtifactId &id, Provenance provenance) {
     update.text(2, id.value);
     update.row();
 }
+void Store::initialize_projected_source_provenance(const ArtifactId &id, data::Metadata fields) {
+    std::lock_guard guard(impl_->mutex);
+    auto a = impl_->get(id);
+    auto writer = impl_->writers.find(id);
+    if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3 ||
+        a.state != ArtifactState::open || writer == impl_->writers.end() || !writer->second->bundles ||
+        writer->second->outcome_published)
+        fail(Status::invalid_argument, "Source provenance requires a live OPEN projected capture", "store");
+    if (fields.empty() || fields.size() > 2048)
+        fail(Status::invalid_argument, "Invalid bounded projected source provenance", "store");
+    const auto existing = static_cast<size_t>(
+        std::count_if(a.provenance.parameters.begin(), a.provenance.parameters.end(),
+                      [](const auto &entry) { return entry.first.starts_with("source_"); }));
+    if (existing > 2048 - fields.size())
+        fail(Status::invalid_argument, "Projected source provenance capacity exceeded", "store");
+    for (const auto &[key, value] : fields) {
+        const bool source = key.starts_with("source_device_calibration_") ||
+                            key.starts_with("source_initial_rig_calibration_") ||
+                            key.starts_with("source_established_rig_calibration_") ||
+                            key.starts_with("source_frameset_rig_calibration_") ||
+                            key.starts_with("source_camera_");
+        if (!source || key.size() > data::max_semantic_id || value.size() > data::max_semantic_string ||
+            a.provenance.parameters.contains(key))
+            fail(Status::invalid_argument, "Source calibration provenance is bounded and write-once",
+                 "store");
+    }
+    a.provenance.parameters.merge(fields);
+    Statement update(impl_->db, "UPDATE artifacts SET provenance=? WHERE id=?");
+    update.text(1, provenance_json(a.provenance));
+    update.text(2, id.value);
+    update.row();
+}
 void Store::append(const Id &id, const data::Packet &packet) {
     std::lock_guard guard(impl_->mutex);
     if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {

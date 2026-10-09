@@ -50,6 +50,9 @@ class Store {
     void clear_active_calibration(const Id &logical_device_id);
     // Capture audit initialization only, before any packet is appended.
     void initialize_provenance(const ArtifactId &, Provenance);
+    // Schema-3 source audit fields may become known after control-only records.
+    // Each bounded source field is initialized once, while the live writer is OPEN.
+    void initialize_projected_source_provenance(const ArtifactId &, data::Metadata);
     // RawCapture v2: sequential records, segment-batched durability/SQLite commits.
     // Failed/incomplete live writers must be abandoned before explicit recovery.
     void abandon(const ArtifactId &);

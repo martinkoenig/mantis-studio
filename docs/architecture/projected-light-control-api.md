@@ -100,6 +100,42 @@ precedence and root/cleanup error separation are retained.
 
 ## Recording, status and diagnostics
 
+Projected start snapshots the selected logical parent's project-local active
+RigCalibration before executor opening/preparation. It verifies the finalized
+artifact/hash and exact logical ID/schema/revision through the existing calibration
+artifact reader. Declared image participants match typed graph component/stream,
+physical identity, role and width/height; a subset of a stereo rig is supported.
+Emitter/controller children are not cameras. A mismatch rejects before hardware
+preparation and before creating a capture artifact.
+
+An internal calibration-bound ProjectedExecutor delegates all lifecycle calls and
+stamps FrameSet/image headers, AcquisitionEvidence.rig_calibration and source-frame
+rig references before L3 correlation/authoritative publication. The typed bound
+reference contains both logical revision and exact immutable artifact/content hash.
+Packet containers are copied; BufferViews and pixel backing are shared. Native
+timing, trigger/effectiveness facts, camera-calibration and original-calibration
+evidence remain unchanged. Abort delegates directly, without the binding mutex or
+storage access.
+
+The selected reference/dependency/hash enters provenance at durable capture
+initialization. Source parent/child references must agree and remain stable;
+established source rig identities/content cannot change or contradict those headers.
+Original source headers and initial/first-established rig references, including exact
+presence/content/hash and each camera's initial/first-established rig references,
+are retained separately under source_* provenance fields. The recorder initializes these bounded, write-once audit
+fields only when their corresponding bundle reaches the recording prefix, before
+append. The schema-3 source-provenance operation permits late initialization while
+OPEN, even after control-only records; it cannot change project binding/dependencies,
+overwrite a field or run after outcome publication. Late camera evidence without a
+FrameSet follows the same validation and audit rules. At most 3 + 2 × declared-camera
+count small initialization groups are produced per run (64-camera semantic bound),
+with at most 2048 bounded scalar provenance fields and no per-frame lookup/SQLite
+transaction. No header, bundle, record, outcome format or metadata schema changes.
+
+No active binding is valid: no project reference is invented and original semantic
+Presence and packet references remain unchanged. Replay reads only recorded values;
+later activation or clearing never replaces the historical revision.
+
 The authoritative path is `ProjectedRun::next -> Store::append_bundle`, synchronously.
 L3 owns the sole bounded authoritative queue. L5 retains one immutable latest bundle
 and compact counters, never a frame/bundle history queue. Store backpressure applies
@@ -258,3 +294,21 @@ The [starting commit CI](https://github.com/martinkoenig/mantis-studio/actions/r
 is green for x86_64 and ARM64, each Studio ON/OFF, and ASan/UBSan. The new L5
 commit's CI remains pending its push; those baseline results are not claimed for
 the new SHA. Frozen C ABI/storage fixtures and their implementations are unchanged.
+
+The calibration-binding follow-up passes the complete non-hardware suite **48/48**
+(30.74 seconds) and the complete ASan + UBSan suite **48/48** (106.21 seconds),
+with the same leak-detection/OpenCV environment and no sanitizer reports. The new
+projected-calibration-binding test covers no active binding, a camera subset of a
+stereo rig, exact revision/artifact/hash binding before L3 publication, shared pixel
+backing, identity/role/dimension rejection before executor opening, contradictory
+and changing source references, late source evidence without a FrameSet, bounded
+write-once provenance, and unchanged replay after activating a newer revision or
+clearing the active binding. Idempotent retries preserve the original snapshot.
+The existing camera-only binding, projected concurrency/count-binding, protocol,
+legacy storage golden and frozen ABI/catalog tests remain green. Boundaries and
+`git diff --check` pass.
+
+The [follow-up baseline CI at 7171b740](https://github.com/martinkoenig/mantis-studio/actions/runs/37917677111)
+is green for x86_64 and ARM64 Studio ON/OFF and sanitizers; follow-up CI awaits push.
+No frozen ABI, protocol numbering, accepted storage format, hardware, extraction,
+triangulation or L6 implementation changes are included.

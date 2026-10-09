@@ -1,4 +1,5 @@
 #include "projected_sessions.hpp"
+#include "projected_calibration.hpp"
 #include <limits>
 #include <mantis/artifact_store.hpp>
 #include <mantis/replay.hpp>
@@ -106,6 +107,7 @@ struct ProjectedSessions::Impl {
         std::string request, signature;
         std::optional<Id> program_source;
         std::unique_ptr<device::ProjectedRun> run;
+        std::shared_ptr<ProjectedCalibrationBinding> calibration;
         std::shared_ptr<const data::AcquisitionBundle> latest;
         std::jthread recorder;
         bool mutation_requested{}, start_resolved{};
@@ -253,6 +255,10 @@ struct ProjectedSessions::Impl {
                                  "projected-storage");
                         bytes = payload + 40;
                     }
+                    auto source = s->calibration->source_provenance(bundle->key.sequence);
+                    if (!source.empty())
+                        store->initialize_projected_source_provenance(s->info.raw_artifact,
+                                                                      std::move(source));
                     store->append_bundle(s->info.raw_artifact, *bundle);
                     std::lock_guard lock(s->mutex);
                     ++s->info.committed;
@@ -390,6 +396,7 @@ ProjectedCaptureInfo ProjectedSessions::start(const ProjectedCaptureRequest &q, 
         fail(Status::busy, "Projected capture history capacity reached");
     auto g = impl_->graph(q);
     impl_->ownership(q.plugin_id, g);
+    auto calibration = std::make_shared<ProjectedCalibrationBinding>(*impl_->store, g, p);
     auto s = std::make_shared<Impl::Session>();
     s->graph = g;
     s->request = request;
@@ -399,14 +406,18 @@ ProjectedCaptureInfo ProjectedSessions::start(const ProjectedCaptureRequest &q, 
     s->info.plugin_id = q.plugin_id;
     s->info.parent = q.parent;
     s->info.program = p.identity;
+    s->calibration = calibration;
     s->run = std::make_unique<device::ProjectedRun>(
-        impl_->registry.open_projected_light(q.plugin_id, q.parent, 100), p, q.config);
+        calibration_bound_executor(impl_->registry.open_projected_light(q.plugin_id, q.parent, 100),
+                                   calibration),
+        p, q.config);
     const auto identity = s->run->snapshot().identity;
     artifact::Provenance provenance;
     provenance.producer = q.plugin_id;
     provenance.parameters = {{"projected_capture_id", s->info.id.value}, {"parent_id", q.parent.value}};
     if (source)
         provenance.inputs.push_back(*source);
+    calibration->provenance(provenance);
     s->info.raw_artifact = impl_->store->begin_projected_capture(
         {p, identity.run, identity.generation, device::recorded_run_config(q.config)}, provenance);
     s->info.bytes = impl_->store->get(s->info.raw_artifact).bytes;
