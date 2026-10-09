@@ -39,6 +39,7 @@ These repository-wide instructions apply to Codex and other coding agents workin
 - During iteration, run the narrowest tests that give useful feedback. Before declaring the assignment complete, perform **all applicable final validation** required by the task, `CONTRIBUTING.md` and CI (including Qt-enabled/headless, relevant sanitizers, regression, platform and performance checks). Do not replace required final checks with selective passing tests.
 - For functional changes and bug fixes, add meaningful regression tests including negative/failure cases appropriate to risk. Never delete, weaken, skip or manipulate a failing test merely to obtain green results.
 - If a required test fails, investigate and repair the cause, then re-run the affected checks and final verification. If blocked by unavailable hardware, infrastructure, external dependencies or an unsafe action, report the **exact unverified requirement and evidence**; do not label it PASS or loop indefinitely.
+- When waiting for GitHub Actions or other asynchronous external operations, prefer one blocking wait command with a reasonable timeout (for example, `gh run watch --exit-status`) instead of repeated LLM-driven status polling. If blocking waits are unavailable, make only bounded, appropriately spaced status checks. Do not waste model calls on frequent polling, spin indefinitely, or treat a pending/timeout result as success.
 - When CI applies, check results for the pushed commit where access is available. Pending, skipped or unavailable checks are not green checks.
 
 ## Completion report
