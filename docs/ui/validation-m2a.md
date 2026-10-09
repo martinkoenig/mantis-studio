@@ -133,6 +133,19 @@ from its filter header. Hybrid's authoritative contents precede sample cards.
 Keyboard focus scrolls into view, including the twelfth list item. No Qt/QML
 warnings are accepted by the Projects test host.
 
+The final application executable also captured the default desktop directly:
+
+```bash
+docker exec mantis-ui-m0-qt64 env QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+  /work/build/qt64/bin/mantis-studio --ui-mode mock --workspace projects \
+  --window-size 1536x1024 --screenshot /work/build/ui-m2a/projects-default-final-1536.png \
+  --quit-after 4500
+```
+
+Exit status was zero; the full image was inspected. The retained default-view
+capture was refreshed because its earlier version preceded final tab-label polish.
+The complete suites and QML matrix already used the final implementation.
+
 Full Qt captures were inspected against the approved reference. The desktop
 retains its header, internal navigator, four-column technical gallery, selected
 mint outline, right-edge inspector and lower contents tabs. Compact layouts wrap
@@ -212,6 +225,10 @@ five jobs: x86_64 Studio ON/OFF, ARM64 Studio ON/OFF and headless sanitizers. Bo
 ON jobs run all 60 tests, repeat Home/Projects QML/resize three times, and upload
 Home/M0 plus Projects screenshots/logs in `ui-m0-ubuntu-24.04` and
 `ui-m0-ubuntu-24.04-arm`. Complete CTest output is copied before repeat runs.
+
+Implementation commit `206a705ded5dff73d6a5bb96e264ea7368b93e71` is linked to
+[its architecture run](https://github.com/martinkoenig/mantis-studio/actions/runs/37923406905).
+The subsequent review-evidence refresh changes no application, test or workflow code.
 
 The final commit's **literal exact SHA and immutable Actions run URL** are generated
 by CI in each artifact's `ui-m2a/revision.json` (from `GITHUB_SHA`/`GITHUB_RUN_ID`).
