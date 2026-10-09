@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# Cancel obsolete validations for the same ref/event while preserving
+# distinct push vs PR merge checks and manually requested runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || (github.event_name == 'workflow_dispatch' && github.run_id || github.ref) }}
+  cancel-in-progress: true
+
 jobs:
   linux:
     strategy:
