@@ -45,7 +45,9 @@ for the Qt 6.4 captured-context compatibility correction and exact-final CI gate
 Selected matrix images, the default CLI view and full Studio CTest logs were
 refreshed after the final Qt 6.4 captured-context and combo-padding corrections.
 [Home pixel comparison](home-icon-pixel-comparison.log) reports no changed pixels.
-The latest native run is retained in [native-locked-final.log](native-locked-final.log)
-with [the locked-session receipt](native-session-final.txt). Earlier successful
-normal/maximized native captures predate those compatibility corrections; no final
-locked-session maximize pass is claimed.
+The earlier locked native run remains in [native-locked-final.log](native-locked-final.log).
+The [later session query](native-session-final.txt) reports unlocked;
+[final default-renderer native checks](native-final-rhi.log) passed all three sources.
+All nine native normal/maximized/restored images were refreshed and inspected on
+the final application code. The separate [software DPR failure](native-software-dpr-failure.log)
+remains documented and no screenshot assertion was weakened.

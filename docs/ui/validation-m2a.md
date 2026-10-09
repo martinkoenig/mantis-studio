@@ -50,7 +50,7 @@ matrix job remains headless, and Qt 6.9 provides extra Studio ON evidence.
 | Qt 6.9 Studio ON ASan/UBSan/LSan | 60/60 passed, 418.66s |
 | Qt 6.4 Home/Projects/resize/M0, each ×3 | 12/12 executions passed, 154.13s |
 | Qt 6.9 Projects focus/layout stress ×10 | 10/10 passed, 137.95s |
-| Native Wayland mock/live/hybrid maximize/restore | Three earlier unlocked passes, all three sources; latest rerun blocked by locked desktop |
+| Native Wayland mock/live/hybrid maximize/restore | Final default-renderer pass in all three sources, normal/maximized/restored; search focus retained |
 
 The suite has 60 Studio ON / 42 OFF tests (accepted baseline: 53 / 41). No test was
 removed or disabled. Existing bridge fixture assertions now require clearing old
@@ -169,7 +169,11 @@ New/Open are visibly blocked, and other missing capabilities are inert/explained
 
 Native Qt 6.9 Wayland was available on the user's GNOME desktop. Actual normal
 1536×1024 and maximized 2048×1210 logical windows at DPR 1.25 were inspected in all
-three sources, with compositor exposure, focus and restore assertions. This is
+three sources, with compositor exposure, focus and restore assertions. After the
+session unlocked, the final application code was rebuilt and all nine native
+normal/maximized/restored images were inspected;
+[final default-renderer log](evidence/projects/native-final-rhi.log) confirms every
+assertion. The host font/rendering stack differs from the Qt 6.4 reference captures. This is
 desktop presentation evidence, not hardware acquisition, native screen-reader,
 metrology, Windows/macOS or physical 4K-monitor verification.
 
@@ -235,9 +239,14 @@ custom combo text padding. Explicit control padding fixes source/sort truncation
 all size/source checks assert those labels are readable. Native checks capture a
 rendered frame before geometry checks and wait for actual compositor state rather
 than a fixed 200ms delay. A later GNOME rerun was blocked by the locked session
-([lock-state receipt](evidence/projects/native-session-final.txt) and
-[final blocked run](evidence/projects/native-locked-final.log)); earlier unlocked native passes
-are distinguished from that rerun. Offscreen final matrices remain mandatory.
+([blocked run](evidence/projects/native-locked-final.log)). A later
+[session-state query](evidence/projects/native-session-final.txt) returned false;
+the default native Qt renderer then passed all three sources on the final code.
+A separate native Wayland/software run failed its exact screenshot-DPR geometry
+assertion after maximize ([failure](evidence/projects/native-software-dpr-failure.log));
+it is retained as a renderer-specific limitation, with no assertion weakened.
+The final offscreen/software DPR matrices and native default-renderer pass remain
+distinct evidence.
 
 Earlier Qt 6.9 runs exposed a fixed-30ms focus-scroll test observing old content
 height between frames. [Failure evidence](evidence/projects/README.md) is retained.
@@ -252,7 +261,7 @@ it is not counted as successful validation. Final full logs supersede early runs
 | --- | --- |
 | P1 | Backend replay/preview project isolation blocks New/Open; separate runtime review required. Path security/exclusive-create/unknown-outcome contracts also need hardening. |
 | P2 | Accepted unreadable PointCloud can retry `client.data()` about every 500ms; separate required reliability fix before UI-M3, unchanged here. |
-| P3 | No public catalog/versions/tags/share/package/delete APIs, live thumbnail or cross-platform/native screen-reader/hardware evidence; truthful unavailable states and mock metadata remain. |
+| P3 | Native Wayland/software screenshot DPR assertion fails after maximize; default renderer passes. No public catalog/versions/tags/share/package/delete APIs, live thumbnail or cross-platform/native screen-reader/hardware evidence; truthful unavailable states and mock metadata remain. |
 
 ## Exact-commit GitHub Actions gate
 
@@ -265,7 +274,9 @@ Home/M0 plus Projects screenshots/logs in `ui-m0-ubuntu-24.04` and
 Implementation commit `206a705ded5dff73d6a5bb96e264ea7368b93e71` is linked to
 [its architecture run](https://github.com/martinkoenig/mantis-studio/actions/runs/37923406905).
 Application compatibility correction `6408638c9ab91c7c7adb1e6eba1affd434254eae`
-is linked to [its architecture run](https://github.com/martinkoenig/mantis-studio/actions/runs/37928167428).
+passed all five jobs in [its architecture run](https://github.com/martinkoenig/mantis-studio/actions/runs/37928167428);
+ARM64 passed all 60 tests plus twelve repeated transitions. This resolves the
+retained M0 crash without suppressing JIT or garbage collection.
 The final documentation/evidence commit is verified independently on its own SHA;
 previous successful jobs do not satisfy that final gate.
 
@@ -278,3 +289,12 @@ all five verified statuses. Resolve the run via
 compare receipts with final local/remote HEAD, and inspect both architectures'
 retained full/repeat logs and generated images. READY FOR REVIEW is withheld until
 all five jobs succeed for that exact commit. No branch is merged.
+
+The final native check used the default renderer (no `QT_QUICK_BACKEND` override):
+
+```bash
+cmake --build build/debug --parallel 3
+env QT_QPA_PLATFORM=wayland OPENCV_OPENCL_RUNTIME=disabled \
+LD_LIBRARY_PATH="$PWD/build/deps/root/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+build/debug/bin/mantis-studio-projects-tests build/ui-m2a/native-final-rhi native
+```
