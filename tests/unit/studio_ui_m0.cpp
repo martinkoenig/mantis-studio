@@ -417,6 +417,10 @@ static void screenshotRegression(QQuickWindow *window, const QString &output) {
     exercise(nullptr, output + "/must-not-exist.png", 40, false, "unavailable");
 }
 
+// Debugger-only handle for Qt's exported QML stack-trace helper on failed CI routes.
+// No ownership transfer and no change to the engine or regression assertions.
+void *routeDebugEngine = nullptr;
+
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
@@ -432,6 +436,7 @@ int main(int argc, char **argv) {
         StudioBridge studio(nullptr, false);
         CalibrationController calibration;
         QQmlApplicationEngine engine;
+        routeDebugEngine = engine.handle();
         conversionRegression(engine);
         engine.rootContext()->setContextProperty("studio", &studio);
         engine.rootContext()->setContextProperty("calibration", &calibration);

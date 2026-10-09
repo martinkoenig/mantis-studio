@@ -57,8 +57,8 @@ jobs:
         run: |
           mkdir -p build/ci/ui-m2a/diagnostic
           for attempt in $(seq 1 10); do
-            gdb -batch -ex run -ex 'thread apply all bt full' --args build/ci/bin/mantis-studio-ui-m0-tests build/ci/ui-m2a/diagnostic > "build/ci/ui-m2a/diagnostic/route-$attempt.log" 2>&1
-            if rg -q 'received signal|Program terminated with signal' "build/ci/ui-m2a/diagnostic/route-$attempt.log"; then
+            gdb -batch -ex run -ex 'thread apply all bt full' -ex 'print (char *)qt_v4StackTraceForEngine(routeDebugEngine)' --args build/ci/bin/mantis-studio-ui-m0-tests build/ci/ui-m2a/diagnostic > "build/ci/ui-m2a/diagnostic/route-$attempt.log" 2>&1
+            if grep -Eq 'received signal|Program terminated with signal' "build/ci/ui-m2a/diagnostic/route-$attempt.log"; then
               cat "build/ci/ui-m2a/diagnostic/route-$attempt.log"
               break
             fi
