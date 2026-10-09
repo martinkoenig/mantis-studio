@@ -30,11 +30,25 @@ jobs:
         run: cmake --build build/ci --parallel 4
       - name: Test
         run: ctest --test-dir build/ci --output-on-failure
-      - name: Repeat Home transition regression
+      - name: Record exact review revision
+        if: ${{ matrix.studio == 'ON' }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          out = Path('build/ci/ui-m2a')
+          out.mkdir(parents=True, exist_ok=True)
+          out.joinpath('revision.json').write_text(json.dumps({
+              'sha': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              'runner': '${{ matrix.runner }}', 'studio': '${{ matrix.studio }}'
+          }, indent=2) + '\n')
+          PY
+      - name: Repeat Home and Projects transition regressions
         if: ${{ matrix.studio == 'ON' }}
         run: |
           cp build/ci/Testing/Temporary/LastTest.log build/ci/ui-m1/full-ctest.log
-          ctest --test-dir build/ci -R '^studio-home-qml$' --repeat until-fail:3 --output-on-failure
+          ctest --test-dir build/ci -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize)$' --repeat until-fail:3 --output-on-failure
       - name: Upload UI review evidence
         if: ${{ always() && matrix.studio == 'ON' }}
         uses: actions/upload-artifact@v4
@@ -44,6 +58,7 @@ jobs:
           path: |
             build/ci/ui-m0/
             build/ci/ui-m1/
+            build/ci/ui-m2a/
             build/ci/Testing/Temporary/LastTest.log
             docs/ui/evidence/
 

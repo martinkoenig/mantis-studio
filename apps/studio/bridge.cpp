@@ -11,23 +11,8 @@ StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled)
         request_pending_ = false;
         applyResult(result);
     });
-    connect(&preview_watcher_, &QFutureWatcher<PreviewResult>::finished, this, [this] {
-        auto result = preview_watcher_.result();
-        if (!connected_)
-            return; // A late preview cannot confirm activity after a snapshot failure.
-        if (!result.left.isNull() && !result.right.isNull()) {
-            dual_preview_ = true;
-            if (left_)
-                left_->setImage(std::move(result.left));
-            if (right_)
-                right_->setImage(std::move(result.right));
-            emit changed();
-            if (!preview_reported_ && left_ && right_ && left_->ready() && right_->ready()) {
-                std::cout << "STUDIO_DUAL_PREVIEW_READY" << std::endl;
-                preview_reported_ = true;
-            }
-        }
-    });
+    connect(&preview_watcher_, &QFutureWatcher<PreviewResult>::finished, this,
+            [this] { applyPreview(preview_watcher_.result()); });
     preview_timer_.setInterval(66);
     connect(&preview_timer_, &QTimer::timeout, this, &StudioBridge::refreshPreview);
     if (runtime_enabled_)
@@ -37,6 +22,22 @@ StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled)
     if (runtime_enabled_) {
         timer_.start();
         QTimer::singleShot(0, this, &StudioBridge::refresh);
+    }
+}
+void StudioBridge::applyPreview(PreviewResult result) {
+    if (!connected_ || result.projectGeneration != project_generation_)
+        return; // Never deliver a late old-project preview after confirmed identity change.
+    if (!result.left.isNull() && !result.right.isNull()) {
+        dual_preview_ = true;
+        if (left_)
+            left_->setImage(std::move(result.left));
+        if (right_)
+            right_->setImage(std::move(result.right));
+        emit changed();
+        if (!preview_reported_ && left_ && right_ && left_->ready() && right_->ready()) {
+            std::cout << "STUDIO_DUAL_PREVIEW_READY" << std::endl;
+            preview_reported_ = true;
+        }
     }
 }
 void StudioBridge::applyResult(const StudioResult &result) {
@@ -70,8 +71,24 @@ void StudioBridge::applyResult(const StudioResult &result) {
         emit changed();
         return; // Keep the authoritative last-known state; send no runtime command.
     }
-    has_snapshot_ = true;
     const auto &snapshot = *result.snapshot;
+    const auto nextProject = QString::fromStdString(snapshot.project_path());
+    if (has_snapshot_ && nextProject != project_) {
+        ++project_generation_;
+        selected_.clear();
+        newest_.clear();
+        replay_.clear();
+        capture_.clear();
+        dual_preview_ = false;
+        preview_reported_ = false;
+        if (view_)
+            view_->setCloud({});
+        if (left_)
+            left_->setImage({});
+        if (right_)
+            right_->setImage({});
+    }
+    has_snapshot_ = true;
     emit snapshotReady(snapshot);
     if (!result.newest_id.empty())
         newest_ = QString::fromStdString(result.newest_id);
@@ -164,7 +181,7 @@ void StudioBridge::applyResult(const StudioResult &result) {
                                            {"kind", s(e.kind())},
                                            {"component", s(e.component())},
                                            {"message", s(e.message())}});
-    if (result.cloud) {
+    if (result.cloud && (result.cloud_project.empty() || result.cloud_project == snapshot.project_path())) {
         selected_ = s(result.cloud_id);
         if (view_)
             view_->setCloud(result.cloud);
@@ -186,15 +203,18 @@ void StudioBridge::execute(std::function<void(const mantis::client::Client &)> a
         return;
     auto client = client_;
     auto selected = newest_.toStdString();
+    auto project = project_.toStdString();
     request_pending_ = true; // The lease includes queued GUI completion, not just worker execution.
-    watcher_.setFuture(QtConcurrent::run(
-        [client, action, selected] { return collectResult(client, action, {}, selected); }));
+    watcher_.setFuture(QtConcurrent::run([client, action, selected, project] {
+        return collectResult(client, action, {}, selected, project);
+    }));
     emit changed();
 }
 StudioResult StudioBridge::collectResult(const mantis::client::Client &client,
                                          const std::function<void(const mantis::client::Client &)> &action,
                                          std::optional<std::string> artifact,
-                                         const std::string &displayedNewest) {
+                                         const std::string &displayedNewest,
+                                         const std::string &expectedProject) {
     StudioResult result;
     auto attempt = [&](const char *phase, auto work) {
         try {
@@ -215,18 +235,23 @@ StudioResult StudioBridge::collectResult(const mantis::client::Client &client,
     // Never retry the operation: capture and job authority remain in mantisd.
     if (!attempt("snapshot", [&] { result.snapshot = client.snapshot(); }))
         return result;
+    const auto snapshotProject = result.snapshot->project_path();
+    const bool projectChanged = !expectedProject.empty() && expectedProject != snapshotProject;
+    if (artifact && projectChanged)
+        return result; // Explicit selection belongs to the previous project.
     std::string newest;
     if (!artifact) {
         for (const auto &entry : result.snapshot->artifacts())
             if (entry.type() == mantis::schema::points.name && entry.state() == "FINALIZED")
                 newest = entry.id();
-        if (newest.empty() || newest == displayedNewest)
+        if (newest.empty() || (!projectChanged && newest == displayedNewest))
             return result;
         artifact = newest;
     }
     result.artifactAttempted = true;
     if (attempt("artifact", [&] { result.cloud = client.data(*artifact); })) {
         result.cloud_id = *artifact;
+        result.cloud_project = snapshotProject;
         result.newest_id = newest; // A failed load must not mark a cloud as already displayed.
     } else {
         // data() includes a control call and a local mapping. Its failure does not
@@ -286,9 +311,10 @@ void StudioBridge::selectArtifact(QString id) {
     if (!runtime_enabled_ || !connected_ || request_pending_)
         return;
     auto client = client_;
+    auto project = project_.toStdString();
     request_pending_ = true; // The lease includes queued GUI completion, not just worker execution.
-    watcher_.setFuture(
-        QtConcurrent::run([client, id] { return collectResult(client, {}, id.toStdString()); }));
+    watcher_.setFuture(QtConcurrent::run(
+        [client, id, project] { return collectResult(client, {}, id.toStdString(), {}, project); }));
     emit changed();
 }
 void StudioBridge::enablePlugin(QString id, bool enabled) {
@@ -313,8 +339,10 @@ void StudioBridge::refreshPreview() {
     if (id.isEmpty())
         return;
     auto client = client_;
-    preview_watcher_.setFuture(QtConcurrent::run([client, id] {
+    const auto generation = project_generation_;
+    preview_watcher_.setFuture(QtConcurrent::run([client, id, generation] {
         PreviewResult result;
+        result.projectGeneration = generation;
         try {
             auto packet = client.preview(id.toStdString());
             if (!packet || packet->frames.size() != 2)
@@ -347,9 +375,15 @@ void StudioBridge::refreshPreview() {
 void StudioBridge::replay(QString artifact, bool verify) {
     if (!connected_)
         return;
-    execute([this, artifact, verify](const auto &client) {
+    const auto generation = project_generation_;
+    execute([this, artifact, verify, generation](const auto &client) {
         auto job = client.replay(artifact.toStdString(), !verify, verify);
         QMetaObject::invokeMethod(
-            this, [this, job] { replay_ = QString::fromStdString(job); }, Qt::QueuedConnection);
+            this,
+            [this, job, generation] {
+                if (connected_ && generation == project_generation_)
+                    replay_ = QString::fromStdString(job);
+            },
+            Qt::QueuedConnection);
     });
 }

@@ -1,6 +1,7 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
 #include "home_model.hpp"
+#include "projects_model.hpp"
 #include <QAccessible>
 #include <QDir>
 #include <QElapsedTimer>
@@ -1197,6 +1198,7 @@ int main(int argc, char **argv) {
     QQuickStyle::setStyle("Basic");
     qInstallMessageHandler(messages);
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
+    qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
     try {

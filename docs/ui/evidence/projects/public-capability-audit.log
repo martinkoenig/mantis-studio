@@ -1,0 +1,8 @@
+Refusal: Project does not exist
+Refusal: Project already open by another runtime
+Refusal: Invalid local access token
+Embedded NUL rejected; current identity unchanged (partial directory side effects require a separate backend policy).
+Refusal: Stop captures before switching projects
+Refusal: Jobs must finish before switching projects
+BLOCKER VERIFIED: completed replay from A remains readable after both clients confirm B; old preview written into /tmp/mantis-project-capabilities-aimc9bui/B-測定.mantis/cache/previews/6c6c8033-27d3-4f09-a8eb-179e963b9b3f.packet
+PASS: published create/open semantics, two clients, capture/job refusal, auth/invalid/missing path, Unicode/literal paths; New/Open remain BLOCKED in UI

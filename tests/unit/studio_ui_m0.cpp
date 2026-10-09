@@ -1,6 +1,7 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
 #include "home_model.hpp"
+#include "projects_model.hpp"
 #include "screenshot.hpp"
 #include <QDir>
 #include <QEventLoop>
@@ -420,6 +421,7 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
+    qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
     qInstallMessageHandler(messages);
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");

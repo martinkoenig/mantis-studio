@@ -1,8 +1,8 @@
-# Mantis Studio UI (UI-M0 foundation + UI-M1 Home)
+# Mantis Studio UI (UI-M0, UI-M1 Home and UI-M2a Projects)
 
 UI-M0 establishes the Qt 6 / Qt Quick desktop shell, ten routes, a small design
 system and an explicit presentation data contract. UI-M1 adds the dedicated
-[Home dashboard](home.md); the other full workspace tools remain deferred. [Architecture v1](../../MANTIS_STUDIO_ARCHITECTURE.md)
+[Home dashboard](home.md); UI-M2a adds the dedicated [Projects workspace](projects.md). Other full workspace tools remain deferred. [Architecture v1](../../MANTIS_STUDIO_ARCHITECTURE.md)
 and the [master roadmap](../../ROADMAP.md) remain authoritative. This UI milestone
 does not change v0.3/v0.4 implementation or hardware acceptance status.
 
@@ -16,7 +16,7 @@ or treated as evidence of device readiness, calibration, accuracy, laser safety,
 remote support or release versions. In particular, the canonical convention is
 **mm, right-handed +X right / +Y forward / +Z up**, regardless of reference text.
 
-The nine M0 foundation routes retain their existing workflows and planned panels.
+The remaining M0 foundation routes retain their existing workflows and planned panels.
 Home presents bounded current project, logical device, job, artifact and
 event summaries. Readiness, project history and utilization remain explicitly
 unknown/unavailable. Mock has a clearly labelled deterministic showcase; hybrid
@@ -37,6 +37,15 @@ the accepted scenic Hero JPEG stays unchanged. See
 see [asset provenance and reproduction](../../ui/home/assets/README.md) and the
 [reference/before/after inventory](evidence/m1-fidelity-delta.md).
 
+Projects follows the approved gallery/filter/inspector/contents hierarchy. It
+uses an adaptive gallery and right-edge 316px inspector, with discoverable stacked
+Filters/Details controls below 1120 workspace pixels. Samples are local illustrations,
+never runtime project IDs. Live contains one shared daemon project, actual artifact
+metadata and explicit unknown fields. New/Open use a visible safety gate: the
+published operation retains old replay/preview context after a project switch.
+There is no GUI filesystem catalog or mutable project operation in this milestone.
+See [UI-M2a validation and review evidence](validation-m2a.md).
+
 ## Launch and data sources
 
 Ordinary launches remain **live**, initially showing the existing acquisition
@@ -49,6 +58,9 @@ by a hardware-facing UI control.
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
   ./build/debug/bin/mantis-studio --ui-mode=mock --workspace=home \
   --window-size=1536x1024 --quit-after 5000 --screenshot /tmp/mantis-ui-m1-home.png
+
+# Fully offline Projects gallery:
+./build/debug/bin/mantis-studio --ui-mode=mock --workspace=projects
 
 # Runtime Home plus a separately labelled illustrative showcase:
 ./build/debug/bin/mantis-studio --ui-mode=hybrid --workspace=home
@@ -107,7 +119,10 @@ remains a supported internal route. The root `workspace`, context objects
 `pointCloudView`, `leftPreview` and `rightPreview` hooks are retained.
 
 Acquisition is instantiated once, so render attachments and view state survive
-navigation. It retains PointCloudView orbit/zoom, MeasurementView dual previews,
+navigation. On a confirmed change of raw runtime project identity, the bridge
+clears old artifact/newest/replay selections and render/preview images; late preview
+completion from the previous project is rejected. Unconfirmed last-known data
+remains labelled stale. This frontend invalidation does not fix daemon replay isolation. It retains PointCloudView orbit/zoom, MeasurementView dual previews,
 capture/stop/replay/verify, artifact selection, recipe execution, PLY export,
 plugin recovery, jobs/cancellation and diagnostics. At small widths its original
 three-column layout scrolls horizontally rather than hiding working controls.
@@ -174,7 +189,7 @@ work from the master roadmap.
 | `inspect` | Geometry viewing in acquisition; no metrology tools | Selection/measurement evidence · UI-M5 | Feed versioned analysis artifacts, units and validity into visual components |
 | `reverse` | No CAD fitting workflow | Fitting/sections/CAD handoff · UI-M5 | Bind capability-backed derived artifacts; no UI-owned geometry computation |
 | `automate` | Existing jobs/cancellation in acquisition | Sequences and execution history · UI-M6 | Introduce public service-backed intent controller when supported |
-| `projects` | Current project and immutable artifacts in acquisition | Browser and revisions · UI-M2 | Bind project/artifact provider without changing card contracts |
+| `projects` | UI-M2a: current runtime project, bounded artifact search/filter/selection, separate twelve-study mock gallery and inspector | Catalog/CRUD/revisions unavailable; New/Open blocked by verified replay isolation defect | ProjectsModel observes the existing bridge; [safety gate and future public APIs](projects-backend-gap.md) |
 | `devices` | Runtime descriptors; existing seven-stage calibration | Device detail/configuration · UI-M2 | Map real advertised capabilities and evidence; keep controller authority |
 | `plugins` | Runtime inventory/status/recovery in acquisition | Inventory and permissions · UI-M6 | Bind existing plugin descriptors/commands; marketplace is deferred |
 | `settings` | Fixed canonical units, launch mode/viewport | Preferences/appearance/diagnostics · UI-M7 | Add local preferences provider; backend settings require supported services |

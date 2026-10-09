@@ -67,6 +67,9 @@ int main(int argc, char **argv) {
         CHECK(loaded.cloud && loaded.cloud_id == "valid");
         bridge.applyResult(loaded);
         CHECK(bridge.selectedArtifact() == "valid");
+        // The fixture deliberately changes raw project identity on every snapshot.
+        // UI-M2a strengthens invalidation: old selections clear after confirmation,
+        // while the existing phase/code/component and stale-state assertions remain.
         const auto beforeDataFailure = bridge.project();
         auto failedData = ObservedBridge::collectResult(client, {}, "missing");
         CHECK(failedData.snapshot && failedData.issues.size() == 1 && !failedData.cloud);
@@ -76,13 +79,13 @@ int main(int argc, char **argv) {
         CHECK(failedData.issues[0].cause->component == "platform");
         bridge.applyResult(failedData);
         CHECK(bridge.connected() && bridge.capturing() && bridge.project() != beforeDataFailure);
-        CHECK(bridge.selectedArtifact() == "valid" && !issue(bridge, "artifact").empty());
+        CHECK(bridge.selectedArtifact().isEmpty() && !issue(bridge, "artifact").empty());
         auto corruptData = ObservedBridge::collectResult(client, {}, "corrupt");
         CHECK(corruptData.snapshot && corruptData.issues.size() == 1);
         CHECK(corruptData.issues[0].cause.has_value());
         CHECK(corruptData.issues[0].cause->code == mantis::Status::corrupt);
         bridge.applyResult(corruptData);
-        CHECK(bridge.connected() && bridge.selectedArtifact() == "valid");
+        CHECK(bridge.connected() && bridge.selectedArtifact().isEmpty());
         CHECK(issue(bridge, "artifact")["code"].toInt() == static_cast<int>(mantis::Status::corrupt));
         // A control failure during artifact access cannot reuse the preceding snapshot.
         const auto retainedProject = bridge.project();
@@ -90,7 +93,7 @@ int main(int argc, char **argv) {
         CHECK(!failedControl.snapshot && failedControl.issues.size() == 2);
         bridge.applyResult(failedControl);
         CHECK(!bridge.connected() && !bridge.capturing() && bridge.lastKnownCapturing());
-        CHECK(bridge.project() == retainedProject && bridge.selectedArtifact() == "valid");
+        CHECK(bridge.project() == retainedProject && bridge.selectedArtifact().isEmpty());
         CHECK(issue(bridge, "artifact")["component"] == "platform");
         CHECK(issue(bridge, "snapshot")["component"] == "platform");
         mode(client, "idle");
@@ -146,7 +149,7 @@ int main(int argc, char **argv) {
             auto automatic = ObservedBridge::collectResult(client);
             CHECK(automatic.snapshot && automatic.artifactAttempted && automatic.newest_id.empty());
             bridge.applyResult(automatic);
-            CHECK(bridge.connected() && bridge.selectedArtifact() == "valid");
+            CHECK(bridge.connected() && bridge.selectedArtifact().isEmpty());
         }
         CHECK(snapshots.size() > 10);
         std::cout << "PASS: structured operation/data failures, confirmed snapshots, loss, authentication "

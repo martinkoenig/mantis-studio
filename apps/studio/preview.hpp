@@ -17,4 +17,4 @@ class MeasurementView : public QQuickPaintedItem {
         painter->drawImage(target, image_);
     }
 };
-struct PreviewResult { QImage left, right; std::string error; };
+struct PreviewResult { QImage left, right; std::string error; quint64 projectGeneration{}; };

@@ -16,7 +16,7 @@ struct StudioIssue {
 struct StudioResult {
     std::optional<mantis::wire::v1::Response> snapshot;
     mantis::data::Published cloud;
-    std::string cloud_id, newest_id;
+    std::string cloud_id, newest_id, cloud_project;
     std::vector<StudioIssue> issues;
     bool operationAttempted{}, artifactAttempted{};
 };
@@ -51,6 +51,8 @@ class StudioBridge : public QObject {
     QPointer<MeasurementView> left_, right_;
     QString acquisition_text_, replay_;
     bool dual_preview_{}, preview_reported_{};
+    quint64 project_generation_{};
+
     void refreshPreview();
     QPointer<mantis::render::PointCloudView> view_;
     void execute(std::function<void(const mantis::client::Client &)> action = {});
@@ -58,10 +60,15 @@ class StudioBridge : public QObject {
   protected:
     // Internal presentation seam; asynchronous completions and deterministic tests share this path.
     void applyResult(const StudioResult &result);
+    void applyPreview(PreviewResult);
+    quint64 projectGeneration() const {
+        return project_generation_;
+    }
     static StudioResult collectResult(const mantis::client::Client &client,
                                       const std::function<void(const mantis::client::Client &)> &action = {},
                                       std::optional<std::string> artifact = {},
-                                      const std::string &displayedNewest = {});
+                                      const std::string &displayedNewest = {},
+                                      const std::string &expectedProject = {});
 
   public:
     explicit StudioBridge(QObject *parent = nullptr, bool runtimeEnabled = true);
