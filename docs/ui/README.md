@@ -29,6 +29,10 @@ inside Activity, with explicit provenance and unavailable dates/sizes; acquisiti
 artifact workflows are unchanged. Mock job details and unsupported project imports
 are disabled with visible/accessibility explanations. Learn/Tips open a working
 local read-only guide; Browse examples focuses the mock/hybrid showcase.
+Home remains fluid below a 1440-logical-pixel content limit and centers within
+the workspace above it. The existing stacked rail and vertical scroll remain;
+there is no horizontal scroll, global zoom or minimum-window-size change.
+See the [nine-size / HiDPI validation](evidence/ultrawide/README.md).
 Six original offline Blender/JPEG assets replace the earlier small Canvas studies;
 see [asset provenance and reproduction](../../ui/home/assets/README.md) and the
 [reference/before/after inventory](evidence/m1-fidelity-delta.md).

@@ -8,6 +8,8 @@ ScrollView {
     id: root
     required property var bridge
     property string mode: "live"
+    // Logical pixels: allow modest growth beyond the approved composition.
+    readonly property real maximumContentWidth: 1440
     readonly property alias liveModel: live
     signal navigate(string route)
     clip: true
@@ -22,24 +24,32 @@ ScrollView {
     }
     HomeModel { id: live; bridge: root.mode === "mock" ? null : root.bridge }
     HomeDemo { id: demo }
-    ColumnLayout {
-        width: root.availableWidth; spacing: Theme.padding
-        HomeDashboard {
-            id: dashboard
-            Layout.fillWidth: true
-            hasExamples: root.mode !== "live"
-            onRevealExamples: root.showExamples()
-            snapshot: root.mode === "mock" ? demo.data : live.data
-            demoProjects: demo.projects
-            onNavigate: function(route) { root.navigate(route) }
-        }
+    Item {
+        width: root.availableWidth
+        implicitHeight: content.implicitHeight
         ColumnLayout {
-            visible: root.mode === "hybrid"
-            Layout.fillWidth: true; spacing: Theme.gap
-            HomeText { objectName: "homeHybridSeparation"; text: "Demo / Mock showcase · separate from the live snapshot above"; color: Theme.warning; font.bold: true; Layout.fillWidth: true }
-            Item {
-                Layout.fillWidth: true; implicitHeight: showcase.implicitHeight
-                HomeProjects { id: showcase; width: parent.width; projects: demo.projects }
+            id: content
+            objectName: "homeContent"
+            width: Math.min(parent.width, root.maximumContentWidth)
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Theme.padding
+            HomeDashboard {
+                id: dashboard
+                Layout.fillWidth: true
+                hasExamples: root.mode !== "live"
+                onRevealExamples: root.showExamples()
+                snapshot: root.mode === "mock" ? demo.data : live.data
+                demoProjects: demo.projects
+                onNavigate: function(route) { root.navigate(route) }
+            }
+            ColumnLayout {
+                visible: root.mode === "hybrid"
+                Layout.fillWidth: true; spacing: Theme.gap
+                HomeText { objectName: "homeHybridSeparation"; text: "Demo / Mock showcase · separate from the live snapshot above"; color: Theme.warning; font.bold: true; Layout.fillWidth: true }
+                Item {
+                    Layout.fillWidth: true; implicitHeight: showcase.implicitHeight
+                    HomeProjects { id: showcase; width: parent.width; projects: demo.projects }
+                }
             }
         }
     }

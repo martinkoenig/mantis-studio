@@ -16,10 +16,17 @@ and in Acquisition's working browsing, replay, processing and export controls.
 
 The right rail contains differentiated Scanner, System Status, Running Jobs and
 Tips & Updates cards. Below 1100 content pixels it stacks beneath the main
-column. Home scrolls vertically, with no horizontal scroll. At 1536×1024 populated
+column. A centered container remains fluid up to **1440 logical pixels** and
+stops growing beyond that width, with equal margins inside the Home workspace.
+The rail uses its 348px preferred width beside the main column and fills the
+stacked row below the breakpoint. Dimensions remain logical pixels at HiDPI;
+there is no application zoom, global scale or minimum-window-size change.
+Home scrolls vertically, with no horizontal scroll. At 1536×1024 populated
 mock, the Activity heading and actual rows appear above the shell footer. The
 [visual delta inventory](evidence/m1-fidelity-delta.md) records the before/after
 comparison; [validation](validation-m1.md) scopes executed checks and screenshots.
+The [ultrawide validation](evidence/ultrawide/README.md) covers all nine requested
+viewports, mode/resize transitions, centered bounds and DPR 2.
 
 | Section | Live authority / unavailable fields | Mock / hybrid | Click intent |
 | --- | --- | --- | --- |

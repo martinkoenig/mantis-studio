@@ -4,6 +4,7 @@ import "../design"
 import "../components"
 ColumnLayout {
     id: root
+    objectName: "homeDashboard"
     required property var snapshot
     required property var demoProjects
     readonly property alias projectGallery: projects
@@ -159,7 +160,10 @@ ColumnLayout {
             }
         }
         ColumnLayout {
-            Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: root.stacked ? -1 : 332; Layout.maximumWidth: root.stacked ? Infinity : 348
+            objectName: "homeRightRail"
+            // Fill the stacked row; keep the preferred rail width beside the main column.
+            // Avoid changing a maximum-width hint retained by the Qt 6.4 layout cache.
+            Layout.fillWidth: root.stacked; Layout.minimumWidth: 0; Layout.preferredWidth: 348
             Layout.alignment: Qt.AlignTop; spacing: 12
             HomeCard {
                 Layout.fillWidth: true; title: "Scanner"; freshness: root.staleLabel

@@ -1,4 +1,4 @@
-# UI-M1 Home validation — 2026-10-08
+# UI-M1 Home validation — 2026-10-09
 
 Scope: [Home contract](home.md), based on accepted UI-M0
 `3ba819ab96686689c69888e1a1a223a376de7375`, isolated branch
@@ -6,6 +6,35 @@ Scope: [Home contract](home.md), based on accepted UI-M0
 client/protocol or plugin ABI change. Capture and calibration retain daemon authority.
 The [binding reliability standard](../architecture/reliability-performance-and-validation.md)
 and [M0 validation](validation.md) remain authoritative.
+
+## Maximized / ultrawide correction
+
+Reviewed baseline: `1eaae357783f9a348c012ac12f11d9bf8f1199ee`. The actual
+3440×1440 Qt 6.4 baseline confirmed unbounded main-column growth. Home now uses a
+centered, fluid container capped at 1440 **logical** pixels. The existing design,
+source/CTA contracts, backend, model, assets and 1080×720 global minimum remain
+unchanged; the standalone artifacts card stays absent. The accepted 1536×1024
+mock screenshot is byte-identical. [Evidence and measurements](evidence/ultrawide/README.md)
+include all nine requested sizes in mock/live/hybrid, DPR 2 and vertical showcase
+scroll. The rail preserves its preferred 348px width beside the main column and
+fills the stacked row, avoiding Qt 6.4's stale maximum-width hint during resize.
+
+New regression coverage checks measured width/margins, fluid sizing, main/rail
+geometry, bounded/nonoverlapping cards, horizontal control bounds, zero horizontal
+scroll, unchanged minimum size, persistent project/action delegates, retained
+keyboard focus, mouse/keyboard guide actions and hybrid scroll/focus. It crosses
+the stacked rail, two/four-card and maximum-content-width thresholds in both
+directions in all modes. `studio-home-hidpi` adds DPR 2 to the complete Studio
+CTest suite; no existing test or deadline is weakened. Existing CI uploads retain
+all 73 M1 PNGs, complete full-suite output and repeated Home logs.
+
+Qt 6.4 complete Studio passed **50/50 in 167.02s**, followed by final Home/public-wire/
+HiDPI mouse-and-keyboard checks **3/3 in 29.28s**. The extra interaction assertions
+were added after that full run. Qt 6.9 Studio ASan/UBSan/LSan final bridge/Home/
+HiDPI/M0/CLI/calibration-QML/acceptance checks passed **8/8 in 67.07s**, with leak
+detection enabled and no suppressions. Exact-final-commit five-job CI remains the delivery
+gate; its run/SHA and both architecture artifact URLs belong in the final handoff.
+Earlier CI links and the earlier fidelity checks below retain their original scope.
 
 ## Visual fidelity completion (supersedes earlier presentation)
 
