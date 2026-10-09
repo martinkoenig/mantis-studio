@@ -1,0 +1,138 @@
+2026-10-09T11:31:56.0771276Z Test project /home/runner/work/mantis-studio/mantis-studio/build/ci
+2026-10-09T11:31:56.1156187Z       Start  1: studio-bridge-errors
+2026-10-09T11:31:56.3145057Z  1/60 Test  #1: studio-bridge-errors ...............   Passed    0.19 sec
+2026-10-09T11:31:56.3205606Z       Start  2: studio-projects-qml
+2026-10-09T11:32:08.3465165Z  2/60 Test  #2: studio-projects-qml ................   Passed   12.03 sec
+2026-10-09T11:32:08.3466237Z       Start  3: studio-projects-states
+2026-10-09T11:32:16.6302769Z  3/60 Test  #3: studio-projects-states .............   Passed    8.28 sec
+2026-10-09T11:32:16.6304453Z       Start  4: studio-projects-resize
+2026-10-09T11:32:27.9030726Z  4/60 Test  #4: studio-projects-resize .............   Passed   11.27 sec
+2026-10-09T11:32:27.9031858Z       Start  5: studio-projects-hidpi
+2026-10-09T11:32:40.9721865Z  5/60 Test  #5: studio-projects-hidpi ..............   Passed   13.07 sec
+2026-10-09T11:32:40.9723090Z       Start  6: studio-projects-fractional-dpi
+2026-10-09T11:32:49.0870532Z  6/60 Test  #6: studio-projects-fractional-dpi .....   Passed    8.11 sec
+2026-10-09T11:32:49.0871674Z       Start  7: studio-projects-wire
+2026-10-09T11:32:51.8603948Z  7/60 Test  #7: studio-projects-wire ...............   Passed    2.77 sec
+2026-10-09T11:32:51.8604350Z       Start  8: studio-home-qml
+2026-10-09T11:33:21.6645194Z  8/60 Test  #8: studio-home-qml ....................   Passed   29.80 sec
+2026-10-09T11:33:21.6646505Z       Start  9: studio-home-wire
+2026-10-09T11:33:23.3636779Z  9/60 Test  #9: studio-home-wire ...................   Passed    1.70 sec
+2026-10-09T11:33:23.3637707Z       Start 10: studio-home-hidpi
+2026-10-09T11:33:31.4878190Z 10/60 Test #10: studio-home-hidpi ..................   Passed    8.12 sec
+2026-10-09T11:33:31.4879801Z       Start 11: studio-home-fractional-dpi
+2026-10-09T11:33:38.0069342Z 11/60 Test #11: studio-home-fractional-dpi .........   Passed    6.52 sec
+2026-10-09T11:33:38.0070579Z       Start 12: studio-home-resize
+2026-10-09T11:33:53.9175418Z 12/60 Test #12: studio-home-resize .................   Passed   15.91 sec
+2026-10-09T11:33:53.9176524Z       Start 13: studio-home-states
+2026-10-09T11:34:01.1231652Z 13/60 Test #13: studio-home-states .................   Passed    7.21 sec
+2026-10-09T11:34:01.1232732Z       Start 14: studio-ui-m0-qml
+2026-10-09T11:34:02.4458723Z 14/60 Test #14: studio-ui-m0-qml ...................***Exception: SegFault  1.32 sec
+2026-10-09T11:34:02.4459073Z 
+2026-10-09T11:34:02.4462037Z       Start 15: studio-ui-m0-cli
+2026-10-09T11:34:19.8390462Z 15/60 Test #15: studio-ui-m0-cli ...................   Passed   17.39 sec
+2026-10-09T11:34:19.8391573Z       Start 16: studio-calibration-controller
+2026-10-09T11:34:19.9700860Z 16/60 Test #16: studio-calibration-controller ......   Passed    0.13 sec
+2026-10-09T11:34:19.9702088Z       Start 17: studio-calibration-daemon
+2026-10-09T11:34:23.6585665Z 17/60 Test #17: studio-calibration-daemon ..........   Passed    3.69 sec
+2026-10-09T11:34:23.6588471Z       Start 18: studio-calibration-qml
+2026-10-09T11:34:24.0522462Z 18/60 Test #18: studio-calibration-qml .............   Passed    0.39 sec
+2026-10-09T11:34:24.0523451Z       Start 19: project-public-capabilities
+2026-10-09T11:34:25.4293650Z 19/60 Test #19: project-public-capabilities ........   Passed    1.38 sec
+2026-10-09T11:34:25.4294706Z       Start 20: calibration-service-protocol
+2026-10-09T11:34:34.0479435Z 20/60 Test #20: calibration-service-protocol .......   Passed    8.62 sec
+2026-10-09T11:34:34.0479983Z       Start 21: calibration-client-integration
+2026-10-09T11:34:39.6207107Z 21/60 Test #21: calibration-client-integration .....   Passed    5.57 sec
+2026-10-09T11:34:39.6207579Z       Start 22: python-calibration
+2026-10-09T11:34:39.6817218Z 22/60 Test #22: python-calibration .................   Passed    0.06 sec
+2026-10-09T11:34:39.6818386Z       Start 23: protocol-field-compatibility
+2026-10-09T11:34:39.7430133Z 23/60 Test #23: protocol-field-compatibility .......   Passed    0.06 sec
+2026-10-09T11:34:39.7431512Z       Start 24: calibration-artifacts
+2026-10-09T11:34:43.3373734Z 24/60 Test #24: calibration-artifacts ..............   Passed    3.59 sec
+2026-10-09T11:34:43.3374551Z       Start 25: active-calibration-binding
+2026-10-09T11:34:46.6203939Z 25/60 Test #25: active-calibration-binding .........   Passed    3.28 sec
+2026-10-09T11:34:46.6204493Z       Start 26: calibration-revision-store
+2026-10-09T11:34:46.6461724Z 26/60 Test #26: calibration-revision-store .........   Passed    0.03 sec
+2026-10-09T11:34:46.6462519Z       Start 27: project-migration-v1-v2
+2026-10-09T11:34:46.6790924Z 27/60 Test #27: project-migration-v1-v2 ............   Passed    0.03 sec
+2026-10-09T11:34:46.6791647Z       Start 28: provenance-calibration-reference
+2026-10-09T11:34:46.6943958Z 28/60 Test #28: provenance-calibration-reference ...   Passed    0.02 sec
+2026-10-09T11:34:46.6944920Z       Start 29: calibration-solver-opencv
+2026-10-09T11:34:48.5161332Z 29/60 Test #29: calibration-solver-opencv ..........   Passed    1.82 sec
+2026-10-09T11:34:48.5162345Z       Start 30: calibration-solve
+2026-10-09T11:34:48.5370520Z 30/60 Test #30: calibration-solve ..................   Passed    0.02 sec
+2026-10-09T11:34:48.5371885Z       Start 31: calibration-dataset
+2026-10-09T11:34:48.5433021Z 31/60 Test #31: calibration-dataset ................   Passed    0.01 sec
+2026-10-09T11:34:48.5433977Z       Start 32: calibration-dataset-ingestion
+2026-10-09T11:35:16.6357551Z 32/60 Test #32: calibration-dataset-ingestion ......   Passed   28.09 sec
+2026-10-09T11:35:16.6358831Z       Start 33: calibration-opencv
+2026-10-09T11:35:19.6050657Z 33/60 Test #33: calibration-opencv .................   Passed    2.97 sec
+2026-10-09T11:35:19.6051404Z       Start 34: calibration-observation
+2026-10-09T11:35:19.6070361Z 34/60 Test #34: calibration-observation ............   Passed    0.00 sec
+2026-10-09T11:35:19.6071713Z       Start 35: calibration-target
+2026-10-09T11:35:19.6087303Z 35/60 Test #35: calibration-target .................   Passed    0.00 sec
+2026-10-09T11:35:19.6088494Z       Start 36: legacy-abi
+2026-10-09T11:35:19.6103191Z 36/60 Test #36: legacy-abi .........................   Passed    0.00 sec
+2026-10-09T11:35:19.6104012Z       Start 37: frozen-l2-abi
+2026-10-09T11:35:19.6112674Z 37/60 Test #37: frozen-l2-abi ......................   Passed    0.00 sec
+2026-10-09T11:35:19.6113507Z       Start 38: frozen-l2-catalog
+2026-10-09T11:35:19.6551642Z 38/60 Test #38: frozen-l2-catalog ..................   Passed    0.04 sec
+2026-10-09T11:35:19.6552920Z       Start 39: calibration-service-activation
+2026-10-09T11:35:24.1707835Z 39/60 Test #39: calibration-service-activation .....   Passed    4.52 sec
+2026-10-09T11:35:24.1708709Z       Start 40: capture-calibration-binding
+2026-10-09T11:35:42.3748499Z 40/60 Test #40: capture-calibration-binding ........   Passed   18.20 sec
+2026-10-09T11:35:42.3749760Z       Start 41: x1-pairing
+2026-10-09T11:35:42.9373612Z 41/60 Test #41: x1-pairing .........................   Passed    0.56 sec
+2026-10-09T11:35:42.9375544Z       Start 42: x1-pairing-stream
+2026-10-09T11:35:51.8070899Z 42/60 Test #42: x1-pairing-stream ..................   Passed    8.87 sec
+2026-10-09T11:35:51.8072269Z       Start 43: x1-media
+2026-10-09T11:35:51.8127135Z 43/60 Test #43: x1-media ...........................   Passed    0.01 sec
+2026-10-09T11:35:51.8128678Z       Start 44: acquisition
+2026-10-09T11:35:52.9571858Z 44/60 Test #44: acquisition ........................   Passed    1.14 sec
+2026-10-09T11:35:52.9572703Z       Start 45: acquisition-integration
+2026-10-09T11:36:01.4704592Z 45/60 Test #45: acquisition-integration ............   Passed    8.51 sec
+2026-10-09T11:36:01.4706072Z       Start 46: acquisition-y10p-integration
+2026-10-09T11:36:10.2866383Z 46/60 Test #46: acquisition-y10p-integration .......   Passed    8.82 sec
+2026-10-09T11:36:10.2866880Z       Start 47: control-listener
+2026-10-09T11:36:16.5857148Z 47/60 Test #47: control-listener ...................   Passed    6.30 sec
+2026-10-09T11:36:16.5857930Z       Start 48: acquisition-qos
+2026-10-09T11:36:16.6388697Z 48/60 Test #48: acquisition-qos ....................   Passed    0.05 sec
+2026-10-09T11:36:16.6389447Z       Start 49: raw-capture
+2026-10-09T11:36:16.7341161Z 49/60 Test #49: raw-capture ........................   Passed    0.09 sec
+2026-10-09T11:36:16.7342131Z       Start 50: projected-sequencer
+2026-10-09T11:36:16.8543407Z 50/60 Test #50: projected-sequencer ................   Passed    0.12 sec
+2026-10-09T11:36:16.8544221Z       Start 51: projected-light-semantics
+2026-10-09T11:36:16.8735784Z 51/60 Test #51: projected-light-semantics ..........   Passed    0.02 sec
+2026-10-09T11:36:16.8736999Z       Start 52: packed-image
+2026-10-09T11:36:16.8751693Z 52/60 Test #52: packed-image .......................   Passed    0.00 sec
+2026-10-09T11:36:16.8752523Z       Start 53: core
+2026-10-09T11:36:16.9927645Z 53/60 Test #53: core ...............................   Passed    0.12 sec
+2026-10-09T11:36:16.9928570Z       Start 54: projected-light-contract
+2026-10-09T11:36:17.0802699Z 54/60 Test #54: projected-light-contract ...........   Passed    0.09 sec
+2026-10-09T11:36:17.0803584Z       Start 55: c-abi
+2026-10-09T11:36:17.0813923Z 55/60 Test #55: c-abi ..............................   Passed    0.00 sec
+2026-10-09T11:36:17.0814271Z       Start 56: boundaries
+2026-10-09T11:36:17.1094997Z 56/60 Test #56: boundaries .........................   Passed    0.03 sec
+2026-10-09T11:36:17.1095682Z       Start 57: python-capture
+2026-10-09T11:36:17.2175241Z 57/60 Test #57: python-capture .....................   Passed    0.11 sec
+2026-10-09T11:36:17.2175634Z       Start 58: acceptance
+2026-10-09T11:36:28.2287615Z 58/60 Test #58: acceptance .........................***Failed   11.01 sec
+2026-10-09T11:36:28.2288009Z Traceback (most recent call last):
+2026-10-09T11:36:28.2288628Z   File "/home/runner/work/mantis-studio/mantis-studio/tests/integration/acceptance.py", line 90, in <module>
+2026-10-09T11:36:28.2289233Z     until(lambda: "STUDIO_ACCEPTANCE_READY" in (root / "studio.log").read_text())
+2026-10-09T11:36:28.2289807Z   File "/home/runner/work/mantis-studio/mantis-studio/tests/integration/acceptance.py", line 47, in until
+2026-10-09T11:36:28.2290295Z     raise AssertionError("Condition timed out")
+2026-10-09T11:36:28.2290568Z AssertionError: Condition timed out
+2026-10-09T11:36:28.2290732Z 
+2026-10-09T11:36:28.2290844Z       Start 59: q6a-validation-harness
+2026-10-09T11:36:29.2037652Z 59/60 Test #59: q6a-validation-harness .............   Passed    0.97 sec
+2026-10-09T11:36:29.2038533Z       Start 60: x1-calibration-validation
+2026-10-09T11:36:58.0268077Z 60/60 Test #60: x1-calibration-validation ..........   Passed   28.82 sec
+2026-10-09T11:36:58.0273446Z 
+2026-10-09T11:36:58.0273624Z 97% tests passed, 2 tests failed out of 60
+2026-10-09T11:36:58.0273826Z 
+2026-10-09T11:36:58.0273907Z Total Test time (real) = 301.95 sec
+2026-10-09T11:36:58.0274067Z 
+2026-10-09T11:36:58.0274150Z The following tests FAILED:
+2026-10-09T11:36:58.0274373Z 	 14 - studio-ui-m0-qml (SEGFAULT)
+2026-10-09T11:36:58.0274598Z 	 58 - acceptance (Failed)
+2026-10-09T11:36:58.0274951Z Errors while running CTest

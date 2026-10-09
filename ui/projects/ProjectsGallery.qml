@@ -30,8 +30,9 @@ Item {
             width: root.cardWidth; height: root.cardHeight
             padding: 0; hoverEnabled: true; activeFocusOnTab: true
             function scheduleReveal() {
-                if (activeFocus) Qt.callLater(function() { if (card.activeFocus) root.revealFocusedCard(card) })
+                if (activeFocus) Qt.callLater(card.revealIfFocused)
             }
+            function revealIfFocused() { if (card.activeFocus) root.revealFocusedCard(card) }
             onActiveFocusChanged: scheduleReveal()
             onYChanged: scheduleReveal()
             onHeightChanged: scheduleReveal()

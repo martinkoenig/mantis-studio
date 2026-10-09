@@ -35,3 +35,9 @@ Complete local suites: [Qt 6.4](qt64-full-ctest.log),
 [Qt 6.9 Studio sanitizers](qt69-full-ctest.log),
 [Studio OFF](headless-verified.log) and
 [headless sanitizers](headless-sanitizers-verified.log).
+
+ARM64 CI investigation retains the [first](ci-first-arm-job.log) and
+[second](ci-second-arm-job.log) failures and the
+[native GDB/QML stack](ci-arm-qml-stack.log) identifying the shared icon paint
+handler. These are failed runs, not final verification. See the validation record
+for the Qt 6.4 captured-context compatibility correction and exact-final CI gate.

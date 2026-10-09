@@ -37,7 +37,11 @@ FocusScope {
     readonly property string operationBlocker: "New/Open blocked: the runtime retains old-project replay queues and preview leases after switching. A completed replay from A can write its preview into B. Runtime isolation must be fixed first."
     onSampleRowsChanged: {
         if (!sampleRows.some(function(p) { return p.key === sampleKey })) sampleKey = sampleRows.length ? sampleRows[0].key : ""
-        Qt.callLater(function() { const focus = root.Window.window ? root.Window.window.activeFocusItem : null; if (root.visible && focus && !focus.visible) search.forceActiveFocus(Qt.TabFocusReason) })
+        Qt.callLater(root.restoreSearchFocus)
+    }
+    function restoreSearchFocus() {
+        const focus = root.Window.window ? root.Window.window.activeFocusItem : null
+        if (root.visible && focus && !focus.visible) search.forceActiveFocus(Qt.TabFocusReason)
     }
     Keys.onEscapePressed: {
         if (!multiPane && detailsOpen) { detailsOpen = false; detailsToggle.forceActiveFocus(Qt.TabFocusReason) }
@@ -52,20 +56,20 @@ FocusScope {
     }
     Connections {
         target: root.Window.window
-        function onActiveFocusItemChanged() { Qt.callLater(function() { root.revealFocused() }) }
+        function onActiveFocusItemChanged() { Qt.callLater(root.revealFocused) }
     }
     Connections {
         target: scroll.contentItem
-        function onContentHeightChanged() { Qt.callLater(function() { root.revealFocused() }) }
+        function onContentHeightChanged() { Qt.callLater(root.revealFocused) }
     }
     Connections {
         target: content
-        function onHeightChanged() { Qt.callLater(function() { root.revealFocused() }) }
+        function onHeightChanged() { Qt.callLater(root.revealFocused) }
     }
     Connections {
         target: gallery
-        function onHeightChanged() { Qt.callLater(function() { root.revealFocused() }) }
-        function onYChanged() { Qt.callLater(function() { root.revealFocused() }) }
+        function onHeightChanged() { Qt.callLater(root.revealFocused) }
+        function onYChanged() { Qt.callLater(root.revealFocused) }
     }
     signal navigate(string route)
     function reveal(item) {

@@ -467,6 +467,9 @@ int main(int argc, char **argv) {
                         QString(route).replace(0, 1, route.left(1).toUpper()),
                     "Wrong workspace title");
             require(window->grabWindow().save(output + "/mock-" + route + ".png"), "Screenshot failed");
+            // Exercise queued QML focus callbacks together with engine-managed collection.
+            // This strengthens the route/lifetime check without changing ownership or JIT.
+            engine.collectGarbage();
         }
         auto *home = checkedItem(window->contentItem(), "nav_home");
         home->forceActiveFocus();

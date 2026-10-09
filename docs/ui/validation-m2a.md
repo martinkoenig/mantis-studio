@@ -58,6 +58,9 @@ selection when that fixture confirms a different project path on every snapshot;
 the prior retention assertions conflicted with the required project-context safety
 contract. All its operation, transport, artifact and authentication checks remain.
 Other existing QML hosts only register/link the new model for the shared shell.
+The M0 route test additionally reports each stage and collects engine-managed
+garbage after every route; its original assertions remain enabled. Both ON CI
+jobs now repeat M0 as well as Home/Projects/resize, twelve executions total.
 
 ## New contracts and safety evidence
 
@@ -202,6 +205,35 @@ network art or runtime image generation. Initial clipped bracket framing was
 rejected by validation and corrected before packaging.
 
 ## Failure evidence and limitations
+
+Initial exact-revision CI failed the native ARM64 M0 route test while the other
+four jobs passed. The evidence refresh reproduced it; that run also retained an
+acceptance ready-marker timeout. Neither failure was discarded or retried into
+an alleged pass. Diagnostic runs
+[af7cb37](https://github.com/martinkoenig/mantis-studio/actions/runs/37924972256) and
+[9b9a746](https://github.com/martinkoenig/mantis-studio/actions/runs/37926818410)
+retained the crash. GDB identifies `QV4::MemoryManager::collectFromJSStack`; Qt's
+exported QML stack helper identifies `StudioIcon.qml`, `expression for onPaint`,
+line 15. [Full QML/backtrace evidence](evidence/projects/ci-arm-qml-stack.log),
+[first failure](evidence/projects/ci-first-arm-job.log) and
+[second failure](evidence/projects/ci-second-arm-job.log) remain available.
+
+Qt's upstream [QTBUG-111935 fix](https://codereview.qt-project.org/c/qt/qtdeclarative/+/466808)
+adds accumulator preservation around captured call-context creation in the JIT;
+the Qt 6.4.2 source lacks that fix. The shared stroke icon now uses persistent
+helpers with explicit canvas arguments, removing the handler's captured closures
+while preserving every coordinate, drawing operation and style. Projects queues
+bound focus methods directly instead of repeatedly allocating closures. No global
+JIT/interpreter/GC override, test skip or backend change is used. The failed-job
+diagnostic detector uses portable `grep`; the first diagnostic run lacked `rg`.
+
+Final label checks also caught Qt Basic's indicator padding being added to the
+custom combo text padding. Explicit control padding fixes source/sort truncation;
+all size/source checks assert those labels are readable. Native checks capture a
+rendered frame before geometry checks and wait for actual compositor state rather
+than a fixed 200ms delay. A later GNOME rerun was blocked by the locked session
+(`org.gnome.ScreenSaver.GetActive` returned true); earlier unlocked native passes
+are distinguished from that rerun. Offscreen final matrices remain mandatory.
 
 Earlier Qt 6.9 runs exposed a fixed-30ms focus-scroll test observing old content
 height between frames. [Failure evidence](evidence/projects/README.md) is retained.

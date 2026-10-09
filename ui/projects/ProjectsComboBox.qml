@@ -4,6 +4,8 @@ import "../design"
 ComboBox {
     id: root
     implicitHeight: 32
+    // The text item owns its padding; avoid adding Basic's padding a second time.
+    padding: 0; leftPadding: 0; rightPadding: 0; topPadding: 0; bottomPadding: 0
     activeFocusOnTab: true
     contentItem: ProjectsText {
         text: root.displayText; color: root.enabled ? Theme.text : Theme.muted

@@ -347,6 +347,9 @@ void bounds(QQuickWindow *w) {
               "Collapsed panels undiscoverable");
     if (gallery->isVisible() && !root->property("listMode").toBool()) {
         const auto width = gallery->property("cardWidth").toDouble();
+        if (width < 165 || width > 380)
+            std::cerr << "Gallery bounds at check: window=" << w->width() << " workspace=" << root->width()
+                      << " gallery=" << gallery->width() << " card=" << width << '\n';
         check(width >= 165 && width <= 380, "Gallery cards excessively narrow/wide");
         for (int i = 0; i < 12; ++i) {
             auto *card = item(w, "projectsMockCard" + QString::number(i));
@@ -375,6 +378,12 @@ void bounds(QQuickWindow *w) {
         check(r.left() >= -1 && r.right() <= root->width() + 1 && r.top() >= -1 &&
                   r.bottom() <= root->height() + 1,
               "Toolbar clipped");
+    }
+    for (const auto &n : QStringList{"projectsSort", "projectsSource"}) {
+        auto *p = item(w, n);
+        auto *label = p->property("contentItem").value<QQuickItem *>();
+        check(!p->isVisible() || (label && !label->property("truncated").toBool()),
+              "Built-in sort/source label was elided by duplicate control padding");
     }
     std::cout << "Projects bounds: " << w->width() << "x" << w->height() << " DPR=" << w->devicePixelRatio()
               << " gallery=" << gallery->width() << " columns=" << gallery->property("columns").toInt()
@@ -561,19 +570,20 @@ void native(QQuickWindow *w, Observed &b, const QString &out) {
         top(w);
         check(QTest::qWaitForWindowExposed(w, 5000) && w->isExposed(),
               "Native compositor did not expose window");
-        bounds(w);
         capture(w, out, "native-normal-" + mode);
+        bounds(w);
         const auto normal = w->size();
         item(w, "projectsSearch")->forceActiveFocus(Qt::TabFocusReason);
         w->showMaximized();
-        QTest::qWait(200);
-        check(QTest::qWaitForWindowExposed(w, 5000) && w->visibility() == QWindow::Maximized,
+        check(QTest::qWaitFor([&] { return w->isExposed() && w->visibility() == QWindow::Maximized; }, 5000),
               "Native maximize failed");
-        bounds(w);
         capture(w, out, "native-maximized-" + mode);
+        bounds(w);
         w->showNormal();
-        QTest::qWait(200);
-        check(QTest::qWaitForWindowExposed(w, 5000) && w->size() == normal, "Native restore failed");
+        check(QTest::qWaitFor([&] { return w->isExposed() && w->visibility() == QWindow::Windowed &&
+                                             w->size() == normal; }, 5000),
+              "Native restore failed");
+        capture(w, out, "native-restored-" + mode);
         bounds(w);
         auto *search = item(w, "projectsSearch");
         std::cout << "Native focus: mode=" << mode.toStdString() << " active=" << w->isActive() << " item="
