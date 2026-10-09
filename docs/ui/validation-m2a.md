@@ -23,7 +23,7 @@ docker exec mantis-ui-m0-qt64 ctest --test-dir /work/build/qt64 --output-on-fail
 docker exec mantis-ui-m0-qt64 ctest --test-dir /work/build/qt64-headless --output-on-failure
 docker exec mantis-ui-m0-qt64 ctest --test-dir /work/build/qt64-headless-sanitizers --output-on-failure
 docker exec mantis-ui-m0-qt64 ctest --test-dir /work/build/qt64 \
-  -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize)$' \
+  -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize|studio-ui-m0-qml)$' \
   --repeat until-fail:3 --output-on-failure
 ```
 
@@ -44,13 +44,13 @@ matrix job remains headless, and Qt 6.9 provides extra Studio ON evidence.
 
 | Final local suite | Result |
 | --- | --- |
-| Qt 6.4 Studio ON | 60/60 passed, 256.37s |
+| Qt 6.4 Studio ON | 60/60 passed, 240.85s |
 | Studio OFF | 42/42 passed, 101.81s |
 | Headless ASan/UBSan/LSan | 42/42 passed, 234.28s |
-| Qt 6.9 Studio ON ASan/UBSan/LSan | 60/60 passed, 472.37s |
-| Qt 6.4 Home/Projects/resize, each ×3 | 9/9 executions passed, 141.35s |
+| Qt 6.9 Studio ON ASan/UBSan/LSan | 60/60 passed, 418.66s |
+| Qt 6.4 Home/Projects/resize/M0, each ×3 | 12/12 executions passed, 154.13s |
 | Qt 6.9 Projects focus/layout stress ×10 | 10/10 passed, 137.95s |
-| Native Wayland mock/live/hybrid maximize/restore | Three final passes, all three sources; exposure/focus/maximize/restore passed |
+| Native Wayland mock/live/hybrid maximize/restore | Three earlier unlocked passes, all three sources; latest rerun blocked by locked desktop |
 
 The suite has 60 Studio ON / 42 OFF tests (accepted baseline: 53 / 41). No test was
 removed or disabled. Existing bridge fixture assertions now require clearing old
@@ -146,7 +146,7 @@ docker exec mantis-ui-m0-qt64 env QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=sof
 ```
 
 Exit status was zero; the full image was inspected. The retained default-view
-capture was refreshed because its earlier version preceded final tab-label polish.
+capture and selected matrix images were refreshed after final tab and combo-label polish.
 The complete suites and QML matrix already used the final implementation.
 
 Full Qt captures were inspected against the approved reference. The desktop
@@ -156,7 +156,10 @@ controls and preserve scroll access; ultrawide layouts add columns instead of
 stretching a few cards. Transparent subject foregrounds share Home's continuous
 QML preview background/padding. The lower pane can sit below the fold on shorter
 windows, preserving vertical scrolling. Home's actual full rendered capture was
-also inspected; its components/assets and standalone-artifacts removal are intact.
+also inspected; its design/assets and standalone-artifacts removal are intact. The
+shared icon compatibility correction produces an exactly identical full Home
+image before/after at 1536×1024 in Qt 6.4 mock/offscreen/software mode
+([pixel comparison](evidence/projects/home-icon-pixel-comparison.log)).
 
 Deliberate reference deviations: original procedural studies replace vendor casts,
 shoe/statue imagery; sample dates/authors/size/version metadata say illustrative.
@@ -176,7 +179,7 @@ A 12,000-entry synthetic snapshot inspects at most 512 descriptors and renders a
 most 128. Counts distinguish snapshot, matching inspected sample and shown rows;
 limited search is disclosed. Queries are literal and bounded to 256 characters,
 never regex. One hundred normalized identical presentations emit zero model
-changes. Those 100 presentations took 661ms in Qt 6.4 Debug and 3,242ms in
+changes. Those 100 presentations took 689ms in Qt 6.4 Debug and 3,132ms in
 Qt 6.9 with sanitizers; retained full CTest logs record the measurements. These
 are local Debug/instrumented observations, not universal performance guarantees.
 There is no model-owned timer/client/watcher, no data-plane thumbnail/point loading,
@@ -232,7 +235,8 @@ custom combo text padding. Explicit control padding fixes source/sort truncation
 all size/source checks assert those labels are readable. Native checks capture a
 rendered frame before geometry checks and wait for actual compositor state rather
 than a fixed 200ms delay. A later GNOME rerun was blocked by the locked session
-(`org.gnome.ScreenSaver.GetActive` returned true); earlier unlocked native passes
+([lock-state receipt](evidence/projects/native-session-final.txt) and
+[final blocked run](evidence/projects/native-locked-final.log)); earlier unlocked native passes
 are distinguished from that rerun. Offscreen final matrices remain mandatory.
 
 Earlier Qt 6.9 runs exposed a fixed-30ms focus-scroll test observing old content
@@ -254,13 +258,16 @@ it is not counted as successful validation. Final full logs supersede early runs
 
 The required [architecture workflow](../../.github/workflows/build.yml) retains
 five jobs: x86_64 Studio ON/OFF, ARM64 Studio ON/OFF and headless sanitizers. Both
-ON jobs run all 60 tests, repeat Home/Projects QML/resize three times, and upload
+ON jobs run all 60 tests, repeat Home/Projects QML/resize/M0 three times, and upload
 Home/M0 plus Projects screenshots/logs in `ui-m0-ubuntu-24.04` and
 `ui-m0-ubuntu-24.04-arm`. Complete CTest output is copied before repeat runs.
 
 Implementation commit `206a705ded5dff73d6a5bb96e264ea7368b93e71` is linked to
 [its architecture run](https://github.com/martinkoenig/mantis-studio/actions/runs/37923406905).
-The subsequent review-evidence refresh changes no application, test or workflow code.
+Application compatibility correction `6408638c9ab91c7c7adb1e6eba1affd434254eae`
+is linked to [its architecture run](https://github.com/martinkoenig/mantis-studio/actions/runs/37928167428).
+The final documentation/evidence commit is verified independently on its own SHA;
+previous successful jobs do not satisfy that final gate.
 
 The final commit's **literal exact SHA and immutable Actions run URL** are generated
 by CI in each artifact's `ui-m2a/revision.json` (from `GITHUB_SHA`/`GITHUB_RUN_ID`).

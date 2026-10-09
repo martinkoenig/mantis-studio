@@ -1,10 +1,10 @@
-Start testing: Oct 09 11:10 UTC
+Start testing: Oct 09 12:10 UTC
 ----------------------------------------------------------
 1/60 Testing: studio-bridge-errors
 1/60 Test: studio-bridge-errors
 Command: "/usr/bin/python3" "/work/tests/integration/studio_bridge.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"studio-bridge-errors" start time: Oct 09 11:10 UTC
+"studio-bridge-errors" start time: Oct 09 12:10 UTC
 Output:
 ----------------------------------------------------------
 PASS: structured operation/data failures, confirmed snapshots, loss, authentication and recovery
@@ -12,7 +12,7 @@ PASS: structured operation/data failures, confirmed snapshots, loss, authenticat
 Test time =   0.18 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-bridge-errors" end time: Oct 09 11:10 UTC
+"studio-bridge-errors" end time: Oct 09 12:10 UTC
 "studio-bridge-errors" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -20,11 +20,11 @@ Test Passed.
 2/60 Test: studio-projects-qml
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/qml" "qml"
 Directory: /work/build/qt64
-"studio-projects-qml" start time: Oct 09 11:10 UTC
+"studio-projects-qml" start time: Oct 09 12:10 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
-Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=661ms updates=0
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=689ms updates=0
 STUDIO_DUAL_PREVIEW_READY
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=4 card=217 rightGap=0 inspector=904 multi=0
 Projects bounds: 1280x720 DPR=1 gallery=1080 columns=5 card=206.4 rightGap=176 inspector=904 multi=0
@@ -56,10 +56,10 @@ Projects bounds: 3440x1440 DPR=1 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=1 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects qml contracts and actual Qt evidence
 <end of output>
-Test time =  10.30 sec
+Test time =  10.10 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-qml" end time: Oct 09 11:11 UTC
+"studio-projects-qml" end time: Oct 09 12:10 UTC
 "studio-projects-qml" time elapsed: 00:00:10
 ----------------------------------------------------------
 
@@ -67,7 +67,7 @@ Test Passed.
 3/60 Test: studio-projects-states
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/states" "states"
 Directory: /work/build/qt64
-"studio-projects-states" start time: Oct 09 11:11 UTC
+"studio-projects-states" start time: Oct 09 12:10 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -127,10 +127,10 @@ Projects bounds: 3440x1440 DPR=1 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=1 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects states contracts and actual Qt evidence
 <end of output>
-Test time =   6.67 sec
+Test time =   6.44 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-states" end time: Oct 09 11:11 UTC
+"studio-projects-states" end time: Oct 09 12:10 UTC
 "studio-projects-states" time elapsed: 00:00:06
 ----------------------------------------------------------
 
@@ -138,7 +138,7 @@ Test Passed.
 4/60 Test: studio-projects-resize
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/resize" "resize"
 Directory: /work/build/qt64
-"studio-projects-resize" start time: Oct 09 11:11 UTC
+"studio-projects-resize" start time: Oct 09 12:10 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -402,10 +402,10 @@ Projects bounds: 796x796 DPR=1 gallery=620 columns=3 card=198.667 rightGap=0 ins
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=1 card=904 rightGap=0 inspector=316 multi=0
 PASS: Projects resize contracts and actual Qt evidence
 <end of output>
-Test time =  10.31 sec
+Test time =  10.30 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-resize" end time: Oct 09 11:11 UTC
+"studio-projects-resize" end time: Oct 09 12:11 UTC
 "studio-projects-resize" time elapsed: 00:00:10
 ----------------------------------------------------------
 
@@ -413,7 +413,7 @@ Test Passed.
 5/60 Test: studio-projects-hidpi
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/hidpi" "hidpi"
 Directory: /work/build/qt64
-"studio-projects-hidpi" start time: Oct 09 11:11 UTC
+"studio-projects-hidpi" start time: Oct 09 12:11 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -447,18 +447,18 @@ Projects bounds: 3440x1440 DPR=2 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=2 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects hidpi contracts and actual Qt evidence
 <end of output>
-Test time =   9.11 sec
+Test time =   8.63 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-hidpi" end time: Oct 09 11:11 UTC
-"studio-projects-hidpi" time elapsed: 00:00:09
+"studio-projects-hidpi" end time: Oct 09 12:11 UTC
+"studio-projects-hidpi" time elapsed: 00:00:08
 ----------------------------------------------------------
 
 6/60 Testing: studio-projects-fractional-dpi
 6/60 Test: studio-projects-fractional-dpi
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/fractional-dpi" "hidpi"
 Directory: /work/build/qt64
-"studio-projects-fractional-dpi" start time: Oct 09 11:11 UTC
+"studio-projects-fractional-dpi" start time: Oct 09 12:11 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -492,18 +492,18 @@ Projects bounds: 3440x1440 DPR=1.5 gallery=2712 columns=12 card=215 rightGap=0 i
 Projects bounds: 3840x2160 DPR=1.5 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects hidpi contracts and actual Qt evidence
 <end of output>
-Test time =   6.06 sec
+Test time =   5.95 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-fractional-dpi" end time: Oct 09 11:11 UTC
-"studio-projects-fractional-dpi" time elapsed: 00:00:06
+"studio-projects-fractional-dpi" end time: Oct 09 12:11 UTC
+"studio-projects-fractional-dpi" time elapsed: 00:00:05
 ----------------------------------------------------------
 
 7/60 Testing: studio-projects-wire
 7/60 Test: studio-projects-wire
 Command: "/usr/bin/python3" "/work/tests/integration/studio_projects.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"studio-projects-wire" start time: Oct 09 11:11 UTC
+"studio-projects-wire" start time: Oct 09 12:11 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -514,7 +514,7 @@ PASS: public Client/StudioBridge/Projects, source-specific passive interactions,
 Test time =   2.49 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-wire" end time: Oct 09 11:11 UTC
+"studio-projects-wire" end time: Oct 09 12:11 UTC
 "studio-projects-wire" time elapsed: 00:00:02
 ----------------------------------------------------------
 
@@ -522,7 +522,7 @@ Test Passed.
 8/60 Test: studio-home-qml
 Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/screenshots"
 Directory: /work/build/qt64
-"studio-home-qml" start time: Oct 09 11:11 UTC
+"studio-home-qml" start time: Oct 09 12:11 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -530,7 +530,7 @@ STAGE: local Home actions in live
 STAGE: local Home actions in mock
 STAGE: local Home actions in hybrid
 Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
-Home stress: 90 immediate model/mode/route/resize transitions, observed 5488 ms (informational, not a latency budget)
+Home stress: 90 immediate model/mode/route/resize transitions, observed 4885 ms (informational, not a latency budget)
 RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
 RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
 RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
@@ -617,18 +617,18 @@ Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052
 Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =  25.49 sec
+Test time =  24.73 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-qml" end time: Oct 09 11:12 UTC
-"studio-home-qml" time elapsed: 00:00:25
+"studio-home-qml" end time: Oct 09 12:11 UTC
+"studio-home-qml" time elapsed: 00:00:24
 ----------------------------------------------------------
 
 9/60 Testing: studio-home-wire
 9/60 Test: studio-home-wire
 Command: "/usr/bin/python3" "/work/tests/integration/studio_home.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"studio-home-wire" start time: Oct 09 11:12 UTC
+"studio-home-wire" start time: Oct 09 12:11 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -636,10 +636,10 @@ PASS: asynchronous public client/StudioBridge/Home UI, rejection, data access fa
 PASS: Home presentation, authority, accessibility and visual evidence
 PASS: bounded public-wire fixture; no capture, project, calibration or cancellation mutation
 <end of output>
-Test time =   1.53 sec
+Test time =   1.52 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-wire" end time: Oct 09 11:12 UTC
+"studio-home-wire" end time: Oct 09 12:11 UTC
 "studio-home-wire" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -647,7 +647,7 @@ Test Passed.
 10/60 Test: studio-home-hidpi
 Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/hidpi" "hidpi"
 Directory: /work/build/qt64
-"studio-home-hidpi" start time: Oct 09 11:12 UTC
+"studio-home-hidpi" start time: Oct 09 12:11 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -716,10 +716,10 @@ Fluid Home: 1252x900 hybrid DPR=2 content=1052 primary=1052 rightGap=0 hero=1052
 Fluid Home: 1248x900 hybrid DPR=2 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =   6.81 sec
+Test time =   6.57 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-hidpi" end time: Oct 09 11:12 UTC
+"studio-home-hidpi" end time: Oct 09 12:11 UTC
 "studio-home-hidpi" time elapsed: 00:00:06
 ----------------------------------------------------------
 
@@ -727,7 +727,7 @@ Test Passed.
 11/60 Test: studio-home-fractional-dpi
 Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/fractional-dpi" "hidpi"
 Directory: /work/build/qt64
-"studio-home-fractional-dpi" start time: Oct 09 11:12 UTC
+"studio-home-fractional-dpi" start time: Oct 09 12:11 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -796,18 +796,18 @@ Fluid Home: 1252x900 hybrid DPR=1.5 content=1052 primary=1052 rightGap=0 hero=10
 Fluid Home: 1248x900 hybrid DPR=1.5 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =   6.17 sec
+Test time =   5.58 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-fractional-dpi" end time: Oct 09 11:12 UTC
-"studio-home-fractional-dpi" time elapsed: 00:00:06
+"studio-home-fractional-dpi" end time: Oct 09 12:12 UTC
+"studio-home-fractional-dpi" time elapsed: 00:00:05
 ----------------------------------------------------------
 
 12/60 Testing: studio-home-resize
 12/60 Test: studio-home-resize
 Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/resize" "resize"
 Directory: /work/build/qt64
-"studio-home-resize" start time: Oct 09 11:12 UTC
+"studio-home-resize" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -1090,18 +1090,18 @@ Fluid Home: 796x796 hybrid DPR=1 content=620 primary=620 rightGap=0 hero=620 rai
 Fluid Home: 1536x1024 hybrid DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =  15.95 sec
+Test time =  14.71 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-resize" end time: Oct 09 11:12 UTC
-"studio-home-resize" time elapsed: 00:00:15
+"studio-home-resize" end time: Oct 09 12:12 UTC
+"studio-home-resize" time elapsed: 00:00:14
 ----------------------------------------------------------
 
 13/60 Testing: studio-home-states
 13/60 Test: studio-home-states
 Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/states" "states"
 Directory: /work/build/qt64
-"studio-home-states" start time: Oct 09 11:12 UTC
+"studio-home-states" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -1143,10 +1143,10 @@ Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 
 Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =   5.79 sec
+Test time =   5.60 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-states" end time: Oct 09 11:12 UTC
+"studio-home-states" end time: Oct 09 12:12 UTC
 "studio-home-states" time elapsed: 00:00:05
 ----------------------------------------------------------
 
@@ -1154,10 +1154,20 @@ Test Passed.
 14/60 Test: studio-ui-m0-qml
 Command: "/work/build/qt64/bin/mantis-studio-ui-m0-tests" "/work/build/qt64/ui-m0/screenshots"
 Directory: /work/build/qt64
-"studio-ui-m0-qml" start time: Oct 09 11:12 UTC
+"studio-ui-m0-qml" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
 STAGE: dynamic device removal followed by immediate resize
 STAGE: presentation provider
 STAGE: controller eligibility and stale snapshot transitions
@@ -1165,10 +1175,10 @@ STAGE: button interactions
 STAGE: rendered-frame screenshot deadlines
 PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
 <end of output>
-Test time =   6.65 sec
+Test time =   6.63 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-ui-m0-qml" end time: Oct 09 11:12 UTC
+"studio-ui-m0-qml" end time: Oct 09 12:12 UTC
 "studio-ui-m0-qml" time elapsed: 00:00:06
 ----------------------------------------------------------
 
@@ -1176,15 +1186,15 @@ Test Passed.
 15/60 Test: studio-ui-m0-cli
 Command: "/usr/bin/python3" "/work/tests/integration/studio_ui_m0.py" "/work/build/qt64/bin/mantis-studio" "/work/build/qt64/ui-m0/cli"
 Directory: /work/build/qt64
-"studio-ui-m0-cli" start time: Oct 09 11:12 UTC
+"studio-ui-m0-cli" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 PASS: CLI validation, short screenshot timeout, token-free offline startup, twelve initial routes without network access
 <end of output>
-Test time =  15.48 sec
+Test time =  15.19 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-ui-m0-cli" end time: Oct 09 11:13 UTC
+"studio-ui-m0-cli" end time: Oct 09 12:12 UTC
 "studio-ui-m0-cli" time elapsed: 00:00:15
 ----------------------------------------------------------
 
@@ -1192,15 +1202,15 @@ Test Passed.
 16/60 Test: studio-calibration-controller
 Command: "/work/build/qt64/bin/mantis-studio-calibration-tests"
 Directory: /work/build/qt64
-"studio-calibration-controller" start time: Oct 09 11:13 UTC
+"studio-calibration-controller" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 Studio calibration presentation contracts passed
 <end of output>
-Test time =   0.10 sec
+Test time =   0.13 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-calibration-controller" end time: Oct 09 11:13 UTC
+"studio-calibration-controller" end time: Oct 09 12:12 UTC
 "studio-calibration-controller" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1208,15 +1218,15 @@ Test Passed.
 17/60 Test: studio-calibration-daemon
 Command: "/usr/bin/python3" "/work/tests/integration/studio_calibration.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"studio-calibration-daemon" start time: Oct 09 11:13 UTC
+"studio-calibration-daemon" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
-Studio controller → mantis-client → Protobuf → real mantisd passed; UI heartbeat 1825
+Studio controller → mantis-client → Protobuf → real mantisd passed; UI heartbeat 1758
 <end of output>
-Test time =   2.65 sec
+Test time =   2.61 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-calibration-daemon" end time: Oct 09 11:13 UTC
+"studio-calibration-daemon" end time: Oct 09 12:12 UTC
 "studio-calibration-daemon" time elapsed: 00:00:02
 ----------------------------------------------------------
 
@@ -1224,16 +1234,16 @@ Test Passed.
 18/60 Test: studio-calibration-qml
 Command: "/work/build/qt64/bin/mantis-studio-calibration-qml"
 Directory: /work/build/qt64
-"studio-calibration-qml" start time: Oct 09 11:13 UTC
+"studio-calibration-qml" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
 Calibration QML loaded and bound all seven stages without binding/type warnings
 <end of output>
-Test time =   0.28 sec
+Test time =   0.23 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-calibration-qml" end time: Oct 09 11:13 UTC
+"studio-calibration-qml" end time: Oct 09 12:12 UTC
 "studio-calibration-qml" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1241,7 +1251,7 @@ Test Passed.
 19/60 Test: project-public-capabilities
 Command: "/usr/bin/python3" "/work/tests/integration/project_capabilities.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"project-public-capabilities" start time: Oct 09 11:13 UTC
+"project-public-capabilities" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 Refusal: Project does not exist
@@ -1250,14 +1260,14 @@ Refusal: Invalid local access token
 Embedded NUL rejected; current identity unchanged (partial directory side effects require a separate backend policy).
 Refusal: Stop captures before switching projects
 Refusal: Jobs must finish before switching projects
-BLOCKER VERIFIED: completed replay from A remains readable after both clients confirm B; old preview written into /tmp/mantis-project-capabilities-sgby24dq/B-測定.mantis/cache/previews/648ebdb8-1efb-49a8-aece-fa90d493d257.packet
+BLOCKER VERIFIED: completed replay from A remains readable after both clients confirm B; old preview written into /tmp/mantis-project-capabilities-ne9jknig/B-測定.mantis/cache/previews/10fe0180-3cee-4d81-abe6-abf7644d27e7.packet
 PASS: published create/open semantics, two clients, capture/job refusal, auth/invalid/missing path, Unicode/literal paths; New/Open remain BLOCKED in UI
 
 <end of output>
-Test time =   1.36 sec
+Test time =   1.43 sec
 ----------------------------------------------------------
 Test Passed.
-"project-public-capabilities" end time: Oct 09 11:13 UTC
+"project-public-capabilities" end time: Oct 09 12:12 UTC
 "project-public-capabilities" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -1265,15 +1275,15 @@ Test Passed.
 20/60 Test: calibration-service-protocol
 Command: "/work/build/qt64/bin/mantis-calibration-service-tests"
 Directory: /work/build/qt64
-"calibration-service-protocol" start time: Oct 09 11:13 UTC
+"calibration-service-protocol" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 CalibrationService and generated protocol dispatch passed
 <end of output>
-Test time =   7.97 sec
+Test time =   7.98 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-service-protocol" end time: Oct 09 11:13 UTC
+"calibration-service-protocol" end time: Oct 09 12:12 UTC
 "calibration-service-protocol" time elapsed: 00:00:07
 ----------------------------------------------------------
 
@@ -1281,17 +1291,17 @@ Test Passed.
 21/60 Test: calibration-client-integration
 Command: "/usr/bin/python3" "/work/tests/integration/calibration_api.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"calibration-client-integration" start time: Oct 09 11:13 UTC
+"calibration-client-integration" start time: Oct 09 12:12 UTC
 Output:
 ----------------------------------------------------------
 C++ calibration SDK against real mantisd passed
 Real daemon Python/C++/CLI calibration APIs and compositional camera/rig workflow passed
 Strict CLI malformed-option rejection passed without contacting a daemon
 <end of output>
-Test time =   4.26 sec
+Test time =   4.03 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-client-integration" end time: Oct 09 11:13 UTC
+"calibration-client-integration" end time: Oct 09 12:13 UTC
 "calibration-client-integration" time elapsed: 00:00:04
 ----------------------------------------------------------
 
@@ -1299,7 +1309,7 @@ Test Passed.
 22/60 Test: python-calibration
 Command: "/usr/bin/python3" "/work/tests/unit/python_calibration.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"python-calibration" start time: Oct 09 11:13 UTC
+"python-calibration" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Python calibration encoding, presence, bounds, artifact arguments, Job and active semantics passed
@@ -1307,7 +1317,7 @@ Python calibration encoding, presence, bounds, artifact arguments, Job and activ
 Test time =   0.07 sec
 ----------------------------------------------------------
 Test Passed.
-"python-calibration" end time: Oct 09 11:13 UTC
+"python-calibration" end time: Oct 09 12:13 UTC
 "python-calibration" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1315,15 +1325,15 @@ Test Passed.
 23/60 Test: protocol-field-compatibility
 Command: "/usr/bin/python3" "/work/tests/contract/protocol_fields.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"protocol-field-compatibility" start time: Oct 09 11:13 UTC
+"protocol-field-compatibility" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Protocol v1: Request 10..31 and Response 1..12 frozen; M6 Request 32..40 / Response 13..15 verified
 <end of output>
-Test time =   0.08 sec
+Test time =   0.06 sec
 ----------------------------------------------------------
 Test Passed.
-"protocol-field-compatibility" end time: Oct 09 11:13 UTC
+"protocol-field-compatibility" end time: Oct 09 12:13 UTC
 "protocol-field-compatibility" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1331,16 +1341,16 @@ Test Passed.
 24/60 Test: calibration-artifacts
 Command: "/work/build/qt64/bin/mantis-calibration-artifacts-tests" "codec"
 Directory: /work/build/qt64
-"calibration-artifacts" start time: Oct 09 11:13 UTC
+"calibration-artifacts" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 OpenCV 4.6.0; full target/dataset/camera/rig graph round-trip passed
 codec passed
 <end of output>
-Test time =   3.21 sec
+Test time =   3.02 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-artifacts" end time: Oct 09 11:13 UTC
+"calibration-artifacts" end time: Oct 09 12:13 UTC
 "calibration-artifacts" time elapsed: 00:00:03
 ----------------------------------------------------------
 
@@ -1348,15 +1358,15 @@ Test Passed.
 25/60 Test: active-calibration-binding
 Command: "/work/build/qt64/bin/mantis-calibration-artifacts-tests" "binding"
 Directory: /work/build/qt64
-"active-calibration-binding" start time: Oct 09 11:13 UTC
+"active-calibration-binding" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 binding passed
 <end of output>
-Test time =   2.39 sec
+Test time =   2.11 sec
 ----------------------------------------------------------
 Test Passed.
-"active-calibration-binding" end time: Oct 09 11:13 UTC
+"active-calibration-binding" end time: Oct 09 12:13 UTC
 "active-calibration-binding" time elapsed: 00:00:02
 ----------------------------------------------------------
 
@@ -1364,7 +1374,7 @@ Test Passed.
 26/60 Test: calibration-revision-store
 Command: "/work/build/qt64/bin/mantis-calibration-revision-store-tests" "revision"
 Directory: /work/build/qt64
-"calibration-revision-store" start time: Oct 09 11:13 UTC
+"calibration-revision-store" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 revision passed
@@ -1372,7 +1382,7 @@ revision passed
 Test time =   0.07 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-revision-store" end time: Oct 09 11:13 UTC
+"calibration-revision-store" end time: Oct 09 12:13 UTC
 "calibration-revision-store" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1380,7 +1390,7 @@ Test Passed.
 27/60 Test: project-migration-v1-v2
 Command: "/work/build/qt64/bin/mantis-calibration-revision-store-tests" "migration"
 Directory: /work/build/qt64
-"project-migration-v1-v2" start time: Oct 09 11:13 UTC
+"project-migration-v1-v2" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 migration passed
@@ -1388,7 +1398,7 @@ migration passed
 Test time =   0.07 sec
 ----------------------------------------------------------
 Test Passed.
-"project-migration-v1-v2" end time: Oct 09 11:13 UTC
+"project-migration-v1-v2" end time: Oct 09 12:13 UTC
 "project-migration-v1-v2" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1396,7 +1406,7 @@ Test Passed.
 28/60 Test: provenance-calibration-reference
 Command: "/work/build/qt64/bin/mantis-calibration-revision-store-tests" "provenance"
 Directory: /work/build/qt64
-"provenance-calibration-reference" start time: Oct 09 11:13 UTC
+"provenance-calibration-reference" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 provenance passed
@@ -1404,7 +1414,7 @@ provenance passed
 Test time =   0.04 sec
 ----------------------------------------------------------
 Test Passed.
-"provenance-calibration-reference" end time: Oct 09 11:13 UTC
+"provenance-calibration-reference" end time: Oct 09 12:13 UTC
 "provenance-calibration-reference" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1412,7 +1422,7 @@ Test Passed.
 29/60 Test: calibration-solver-opencv
 Command: "/work/build/qt64/bin/mantis-calibration-solver-opencv-tests"
 Directory: /work/build/qt64
-"calibration-solver-opencv" start time: Oct 09 11:13 UTC
+"calibration-solver-opencv" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 M4 solver OpenCV 4.6.0 (core/calib3d)
@@ -1423,10 +1433,10 @@ Finite noisy fit retained: final RMS=2.98637219259 px held-out RMS=3.00129524957
 Numerical failure converted: Camera model coefficients must be finite
 OpenCV calibration solver contracts passed
 <end of output>
-Test time =   1.18 sec
+Test time =   1.14 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-solver-opencv" end time: Oct 09 11:13 UTC
+"calibration-solver-opencv" end time: Oct 09 12:13 UTC
 "calibration-solver-opencv" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -1434,7 +1444,7 @@ Test Passed.
 30/60 Test: calibration-solve
 Command: "/work/build/qt64/bin/mantis-calibration-solve-tests"
 Directory: /work/build/qt64
-"calibration-solve" start time: Oct 09 11:13 UTC
+"calibration-solve" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Pure calibration solve contracts passed
@@ -1442,7 +1452,7 @@ Pure calibration solve contracts passed
 Test time =   0.03 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-solve" end time: Oct 09 11:13 UTC
+"calibration-solve" end time: Oct 09 12:13 UTC
 "calibration-solve" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1450,7 +1460,7 @@ Test Passed.
 31/60 Test: calibration-dataset
 Command: "/work/build/qt64/bin/mantis-calibration-dataset-tests"
 Directory: /work/build/qt64
-"calibration-dataset" start time: Oct 09 11:13 UTC
+"calibration-dataset" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Policy v1 exact keys: left A/17 B/17 B/18; right B/17 A/18 B/18
@@ -1459,7 +1469,7 @@ Calibration dataset: pure structure, descriptors, checked fixed-point distance a
 Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-dataset" end time: Oct 09 11:13 UTC
+"calibration-dataset" end time: Oct 09 12:13 UTC
 "calibration-dataset" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1467,25 +1477,25 @@ Test Passed.
 32/60 Test: calibration-dataset-ingestion
 Command: "/work/build/qt64/bin/mantis-calibration-dataset-ingestion-tests"
 Directory: /work/build/qt64
-"calibration-dataset-ingestion" start time: Oct 09 11:13 UTC
+"calibration-dataset-ingestion" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Multi-capture RAW8/Y10P exact selection: left canonical A/17 B/17 B/18; right B/17 A/18 B/18
 OpenCV 4.6.0: unsupported white-origin physical layout propagated as incompatible
 RawCapture dataset ingestion: canonical identities, exact roles, packing, partial visibility, selection, source errors and metadata-only lifetime passed
 <end of output>
-Test time =  19.39 sec
+Test time =  17.68 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-dataset-ingestion" end time: Oct 09 11:13 UTC
-"calibration-dataset-ingestion" time elapsed: 00:00:19
+"calibration-dataset-ingestion" end time: Oct 09 12:13 UTC
+"calibration-dataset-ingestion" time elapsed: 00:00:17
 ----------------------------------------------------------
 
 33/60 Testing: calibration-opencv
 33/60 Test: calibration-opencv
 Command: "/work/build/qt64/bin/mantis-calibration-opencv-tests"
 Directory: /work/build/qt64
-"calibration-opencv" start time: Oct 09 11:13 UTC
+"calibration-opencv" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 OpenCV 4.6.0: 4.6-generation SB/ArUco/ChArUco contracts
@@ -1497,10 +1507,10 @@ ChArUco contract: 35 full corners, 20/20 partial corners, common IDs 3 10 17 24 
 ChArUco white-origin even-row layout: valid target, deterministic incompatible backend error verified
 Calibration OpenCV: synthetic detection, identity, partial visibility, scale, dictionaries and input validation passed
 <end of output>
-Test time =   1.78 sec
+Test time =   1.72 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-opencv" end time: Oct 09 11:13 UTC
+"calibration-opencv" end time: Oct 09 12:13 UTC
 "calibration-opencv" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -1508,7 +1518,7 @@ Test Passed.
 34/60 Test: calibration-observation
 Command: "/work/build/qt64/bin/mantis-calibration-observation-tests"
 Directory: /work/build/qt64
-"calibration-observation" start time: Oct 09 11:13 UTC
+"calibration-observation" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Calibration observations: pure validation, ID semantics and correspondence intersection passed
@@ -1516,7 +1526,7 @@ Calibration observations: pure validation, ID semantics and correspondence inter
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-observation" end time: Oct 09 11:13 UTC
+"calibration-observation" end time: Oct 09 12:13 UTC
 "calibration-observation" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1524,7 +1534,7 @@ Test Passed.
 35/60 Test: calibration-target
 Command: "/work/build/qt64/bin/mantis-calibration-target-tests"
 Directory: /work/build/qt64
-"calibration-target" start time: Oct 09 11:13 UTC
+"calibration-target" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Calibration targets: nominal/measured scale, anisotropy, marker dimensions, points and structural validation passed
@@ -1532,7 +1542,7 @@ Calibration targets: nominal/measured scale, anisotropy, marker dimensions, poin
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-target" end time: Oct 09 11:13 UTC
+"calibration-target" end time: Oct 09 12:13 UTC
 "calibration-target" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1540,7 +1550,7 @@ Test Passed.
 36/60 Test: legacy-abi
 Command: "/work/build/qt64/bin/mantis-legacy-abi-tests" "/work/build/qt64/plugins/libmantis-legacy-device.so" "/work/build/qt64/plugins/libmantis-legacy-acquisition.so"
 Directory: /work/build/qt64
-"legacy-abi" start time: Oct 09 11:13 UTC
+"legacy-abi" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Frozen-header C ABI v1 DSO, callbacks and retained buffers passed
@@ -1548,7 +1558,7 @@ Frozen-header C ABI v1 DSO, callbacks and retained buffers passed
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"legacy-abi" end time: Oct 09 11:13 UTC
+"legacy-abi" end time: Oct 09 12:13 UTC
 "legacy-abi" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1556,7 +1566,7 @@ Test Passed.
 37/60 Test: frozen-l2-abi
 Command: "/work/build/qt64/bin/mantis-l2-abi-tests"
 Directory: /work/build/qt64
-"frozen-l2-abi" start time: Oct 09 11:13 UTC
+"frozen-l2-abi" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Frozen L2 ABI: 2023 layout/numeric checks and 22 identity checks passed
@@ -1564,7 +1574,7 @@ Frozen L2 ABI: 2023 layout/numeric checks and 22 identity checks passed
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"frozen-l2-abi" end time: Oct 09 11:13 UTC
+"frozen-l2-abi" end time: Oct 09 12:13 UTC
 "frozen-l2-abi" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1572,7 +1582,7 @@ Test Passed.
 38/60 Test: frozen-l2-catalog
 Command: "/usr/bin/python3" "/work/tests/contract/l2/generate_catalog.py" "--check"
 Directory: /work/build/qt64
-"frozen-l2-catalog" start time: Oct 09 11:13 UTC
+"frozen-l2-catalog" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 L2 frozen catalogs: 129 structs, 10 callback aliases, 816 fields, 113 numeric constants, 22 IDs
@@ -1580,7 +1590,7 @@ L2 frozen catalogs: 129 structs, 10 callback aliases, 816 fields, 113 numeric co
 Test time =   0.04 sec
 ----------------------------------------------------------
 Test Passed.
-"frozen-l2-catalog" end time: Oct 09 11:13 UTC
+"frozen-l2-catalog" end time: Oct 09 12:13 UTC
 "frozen-l2-catalog" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1588,15 +1598,15 @@ Test Passed.
 39/60 Test: calibration-service-activation
 Command: "/work/build/qt64/bin/mantis-calibration-activation-tests" "/work/build/qt64/plugins" "/work/tests/fixtures/x1-acceptance-env.json"
 Directory: /work/build/qt64
-"calibration-service-activation" start time: Oct 09 11:13 UTC
+"calibration-service-activation" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Calibration service discovered activation, strict parsing and M5 capture snapshot passed
 <end of output>
-Test time =   3.23 sec
+Test time =   3.10 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-service-activation" end time: Oct 09 11:13 UTC
+"calibration-service-activation" end time: Oct 09 12:13 UTC
 "calibration-service-activation" time elapsed: 00:00:03
 ----------------------------------------------------------
 
@@ -1604,15 +1614,15 @@ Test Passed.
 40/60 Test: capture-calibration-binding
 Command: "/work/build/qt64/bin/mantis-capture-calibration-tests" "/work/build/qt64/plugins" "/work/tests/fixtures/x1-acceptance-env.json"
 Directory: /work/build/qt64
-"capture-calibration-binding" start time: Oct 09 11:13 UTC
+"capture-calibration-binding" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Real Runtime/fake-X1: no-active, snapshot rev1 while active changes, future rev2, historical replay, identical pixel hashes and BufferView identities, strict discovery geometry, capture-start geometry rejection and packing/FPS compatibility passed
 <end of output>
-Test time =  15.52 sec
+Test time =  15.33 sec
 ----------------------------------------------------------
 Test Passed.
-"capture-calibration-binding" end time: Oct 09 11:14 UTC
+"capture-calibration-binding" end time: Oct 09 12:13 UTC
 "capture-calibration-binding" time elapsed: 00:00:15
 ----------------------------------------------------------
 
@@ -1620,15 +1630,15 @@ Test Passed.
 41/60 Test: x1-pairing
 Command: "/work/build/qt64/bin/mantis-x1-pairing-tests"
 Directory: /work/build/qt64
-"x1-pairing" start time: Oct 09 11:14 UTC
+"x1-pairing" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 bounded timestamp-nearest pairing passed
 <end of output>
-Test time =   0.47 sec
+Test time =   0.39 sec
 ----------------------------------------------------------
 Test Passed.
-"x1-pairing" end time: Oct 09 11:14 UTC
+"x1-pairing" end time: Oct 09 12:13 UTC
 "x1-pairing" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1636,7 +1646,7 @@ Test Passed.
 42/60 Test: x1-pairing-stream
 Command: "/work/build/qt64/bin/mantis-x1-pairing-stream-tests" "/work/build/qt64/plugins"
 Directory: /work/build/qt64
-"x1-pairing-stream" start time: Oct 09 11:14 UTC
+"x1-pairing-stream" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 GREY normal hardware=0
@@ -1714,18 +1724,18 @@ Y10P phase-drift-right counted exclusions, zero recorder loss and exact replay p
 Y10P phase-jitter-left counted exclusions, zero recorder loss and exact replay passed
 Y10P phase-jitter-right counted exclusions, zero recorder loss and exact replay passed
 <end of output>
-Test time =   8.70 sec
+Test time =   8.00 sec
 ----------------------------------------------------------
 Test Passed.
-"x1-pairing-stream" end time: Oct 09 11:14 UTC
-"x1-pairing-stream" time elapsed: 00:00:08
+"x1-pairing-stream" end time: Oct 09 12:13 UTC
+"x1-pairing-stream" time elapsed: 00:00:07
 ----------------------------------------------------------
 
 43/60 Testing: x1-media
 43/60 Test: x1-media
 Command: "/work/build/qt64/bin/mantis-x1-media-tests"
 Directory: /work/build/qt64
-"x1-media" start time: Oct 09 11:14 UTC
+"x1-media" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 Disabled-link route discovery and explicit ambiguity checks passed
@@ -1733,7 +1743,7 @@ Disabled-link route discovery and explicit ambiguity checks passed
 Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"x1-media" end time: Oct 09 11:14 UTC
+"x1-media" end time: Oct 09 12:13 UTC
 "x1-media" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1741,7 +1751,7 @@ Test Passed.
 44/60 Test: acquisition
 Command: "/work/build/qt64/bin/mantis-acquisition-tests" "/work/build/qt64/plugins" "/work/profiles/x1-q6a.json"
 Directory: /work/build/qt64
-"acquisition" start time: Oct 09 11:14 UTC
+"acquisition" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 normal passed
@@ -1760,10 +1770,10 @@ stall-right passed
 stop-right passed
 stream-mismatch passed
 <end of output>
-Test time =   1.15 sec
+Test time =   1.13 sec
 ----------------------------------------------------------
 Test Passed.
-"acquisition" end time: Oct 09 11:14 UTC
+"acquisition" end time: Oct 09 12:13 UTC
 "acquisition" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -1771,16 +1781,16 @@ Test Passed.
 45/60 Test: acquisition-integration
 Command: "/usr/bin/python3" "/work/tests/integration/acquisition.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"acquisition-integration" start time: Oct 09 11:14 UTC
+"acquisition-integration" start time: Oct 09 12:13 UTC
 Output:
 ----------------------------------------------------------
 C++ acquisition client passed
 Fake X1 CLI/Python/C++ controls, dual preview, immutable references, kill/recovery and hardware-free replay passed
 <end of output>
-Test time =   8.40 sec
+Test time =   8.16 sec
 ----------------------------------------------------------
 Test Passed.
-"acquisition-integration" end time: Oct 09 11:14 UTC
+"acquisition-integration" end time: Oct 09 12:14 UTC
 "acquisition-integration" time elapsed: 00:00:08
 ----------------------------------------------------------
 
@@ -1788,16 +1798,16 @@ Test Passed.
 46/60 Test: acquisition-y10p-integration
 Command: "/usr/bin/python3" "/work/tests/integration/acquisition.py" "/work/build/qt64" "Y10P"
 Directory: /work/build/qt64
-"acquisition-y10p-integration" start time: Oct 09 11:14 UTC
+"acquisition-y10p-integration" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 C++ acquisition client passed
 Fake X1 CLI/Python/C++ controls, dual preview, immutable references, kill/recovery and hardware-free replay passed
 <end of output>
-Test time =   8.65 sec
+Test time =   8.26 sec
 ----------------------------------------------------------
 Test Passed.
-"acquisition-y10p-integration" end time: Oct 09 11:14 UTC
+"acquisition-y10p-integration" end time: Oct 09 12:14 UTC
 "acquisition-y10p-integration" time elapsed: 00:00:08
 ----------------------------------------------------------
 
@@ -1805,7 +1815,7 @@ Test Passed.
 47/60 Test: control-listener
 Command: "/usr/bin/python3" "/work/tests/integration/control_listener.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"control-listener" start time: Oct 09 11:14 UTC
+"control-listener" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 Blocking idle listener remains quiet and handles requests/shutdown after six seconds
@@ -1813,7 +1823,7 @@ Blocking idle listener remains quiet and handles requests/shutdown after six sec
 Test time =   6.31 sec
 ----------------------------------------------------------
 Test Passed.
-"control-listener" end time: Oct 09 11:14 UTC
+"control-listener" end time: Oct 09 12:14 UTC
 "control-listener" time elapsed: 00:00:06
 ----------------------------------------------------------
 
@@ -1821,7 +1831,7 @@ Test Passed.
 48/60 Test: acquisition-qos
 Command: "/work/build/qt64/bin/mantis-acquisition-qos-tests"
 Directory: /work/build/qt64
-"acquisition-qos" start time: Oct 09 11:14 UTC
+"acquisition-qos" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 Bounded raw saturation/failure, preview isolation and cooperative shutdown passed
@@ -1829,7 +1839,7 @@ Bounded raw saturation/failure, preview isolation and cooperative shutdown passe
 Test time =   0.05 sec
 ----------------------------------------------------------
 Test Passed.
-"acquisition-qos" end time: Oct 09 11:14 UTC
+"acquisition-qos" end time: Oct 09 12:14 UTC
 "acquisition-qos" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1837,7 +1847,7 @@ Test Passed.
 49/60 Test: raw-capture
 Command: "/work/build/qt64/bin/mantis-raw-tests"
 Directory: /work/build/qt64
-"raw-capture" start time: Oct 09 11:14 UTC
+"raw-capture" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 Segment storage, prefix recovery, legacy compatibility and two byte-identical replays passed
@@ -1845,7 +1855,7 @@ Segment storage, prefix recovery, legacy compatibility and two byte-identical re
 Test time =   0.22 sec
 ----------------------------------------------------------
 Test Passed.
-"raw-capture" end time: Oct 09 11:14 UTC
+"raw-capture" end time: Oct 09 12:14 UTC
 "raw-capture" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1853,15 +1863,15 @@ Test Passed.
 50/60 Test: projected-sequencer
 Command: "/work/build/qt64/bin/mantis-projected-run-tests"
 Directory: /work/build/qt64
-"projected-sequencer" start time: Oct 09 11:14 UTC
+"projected-sequencer" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 1884 deterministic sequencer checks passed
 <end of output>
-Test time =   0.10 sec
+Test time =   0.13 sec
 ----------------------------------------------------------
 Test Passed.
-"projected-sequencer" end time: Oct 09 11:14 UTC
+"projected-sequencer" end time: Oct 09 12:14 UTC
 "projected-sequencer" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1869,7 +1879,7 @@ Test Passed.
 51/60 Test: projected-light-semantics
 Command: "/work/build/qt64/bin/mantis-projected-light-tests"
 Directory: /work/build/qt64
-"projected-light-semantics" start time: Oct 09 11:14 UTC
+"projected-light-semantics" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 735 canonical projected-light checks passed
@@ -1877,7 +1887,7 @@ Output:
 Test time =   0.02 sec
 ----------------------------------------------------------
 Test Passed.
-"projected-light-semantics" end time: Oct 09 11:14 UTC
+"projected-light-semantics" end time: Oct 09 12:14 UTC
 "projected-light-semantics" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1885,7 +1895,7 @@ Test Passed.
 52/60 Test: packed-image
 Command: "/work/build/qt64/bin/mantis-packed-image-tests"
 Directory: /work/build/qt64
-"packed-image" start time: Oct 09 11:14 UTC
+"packed-image" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 Y10P known vectors, padding, display reduction and raw preservation passed
@@ -1893,7 +1903,7 @@ Y10P known vectors, padding, display reduction and raw preservation passed
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"packed-image" end time: Oct 09 11:14 UTC
+"packed-image" end time: Oct 09 12:14 UTC
 "packed-image" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1901,7 +1911,7 @@ Test Passed.
 53/60 Test: core
 Command: "/work/build/qt64/bin/mantis-core-tests" "/work/build/qt64/plugins"
 Directory: /work/build/qt64
-"core" start time: Oct 09 11:14 UTC
+"core" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 2113 architecture assertions passed
@@ -1909,7 +1919,7 @@ Output:
 Test time =   0.15 sec
 ----------------------------------------------------------
 Test Passed.
-"core" end time: Oct 09 11:14 UTC
+"core" end time: Oct 09 12:14 UTC
 "core" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1917,15 +1927,15 @@ Test Passed.
 54/60 Test: projected-light-contract
 Command: "/work/build/qt64/bin/mantis-projected-contract-tests" "/work/build/qt64/contract-plugins/libmantis-projected-contract.so" "/work/build/qt64/contract-plugins"
 Directory: /work/build/qt64
-"projected-light-contract" start time: Oct 09 11:14 UTC
+"projected-light-contract" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 553 projected-light ABI/adapter checks passed
 <end of output>
-Test time =   0.09 sec
+Test time =   0.10 sec
 ----------------------------------------------------------
 Test Passed.
-"projected-light-contract" end time: Oct 09 11:14 UTC
+"projected-light-contract" end time: Oct 09 12:14 UTC
 "projected-light-contract" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1933,14 +1943,14 @@ Test Passed.
 55/60 Test: c-abi
 Command: "/work/build/qt64/bin/mantis-c-contract"
 Directory: /work/build/qt64
-"c-abi" start time: Oct 09 11:14 UTC
+"c-abi" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 <end of output>
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"c-abi" end time: Oct 09 11:14 UTC
+"c-abi" end time: Oct 09 12:14 UTC
 "c-abi" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1948,15 +1958,15 @@ Test Passed.
 56/60 Test: boundaries
 Command: "/usr/bin/python3" "/work/tests/contract/boundaries.py" "/work"
 Directory: /work/build/qt64
-"boundaries" start time: Oct 09 11:14 UTC
+"boundaries" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 Foundation, frontend, plugin and Linux media implementation boundaries passed
 <end of output>
-Test time =   0.03 sec
+Test time =   0.02 sec
 ----------------------------------------------------------
 Test Passed.
-"boundaries" end time: Oct 09 11:14 UTC
+"boundaries" end time: Oct 09 12:14 UTC
 "boundaries" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1964,19 +1974,19 @@ Test Passed.
 57/60 Test: python-capture
 Command: "/usr/bin/python3" "/work/tests/unit/python_capture.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"python-capture" start time: Oct 09 11:14 UTC
+"python-capture" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 ....
 ----------------------------------------------------------------------
-Ran 4 tests in 0.002s
+Ran 4 tests in 0.001s
 
 OK
 <end of output>
-Test time =   0.12 sec
+Test time =   0.07 sec
 ----------------------------------------------------------
 Test Passed.
-"python-capture" end time: Oct 09 11:14 UTC
+"python-capture" end time: Oct 09 12:14 UTC
 "python-capture" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1984,15 +1994,15 @@ Test Passed.
 58/60 Test: acceptance
 Command: "/usr/bin/python3" "/work/tests/integration/acceptance.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"acceptance" start time: Oct 09 11:14 UTC
+"acceptance" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 PASS: Python, CLI, Studio/viewport/UI restart, deterministic replay, isolated crash, capture continuity, daemon crash recovery
 <end of output>
-Test time =   2.99 sec
+Test time =   2.97 sec
 ----------------------------------------------------------
 Test Passed.
-"acceptance" end time: Oct 09 11:14 UTC
+"acceptance" end time: Oct 09 12:14 UTC
 "acceptance" time elapsed: 00:00:02
 ----------------------------------------------------------
 
@@ -2000,19 +2010,19 @@ Test Passed.
 59/60 Test: q6a-validation-harness
 Command: "/usr/bin/python3" "/work/tests/integration/q6a_validation_harness.py"
 Directory: /work/build/qt64
-"q6a-validation-harness" start time: Oct 09 11:14 UTC
+"q6a-validation-harness" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 .............
 ----------------------------------------------------------------------
-Ran 13 tests in 0.822s
+Ran 13 tests in 0.770s
 
 OK
 <end of output>
-Test time =   0.91 sec
+Test time =   0.83 sec
 ----------------------------------------------------------
 Test Passed.
-"q6a-validation-harness" end time: Oct 09 11:14 UTC
+"q6a-validation-harness" end time: Oct 09 12:14 UTC
 "q6a-validation-harness" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -2020,7 +2030,7 @@ Test Passed.
 60/60 Test: x1-calibration-validation
 Command: "/usr/bin/python3" "/work/tests/integration/x1_calibration_validation.py" "/work/build/qt64"
 Directory: /work/build/qt64
-"x1-calibration-validation" start time: Oct 09 11:14 UTC
+"x1-calibration-validation" start time: Oct 09 12:14 UTC
 Output:
 ----------------------------------------------------------
 Fixture-only M4 fixed evaluation, lineage and directional evidence PASS
@@ -2040,8 +2050,8 @@ Fixture-only M4 fixed evaluation, lineage and directional evidence PASS
       "reason": "Real evidence rejects MANTIS_X1_FAKE"
     }
   ],
-  "started_utc": "20261009-111500-427308",
-  "output": "/tmp/tmpuj8dhefw/fake/x1-calibration-20261009-111500-427308",
+  "started_utc": "20261009-121433-641486",
+  "output": "/tmp/tmp6f512mo2/fake/x1-calibration-20261009-121433-641486",
   "cleanup_errors": []
 }
 <frozen importlib._bootstrap>:488: DeprecationWarning: Type google.protobuf.pyext._message.ScalarMapContainer uses PyType_Spec with a metaclass that has custom tp_new. This is deprecated and will no longer be allowed in Python 3.14.
@@ -2062,23 +2072,23 @@ Fixture-only M4 fixed evaluation, lineage and directional evidence PASS
       "reason": "Interrupted"
     }
   ],
-  "started_utc": "20261009-111500-507049",
-  "output": "/tmp/tmpuj8dhefw/interrupt/x1-calibration-20261009-111500-507049",
+  "started_utc": "20261009-121433-710716",
+  "output": "/tmp/tmp6f512mo2/interrupt/x1-calibration-20261009-121433-710716",
   "cleanup_errors": []
 }
 ......../usr/lib/python3/dist-packages/google/protobuf/internal/well_known_types.py:91: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
   _EPOCH_DATETIME_NAIVE = datetime.datetime.utcfromtimestamp(0)
 ....
 ----------------------------------------------------------------------
-Ran 14 tests in 25.135s
+Ran 14 tests in 18.424s
 
 OK
 <end of output>
-Test time =  25.25 sec
+Test time =  18.50 sec
 ----------------------------------------------------------
 Test Passed.
-"x1-calibration-validation" end time: Oct 09 11:15 UTC
-"x1-calibration-validation" time elapsed: 00:00:25
+"x1-calibration-validation" end time: Oct 09 12:14 UTC
+"x1-calibration-validation" time elapsed: 00:00:18
 ----------------------------------------------------------
 
-End testing: Oct 09 11:15 UTC
+End testing: Oct 09 12:14 UTC

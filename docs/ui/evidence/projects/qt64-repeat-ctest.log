@@ -1,14 +1,14 @@
-Start testing: Oct 09 11:20 UTC
+Start testing: Oct 09 12:18 UTC
 ----------------------------------------------------------
 2/60 Testing: studio-projects-qml
 2/60 Test: studio-projects-qml
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/qml" "qml"
 Directory: /work/build/qt64
-"studio-projects-qml" start time: Oct 09 11:20 UTC
+"studio-projects-qml" start time: Oct 09 12:18 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
-Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=736ms updates=0
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=718ms updates=0
 STUDIO_DUAL_PREVIEW_READY
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=4 card=217 rightGap=0 inspector=904 multi=0
 Projects bounds: 1280x720 DPR=1 gallery=1080 columns=5 card=206.4 rightGap=176 inspector=904 multi=0
@@ -40,10 +40,10 @@ Projects bounds: 3440x1440 DPR=1 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=1 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects qml contracts and actual Qt evidence
 <end of output>
-Test time =  10.24 sec
+Test time =  10.32 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-qml" end time: Oct 09 11:20 UTC
+"studio-projects-qml" end time: Oct 09 12:18 UTC
 "studio-projects-qml" time elapsed: 00:00:10
 ----------------------------------------------------------
 
@@ -51,11 +51,11 @@ Test Passed.
 2/60 Test: studio-projects-qml
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/qml" "qml"
 Directory: /work/build/qt64
-"studio-projects-qml" start time: Oct 09 11:20 UTC
+"studio-projects-qml" start time: Oct 09 12:18 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
-Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=633ms updates=0
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=615ms updates=0
 STUDIO_DUAL_PREVIEW_READY
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=4 card=217 rightGap=0 inspector=904 multi=0
 Projects bounds: 1280x720 DPR=1 gallery=1080 columns=5 card=206.4 rightGap=176 inspector=904 multi=0
@@ -87,22 +87,22 @@ Projects bounds: 3440x1440 DPR=1 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=1 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects qml contracts and actual Qt evidence
 <end of output>
-Test time =  10.00 sec
+Test time =   9.99 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-qml" end time: Oct 09 11:20 UTC
-"studio-projects-qml" time elapsed: 00:00:10
+"studio-projects-qml" end time: Oct 09 12:18 UTC
+"studio-projects-qml" time elapsed: 00:00:09
 ----------------------------------------------------------
 
 2/60 Testing: studio-projects-qml
 2/60 Test: studio-projects-qml
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/qml" "qml"
 Directory: /work/build/qt64
-"studio-projects-qml" start time: Oct 09 11:20 UTC
+"studio-projects-qml" start time: Oct 09 12:18 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
-Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=662ms updates=0
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=639ms updates=0
 STUDIO_DUAL_PREVIEW_READY
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=4 card=217 rightGap=0 inspector=904 multi=0
 Projects bounds: 1280x720 DPR=1 gallery=1080 columns=5 card=206.4 rightGap=176 inspector=904 multi=0
@@ -134,10 +134,10 @@ Projects bounds: 3440x1440 DPR=1 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=1 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects qml contracts and actual Qt evidence
 <end of output>
-Test time =  10.18 sec
+Test time =  10.03 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-qml" end time: Oct 09 11:20 UTC
+"studio-projects-qml" end time: Oct 09 12:18 UTC
 "studio-projects-qml" time elapsed: 00:00:10
 ----------------------------------------------------------
 
@@ -145,7 +145,7 @@ Test Passed.
 4/60 Test: studio-projects-resize
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/resize" "resize"
 Directory: /work/build/qt64
-"studio-projects-resize" start time: Oct 09 11:20 UTC
+"studio-projects-resize" start time: Oct 09 12:18 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -409,10 +409,10 @@ Projects bounds: 796x796 DPR=1 gallery=620 columns=3 card=198.667 rightGap=0 ins
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=1 card=904 rightGap=0 inspector=316 multi=0
 PASS: Projects resize contracts and actual Qt evidence
 <end of output>
-Test time =  10.40 sec
+Test time =  10.37 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-resize" end time: Oct 09 11:20 UTC
+"studio-projects-resize" end time: Oct 09 12:18 UTC
 "studio-projects-resize" time elapsed: 00:00:10
 ----------------------------------------------------------
 
@@ -420,7 +420,7 @@ Test Passed.
 4/60 Test: studio-projects-resize
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/resize" "resize"
 Directory: /work/build/qt64
-"studio-projects-resize" start time: Oct 09 11:20 UTC
+"studio-projects-resize" start time: Oct 09 12:18 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -684,10 +684,10 @@ Projects bounds: 796x796 DPR=1 gallery=620 columns=3 card=198.667 rightGap=0 ins
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=1 card=904 rightGap=0 inspector=316 multi=0
 PASS: Projects resize contracts and actual Qt evidence
 <end of output>
-Test time =  10.43 sec
+Test time =  10.57 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-resize" end time: Oct 09 11:21 UTC
+"studio-projects-resize" end time: Oct 09 12:19 UTC
 "studio-projects-resize" time elapsed: 00:00:10
 ----------------------------------------------------------
 
@@ -695,7 +695,7 @@ Test Passed.
 4/60 Test: studio-projects-resize
 Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/resize" "resize"
 Directory: /work/build/qt64
-"studio-projects-resize" start time: Oct 09 11:21 UTC
+"studio-projects-resize" start time: Oct 09 12:19 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -959,10 +959,10 @@ Projects bounds: 796x796 DPR=1 gallery=620 columns=3 card=198.667 rightGap=0 ins
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=1 card=904 rightGap=0 inspector=316 multi=0
 PASS: Projects resize contracts and actual Qt evidence
 <end of output>
-Test time =  10.67 sec
+Test time =  10.59 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-resize" end time: Oct 09 11:21 UTC
+"studio-projects-resize" end time: Oct 09 12:19 UTC
 "studio-projects-resize" time elapsed: 00:00:10
 ----------------------------------------------------------
 
@@ -970,7 +970,7 @@ Test Passed.
 8/60 Test: studio-home-qml
 Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/screenshots"
 Directory: /work/build/qt64
-"studio-home-qml" start time: Oct 09 11:21 UTC
+"studio-home-qml" start time: Oct 09 12:19 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -978,7 +978,7 @@ STAGE: local Home actions in live
 STAGE: local Home actions in mock
 STAGE: local Home actions in hybrid
 Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
-Home stress: 90 immediate model/mode/route/resize transitions, observed 6000 ms (informational, not a latency budget)
+Home stress: 90 immediate model/mode/route/resize transitions, observed 4411 ms (informational, not a latency budget)
 RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
 RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
 RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
@@ -1065,18 +1065,18 @@ Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052
 Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =  26.68 sec
+Test time =  24.20 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-qml" end time: Oct 09 11:21 UTC
-"studio-home-qml" time elapsed: 00:00:26
+"studio-home-qml" end time: Oct 09 12:19 UTC
+"studio-home-qml" time elapsed: 00:00:24
 ----------------------------------------------------------
 
 8/60 Testing: studio-home-qml
 8/60 Test: studio-home-qml
 Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/screenshots"
 Directory: /work/build/qt64
-"studio-home-qml" start time: Oct 09 11:21 UTC
+"studio-home-qml" start time: Oct 09 12:19 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -1084,7 +1084,7 @@ STAGE: local Home actions in live
 STAGE: local Home actions in mock
 STAGE: local Home actions in hybrid
 Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
-Home stress: 90 immediate model/mode/route/resize transitions, observed 4833 ms (informational, not a latency budget)
+Home stress: 90 immediate model/mode/route/resize transitions, observed 4420 ms (informational, not a latency budget)
 RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
 RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
 RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
@@ -1171,18 +1171,18 @@ Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052
 Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =  25.54 sec
+Test time =  24.13 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-qml" end time: Oct 09 11:22 UTC
-"studio-home-qml" time elapsed: 00:00:25
+"studio-home-qml" end time: Oct 09 12:20 UTC
+"studio-home-qml" time elapsed: 00:00:24
 ----------------------------------------------------------
 
 8/60 Testing: studio-home-qml
 8/60 Test: studio-home-qml
 Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/screenshots"
 Directory: /work/build/qt64
-"studio-home-qml" start time: Oct 09 11:22 UTC
+"studio-home-qml" start time: Oct 09 12:20 UTC
 Output:
 ----------------------------------------------------------
 QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
@@ -1190,7 +1190,7 @@ STAGE: local Home actions in live
 STAGE: local Home actions in mock
 STAGE: local Home actions in hybrid
 Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
-Home stress: 90 immediate model/mode/route/resize transitions, observed 6085 ms (informational, not a latency budget)
+Home stress: 90 immediate model/mode/route/resize transitions, observed 4424 ms (informational, not a latency budget)
 RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
 RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
 RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
@@ -1277,11 +1277,107 @@ Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052
 Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =  27.21 sec
+Test time =  24.21 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-qml" end time: Oct 09 11:22 UTC
-"studio-home-qml" time elapsed: 00:00:27
+"studio-home-qml" end time: Oct 09 12:20 UTC
+"studio-home-qml" time elapsed: 00:00:24
 ----------------------------------------------------------
 
-End testing: Oct 09 11:22 UTC
+14/60 Testing: studio-ui-m0-qml
+14/60 Test: studio-ui-m0-qml
+Command: "/work/build/qt64/bin/mantis-studio-ui-m0-tests" "/work/build/qt64/ui-m0/screenshots"
+Directory: /work/build/qt64
+"studio-ui-m0-qml" start time: Oct 09 12:20 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
+STAGE: dynamic device removal followed by immediate resize
+STAGE: presentation provider
+STAGE: controller eligibility and stale snapshot transitions
+STAGE: button interactions
+STAGE: rendered-frame screenshot deadlines
+PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
+<end of output>
+Test time =   6.56 sec
+----------------------------------------------------------
+Test Passed.
+"studio-ui-m0-qml" end time: Oct 09 12:20 UTC
+"studio-ui-m0-qml" time elapsed: 00:00:06
+----------------------------------------------------------
+
+14/60 Testing: studio-ui-m0-qml
+14/60 Test: studio-ui-m0-qml
+Command: "/work/build/qt64/bin/mantis-studio-ui-m0-tests" "/work/build/qt64/ui-m0/screenshots"
+Directory: /work/build/qt64
+"studio-ui-m0-qml" start time: Oct 09 12:20 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
+STAGE: dynamic device removal followed by immediate resize
+STAGE: presentation provider
+STAGE: controller eligibility and stale snapshot transitions
+STAGE: button interactions
+STAGE: rendered-frame screenshot deadlines
+PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
+<end of output>
+Test time =   6.57 sec
+----------------------------------------------------------
+Test Passed.
+"studio-ui-m0-qml" end time: Oct 09 12:20 UTC
+"studio-ui-m0-qml" time elapsed: 00:00:06
+----------------------------------------------------------
+
+14/60 Testing: studio-ui-m0-qml
+14/60 Test: studio-ui-m0-qml
+Command: "/work/build/qt64/bin/mantis-studio-ui-m0-tests" "/work/build/qt64/ui-m0/screenshots"
+Directory: /work/build/qt64
+"studio-ui-m0-qml" start time: Oct 09 12:20 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
+STAGE: dynamic device removal followed by immediate resize
+STAGE: presentation provider
+STAGE: controller eligibility and stale snapshot transitions
+STAGE: button interactions
+STAGE: rendered-frame screenshot deadlines
+PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
+<end of output>
+Test time =   6.58 sec
+----------------------------------------------------------
+Test Passed.
+"studio-ui-m0-qml" end time: Oct 09 12:20 UTC
+"studio-ui-m0-qml" time elapsed: 00:00:06
+----------------------------------------------------------
+
+End testing: Oct 09 12:20 UTC

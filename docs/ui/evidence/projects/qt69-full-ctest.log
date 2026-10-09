@@ -1,18 +1,18 @@
-Start testing: Oct 09 13:10 CEST
+Start testing: Oct 09 14:09 CEST
 ----------------------------------------------------------
 1/60 Testing: studio-bridge-errors
 1/60 Test: studio-bridge-errors
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_bridge.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-bridge-errors" start time: Oct 09 13:10 CEST
+"studio-bridge-errors" start time: Oct 09 14:09 CEST
 Output:
 ----------------------------------------------------------
 PASS: structured operation/data failures, confirmed snapshots, loss, authentication and recovery
 <end of output>
-Test time =   0.22 sec
+Test time =   0.20 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-bridge-errors" end time: Oct 09 13:10 CEST
+"studio-bridge-errors" end time: Oct 09 14:09 CEST
 "studio-bridge-errors" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -20,10 +20,10 @@ Test Passed.
 2/60 Test: studio-projects-qml
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/qml" "qml"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-projects-qml" start time: Oct 09 13:10 CEST
+"studio-projects-qml" start time: Oct 09 14:09 CEST
 Output:
 ----------------------------------------------------------
-Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=3242ms updates=0
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=3132ms updates=0
 STUDIO_DUAL_PREVIEW_READY
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=4 card=217 rightGap=0 inspector=904 multi=0
 Projects bounds: 1280x720 DPR=1 gallery=1080 columns=5 card=206.4 rightGap=176 inspector=904 multi=0
@@ -55,10 +55,10 @@ Projects bounds: 3440x1440 DPR=1 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=1 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects qml contracts and actual Qt evidence
 <end of output>
-Test time =  14.24 sec
+Test time =  14.39 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-qml" end time: Oct 09 13:10 CEST
+"studio-projects-qml" end time: Oct 09 14:09 CEST
 "studio-projects-qml" time elapsed: 00:00:14
 ----------------------------------------------------------
 
@@ -66,7 +66,7 @@ Test Passed.
 3/60 Test: studio-projects-states
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/states" "states"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-projects-states" start time: Oct 09 13:10 CEST
+"studio-projects-states" start time: Oct 09 14:09 CEST
 Output:
 ----------------------------------------------------------
 Projects bounds: 1080x720 DPR=1 gallery=0 columns=1 card=0 rightGap=24 inspector=316 multi=0
@@ -125,10 +125,10 @@ Projects bounds: 3440x1440 DPR=1 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=1 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects states contracts and actual Qt evidence
 <end of output>
-Test time =   7.57 sec
+Test time =   7.43 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-states" end time: Oct 09 13:11 CEST
+"studio-projects-states" end time: Oct 09 14:09 CEST
 "studio-projects-states" time elapsed: 00:00:07
 ----------------------------------------------------------
 
@@ -136,7 +136,7 @@ Test Passed.
 4/60 Test: studio-projects-resize
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/resize" "resize"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-projects-resize" start time: Oct 09 13:11 CEST
+"studio-projects-resize" start time: Oct 09 14:09 CEST
 Output:
 ----------------------------------------------------------
 Projects bounds: 1080x900 DPR=1 gallery=904 columns=4 card=217 rightGap=24 inspector=316 multi=0
@@ -224,12 +224,12 @@ Projects bounds: 1252x900 DPR=1 gallery=1052 columns=5 card=200.8 rightGap=-66 i
 Projects bounds: 1248x900 DPR=1 gallery=1072 columns=5 card=204.8 rightGap=-46 inspector=316 multi=0
 Projects bounds: 1080x900 DPR=1 gallery=904 columns=4 card=217 rightGap=-214 inspector=316 multi=0
 Projects bounds: 796x796 DPR=1 gallery=620 columns=3 card=198.667 rightGap=-76 inspector=316 multi=0
-Projects bounds: 1080x720 DPR=1 gallery=904 columns=1 card=904 rightGap=24 inspector=316 multi=0
-Projects bounds: 1080x900 DPR=1 gallery=904 columns=4 card=217 rightGap=24 inspector=316 multi=0
-Projects bounds: 1248x900 DPR=1 gallery=904 columns=4 card=217 rightGap=192 inspector=316 multi=0
-Projects bounds: 1252x900 DPR=1 gallery=904 columns=4 card=217 rightGap=172 inspector=316 multi=0
-Projects bounds: 1300x900 DPR=1 gallery=904 columns=4 card=217 rightGap=220 inspector=316 multi=0
-Projects bounds: 1318x900 DPR=1 gallery=904 columns=4 card=217 rightGap=238 inspector=316 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=904 columns=1 card=904 rightGap=-432 inspector=316 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=904 columns=4 card=217 rightGap=-432 inspector=316 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=904 columns=4 card=217 rightGap=-264 inspector=316 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=904 columns=4 card=217 rightGap=-284 inspector=316 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=904 columns=4 card=217 rightGap=-236 inspector=316 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=904 columns=4 card=217 rightGap=-218 inspector=316 multi=0
 Projects bounds: 1322x900 DPR=1 gallery=904 columns=4 card=217 rightGap=0 inspector=316 multi=1
 Projects bounds: 1350x900 DPR=1 gallery=904 columns=4 card=217 rightGap=0 inspector=316 multi=1
 Projects bounds: 1366x900 DPR=1 gallery=904 columns=4 card=217 rightGap=0 inspector=316 multi=1
@@ -399,10 +399,10 @@ Projects bounds: 796x796 DPR=1 gallery=620 columns=3 card=198.667 rightGap=-76 i
 Projects bounds: 1080x720 DPR=1 gallery=904 columns=1 card=904 rightGap=-432 inspector=316 multi=0
 PASS: Projects resize contracts and actual Qt evidence
 <end of output>
-Test time =  14.40 sec
+Test time =  14.65 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-resize" end time: Oct 09 13:11 CEST
+"studio-projects-resize" end time: Oct 09 14:09 CEST
 "studio-projects-resize" time elapsed: 00:00:14
 ----------------------------------------------------------
 
@@ -410,7 +410,7 @@ Test Passed.
 5/60 Test: studio-projects-hidpi
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/hidpi" "hidpi"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-projects-hidpi" start time: Oct 09 13:11 CEST
+"studio-projects-hidpi" start time: Oct 09 14:09 CEST
 Output:
 ----------------------------------------------------------
 Projects bounds: 1080x720 DPR=2 gallery=904 columns=4 card=217 rightGap=24 inspector=316 multi=0
@@ -443,10 +443,10 @@ Projects bounds: 3440x1440 DPR=2 gallery=2712 columns=12 card=215 rightGap=0 ins
 Projects bounds: 3840x2160 DPR=2 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects hidpi contracts and actual Qt evidence
 <end of output>
-Test time =  10.54 sec
+Test time =  10.16 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-hidpi" end time: Oct 09 13:11 CEST
+"studio-projects-hidpi" end time: Oct 09 14:09 CEST
 "studio-projects-hidpi" time elapsed: 00:00:10
 ----------------------------------------------------------
 
@@ -454,7 +454,7 @@ Test Passed.
 6/60 Test: studio-projects-fractional-dpi
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/fractional-dpi" "hidpi"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-projects-fractional-dpi" start time: Oct 09 13:11 CEST
+"studio-projects-fractional-dpi" start time: Oct 09 14:09 CEST
 Output:
 ----------------------------------------------------------
 Projects bounds: 1080x720 DPR=1.5 gallery=904 columns=4 card=217 rightGap=24 inspector=316 multi=0
@@ -487,28 +487,28 @@ Projects bounds: 3440x1440 DPR=1.5 gallery=2712 columns=12 card=215 rightGap=0 i
 Projects bounds: 3840x2160 DPR=1.5 gallery=3112 columns=12 card=248.333 rightGap=0 inspector=316 multi=1
 PASS: Projects hidpi contracts and actual Qt evidence
 <end of output>
-Test time =   7.22 sec
+Test time =   6.92 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-fractional-dpi" end time: Oct 09 13:11 CEST
-"studio-projects-fractional-dpi" time elapsed: 00:00:07
+"studio-projects-fractional-dpi" end time: Oct 09 14:10 CEST
+"studio-projects-fractional-dpi" time elapsed: 00:00:06
 ----------------------------------------------------------
 
 7/60 Testing: studio-projects-wire
 7/60 Test: studio-projects-wire
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_projects.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-projects-wire" start time: Oct 09 13:11 CEST
+"studio-projects-wire" start time: Oct 09 14:10 CEST
 Output:
 ----------------------------------------------------------
 PASS: Projects wire contracts and actual Qt evidence
 
 PASS: public Client/StudioBridge/Projects, source-specific passive interactions, refusal/busy lease, stale/auth/reconnect; zero GUI project_open/capture/replay/artifact_data/preview requests; one controlled uncertain-outcome public-wire audit {'snapshot': 12, 'pipeline_run': 1, 'plugin_enable': 4, 'project_open': 1}
 <end of output>
-Test time =   2.95 sec
+Test time =   2.89 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-projects-wire" end time: Oct 09 13:11 CEST
+"studio-projects-wire" end time: Oct 09 14:10 CEST
 "studio-projects-wire" time elapsed: 00:00:02
 ----------------------------------------------------------
 
@@ -516,14 +516,14 @@ Test Passed.
 8/60 Test: studio-home-qml
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/screenshots"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-home-qml" start time: Oct 09 13:11 CEST
+"studio-home-qml" start time: Oct 09 14:10 CEST
 Output:
 ----------------------------------------------------------
 STAGE: local Home actions in live
 STAGE: local Home actions in mock
 STAGE: local Home actions in hybrid
 Primary layout: hero 972x280, actions bottom 811, activity 823, first row bottom 916, viewport bottom 982
-Home stress: 90 immediate model/mode/route/resize transitions, observed 9875 ms (informational, not a latency budget)
+Home stress: 90 immediate model/mode/route/resize transitions, observed 8953 ms (informational, not a latency budget)
 RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
 RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
 RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
@@ -610,36 +610,36 @@ Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052
 Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =  34.18 sec
+Test time =  32.75 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-qml" end time: Oct 09 13:12 CEST
-"studio-home-qml" time elapsed: 00:00:34
+"studio-home-qml" end time: Oct 09 14:10 CEST
+"studio-home-qml" time elapsed: 00:00:32
 ----------------------------------------------------------
 
 9/60 Testing: studio-home-wire
 9/60 Test: studio-home-wire
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_home.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-home-wire" start time: Oct 09 13:12 CEST
+"studio-home-wire" start time: Oct 09 14:10 CEST
 Output:
 ----------------------------------------------------------
 PASS: asynchronous public client/StudioBridge/Home UI, rejection, data access failure, transport loss, reconnection; navigation sent no mutable command
 PASS: Home presentation, authority, accessibility and visual evidence
 PASS: bounded public-wire fixture; no capture, project, calibration or cancellation mutation
 <end of output>
-Test time =   2.34 sec
+Test time =   1.94 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-wire" end time: Oct 09 13:12 CEST
-"studio-home-wire" time elapsed: 00:00:02
+"studio-home-wire" end time: Oct 09 14:10 CEST
+"studio-home-wire" time elapsed: 00:00:01
 ----------------------------------------------------------
 
 10/60 Testing: studio-home-hidpi
 10/60 Test: studio-home-hidpi
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/hidpi" "hidpi"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-home-hidpi" start time: Oct 09 13:12 CEST
+"studio-home-hidpi" start time: Oct 09 14:10 CEST
 Output:
 ----------------------------------------------------------
 RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
@@ -707,18 +707,18 @@ Fluid Home: 1252x900 hybrid DPR=2 content=1052 primary=1052 rightGap=0 hero=1052
 Fluid Home: 1248x900 hybrid DPR=2 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =   9.42 sec
+Test time =   7.99 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-hidpi" end time: Oct 09 13:12 CEST
-"studio-home-hidpi" time elapsed: 00:00:09
+"studio-home-hidpi" end time: Oct 09 14:10 CEST
+"studio-home-hidpi" time elapsed: 00:00:07
 ----------------------------------------------------------
 
 11/60 Testing: studio-home-fractional-dpi
 11/60 Test: studio-home-fractional-dpi
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/fractional-dpi" "hidpi"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-home-fractional-dpi" start time: Oct 09 13:12 CEST
+"studio-home-fractional-dpi" start time: Oct 09 14:10 CEST
 Output:
 ----------------------------------------------------------
 RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
@@ -786,18 +786,18 @@ Fluid Home: 1252x900 hybrid DPR=1.5 content=1052 primary=1052 rightGap=0 hero=10
 Fluid Home: 1248x900 hybrid DPR=1.5 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =   8.35 sec
+Test time =   7.05 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-fractional-dpi" end time: Oct 09 13:12 CEST
-"studio-home-fractional-dpi" time elapsed: 00:00:08
+"studio-home-fractional-dpi" end time: Oct 09 14:10 CEST
+"studio-home-fractional-dpi" time elapsed: 00:00:07
 ----------------------------------------------------------
 
 12/60 Testing: studio-home-resize
 12/60 Test: studio-home-resize
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/resize" "resize"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-home-resize" start time: Oct 09 13:12 CEST
+"studio-home-resize" start time: Oct 09 14:10 CEST
 Output:
 ----------------------------------------------------------
 Fluid Home: 1080x900 mock DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
@@ -1079,10 +1079,10 @@ Fluid Home: 796x796 hybrid DPR=1 content=620 primary=620 rightGap=0 hero=620 rai
 Fluid Home: 1536x1024 hybrid DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =  20.91 sec
+Test time =  20.70 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-resize" end time: Oct 09 13:12 CEST
+"studio-home-resize" end time: Oct 09 14:11 CEST
 "studio-home-resize" time elapsed: 00:00:20
 ----------------------------------------------------------
 
@@ -1090,7 +1090,7 @@ Test Passed.
 13/60 Test: studio-home-states
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/states" "states"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-home-states" start time: Oct 09 13:12 CEST
+"studio-home-states" start time: Oct 09 14:11 CEST
 Output:
 ----------------------------------------------------------
 Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
@@ -1131,10 +1131,10 @@ Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 
 Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
 PASS: Home presentation, authority, accessibility and visual evidence
 <end of output>
-Test time =   6.85 sec
+Test time =   6.86 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-home-states" end time: Oct 09 13:12 CEST
+"studio-home-states" end time: Oct 09 14:11 CEST
 "studio-home-states" time elapsed: 00:00:06
 ----------------------------------------------------------
 
@@ -1142,9 +1142,19 @@ Test Passed.
 14/60 Test: studio-ui-m0-qml
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-ui-m0-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m0/screenshots"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-ui-m0-qml" start time: Oct 09 13:12 CEST
+"studio-ui-m0-qml" start time: Oct 09 14:11 CEST
 Output:
 ----------------------------------------------------------
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
 STAGE: dynamic device removal followed by immediate resize
 STAGE: presentation provider
 STAGE: controller eligibility and stale snapshot transitions
@@ -1152,10 +1162,10 @@ STAGE: button interactions
 STAGE: rendered-frame screenshot deadlines
 PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
 <end of output>
-Test time =   7.42 sec
+Test time =   7.29 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-ui-m0-qml" end time: Oct 09 13:13 CEST
+"studio-ui-m0-qml" end time: Oct 09 14:11 CEST
 "studio-ui-m0-qml" time elapsed: 00:00:07
 ----------------------------------------------------------
 
@@ -1163,15 +1173,15 @@ Test Passed.
 15/60 Test: studio-ui-m0-cli
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_ui_m0.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m0/cli"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-ui-m0-cli" start time: Oct 09 13:13 CEST
+"studio-ui-m0-cli" start time: Oct 09 14:11 CEST
 Output:
 ----------------------------------------------------------
 PASS: CLI validation, short screenshot timeout, token-free offline startup, twelve initial routes without network access
 <end of output>
-Test time =  21.90 sec
+Test time =  21.34 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-ui-m0-cli" end time: Oct 09 13:13 CEST
+"studio-ui-m0-cli" end time: Oct 09 14:11 CEST
 "studio-ui-m0-cli" time elapsed: 00:00:21
 ----------------------------------------------------------
 
@@ -1179,15 +1189,15 @@ Test Passed.
 16/60 Test: studio-calibration-controller
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-calibration-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-calibration-controller" start time: Oct 09 13:13 CEST
+"studio-calibration-controller" start time: Oct 09 14:11 CEST
 Output:
 ----------------------------------------------------------
 Studio calibration presentation contracts passed
 <end of output>
-Test time =   0.32 sec
+Test time =   0.34 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-calibration-controller" end time: Oct 09 13:13 CEST
+"studio-calibration-controller" end time: Oct 09 14:11 CEST
 "studio-calibration-controller" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1195,31 +1205,31 @@ Test Passed.
 17/60 Test: studio-calibration-daemon
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_calibration.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-calibration-daemon" start time: Oct 09 13:13 CEST
+"studio-calibration-daemon" start time: Oct 09 14:11 CEST
 Output:
 ----------------------------------------------------------
-Studio controller → mantis-client → Protobuf → real mantisd passed; UI heartbeat 5121
+Studio controller → mantis-client → Protobuf → real mantisd passed; UI heartbeat 4807
 <end of output>
-Test time =  11.16 sec
+Test time =   9.63 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-calibration-daemon" end time: Oct 09 13:13 CEST
-"studio-calibration-daemon" time elapsed: 00:00:11
+"studio-calibration-daemon" end time: Oct 09 14:11 CEST
+"studio-calibration-daemon" time elapsed: 00:00:09
 ----------------------------------------------------------
 
 18/60 Testing: studio-calibration-qml
 18/60 Test: studio-calibration-qml
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-calibration-qml"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"studio-calibration-qml" start time: Oct 09 13:13 CEST
+"studio-calibration-qml" start time: Oct 09 14:11 CEST
 Output:
 ----------------------------------------------------------
 Calibration QML loaded and bound all seven stages without binding/type warnings
 <end of output>
-Test time =   0.79 sec
+Test time =   0.86 sec
 ----------------------------------------------------------
 Test Passed.
-"studio-calibration-qml" end time: Oct 09 13:13 CEST
+"studio-calibration-qml" end time: Oct 09 14:12 CEST
 "studio-calibration-qml" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1227,7 +1237,7 @@ Test Passed.
 19/60 Test: project-public-capabilities
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/project_capabilities.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"project-public-capabilities" start time: Oct 09 13:13 CEST
+"project-public-capabilities" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 Refusal: Project does not exist
@@ -1236,14 +1246,14 @@ Refusal: Invalid local access token
 Embedded NUL rejected; current identity unchanged (partial directory side effects require a separate backend policy).
 Refusal: Stop captures before switching projects
 Refusal: Jobs must finish before switching projects
-BLOCKER VERIFIED: completed replay from A remains readable after both clients confirm B; old preview written into /tmp/mantis-project-capabilities-zjd7v6rq/B-測定.mantis/cache/previews/f4379ea8-2cff-4fab-a02d-133afb7bbcc7.packet
+BLOCKER VERIFIED: completed replay from A remains readable after both clients confirm B; old preview written into /tmp/mantis-project-capabilities-o2ib24my/B-測定.mantis/cache/previews/4dbfb553-1c7b-4e0d-b241-6afc52084e8e.packet
 PASS: published create/open semantics, two clients, capture/job refusal, auth/invalid/missing path, Unicode/literal paths; New/Open remain BLOCKED in UI
 
 <end of output>
 Test time =   1.45 sec
 ----------------------------------------------------------
 Test Passed.
-"project-public-capabilities" end time: Oct 09 13:13 CEST
+"project-public-capabilities" end time: Oct 09 14:12 CEST
 "project-public-capabilities" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -1251,15 +1261,15 @@ Test Passed.
 20/60 Test: calibration-service-protocol
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-service-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-service-protocol" start time: Oct 09 13:13 CEST
+"calibration-service-protocol" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 CalibrationService and generated protocol dispatch passed
 <end of output>
-Test time =  20.67 sec
+Test time =  20.69 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-service-protocol" end time: Oct 09 13:14 CEST
+"calibration-service-protocol" end time: Oct 09 14:12 CEST
 "calibration-service-protocol" time elapsed: 00:00:20
 ----------------------------------------------------------
 
@@ -1267,33 +1277,33 @@ Test Passed.
 21/60 Test: calibration-client-integration
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/calibration_api.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-client-integration" start time: Oct 09 13:14 CEST
+"calibration-client-integration" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 C++ calibration SDK against real mantisd passed
 Real daemon Python/C++/CLI calibration APIs and compositional camera/rig workflow passed
 Strict CLI malformed-option rejection passed without contacting a daemon
 <end of output>
-Test time =  17.03 sec
+Test time =  13.41 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-client-integration" end time: Oct 09 13:14 CEST
-"calibration-client-integration" time elapsed: 00:00:17
+"calibration-client-integration" end time: Oct 09 14:12 CEST
+"calibration-client-integration" time elapsed: 00:00:13
 ----------------------------------------------------------
 
 22/60 Testing: python-calibration
 22/60 Test: python-calibration
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/unit/python_calibration.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"python-calibration" start time: Oct 09 13:14 CEST
+"python-calibration" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 Python calibration encoding, presence, bounds, artifact arguments, Job and active semantics passed
 <end of output>
-Test time =   0.06 sec
+Test time =   0.05 sec
 ----------------------------------------------------------
 Test Passed.
-"python-calibration" end time: Oct 09 13:14 CEST
+"python-calibration" end time: Oct 09 14:12 CEST
 "python-calibration" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1301,15 +1311,15 @@ Test Passed.
 23/60 Test: protocol-field-compatibility
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/contract/protocol_fields.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"protocol-field-compatibility" start time: Oct 09 13:14 CEST
+"protocol-field-compatibility" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 Protocol v1: Request 10..31 and Response 1..12 frozen; M6 Request 32..40 / Response 13..15 verified
 <end of output>
-Test time =   0.05 sec
+Test time =   0.04 sec
 ----------------------------------------------------------
 Test Passed.
-"protocol-field-compatibility" end time: Oct 09 13:14 CEST
+"protocol-field-compatibility" end time: Oct 09 14:12 CEST
 "protocol-field-compatibility" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1317,40 +1327,40 @@ Test Passed.
 24/60 Test: calibration-artifacts
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-artifacts-tests" "codec"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-artifacts" start time: Oct 09 13:14 CEST
+"calibration-artifacts" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 OpenCV 4.10.0; full target/dataset/camera/rig graph round-trip passed
 codec passed
 <end of output>
-Test time =  10.72 sec
+Test time =   8.53 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-artifacts" end time: Oct 09 13:14 CEST
-"calibration-artifacts" time elapsed: 00:00:10
+"calibration-artifacts" end time: Oct 09 14:12 CEST
+"calibration-artifacts" time elapsed: 00:00:08
 ----------------------------------------------------------
 
 25/60 Testing: active-calibration-binding
 25/60 Test: active-calibration-binding
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-artifacts-tests" "binding"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"active-calibration-binding" start time: Oct 09 13:14 CEST
+"active-calibration-binding" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 binding passed
 <end of output>
-Test time =  11.35 sec
+Test time =   8.78 sec
 ----------------------------------------------------------
 Test Passed.
-"active-calibration-binding" end time: Oct 09 13:14 CEST
-"active-calibration-binding" time elapsed: 00:00:11
+"active-calibration-binding" end time: Oct 09 14:12 CEST
+"active-calibration-binding" time elapsed: 00:00:08
 ----------------------------------------------------------
 
 26/60 Testing: calibration-revision-store
 26/60 Test: calibration-revision-store
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-revision-store-tests" "revision"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-revision-store" start time: Oct 09 13:14 CEST
+"calibration-revision-store" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 revision passed
@@ -1358,7 +1368,7 @@ revision passed
 Test time =   0.03 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-revision-store" end time: Oct 09 13:14 CEST
+"calibration-revision-store" end time: Oct 09 14:12 CEST
 "calibration-revision-store" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1366,7 +1376,7 @@ Test Passed.
 27/60 Test: project-migration-v1-v2
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-revision-store-tests" "migration"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"project-migration-v1-v2" start time: Oct 09 13:14 CEST
+"project-migration-v1-v2" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 migration passed
@@ -1374,7 +1384,7 @@ migration passed
 Test time =   0.03 sec
 ----------------------------------------------------------
 Test Passed.
-"project-migration-v1-v2" end time: Oct 09 13:14 CEST
+"project-migration-v1-v2" end time: Oct 09 14:12 CEST
 "project-migration-v1-v2" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1382,15 +1392,15 @@ Test Passed.
 28/60 Test: provenance-calibration-reference
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-revision-store-tests" "provenance"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"provenance-calibration-reference" start time: Oct 09 13:14 CEST
+"provenance-calibration-reference" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 provenance passed
 <end of output>
-Test time =   0.03 sec
+Test time =   0.02 sec
 ----------------------------------------------------------
 Test Passed.
-"provenance-calibration-reference" end time: Oct 09 13:14 CEST
+"provenance-calibration-reference" end time: Oct 09 14:12 CEST
 "provenance-calibration-reference" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1398,7 +1408,7 @@ Test Passed.
 29/60 Test: calibration-solver-opencv
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-solver-opencv-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-solver-opencv" start time: Oct 09 13:14 CEST
+"calibration-solver-opencv" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 M4 solver OpenCV 4.10.0 (core/calib3d)
@@ -1409,10 +1419,10 @@ Finite noisy fit retained: final RMS=2.98637219259 px held-out RMS=3.00129525213
 Numerical failure converted: Camera model coefficients must be finite
 OpenCV calibration solver contracts passed
 <end of output>
-Test time =   1.89 sec
+Test time =   1.41 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-solver-opencv" end time: Oct 09 13:14 CEST
+"calibration-solver-opencv" end time: Oct 09 14:12 CEST
 "calibration-solver-opencv" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -1420,15 +1430,15 @@ Test Passed.
 30/60 Test: calibration-solve
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-solve-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-solve" start time: Oct 09 13:14 CEST
+"calibration-solve" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 Pure calibration solve contracts passed
 <end of output>
-Test time =   0.09 sec
+Test time =   0.07 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-solve" end time: Oct 09 13:14 CEST
+"calibration-solve" end time: Oct 09 14:12 CEST
 "calibration-solve" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1436,16 +1446,16 @@ Test Passed.
 31/60 Test: calibration-dataset
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-dataset-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-dataset" start time: Oct 09 13:14 CEST
+"calibration-dataset" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 Policy v1 exact keys: left A/17 B/17 B/18; right B/17 A/18 B/18
 Calibration dataset: pure structure, descriptors, checked fixed-point distance and deterministic per-camera selection passed
 <end of output>
-Test time =   0.04 sec
+Test time =   0.03 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-dataset" end time: Oct 09 13:14 CEST
+"calibration-dataset" end time: Oct 09 14:12 CEST
 "calibration-dataset" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1453,24 +1463,24 @@ Test Passed.
 32/60 Test: calibration-dataset-ingestion
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-dataset-ingestion-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-dataset-ingestion" start time: Oct 09 13:14 CEST
+"calibration-dataset-ingestion" start time: Oct 09 14:12 CEST
 Output:
 ----------------------------------------------------------
 Multi-capture RAW8/Y10P exact selection: left canonical A/17 B/17 B/18; right B/17 A/18 B/18
 RawCapture dataset ingestion: canonical identities, exact roles, packing, partial visibility, selection, source errors and metadata-only lifetime passed
 <end of output>
-Test time =  27.73 sec
+Test time =  22.50 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-dataset-ingestion" end time: Oct 09 13:15 CEST
-"calibration-dataset-ingestion" time elapsed: 00:00:27
+"calibration-dataset-ingestion" end time: Oct 09 14:13 CEST
+"calibration-dataset-ingestion" time elapsed: 00:00:22
 ----------------------------------------------------------
 
 33/60 Testing: calibration-opencv
 33/60 Test: calibration-opencv
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-opencv-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-opencv" start time: Oct 09 13:15 CEST
+"calibration-opencv" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 OpenCV 4.10.0: 4.6-generation SB/ArUco/ChArUco contracts
@@ -1482,18 +1492,18 @@ ChArUco contract: 35 full corners, 20/20 partial corners, common IDs 3 10 17 24 
 ChArUco white-origin even-row layout: full/partial IDs, planar mapping, scale and opposite-layout rejection verified
 Calibration OpenCV: synthetic detection, identity, partial visibility, scale, dictionaries and input validation passed
 <end of output>
-Test time =   3.58 sec
+Test time =   2.81 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-opencv" end time: Oct 09 13:15 CEST
-"calibration-opencv" time elapsed: 00:00:03
+"calibration-opencv" end time: Oct 09 14:13 CEST
+"calibration-opencv" time elapsed: 00:00:02
 ----------------------------------------------------------
 
 34/60 Testing: calibration-observation
 34/60 Test: calibration-observation
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-observation-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-observation" start time: Oct 09 13:15 CEST
+"calibration-observation" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 Calibration observations: pure validation, ID semantics and correspondence intersection passed
@@ -1501,7 +1511,7 @@ Calibration observations: pure validation, ID semantics and correspondence inter
 Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-observation" end time: Oct 09 13:15 CEST
+"calibration-observation" end time: Oct 09 14:13 CEST
 "calibration-observation" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1509,7 +1519,7 @@ Test Passed.
 35/60 Test: calibration-target
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-target-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-target" start time: Oct 09 13:15 CEST
+"calibration-target" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 Calibration targets: nominal/measured scale, anisotropy, marker dimensions, points and structural validation passed
@@ -1517,7 +1527,7 @@ Calibration targets: nominal/measured scale, anisotropy, marker dimensions, poin
 Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-target" end time: Oct 09 13:15 CEST
+"calibration-target" end time: Oct 09 14:13 CEST
 "calibration-target" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1525,15 +1535,15 @@ Test Passed.
 36/60 Test: legacy-abi
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-legacy-abi-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins/libmantis-legacy-device.so" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins/libmantis-legacy-acquisition.so"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"legacy-abi" start time: Oct 09 13:15 CEST
+"legacy-abi" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 Frozen-header C ABI v1 DSO, callbacks and retained buffers passed
 <end of output>
-Test time =   0.01 sec
+Test time =   0.02 sec
 ----------------------------------------------------------
 Test Passed.
-"legacy-abi" end time: Oct 09 13:15 CEST
+"legacy-abi" end time: Oct 09 14:13 CEST
 "legacy-abi" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1541,7 +1551,7 @@ Test Passed.
 37/60 Test: frozen-l2-abi
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-l2-abi-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"frozen-l2-abi" start time: Oct 09 13:15 CEST
+"frozen-l2-abi" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 Frozen L2 ABI: 2023 layout/numeric checks and 22 identity checks passed
@@ -1549,7 +1559,7 @@ Frozen L2 ABI: 2023 layout/numeric checks and 22 identity checks passed
 Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"frozen-l2-abi" end time: Oct 09 13:15 CEST
+"frozen-l2-abi" end time: Oct 09 14:13 CEST
 "frozen-l2-abi" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1557,7 +1567,7 @@ Test Passed.
 38/60 Test: frozen-l2-catalog
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/contract/l2/generate_catalog.py" "--check"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"frozen-l2-catalog" start time: Oct 09 13:15 CEST
+"frozen-l2-catalog" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 L2 frozen catalogs: 129 structs, 10 callback aliases, 816 fields, 113 numeric constants, 22 IDs
@@ -1565,7 +1575,7 @@ L2 frozen catalogs: 129 structs, 10 callback aliases, 816 fields, 113 numeric co
 Test time =   0.04 sec
 ----------------------------------------------------------
 Test Passed.
-"frozen-l2-catalog" end time: Oct 09 13:15 CEST
+"frozen-l2-catalog" end time: Oct 09 14:13 CEST
 "frozen-l2-catalog" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1573,47 +1583,47 @@ Test Passed.
 39/60 Test: calibration-service-activation
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-activation-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins" "/home/martin/src/mantis-studio-ui/tests/fixtures/x1-acceptance-env.json"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"calibration-service-activation" start time: Oct 09 13:15 CEST
+"calibration-service-activation" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 Calibration service discovered activation, strict parsing and M5 capture snapshot passed
 <end of output>
-Test time =  13.88 sec
+Test time =  10.85 sec
 ----------------------------------------------------------
 Test Passed.
-"calibration-service-activation" end time: Oct 09 13:15 CEST
-"calibration-service-activation" time elapsed: 00:00:13
+"calibration-service-activation" end time: Oct 09 14:13 CEST
+"calibration-service-activation" time elapsed: 00:00:10
 ----------------------------------------------------------
 
 40/60 Testing: capture-calibration-binding
 40/60 Test: capture-calibration-binding
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-capture-calibration-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins" "/home/martin/src/mantis-studio-ui/tests/fixtures/x1-acceptance-env.json"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"capture-calibration-binding" start time: Oct 09 13:15 CEST
+"capture-calibration-binding" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 Real Runtime/fake-X1: no-active, snapshot rev1 while active changes, future rev2, historical replay, identical pixel hashes and BufferView identities, strict discovery geometry, capture-start geometry rejection and packing/FPS compatibility passed
 <end of output>
-Test time =  28.22 sec
+Test time =  23.67 sec
 ----------------------------------------------------------
 Test Passed.
-"capture-calibration-binding" end time: Oct 09 13:15 CEST
-"capture-calibration-binding" time elapsed: 00:00:28
+"capture-calibration-binding" end time: Oct 09 14:13 CEST
+"capture-calibration-binding" time elapsed: 00:00:23
 ----------------------------------------------------------
 
 41/60 Testing: x1-pairing
 41/60 Test: x1-pairing
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-x1-pairing-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"x1-pairing" start time: Oct 09 13:15 CEST
+"x1-pairing" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 bounded timestamp-nearest pairing passed
 <end of output>
-Test time =   1.27 sec
+Test time =   1.33 sec
 ----------------------------------------------------------
 Test Passed.
-"x1-pairing" end time: Oct 09 13:15 CEST
+"x1-pairing" end time: Oct 09 14:13 CEST
 "x1-pairing" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -1621,7 +1631,7 @@ Test Passed.
 42/60 Test: x1-pairing-stream
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-x1-pairing-stream-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"x1-pairing-stream" start time: Oct 09 13:15 CEST
+"x1-pairing-stream" start time: Oct 09 14:13 CEST
 Output:
 ----------------------------------------------------------
 GREY normal hardware=0
@@ -1699,10 +1709,10 @@ Y10P phase-drift-right counted exclusions, zero recorder loss and exact replay p
 Y10P phase-jitter-left counted exclusions, zero recorder loss and exact replay passed
 Y10P phase-jitter-right counted exclusions, zero recorder loss and exact replay passed
 <end of output>
-Test time =  18.52 sec
+Test time =  18.04 sec
 ----------------------------------------------------------
 Test Passed.
-"x1-pairing-stream" end time: Oct 09 13:16 CEST
+"x1-pairing-stream" end time: Oct 09 14:14 CEST
 "x1-pairing-stream" time elapsed: 00:00:18
 ----------------------------------------------------------
 
@@ -1710,7 +1720,7 @@ Test Passed.
 43/60 Test: x1-media
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-x1-media-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"x1-media" start time: Oct 09 13:16 CEST
+"x1-media" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 Disabled-link route discovery and explicit ambiguity checks passed
@@ -1718,7 +1728,7 @@ Disabled-link route discovery and explicit ambiguity checks passed
 Test time =   0.03 sec
 ----------------------------------------------------------
 Test Passed.
-"x1-media" end time: Oct 09 13:16 CEST
+"x1-media" end time: Oct 09 14:14 CEST
 "x1-media" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1726,7 +1736,7 @@ Test Passed.
 44/60 Test: acquisition
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-acquisition-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins" "/home/martin/src/mantis-studio-ui/profiles/x1-q6a.json"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"acquisition" start time: Oct 09 13:16 CEST
+"acquisition" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 normal passed
@@ -1745,10 +1755,10 @@ stall-right passed
 stop-right passed
 stream-mismatch passed
 <end of output>
-Test time =   1.50 sec
+Test time =   1.47 sec
 ----------------------------------------------------------
 Test Passed.
-"acquisition" end time: Oct 09 13:16 CEST
+"acquisition" end time: Oct 09 14:14 CEST
 "acquisition" time elapsed: 00:00:01
 ----------------------------------------------------------
 
@@ -1756,33 +1766,33 @@ Test Passed.
 45/60 Test: acquisition-integration
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/acquisition.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"acquisition-integration" start time: Oct 09 13:16 CEST
+"acquisition-integration" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 C++ acquisition client passed
 Fake X1 CLI/Python/C++ controls, dual preview, immutable references, kill/recovery and hardware-free replay passed
 <end of output>
-Test time =  11.01 sec
+Test time =  10.71 sec
 ----------------------------------------------------------
 Test Passed.
-"acquisition-integration" end time: Oct 09 13:16 CEST
-"acquisition-integration" time elapsed: 00:00:11
+"acquisition-integration" end time: Oct 09 14:14 CEST
+"acquisition-integration" time elapsed: 00:00:10
 ----------------------------------------------------------
 
 46/60 Testing: acquisition-y10p-integration
 46/60 Test: acquisition-y10p-integration
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/acquisition.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers" "Y10P"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"acquisition-y10p-integration" start time: Oct 09 13:16 CEST
+"acquisition-y10p-integration" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 C++ acquisition client passed
 Fake X1 CLI/Python/C++ controls, dual preview, immutable references, kill/recovery and hardware-free replay passed
 <end of output>
-Test time =  11.54 sec
+Test time =  11.61 sec
 ----------------------------------------------------------
 Test Passed.
-"acquisition-y10p-integration" end time: Oct 09 13:16 CEST
+"acquisition-y10p-integration" end time: Oct 09 14:14 CEST
 "acquisition-y10p-integration" time elapsed: 00:00:11
 ----------------------------------------------------------
 
@@ -1790,15 +1800,15 @@ Test Passed.
 47/60 Test: control-listener
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/control_listener.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"control-listener" start time: Oct 09 13:16 CEST
+"control-listener" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 Blocking idle listener remains quiet and handles requests/shutdown after six seconds
 <end of output>
-Test time =   6.35 sec
+Test time =   6.34 sec
 ----------------------------------------------------------
 Test Passed.
-"control-listener" end time: Oct 09 13:16 CEST
+"control-listener" end time: Oct 09 14:14 CEST
 "control-listener" time elapsed: 00:00:06
 ----------------------------------------------------------
 
@@ -1806,7 +1816,7 @@ Test Passed.
 48/60 Test: acquisition-qos
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-acquisition-qos-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"acquisition-qos" start time: Oct 09 13:16 CEST
+"acquisition-qos" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 Bounded raw saturation/failure, preview isolation and cooperative shutdown passed
@@ -1814,7 +1824,7 @@ Bounded raw saturation/failure, preview isolation and cooperative shutdown passe
 Test time =   0.07 sec
 ----------------------------------------------------------
 Test Passed.
-"acquisition-qos" end time: Oct 09 13:16 CEST
+"acquisition-qos" end time: Oct 09 14:14 CEST
 "acquisition-qos" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1822,15 +1832,15 @@ Test Passed.
 49/60 Test: raw-capture
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-raw-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"raw-capture" start time: Oct 09 13:16 CEST
+"raw-capture" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 Segment storage, prefix recovery, legacy compatibility and two byte-identical replays passed
 <end of output>
-Test time =   0.10 sec
+Test time =   0.14 sec
 ----------------------------------------------------------
 Test Passed.
-"raw-capture" end time: Oct 09 13:16 CEST
+"raw-capture" end time: Oct 09 14:14 CEST
 "raw-capture" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1838,15 +1848,15 @@ Test Passed.
 50/60 Test: projected-sequencer
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-projected-run-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"projected-sequencer" start time: Oct 09 13:16 CEST
+"projected-sequencer" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 1884 deterministic sequencer checks passed
 <end of output>
-Test time =   0.49 sec
+Test time =   0.46 sec
 ----------------------------------------------------------
 Test Passed.
-"projected-sequencer" end time: Oct 09 13:16 CEST
+"projected-sequencer" end time: Oct 09 14:14 CEST
 "projected-sequencer" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1854,15 +1864,15 @@ Test Passed.
 51/60 Test: projected-light-semantics
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-projected-light-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"projected-light-semantics" start time: Oct 09 13:16 CEST
+"projected-light-semantics" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 735 canonical projected-light checks passed
 <end of output>
-Test time =   0.09 sec
+Test time =   0.11 sec
 ----------------------------------------------------------
 Test Passed.
-"projected-light-semantics" end time: Oct 09 13:16 CEST
+"projected-light-semantics" end time: Oct 09 14:14 CEST
 "projected-light-semantics" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1870,7 +1880,7 @@ Test Passed.
 52/60 Test: packed-image
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-packed-image-tests"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"packed-image" start time: Oct 09 13:16 CEST
+"packed-image" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 Y10P known vectors, padding, display reduction and raw preservation passed
@@ -1878,7 +1888,7 @@ Y10P known vectors, padding, display reduction and raw preservation passed
 Test time =   0.01 sec
 ----------------------------------------------------------
 Test Passed.
-"packed-image" end time: Oct 09 13:16 CEST
+"packed-image" end time: Oct 09 14:14 CEST
 "packed-image" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1886,7 +1896,7 @@ Test Passed.
 53/60 Test: core
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-core-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"core" start time: Oct 09 13:16 CEST
+"core" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 2113 architecture assertions passed
@@ -1894,7 +1904,7 @@ Output:
 Test time =   0.23 sec
 ----------------------------------------------------------
 Test Passed.
-"core" end time: Oct 09 13:16 CEST
+"core" end time: Oct 09 14:14 CEST
 "core" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1902,15 +1912,15 @@ Test Passed.
 54/60 Test: projected-light-contract
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-projected-contract-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/contract-plugins/libmantis-projected-contract.so" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/contract-plugins"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"projected-light-contract" start time: Oct 09 13:16 CEST
+"projected-light-contract" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 553 projected-light ABI/adapter checks passed
 <end of output>
-Test time =   0.22 sec
+Test time =   0.26 sec
 ----------------------------------------------------------
 Test Passed.
-"projected-light-contract" end time: Oct 09 13:16 CEST
+"projected-light-contract" end time: Oct 09 14:14 CEST
 "projected-light-contract" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1918,14 +1928,14 @@ Test Passed.
 55/60 Test: c-abi
 Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-c-contract"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"c-abi" start time: Oct 09 13:16 CEST
+"c-abi" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 <end of output>
 Test time =   0.00 sec
 ----------------------------------------------------------
 Test Passed.
-"c-abi" end time: Oct 09 13:16 CEST
+"c-abi" end time: Oct 09 14:14 CEST
 "c-abi" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1933,7 +1943,7 @@ Test Passed.
 56/60 Test: boundaries
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/contract/boundaries.py" "/home/martin/src/mantis-studio-ui"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"boundaries" start time: Oct 09 13:16 CEST
+"boundaries" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 Foundation, frontend, plugin and Linux media implementation boundaries passed
@@ -1941,7 +1951,7 @@ Foundation, frontend, plugin and Linux media implementation boundaries passed
 Test time =   0.03 sec
 ----------------------------------------------------------
 Test Passed.
-"boundaries" end time: Oct 09 13:16 CEST
+"boundaries" end time: Oct 09 14:14 CEST
 "boundaries" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1949,7 +1959,7 @@ Test Passed.
 57/60 Test: python-capture
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/unit/python_capture.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"python-capture" start time: Oct 09 13:16 CEST
+"python-capture" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 ....
@@ -1958,10 +1968,10 @@ Ran 4 tests in 0.001s
 
 OK
 <end of output>
-Test time =   0.08 sec
+Test time =   0.10 sec
 ----------------------------------------------------------
 Test Passed.
-"python-capture" end time: Oct 09 13:16 CEST
+"python-capture" end time: Oct 09 14:14 CEST
 "python-capture" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -1969,35 +1979,35 @@ Test Passed.
 58/60 Test: acceptance
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/acceptance.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"acceptance" start time: Oct 09 13:16 CEST
+"acceptance" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 PASS: Python, CLI, Studio/viewport/UI restart, deterministic replay, isolated crash, capture continuity, daemon crash recovery
 <end of output>
-Test time =   5.23 sec
+Test time =   4.40 sec
 ----------------------------------------------------------
 Test Passed.
-"acceptance" end time: Oct 09 13:16 CEST
-"acceptance" time elapsed: 00:00:05
+"acceptance" end time: Oct 09 14:14 CEST
+"acceptance" time elapsed: 00:00:04
 ----------------------------------------------------------
 
 59/60 Testing: q6a-validation-harness
 59/60 Test: q6a-validation-harness
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/q6a_validation_harness.py"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"q6a-validation-harness" start time: Oct 09 13:16 CEST
+"q6a-validation-harness" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 .............
 ----------------------------------------------------------------------
-Ran 13 tests in 0.850s
+Ran 13 tests in 0.842s
 
 OK
 <end of output>
-Test time =   0.95 sec
+Test time =   0.91 sec
 ----------------------------------------------------------
 Test Passed.
-"q6a-validation-harness" end time: Oct 09 13:16 CEST
+"q6a-validation-harness" end time: Oct 09 14:14 CEST
 "q6a-validation-harness" time elapsed: 00:00:00
 ----------------------------------------------------------
 
@@ -2005,7 +2015,7 @@ Test Passed.
 60/60 Test: x1-calibration-validation
 Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/x1_calibration_validation.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
 Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
-"x1-calibration-validation" start time: Oct 09 13:16 CEST
+"x1-calibration-validation" start time: Oct 09 14:14 CEST
 Output:
 ----------------------------------------------------------
 Fixture-only M4 fixed evaluation, lineage and directional evidence PASS
@@ -2025,8 +2035,8 @@ Fixture-only M4 fixed evaluation, lineage and directional evidence PASS
       "reason": "Real evidence rejects MANTIS_X1_FAKE"
     }
   ],
-  "started_utc": "20261009-111756-568985",
-  "output": "/tmp/tmp_5lbbgfx/fake/x1-calibration-20261009-111756-568985",
+  "started_utc": "20261009-121537-397601",
+  "output": "/tmp/tmpq51_xgp0/fake/x1-calibration-20261009-121537-397601",
   "cleanup_errors": []
 }
 <frozen importlib._bootstrap>:488: DeprecationWarning: Type google.protobuf.pyext._message.ScalarMapContainer uses PyType_Spec with a metaclass that has custom tp_new. This is deprecated and will no longer be allowed in Python 3.14.
@@ -2047,23 +2057,23 @@ Fixture-only M4 fixed evaluation, lineage and directional evidence PASS
       "reason": "Interrupted"
     }
   ],
-  "started_utc": "20261009-111756-784927",
-  "output": "/tmp/tmp_5lbbgfx/interrupt/x1-calibration-20261009-111756-784927",
+  "started_utc": "20261009-121537-554177",
+  "output": "/tmp/tmpq51_xgp0/interrupt/x1-calibration-20261009-121537-554177",
   "cleanup_errors": []
 }
 ......../usr/lib/python3/dist-packages/google/protobuf/internal/well_known_types.py:91: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
   _EPOCH_DATETIME_NAIVE = datetime.datetime.utcfromtimestamp(0)
 ....
 ----------------------------------------------------------------------
-Ran 14 tests in 96.834s
+Ran 14 tests in 74.439s
 
 OK
 <end of output>
-Test time =  96.95 sec
+Test time =  74.51 sec
 ----------------------------------------------------------
 Test Passed.
-"x1-calibration-validation" end time: Oct 09 13:18 CEST
-"x1-calibration-validation" time elapsed: 00:01:36
+"x1-calibration-validation" end time: Oct 09 14:16 CEST
+"x1-calibration-validation" time elapsed: 00:01:14
 ----------------------------------------------------------
 
-End testing: Oct 09 13:18 CEST
+End testing: Oct 09 14:16 CEST

@@ -41,3 +41,11 @@ ARM64 CI investigation retains the [first](ci-first-arm-job.log) and
 [native GDB/QML stack](ci-arm-qml-stack.log) identifying the shared icon paint
 handler. These are failed runs, not final verification. See the validation record
 for the Qt 6.4 captured-context compatibility correction and exact-final CI gate.
+
+Selected matrix images, the default CLI view and full Studio CTest logs were
+refreshed after the final Qt 6.4 captured-context and combo-padding corrections.
+[Home pixel comparison](home-icon-pixel-comparison.log) reports no changed pixels.
+The latest native run is retained in [native-locked-final.log](native-locked-final.log)
+with [the locked-session receipt](native-session-final.txt). Earlier successful
+normal/maximized native captures predate those compatibility corrections; no final
+locked-session maximize pass is claimed.
