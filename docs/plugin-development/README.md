@@ -77,9 +77,8 @@ frozen v0.1 C header is loaded by the current host. See the Linux
 [X1 example](../../plugins/first-party/devices/mantis-x1.cpp) and
 [ADR-021](../adr/021-enumerated-acquisition-and-frameset-contract.md).
 
-MantisProcessorV1 retains its v0.1 single-packet attribute contract. FrameSet-aware
-native processing plugins will need a future queried processing interface; no
-scanner algorithm is added here. The v0.2 source and C++ semantic pipeline carry
+MantisProcessorV1 retains its v0.1 single-packet attribute contract. FrameSet-aware native processors use the optional frozen ProcessorV2 interface
+implemented in L6; no production scanner algorithm is added here. The v0.2 source and C++ semantic pipeline carry
 the complete FrameSet unchanged through acquisition/replay.
 
 
@@ -108,3 +107,20 @@ The planned generic bridge adapter maps capability/stream descriptors into the
 normal Device API so Studio/core code does not acquire ESP32, Arduino or
 vendor-model branches. Arduino/ESP libraries are future convenience bindings over
 that one protocol, not alternative Mantis data models.
+
+
+## v0.4 full semantic processing
+
+The frozen `org.mantis.processor.v2` queried interface accepts full borrowed
+semantic packet views, finite describe/process deadlines and exactly one full
+validated emit on success. Retain/transfer buffers explicitly; contain exceptions
+at the SDK boundary. V1 remains optional and unchanged. Registry selects V1 and
+V2 explicitly and preserves manifest isolation; unapproved V2 plugins run through
+`mantis-plugin-host process-semantic` with bounded typed local data-plane files.
+Output headers and evidence belong to the producer and are never overwritten.
+
+See [the implementation and ownership contract](../architecture/laser-observation-processing.md)
+and [MLOBS001/local semantic transport](../architecture/laser-observation-format.md).
+The C-only adversarial fixture and deterministic synthetic DSO under
+`tests/contract/processor-v2` exercise the frozen interface without hardware. They
+are test targets, not production extraction plugins or real optical evidence.

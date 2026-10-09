@@ -31,6 +31,7 @@ class Loaded {
     const std::filesystem::path &path() const {
         return path_;
     }
+    std::shared_ptr<const void> lifetime() const { return library_; }
     const MantisPluginV1 *api() const {
         return api_;
     }
@@ -47,12 +48,16 @@ std::unique_ptr<device::ProjectedExecutor> open_projected_light(std::shared_ptr<
 data::Published process(const Loaded &, const data::Packet &);
 void export_data(const Loaded &, const data::Packet &, const std::filesystem::path &);
 pipeline::NodeDescriptor describe_node(const Loaded &);
+pipeline::NodeDescriptor describe_semantic_node(const Loaded &, uint32_t timeout_ms = 1000);
+data::SemanticPublished process_semantic(const Loaded &, const data::SemanticPacket &,
+                                         uint32_t timeout_ms = 1000, const CancellationToken & = {});
 class Registry {
     struct Entry {
         Manifest manifest;
         std::string state{"registered"}, diagnostic;
         std::shared_ptr<Loaded> loaded;
         pipeline::NodeDescriptor node;
+        std::optional<pipeline::NodeDescriptor> semantic_node;
     };
     std::map<std::string, std::shared_ptr<Entry>> entries_;
     mutable std::mutex mutex_;
@@ -75,6 +80,7 @@ class Registry {
     std::unique_ptr<device::ProjectedExecutor> open_projected_light(const std::string &plugin_id,
                                                                     const Id &parent, uint32_t timeout_ms);
     pipeline::Node node(const std::string &);
+    pipeline::SemanticNode semantic_node(const std::string &, uint32_t timeout_ms = 1000);
     void export_file(const std::string &, const data::Packet &, const std::filesystem::path &,
                      const CancellationToken &);
     void set_enabled(const std::string &, bool);

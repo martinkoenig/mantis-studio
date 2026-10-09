@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <mantis/artifact_api.hpp>
+#include <mantis/laser_observation_io.hpp>
 #include <mantis/projected_light_io.hpp>
 namespace mantis::artifact {
 struct CalibrationRevision {
@@ -25,6 +26,10 @@ class Store {
     const std::filesystem::path &root() const;
     ArtifactId begin(ArtifactType, Provenance);
     void append(const ArtifactId &, const data::Packet &);
+    // A single immutable semantic observation per derived artifact, with exact context/lineage.
+    ArtifactId begin_laser_observation(Provenance = {});
+    void append_laser_observation(const ArtifactId &, const data::LaserObservation &);
+    data::LaserObservation laser_observation(const ArtifactId &) const;
     // Synchronous durable pre-run initialization; never starts hardware.
     ArtifactId begin_projected_capture(data::ProjectedCaptureHeader, Provenance = {});
     void append_bundle(const ArtifactId &, const data::AcquisitionBundle &);

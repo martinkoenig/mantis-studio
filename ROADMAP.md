@@ -7,7 +7,7 @@ v0.4 planning/development branch: `feature/v0.4-laser-acquisition`
 
 This document is the canonical high-level release roadmap for the Mantis Studio / Mantis X1 scanning path. Detailed architecture, implementation contracts, ADRs and validation evidence remain authoritative for their respective releases.
 
-The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has FINAL ACCEPTED L0 architecture, L1 canonical semantics, L2 contracts and L3 sequencer and L4 evidence/storage; L5 is implemented, acceptance pending, and L6–L8 remain planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
+The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has FINAL ACCEPTED L0 architecture, L1 canonical semantics, L2 contracts and L3 sequencer and L4 evidence/storage; L5 is FINAL ACCEPTED; L6 is implemented, acceptance pending, and L7–L8 remain planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
 
 ## Release sequence
 
@@ -16,7 +16,7 @@ The roadmap intentionally distinguishes between **implemented/accepted**, **curr
 | v0.1 | Architecture/runtime foundation | Complete | Daemon-centric runtime, typed data/pipeline model, plugins, artifacts, jobs, clients and Studio shell |
 | v0.2 | Real acquisition foundation | Complete | Real dual-OV9281 X1 acquisition, FrameSets, recording/replay and Q6A hardware acceptance |
 | v0.3 | Geometric calibration foundation | Current | Physically scaled, versioned camera/stereo calibration with Studio workflow and real-hardware acceptance |
-| v0.4 | Laser acquisition foundation | L0/L1/L2/L3/L4 FINAL ACCEPTED; L5 implemented, acceptance pending | Deterministic projected-light control, timing and capture semantics with typed LaserObservation infrastructure |
+| v0.4 | Laser acquisition foundation | L0/L1/L2/L3/L4/L5 FINAL ACCEPTED; L6 implemented, acceptance pending | Deterministic projected-light control, timing and capture semantics with typed LaserObservation infrastructure |
 | v0.5 | Laser geometry and triangulation | Planned | Calibrated laser geometry, subpixel line extraction and metric 3D observations |
 | v0.6 | Tracking, registration and fusion | Planned | Multi-frame pose estimation, registration and fused point-cloud reconstruction |
 | v0.7 | Surface, mesh and texture | Planned | Surface reconstruction, mesh generation and RGB texture integration |
@@ -39,7 +39,7 @@ Canonical detail:
 
 ## v0.4 — Laser Acquisition Foundation
 
-**L0 FINAL ACCEPTED; L1 FINAL ACCEPTED; L2 FINAL ACCEPTED; L3 FINAL ACCEPTED; L4 FINAL ACCEPTED; L5 implemented, acceptance pending; L6–L8 planned.** See the
+**L0 FINAL ACCEPTED; L1 FINAL ACCEPTED; L2 FINAL ACCEPTED; L3 FINAL ACCEPTED; L4 FINAL ACCEPTED; L5 FINAL ACCEPTED; L6 implemented, acceptance pending; L7–L8 planned.** See the
 [v0.4 architecture baseline and package map](docs/architecture/v0.4-laser-acquisition.md).
 
 The purpose of v0.4 is to make projected-light acquisition a first-class, deterministic part of the same Mantis runtime instead of introducing a separate scanner-specific side path.

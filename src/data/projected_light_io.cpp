@@ -1,7 +1,10 @@
 #include <bit>
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <mantis/data_io.hpp>
+#include <mantis/laser_observation_io.hpp>
+#include <mantis/platform.hpp>
 #include <mantis/projected_light_io.hpp>
 #include <sstream>
 #include <streambuf>
@@ -29,7 +32,8 @@ struct Reader {
     memory::BufferView storage;
     std::span<const std::byte> bytes;
     size_t pos{};
-    explicit Reader(memory::BufferView v) : storage(std::move(v)) {
+    bool observation{};
+    explicit Reader(memory::BufferView v, bool obs = false) : storage(std::move(v)), observation(obs) {
         auto m = storage.map_read();
         if (!m)
             throw Failure(m.error());
@@ -61,15 +65,19 @@ struct Reader {
 };
 // Counts metadata only. Pixel sizes are computed separately from BufferView extents.
 class Counter : public std::streambuf {
+    bool checksum;
+
   public:
+    explicit Counter(bool integrity = true) : checksum(integrity) {}
     uint64_t size{}, hash{14695981039346656037ull};
 
   protected:
     std::streamsize xsputn(const char *p, std::streamsize n) override {
         require(n >= 0, "Invalid write size");
         size = add(size, static_cast<uint64_t>(n));
-        for (std::streamsize i = 0; i < n; ++i)
-            hash = (hash ^ static_cast<unsigned char>(p[i])) * 1099511628211ull;
+        if (checksum)
+            for (std::streamsize i = 0; i < n; ++i)
+                hash = (hash ^ static_cast<unsigned char>(p[i])) * 1099511628211ull;
         return n;
     }
     int_type overflow(int_type c) override {
@@ -111,6 +119,7 @@ class SequentialPosition final : public std::streambuf {
 };
 template <class T> struct Fields;
 template <class T> struct Tags;
+#include "laser_observation_fields.inc"
 #include "projected_light_fields.inc"
 template <class T> struct Fields<SemanticId<T>> {
     template <class A, class V> static void apply(A &a, V &v) { a(v.id); }
@@ -153,6 +162,14 @@ template <class T> void put(Writer &w, const T &v) {
         static_assert(sizeof(double) == 8 && std::numeric_limits<double>::is_iec559);
         require(std::isfinite(v), "Nonfinite semantic number");
         w.number(std::bit_cast<uint64_t>(v));
+    } else if constexpr (std::is_same_v<T, memory::BufferView>) {
+        require(std::endian::native == std::endian::little, "Bulk scalar codec requires little-endian host");
+        auto b = v.map_read();
+        if (!b)
+            throw Failure(b.error());
+        require(b->size() <= max_semantic_payload, "Excessive attribute bytes");
+        w.number(b->size());
+        w.raw({reinterpret_cast<const char *>(b->data()), b->size()});
     } else if constexpr (std::is_same_v<T, bool>) {
         w.byte(v ? 1 : 0);
     } else if constexpr (std::is_integral_v<T>) {
@@ -197,7 +214,12 @@ template <class T> T get(Reader &r) {
         v = Duration{std::bit_cast<int64_t>(r.number())};
     else if constexpr (std::is_same_v<T, double>)
         v = std::bit_cast<double>(r.number());
-    else if constexpr (std::is_same_v<T, bool>) {
+    else if constexpr (std::is_same_v<T, memory::BufferView>) {
+        require(std::endian::native == std::endian::little, "Bulk scalar codec requires little-endian host");
+        auto n = r.number();
+        require(n <= max_semantic_payload, "Excessive attribute bytes");
+        v = r.take(n);
+    } else if constexpr (std::is_same_v<T, bool>) {
         auto tag = r.byte();
         require(tag <= 1, "Invalid boolean tag");
         v = tag == 1;
@@ -216,6 +238,18 @@ template <class T> T get(Reader &r) {
     } else if constexpr (IsVector<T>::value) {
         auto n = r.number();
         require(n <= max_semantic_entries && n <= r.bytes.size() - r.pos, "Array too large or truncated");
+        if (r.observation) {
+            using Element = typename IsVector<T>::value_type;
+            if constexpr (std::is_same_v<Element, Attribute>)
+                require(n <= 128, "Too many observation attributes");
+            if constexpr (std::is_same_v<Element, uint64_t>)
+                require(n <= 4, "Invalid attribute rank");
+            if constexpr (std::is_same_v<Element, EmitterEvidence> ||
+                          std::is_same_v<Element, ClockMappingEvidence>)
+                require(n <= 64, "Too many observation participants/mappings");
+            if constexpr (std::is_same_v<Element, CameraEffectiveState>)
+                require(n <= 1, "Observation is scoped to one source image");
+        }
         v.reserve(static_cast<size_t>(n));
         for (uint64_t i = 0; i < n; ++i)
             v.push_back(get<typename IsVector<T>::value_type>(r));
@@ -626,5 +660,257 @@ bool same_participants(const Participants &a, const Participants &b) {
     put(wx, a);
     put(wy, b);
     return x.str() == y.str();
+}
+namespace {
+memory::BufferView map_semantic_file(const std::filesystem::path &p) {
+    require(std::filesystem::file_size(p) <= limit, "Semantic file exceeds bound");
+    auto m = platform::map_read(p);
+    require(m.size <= limit, "Semantic file exceeds bound");
+    auto storage = std::make_shared<memory::Storage>();
+    storage->owner = m.owner;
+    storage->host = m.data;
+    storage->size = m.size;
+    storage->alignment = 1;
+    storage->domain = memory::MemoryDomain::shared_memory;
+    return {std::move(storage), 0, m.size};
+}
+void write_file(const std::filesystem::path &p, const auto &value, auto encode) {
+    std::ofstream out(p, std::ios::binary | std::ios::trunc);
+    if (!out)
+        fail(Status::io, "Cannot write semantic file");
+    encode(out, value);
+    out.flush();
+    check_write(out);
+}
+void envelope(std::ostream &out, std::string_view magic, std::string_view footer, const auto &encode) {
+    Counter c;
+    std::ostream pass(&c);
+    pass.exceptions(std::ios::badbit | std::ios::failbit);
+    encode(pass);
+    require(c.size <= limit - 48, "Semantic record exceeds bound");
+    Writer w{out};
+    w.raw(magic);
+    w.number(1);
+    w.number(c.size);
+    w.number(c.hash);
+    encode(out);
+    w.raw(footer);
+    w.number(~c.size);
+    check_write(out);
+}
+memory::BufferView envelope(memory::BufferView b, std::string_view magic, std::string_view footer) {
+    Reader r(std::move(b));
+    r.magic(magic);
+    require(r.number() == 1, "Unsupported semantic record version");
+    auto n = r.number(), hash = r.number();
+    require(n <= limit - 48, "Semantic record exceeds bound");
+    auto body = r.take(n);
+    r.magic(footer);
+    require(r.number() == ~n, "Invalid semantic completion footer");
+    r.end();
+    auto bytes = body.map_read();
+    if (!bytes)
+        throw Failure(bytes.error());
+    uint64_t actual = 14695981039346656037ull;
+    for (auto x : *bytes)
+        actual = (actual ^ std::to_integer<uint8_t>(x)) * 1099511628211ull;
+    require(actual == hash, "Semantic record checksum mismatch");
+    return body;
+}
+void observation_payload(std::ostream &out, const LaserObservation &v, const Counter &body) {
+    Writer w{out};
+    w.raw("MLOBS001");
+    w.number(1);
+    w.number(body.size);
+    w.number(body.hash);
+    put(w, v);
+    w.raw("MLOBEND1");
+    w.number(~body.size);
+    check_write(out);
+}
+void semantic_payload(std::ostream &out, const SemanticPacket &p, const Counter *observation_body) {
+    Writer w{out};
+    const auto tag = std::visit(
+        [](const auto &value) -> uint64_t {
+            using T = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<T, Published>)
+                return 0;
+            else if constexpr (std::is_same_v<T, AcquisitionEvidence>)
+                return 1;
+            else if constexpr (std::is_same_v<T, TriggerEvent>)
+                return 2;
+            else if constexpr (std::is_same_v<T, AcquisitionBundle>)
+                return 3;
+            else
+                return 4;
+        },
+        p);
+    w.number(tag);
+    std::visit(
+        [&](const auto &v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, Published>) {
+                SequentialPosition position(out.rdbuf());
+                std::ostream sequential(&position);
+                write_packet(sequential, *v);
+                check_write(sequential);
+            } else if constexpr (std::is_same_v<T, AcquisitionBundle>)
+                write_bundle(out, v);
+            else if constexpr (std::is_same_v<T, LaserObservation>)
+                observation_payload(out, v, *observation_body);
+            else if constexpr (std::is_same_v<T, AcquisitionEvidence>)
+                semantic(w, "MEVID001", v);
+            else
+                semantic(w, "MTRIG001", v);
+        },
+        p);
+}
+} // namespace
+schema::DataTypeId semantic_type(const SemanticPacket &p) {
+    return std::visit(
+        [](const auto &v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, Published>) {
+                require(bool(v), "Null semantic data packet");
+                return v->type;
+            } else
+                return v.type;
+        },
+        p);
+}
+Result<void> validate(const SemanticPacket &p) {
+    try {
+        std::visit(
+            [](const auto &v) {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, Published>) {
+                    require(bool(v), "Null semantic packet");
+                    require(v->type.version > 0 && v->type.name.find('.') != std::string::npos,
+                            "Invalid semantic data type");
+                    require(v->type.name != schema::laser_observation.name &&
+                                v->type.name != schema::acquisition_bundle.name &&
+                                v->type.name != schema::acquisition_evidence.name &&
+                                v->type.name != schema::trigger_event.name &&
+                                v->type.name != schema::acquisition_program.name,
+                            "Typed semantics cannot masquerade as a flat packet");
+                    require((v->type.name != schema::image.name && v->type.name != schema::frameset.name) ||
+                                v->type.version == 1,
+                            "Unsupported image schema");
+                    (void)publish(*v);
+                    (void)packet_size(*v);
+                } else {
+                    auto r = validate(v);
+                    if (!r)
+                        throw Failure(r.error());
+                }
+            },
+            p);
+        return {};
+    } catch (const Failure &e) {
+        return std::unexpected(e.error);
+    }
+}
+SemanticPublished publish(SemanticPacket p) {
+    auto r = validate(p);
+    if (!r)
+        throw Failure(r.error());
+    return std::make_shared<const SemanticPacket>(std::move(p));
+}
+void write_laser_observation(std::ostream &out, const LaserObservation &v) {
+    auto r = validate(v);
+    if (!r)
+        throw Failure(r.error());
+    Counter size(false);
+    std::ostream structural(&size);
+    structural.exceptions(std::ios::badbit | std::ios::failbit);
+    Writer sizing{structural};
+    put(sizing, v);
+    require(size.size <= limit - 48, "Observation record exceeds bound");
+    envelope(out, "MLOBS001", "MLOBEND1", [&](std::ostream &o) {
+        Writer w{o};
+        put(w, v);
+    });
+}
+LaserObservation read_laser_observation(memory::BufferView b) {
+    Reader fields(envelope(std::move(b), "MLOBS001", "MLOBEND1"), true);
+    auto v = get<LaserObservation>(fields);
+    fields.end();
+    auto r = validate(v);
+    if (!r)
+        fail(Status::corrupt, r.error().message, "MLOBS001");
+    return v;
+}
+void write_laser_observation(const std::filesystem::path &p, const LaserObservation &v) {
+    write_file(p, v, [](auto &o, const auto &x) { write_laser_observation(o, x); });
+}
+LaserObservation read_laser_observation(const std::filesystem::path &p) {
+    return read_laser_observation(map_semantic_file(p));
+}
+void write_semantic_packet(std::ostream &out, const SemanticPacket &v) {
+    auto r = validate(v);
+    if (!r)
+        throw Failure(r.error());
+    std::optional<Counter> observation_body;
+    if (const auto *obs = std::get_if<LaserObservation>(&v)) {
+        Counter size(false);
+        std::ostream structural(&size);
+        structural.exceptions(std::ios::badbit | std::ios::failbit);
+        Writer sizing{structural};
+        put(sizing, *obs);
+        require(size.size <= limit - 104, "Observation transport exceeds bound");
+        observation_body.emplace();
+        std::ostream integrity(&*observation_body);
+        integrity.exceptions(std::ios::badbit | std::ios::failbit);
+        Writer fields{integrity};
+        put(fields, *obs);
+    }
+    envelope(out, "MSEM0001", "MSEMEND1", [&](std::ostream &o) {
+        semantic_payload(o, v, observation_body ? &*observation_body : nullptr);
+    });
+}
+SemanticPacket read_semantic_packet(memory::BufferView b) {
+    Reader r(envelope(std::move(b), "MSEM0001", "MSEMEND1"));
+    auto kind = r.number();
+    auto payload = r.take(r.bytes.size() - r.pos);
+    r.end();
+    SemanticPacket result;
+    switch (kind) {
+    case 0: {
+        auto bytes = payload.map_read();
+        if (!bytes)
+            throw Failure(bytes.error());
+        if (bytes->size() >= 8 && !std::memcmp(bytes->data(), "MANTIS02", 8)) {
+            Reader f(payload);
+            inspect_frameset(f);
+            f.end();
+        }
+        result = read_packet(payload);
+        break;
+    }
+    case 1:
+        result = semantic<AcquisitionEvidence>(payload, "MEVID001");
+        break;
+    case 2:
+        result = semantic<TriggerEvent>(payload, "MTRIG001");
+        break;
+    case 3:
+        result = read_bundle(payload);
+        break;
+    case 4:
+        result = read_laser_observation(payload);
+        break;
+    default:
+        fail(Status::corrupt, "Unknown semantic transport kind");
+    }
+    auto valid = validate(result);
+    if (!valid)
+        fail(Status::corrupt, valid.error().message);
+    return result;
+}
+void write_semantic_packet(const std::filesystem::path &p, const SemanticPacket &v) {
+    write_file(p, v, [](auto &o, const auto &x) { write_semantic_packet(o, x); });
+}
+SemanticPacket read_semantic_packet(const std::filesystem::path &p) {
+    return read_semantic_packet(map_semantic_file(p));
 }
 } // namespace mantis::data

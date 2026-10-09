@@ -25,6 +25,7 @@ template <class T> class BoundedQueue {
         if (capacity == 0)
             fail(Status::invalid_argument, "Queue capacity must be positive");
     }
+    QueuePolicy policy() const noexcept { return policy_; }
     bool push(T value, std::stop_token stop = {}) {
         std::unique_lock lock(mutex_);
         if (closed_)
@@ -139,5 +140,24 @@ struct PipelineRecipe {
 struct NodeTiming {
     std::string node;
     uint64_t nanoseconds{};
+};
+} // namespace mantis::pipeline
+
+// Additive full-semantic route; legacy NodeInstance remains packet-only.
+#include <mantis/semantic_packet.hpp>
+namespace mantis::pipeline {
+class SemanticNodeInstance {
+  public:
+    virtual ~SemanticNodeInstance() = default;
+    virtual Result<data::SemanticPublished> process(std::span<const data::SemanticPublished>,
+                                                    const CancellationToken &) = 0;
+};
+struct SemanticNode {
+    NodeDescriptor descriptor;
+    std::function<std::unique_ptr<SemanticNodeInstance>()> factory;
+};
+struct SemanticGraph {
+    std::vector<SemanticNode> nodes;
+    std::vector<Connection> connections;
 };
 } // namespace mantis::pipeline

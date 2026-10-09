@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <mantis/data_io.hpp>
+#include <mantis/laser_observation_io.hpp>
 #include <mantis/plugin_runtime.hpp>
 #include <nlohmann/json.hpp>
 struct MantisBuffer {
@@ -439,8 +440,14 @@ void Registry::discover(const std::filesystem::path &directory, const std::vecto
                 if (e->manifest.id != e->loaded->api()->id ||
                     e->manifest.version != e->loaded->api()->version)
                     fail(Status::incompatible, "Manifest/binary identity mismatch");
-                if (e->manifest.kind == "processor")
-                    e->node = describe_node(*e->loaded);
+                if (e->manifest.kind == "processor") {
+                    if (e->loaded->api()->query_interface(MANTIS_PROCESSOR_V1))
+                        e->node = describe_node(*e->loaded);
+                    if (e->loaded->api()->query_interface(MANTIS_PROCESSOR_V2))
+                        e->semantic_node = describe_semantic_node(*e->loaded);
+                    if (e->node.id.empty() && !e->semantic_node)
+                        fail(Status::incompatible, "No supported processor interface");
+                }
             } else {
                 e->manifest.execution = "isolated";
                 auto probe = scratch_ / (Id::random().value + ".json");
@@ -458,13 +465,27 @@ void Registry::discover(const std::filesystem::path &directory, const std::vecto
                     fail(Status::unsupported, "Isolated device stream transport is reserved; v0.1 supports "
                                               "isolated processors/exporters");
                 if (e->manifest.kind == "processor") {
-                    e->node.id = info.at("node");
-                    e->node.plugin_id = e->manifest.id;
-                    e->node.algorithm_id = e->node.id;
-                    e->node.deterministic = info.at("deterministic");
-                    e->node.resources.backends = {info.at("backend")};
-                    e->node.inputs = {{"input", {info.at("input"), info.at("input_schema")}}};
-                    e->node.outputs = {{"output", {info.at("output"), info.at("output_schema")}}};
+                    auto descriptor = [&](const nlohmann::json &node_info) {
+                        pipeline::NodeDescriptor d;
+                        d.id = node_info.at("node");
+                        d.plugin_id = e->manifest.id;
+                        d.algorithm_id = d.id;
+                        d.deterministic = node_info.at("deterministic");
+                        d.resources.backends = {node_info.at("backend")};
+                        d.inputs = {{"input", {node_info.at("input"), node_info.at("input_schema")}}};
+                        d.outputs = {{"output", {node_info.at("output"), node_info.at("output_schema")}}};
+                        if (node_info.contains("algorithm_version")) {
+                            auto v = node_info.at("algorithm_version");
+                            d.version = {v.at(0), v.at(1), v.at(2)};
+                        }
+                        return d;
+                    };
+                    if (info.contains("node"))
+                        e->node = descriptor(info);
+                    if (info.contains("semantic_node"))
+                        e->semantic_node = descriptor(info.at("semantic_node"));
+                    if (e->node.id.empty() && !e->semantic_node)
+                        fail(Status::incompatible, "No supported processor interface");
                 }
             }
         } catch (const std::exception &ex) {
@@ -561,8 +582,8 @@ pipeline::Node Registry::node(const std::string &id) {
     auto e = entry(id);
     {
         std::lock_guard lock(mutex_);
-        if (e->state != "registered" || e->manifest.kind != "processor")
-            fail(Status::plugin_failed, "Processor unavailable: " + id);
+        if (e->state != "registered" || e->manifest.kind != "processor" || e->node.id.empty())
+            fail(Status::plugin_failed, "ProcessorV1 unavailable: " + id);
     }
     return {e->node, [this, e] {
                 return std::make_unique<FunctionNode>(
@@ -625,5 +646,85 @@ void Registry::set_enabled(const std::string &id, bool enabled) {
         fail(Status::busy, "Device plugin lifecycle belongs to active device runtime");
     e->state = enabled ? "registered" : "disabled";
     e->diagnostic.clear();
+}
+namespace {
+class SemanticFunctionNode final : public pipeline::SemanticNodeInstance {
+    std::function<Result<data::SemanticPublished>(std::span<const data::SemanticPublished>,
+                                                  const CancellationToken &)>
+        f;
+
+  public:
+    explicit SemanticFunctionNode(decltype(f) callback) : f(std::move(callback)) {}
+    Result<data::SemanticPublished> process(std::span<const data::SemanticPublished> inputs,
+                                            const CancellationToken &token) override {
+        return f(inputs, token);
+    }
+};
+} // namespace
+pipeline::SemanticNode Registry::semantic_node(const std::string &id, uint32_t ms) {
+    if (!ms || ms > 60000)
+        fail(Status::invalid_argument, "ProcessorV2 timeout must be finite");
+    auto e = entry(id);
+    {
+        std::lock_guard lock(mutex_);
+        if (e->state != "registered" || e->manifest.kind != "processor" || !e->semantic_node)
+            fail(Status::incompatible, "ProcessorV2 unavailable: " + id);
+    }
+    return {
+        *e->semantic_node, [this, e, ms] {
+            return std::make_unique<SemanticFunctionNode>(
+                [this, e, ms](std::span<const data::SemanticPublished> inputs,
+                              const CancellationToken &token) -> Result<data::SemanticPublished> {
+                    try {
+                        token.check();
+                        {
+                            std::lock_guard lock(mutex_);
+                            if (e->state != "registered")
+                                fail(Status::plugin_failed, "Processor unavailable");
+                        }
+                        if (inputs.size() != 1 || !inputs[0] ||
+                            data::semantic_type(*inputs[0]) != e->semantic_node->inputs[0].type)
+                            fail(Status::incompatible, "ProcessorV2 input type/schema mismatch");
+                        if (e->loaded) {
+                            auto out = process_semantic(*e->loaded, *inputs[0], ms, token);
+                            if (data::semantic_type(*out) != e->semantic_node->outputs[0].type)
+                                fail(Status::incompatible,
+                                     "ProcessorV2 registered output type/schema changed");
+                            return out;
+                        }
+                        auto dir = scratch_ / Id::random().value;
+                        std::filesystem::create_directory(dir);
+                        struct Cleanup {
+                            std::filesystem::path p;
+                            ~Cleanup() {
+                                std::error_code ec;
+                                std::filesystem::remove_all(p, ec);
+                            }
+                        } cleanup{dir};
+                        data::write_semantic_packet(dir / "input.semantic", *inputs[0]);
+                        // Parent enforces a finite lifetime even if an isolated plugin violates its callback
+                        // deadline.
+                        auto seconds = std::chrono::seconds((ms + 999) / 1000 + 1);
+                        auto rc =
+                            platform::run_process(host_,
+                                                  {"process-semantic", e->manifest.library.string(),
+                                                   (dir / "input.semantic").string(),
+                                                   (dir / "output.semantic").string(), std::to_string(ms)},
+                                                  token, seconds);
+                        if (rc)
+                            fail(Status::plugin_failed, "ProcessorV2 host exited " + std::to_string(rc),
+                                 e->manifest.id);
+                        token.check();
+                        auto out = data::read_semantic_packet(dir / "output.semantic");
+                        if (data::semantic_type(out) != e->semantic_node->outputs[0].type)
+                            fail(Status::incompatible, "ProcessorV2 isolated output type/schema mismatch");
+                        return data::publish(std::move(out));
+                    } catch (const Failure &ex) {
+                        return std::unexpected(ex.error);
+                    } catch (const std::exception &ex) {
+                        return std::unexpected(Error{Status::plugin_failed, ex.what(), e->manifest.id});
+                    }
+                });
+        }};
 }
 } // namespace mantis::plugins

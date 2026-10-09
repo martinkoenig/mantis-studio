@@ -1,11 +1,10 @@
 #pragma once
-#include <mantis/projected_light.hpp>
 #include <mantis/projected_light_device.hpp>
 #include <mantis/sdk.hpp>
+#include <mantis/semantic_packet.hpp>
 
 namespace mantis::plugins::semantic {
-using Packet = std::variant<data::Published, data::AcquisitionEvidence, data::TriggerEvent,
-                            data::AcquisitionBundle, data::LaserObservation>;
+using Packet = data::SemanticPacket;
 // Owner keeps all borrowed strings/views/buffers alive until it is destroyed.
 // The input domain object need not outlive this view.
 class ProgramView {

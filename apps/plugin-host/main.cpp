@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include <mantis/data_io.hpp>
+#include <mantis/laser_observation_io.hpp>
 #include <mantis/plugin_runtime.hpp>
 #include <nlohmann/json.hpp>
 #ifndef _WIN32
@@ -30,10 +31,35 @@ int main(int argc, char **argv) {
                 report["deterministic"] = node.deterministic;
                 report["backend"] = node.resources.backends.front();
             }
+            if (plugin.api()->query_interface(MANTIS_PROCESSOR_V2)) {
+                auto node = mantis::plugins::describe_semantic_node(plugin);
+                report["semantic_node"] = {
+                    {"node", node.id},
+                    {"input", node.inputs[0].type.name},
+                    {"input_schema", node.inputs[0].type.version},
+                    {"output", node.outputs[0].type.name},
+                    {"output_schema", node.outputs[0].type.version},
+                    {"deterministic", node.deterministic},
+                    {"backend", node.resources.backends.front()},
+                    {"algorithm_version", {node.version.major, node.version.minor, node.version.patch}}};
+            }
             std::ofstream out(argv[3]);
             out << report.dump(2);
             if (!out)
                 return 2;
+            return 0;
+        }
+        if (operation == "process-semantic") {
+            if (argc != 6)
+                return 2;
+            auto input = mantis::data::read_semantic_packet(argv[3]);
+            auto output =
+                mantis::plugins::process_semantic(plugin, input, static_cast<uint32_t>(std::stoul(argv[5])));
+            // Parent uses a unique invocation directory and accepts only a completed checked result.
+            auto part = std::filesystem::path(argv[4]);
+            part += ".part";
+            mantis::data::write_semantic_packet(part, *output);
+            std::filesystem::rename(part, argv[4]);
             return 0;
         }
         if (argc != 5)

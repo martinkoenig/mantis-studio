@@ -5,9 +5,9 @@
 
 namespace mantis::data {
 namespace {
-void require(bool ok, std::string message) {
+void require(bool ok, std::string_view message) {
     if (!ok)
-        fail(Status::invalid_argument, std::move(message), "projected-light");
+        fail(Status::invalid_argument, std::string(message), "projected-light");
 }
 template <class F> Result<void> checked(F f) {
     try {

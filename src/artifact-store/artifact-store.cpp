@@ -541,7 +541,8 @@ struct Store::Impl {
                 }
                 auto rel = j.at("path").get<std::string>();
                 auto expected =
-                    "objects/" + id + "/" + std::to_string(j.at("index").get<uint64_t>()) + ".packet";
+                    "objects/" + id + "/" + std::to_string(j.at("index").get<uint64_t>()) +
+                    (artifact.type.name == "org.mantis.LaserObservation" ? ".observation" : ".packet");
                 if (rel != expected)
                     fail(Status::corrupt, "Invalid journal path");
                 auto file = root / rel;
@@ -553,7 +554,13 @@ struct Store::Impl {
                     platform::durable_directory(file.parent_path());
                 }
                 if (std::filesystem::exists(file) && file_hash(file).hex == j.at("hash").get<std::string>()) {
-                    (void)data::read_packet(file);
+                    if (artifact.type.name == "org.mantis.LaserObservation") {
+                        if (artifact.type.schema_version != 1 || j.at("index") != 0 ||
+                            j.at("bytes").get<uint64_t>() != std::filesystem::file_size(file))
+                            fail(Status::corrupt, "Invalid observation artifact journal");
+                        (void)data::read_laser_observation(file);
+                    } else
+                        (void)data::read_packet(file);
                     commit_chunk(id, j.at("index"), rel, j.at("hash"), j.at("bytes"));
                 } else if (std::filesystem::exists(part))
                     std::filesystem::remove(part);
@@ -575,6 +582,8 @@ ArtifactId Store::begin(ArtifactType type, Provenance provenance) {
     std::lock_guard guard(impl_->mutex);
     if (type.name == "org.mantis.RawCapture" && type.schema_version != 1 && type.schema_version != 2)
         fail(Status::incompatible, "Use begin_projected_capture for schema 3; unknown schemas unsupported");
+    if (type.name == "org.mantis.LaserObservation" && type.schema_version != 1)
+        fail(Status::incompatible, "Unsupported observation artifact schema");
     Id id = Id::random();
     std::filesystem::create_directory(impl_->root / "objects" / id.value);
     platform::durable_directory(impl_->root / "objects");
@@ -890,6 +899,8 @@ void Store::append(const Id &id, const data::Packet &packet) {
         return;
     }
     auto a = impl_->get(id);
+    if (a.type.name == "org.mantis.LaserObservation")
+        fail(Status::incompatible, "Use append_laser_observation, never flat packet append");
     if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version != 1 && a.type.schema_version != 2)
         fail(Status::incompatible, "Packet append does not support bundle/unknown RawCapture schemas");
     if (a.state != ArtifactState::open)
@@ -927,6 +938,93 @@ void Store::append(const Id &id, const data::Packet &packet) {
     std::filesystem::remove(journal);
     platform::durable_directory(journal.parent_path());
 }
+ArtifactId Store::begin_laser_observation(Provenance provenance) {
+    return begin({"org.mantis.LaserObservation", 1}, std::move(provenance));
+}
+void Store::append_laser_observation(const Id &id, const data::LaserObservation &observation) {
+    auto valid = data::validate(observation);
+    if (!valid)
+        throw Failure(valid.error());
+    std::lock_guard guard(impl_->mutex);
+    auto a = impl_->get(id);
+    if (a.type.name != "org.mantis.LaserObservation" || a.type.schema_version != 1)
+        fail(Status::incompatible, "Typed observation append requires observation artifact schema 1");
+    if (a.state != ArtifactState::open || a.chunks != 0)
+        fail(Status::invalid_argument, "Observation artifact accepts exactly one OPEN immutable value");
+    // Context is authoritative. Persist its exact input IDs as ordinary artifact lineage too.
+    auto lineage = a.provenance;
+    if (lineage.producer.empty()) {
+        lineage.producer = observation.context.producer.implementation.value;
+        lineage.version = observation.context.producer.version;
+    }
+    std::vector<data::ContentReference> refs = observation.context.exact_inputs;
+    if (observation.context.raw_input.get())
+        refs.push_back(*observation.context.raw_input.get());
+    for (const auto *cal :
+         {&observation.context.source.camera_calibration, &observation.context.source.rig_calibration,
+          &observation.context.source.original_calibration})
+        if (cal->get() && cal->get()->content.get())
+            refs.push_back(*cal->get()->content.get());
+    for (const auto &ref : refs) {
+        Statement lookup(impl_->db, "SELECT state,type,version,hash FROM artifacts WHERE id=?");
+        lookup.text(1, ref.id.value);
+        if (lookup.row()) {
+            if (lookup.integer(0) != 2 || lookup.text(1) != ref.type.name ||
+                lookup.integer(2) != ref.type.version || !ref.hash.get() ||
+                *ref.hash.get() != Hash{"fnv1a64", lookup.text(3)})
+                fail(Status::incompatible, "Observation persisted input identity/hash mismatch");
+        }
+        if (std::find(lineage.inputs.begin(), lineage.inputs.end(), ref.id) == lineage.inputs.end())
+            lineage.inputs.push_back(ref.id);
+    }
+    auto rel = "objects/" + id.value + "/0.observation";
+    auto file = impl_->root / rel;
+    auto part = file;
+    part += ".part";
+    auto journal = impl_->root / "journal" / (id.value + "_0.json");
+    auto journal_part = journal;
+    journal_part += ".part";
+    try {
+        Statement provenance(impl_->db, "UPDATE artifacts SET provenance=? WHERE id=?");
+        provenance.text(1, provenance_json(lineage));
+        provenance.text(2, id.value);
+        provenance.row();
+        data::write_laser_observation(part, observation);
+        platform::durable_file(part);
+        // Verify complete typed value before making the journal a durable publication promise.
+        (void)data::read_laser_observation(part);
+        auto hash = file_hash(part);
+        auto bytes = std::filesystem::file_size(part);
+        {
+            std::ofstream out(journal_part);
+            out << Json{{"id", id.value}, {"index", 0}, {"path", rel}, {"hash", hash.hex}, {"bytes", bytes}}
+                       .dump();
+            out.flush();
+            if (!out)
+                fail(Status::io, "Observation journal write failed");
+        }
+        platform::durable_file(journal_part);
+        std::filesystem::rename(journal_part, journal);
+        platform::durable_directory(journal.parent_path());
+        std::filesystem::rename(part, file);
+        platform::durable_directory(file.parent_path());
+        impl_->commit_chunk(id.value, 0, rel, hash.hex, bytes);
+        std::filesystem::remove(journal);
+        platform::durable_directory(journal.parent_path());
+    } catch (...) {
+        Statement state(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+        state.text(1, id.value);
+        state.row();
+        throw;
+    }
+}
+data::LaserObservation Store::laser_observation(const Id &id) const {
+    const auto a = get(id);
+    if (a.type.name != "org.mantis.LaserObservation" || a.type.schema_version != 1 ||
+        a.state != ArtifactState::finalized || a.chunks != 1)
+        fail(Status::incompatible, "Expected finalized observation artifact schema 1");
+    return data::read_laser_observation(object_path(id, 0));
+}
 ArtifactDescriptor Store::finalize(const Id &id, const CancellationToken &token) {
     return finalize_impl(id, token, false);
 }
@@ -938,6 +1036,8 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
         a.type.schema_version != 3)
         fail(Status::incompatible, "Unknown RawCapture schema");
     const bool projected = a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3;
+    if (a.type.name == "org.mantis.LaserObservation" && (a.type.schema_version != 1 || a.chunks != 1))
+        fail(Status::incompatible, "Observation artifacts require exactly one schema-1 observation");
     // A missing cleanup outcome is an ordinary sequencing error, not a storage failure.
     // Reject before sealing/removing a healthy live writer or changing OPEN.
     if (projected && !recovery &&
@@ -977,6 +1077,8 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
         for (uint64_t i = 0; i < a.chunks; ++i) {
             token.check();
             auto file = object_path(id, i);
+            if (a.type.name == "org.mantis.LaserObservation")
+                (void)data::read_laser_observation(file);
             if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) {
                 auto scanned = segments::scan(file);
                 if (scanned.incomplete || !scanned.corruption.empty() || scanned.records.empty())
@@ -1067,6 +1169,8 @@ std::filesystem::path Store::object_path(const Id &id, uint64_t chunk) const {
 }
 data::Published Store::packet(const Id &id, uint64_t chunk) const {
     auto artifact = get(id);
+    if (artifact.type.name == "org.mantis.LaserObservation")
+        fail(Status::incompatible, "Observation artifacts require typed observation API");
     if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version != 1 &&
         artifact.type.schema_version != 2)
         fail(Status::incompatible, "Packet API requires RawCapture schema 1/2");
