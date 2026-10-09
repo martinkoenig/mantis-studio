@@ -8,8 +8,6 @@ ScrollView {
     id: root
     required property var bridge
     property string mode: "live"
-    // Logical pixels: allow modest growth beyond the approved composition.
-    readonly property real maximumContentWidth: 1440
     readonly property alias liveModel: live
     signal navigate(string route)
     clip: true
@@ -30,8 +28,7 @@ ScrollView {
         ColumnLayout {
             id: content
             objectName: "homeContent"
-            width: Math.min(parent.width, root.maximumContentWidth)
-            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
             spacing: Theme.padding
             HomeDashboard {
                 id: dashboard
@@ -48,7 +45,8 @@ ScrollView {
                 HomeText { objectName: "homeHybridSeparation"; text: "Demo / Mock showcase · separate from the live snapshot above"; color: Theme.warning; font.bold: true; Layout.fillWidth: true }
                 Item {
                     Layout.fillWidth: true; implicitHeight: showcase.implicitHeight
-                    HomeProjects { id: showcase; width: parent.width; projects: demo.projects }
+                    // A local gallery reading bound, independent of the edge-pinned dashboard.
+                    HomeProjects { id: showcase; width: Math.min(parent.width, 1680); projects: demo.projects }
                 }
             }
         }

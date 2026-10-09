@@ -5,6 +5,7 @@ No scanner model/vendor geometry or reference pixels are used.
 import bpy
 import math
 import os
+import sys
 from mathutils import Vector
 
 OUT = os.path.dirname(os.path.abspath(__file__))
@@ -14,6 +15,7 @@ scene = bpy.context.scene
 scene.render.engine = 'CYCLES'
 scene.cycles.device = 'CPU'
 scene.cycles.samples = 256
+scene.cycles.seed = 0
 scene.cycles.use_denoising = False
 scene.render.image_settings.file_format = 'PNG'
 scene.render.resolution_percentage = 100
@@ -189,7 +191,7 @@ def light(name, loc, energy, color, size):
     o.data.size = size
     o.rotation_euler = (Vector((0,0,0.5)) - o.location).to_track_quat('-Z','Y').to_euler()
 
-box('Studio floor', (0,0,-0.10), (200,200,0.1), floor, 0)
+studio_floor = box('Studio floor', (0,0,-0.10), (200,200,0.1), floor, 0)
 objects.clear()
 light('Soft overhead', (-3,-4,7), 1100, (0.82,0.91,1), 5)
 light('Mint rim', (2,4,4), 1250, (0.26,0.75,0.61), 4)
@@ -214,13 +216,24 @@ def clear():
         bpy.data.objects.remove(o, do_unlink=True)
     objects.clear()
 
+# Foregrounds have no floor/world pixels. Lighting remains identical to the
+# scenic pass; the card, safe area and contact shadow belong to QML.
+scene.render.film_transparent = True
+scene.render.image_settings.color_mode = 'RGBA'
+studio_floor.hide_render = True
 for name, build in [('housing',housing),('rotor',rotor),('bracket',bracket),('cover',cover)]:
     build()
     render(name, (640,380), (4,-6,4.3), (0,0,0.85 if name == 'bracket' else 0.65), 4.9 if name == 'bracket' else 4.3)
     clear()
 scanner()
-render('scanner', (480,400), (4,-6,3.2), (0,0,1.48), 3.85)
+render('scanner', (480,400), (4,-6,3.2), (0,0,1.48), 4.5)
 clear()
+# Allow foreground-only reproduction without rewriting the accepted hero.
+if '--subjects-only' in sys.argv:
+    sys.exit(0)
+scene.render.film_transparent = False
+scene.render.image_settings.color_mode = 'RGB'
+studio_floor.hide_render = False
 # Hero subjects occupy the right half; dark negative space supports real QML type.
 housing()
 for o in objects:

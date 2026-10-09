@@ -5,6 +5,8 @@ QtObject {
     readonly property color chrome: "#0d171b"
     readonly property color panel: "#101c20"
     readonly property color raised: "#17252a"
+    readonly property color previewTop: "#252b30"
+    readonly property color previewBottom: "#191f24"
     readonly property color border: "#243238"
     readonly property color text: "#edf4f3"
     readonly property color secondary: "#a5b6ba"

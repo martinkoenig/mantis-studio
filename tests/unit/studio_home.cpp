@@ -284,6 +284,10 @@ void capture(QQuickWindow *window, const QString &output, const QString &name) {
     const auto image = window->grabWindow();
     const QSize pixels(qRound(window->width() * window->devicePixelRatio()),
                        qRound(window->height() * window->devicePixelRatio()));
+    if (image.isNull() || image.size() != pixels)
+        std::cerr << "Capture logical=" << window->width() << "x" << window->height()
+                  << " DPR=" << window->devicePixelRatio() << " expected=" << pixels.width() << "x"
+                  << pixels.height() << " received=" << image.width() << "x" << image.height() << '\n';
     require(!image.isNull() && image.size() == pixels, "Rendered frame unavailable");
     require(image.save(output + "/" + name + "-" + QString::number(window->width()) + ".png"),
             "Screenshot failed");
@@ -395,7 +399,9 @@ void fidelity(QQuickWindow *window) {
             pending.push_back(child);
     }
     auto *hero = item(window, "homeHero");
-    require(hero->height() >= 270 && hero->height() <= 310, "Hero lost substantive height");
+    auto *primary = find(home, "homePrimary");
+    const auto heroCeiling = primary && primary->property("wide").toBool() ? 330 : 310;
+    require(hero->height() >= 270 && hero->height() <= heroCeiling, "Hero lost substantive height");
     const auto mock = window->property("uiMode") == "mock";
     require(item(window, "homeCurrentProjectCard")->isVisible() != mock,
             "Live current project confused with history");
@@ -579,52 +585,133 @@ void localActions(QQuickWindow *window, ObservedBridge &bridge, const QString &o
     window->setProperty("uiMode", "live");
     resetScroll(window);
 }
-void centeredBounds(QQuickWindow *window) {
+void previewGeometry(QQuickWindow *window) {
+    QList<QQuickItem *> pending{item(window, "homeWorkspace")};
+    const auto frame = window->grabWindow();
+    const auto dpr = window->devicePixelRatio();
+    int inspected = 0;
+    while (!pending.empty()) {
+        auto *node = pending.takeLast();
+        if (node->isVisible() && node->objectName().startsWith("homeProjectArt")) {
+            auto *image = qobject_cast<QQuickItem *>(node->property("image").value<QObject *>());
+            const auto padding = node->property("safePadding").toDouble();
+            require(image && padding >= 12 && padding <= 22, "Preview has no padded transparent layer");
+            require(image->property("fillMode").toInt() == 1, "Preview geometry cropped or stretched");
+            const auto url = QUrl("qrc:/ui/home/").resolved(image->property("source").toUrl());
+            require(url.path().endsWith(".png"), "Opaque preview source retained");
+            const QImage asset(":" + url.path());
+            require(!asset.isNull() && asset.hasAlphaChannel(), "Preview alpha decode failed");
+            const auto painted = QSizeF(image->property("paintedWidth").toDouble(),
+                                        image->property("paintedHeight").toDouble());
+            const QRectF fitted((node->width() - painted.width()) / 2,
+                                (node->height() - painted.height()) / 2, painted.width(), painted.height());
+            require(painted.width() > 0 && painted.height() > 0 &&
+                        node->boundingRect()
+                            .adjusted(padding - 1, padding - 1, 1 - padding, 1 - padding)
+                            .contains(fitted),
+                    "Preview subject escaped its safe area");
+            auto *card = node->parentItem()->parentItem();
+            require(std::abs(node->width() - card->width()) <= 1 && node->height() >= 120 &&
+                        node->height() <= 180 && std::abs(card->height() - node->height() - 78) <= 1,
+                    "Preview/body geometry changed");
+            // The full upper band is card-owned, including outside the fitted image.
+            // Sample actual Qt pixels, not a golden image or inferred QML color.
+            const auto point = node->mapToScene(QPointF(10, 8));
+            if (point.y() >= 0 && point.y() < window->height()) {
+                const auto color = frame.pixelColor(qRound(point.x() * dpr), qRound(point.y() * dpr));
+                for (double x : {node->width() / 2, node->width() - 10}) {
+                    const auto other = node->mapToScene(QPointF(x, 8));
+                    const auto pixel = frame.pixelColor(qRound(other.x() * dpr), qRound(other.y() * dpr));
+                    require(std::abs(color.red() - pixel.red()) + std::abs(color.green() - pixel.green()) +
+                                    std::abs(color.blue() - pixel.blue()) <=
+                                3,
+                            "Preview background has image-sized color bars");
+                }
+            }
+            ++inspected;
+        }
+        for (auto *child : node->childItems())
+            pending.push_back(child);
+    }
+    require(inspected == (window->property("uiMode") == "live" ? 0 : 4), "Visible preview layers missing");
+}
+void assetTransparency() {
+    for (const auto &name : QStringList{"housing", "rotor", "bracket", "cover", "scanner"}) {
+        const QImage image(":/ui/home/assets/" + name + ".png");
+        require(!image.isNull() && image.hasAlphaChannel(), "Foreground is not decoded RGBA");
+        int transparent = 0, opaque = 0, antialiased = 0;
+        QRect subject;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                const auto alpha = image.pixelColor(x, y).alpha();
+                transparent += alpha == 0;
+                opaque += alpha == 255;
+                antialiased += alpha > 0 && alpha < 255;
+                if (alpha > 0)
+                    subject = subject.united(QRect(x, y, 1, 1));
+            }
+        require(transparent > image.width() * image.height() / 10 &&
+                    opaque > image.width() * image.height() / 10 && antialiased > 100,
+                "Foreground has trivial alpha or no antialiased edges");
+        require(subject.left() >= 8 && subject.top() >= 8 && subject.right() < image.width() - 8 &&
+                    subject.bottom() < image.height() - 8,
+                "Foreground geometry cropped at export boundary");
+        std::cout << "RGBA " << name.toStdString() << " " << image.width() << "x" << image.height()
+                  << " transparent=" << transparent << " opaque=" << opaque << " edge=" << antialiased
+                  << " inset=" << subject.left() << "/" << subject.top() << '\n';
+    }
+}
+void responsiveBounds(QQuickWindow *window) {
     auto *home = item(window, "homeWorkspace");
     auto *content = item(window, "homeContent");
     auto *dashboard = item(window, "homeDashboard");
     auto *hero = item(window, "homeHero");
     auto *rail = item(window, "homeRightRail");
     const auto available = home->property("availableWidth").toDouble();
-    const auto rect = content->mapRectToItem(home, content->boundingRect());
-    const auto left = rect.left() - home->property("leftPadding").toDouble();
-    const auto right = available - left - content->width();
-    require(content->width() <= 1441 && std::abs(left - right) <= 1 && left >= -1 && right >= -1,
-            "Home content unbounded or off center");
-    require(std::abs(content->width() - std::min(available, 1440.0)) <= 1,
-            "Home no longer fluid below its width limit");
-    require(std::abs(dashboard->width() - content->width()) <= 1, "Dashboard escaped centered container");
+    require(std::abs(content->width() - available) <= 1, "Whole Home dashboard remains a capped island");
+    require(std::abs(dashboard->width() - content->width()) <= 1, "Dashboard escaped workspace");
+    const auto railRect = rail->mapRectToItem(home, rail->boundingRect());
+    const auto right = home->property("leftPadding").toDouble() + available - railRect.right();
     auto *flick = qobject_cast<QQuickItem *>(home->property("contentItem").value<QObject *>());
     require(flick && flick->property("contentWidth").toDouble() <= flick->width() + 1 &&
                 std::abs(flick->property("contentX").toDouble()) <= 1,
             "Home permits horizontal scrolling");
-    const auto heroRect = hero->mapRectToItem(content, hero->boundingRect());
-    const auto railRect = rail->mapRectToItem(content, rail->boundingRect());
+    auto *primary = item(window, "homePrimary");
+    const auto primaryRect = primary->mapRectToItem(home, primary->boundingRect());
     if (dashboard->property("stacked").toBool()) {
-        require(std::abs(hero->width() - content->width()) <= 1 &&
-                    std::abs(rail->width() - content->width()) <= 1 && railRect.top() > heroRect.bottom(),
+        require(std::abs(primary->width() - content->width()) <= 1 &&
+                    std::abs(rail->width() - content->width()) <= 1 &&
+                    railRect.top() >= primaryRect.bottom() + 15,
                 "Narrow Home failed to stack its rail");
     } else {
-        require(rail->width() >= 320 && rail->width() <= 349 &&
-                    std::abs(railRect.left() - heroRect.right() - 16) <= 1 &&
-                    std::abs(hero->width() + rail->width() + 16 - content->width()) <= 1,
-                "Home main column / rail proportions changed");
+        require(std::abs(right) <= 1 && rail->width() >= 320 && rail->width() <= 349 &&
+                    std::abs(railRect.left() - primaryRect.right() - 16) <= 1,
+                "Right rail detached from workspace edge or gutter grew");
+        require(std::abs(primary->width() - (available - rail->width() - 16)) <= 1,
+                "Primary region stopped using available width");
     }
-    if (available >= 1440) {
-        require(hero->width() <= 1080, "Wide hero stretched beyond designed proportions");
-        for (int i = 0; i < 4; ++i)
-            require(item(window, "homeProjectCard" + QString::number(i))->width() <= 270 &&
-                        item(window, "homeActionCard" + QString::number(i))->width() <= 270,
-                    "Wide project / action cards stretched");
-    }
+    const auto heroRect = hero->mapRectToItem(primary, hero->boundingRect());
+    auto *activity = item(window, "homeActivity");
+    const auto activityRect = activity->mapRectToItem(primary, activity->boundingRect());
+    auto *actions = item(window, "homeQuickActions");
+    const auto actionsRect = actions->mapRectToItem(primary, actions->boundingRect());
+    if (primary->property("wide").toBool()) {
+        require(hero->width() >= primary->width() * 0.45 && hero->width() <= primary->width() * 0.55 &&
+                    std::abs(actionsRect.left() - heroRect.right() - 24) <= 1 &&
+                    std::abs(activity->width() - hero->width()) <= 1 &&
+                    activityRect.top() > heroRect.bottom(),
+                "Wide Home lanes unbalanced, empty or overlapping");
+    } else
+        require(std::abs(hero->width() - primary->width()) <= 1, "Normal Hero lost primary width");
     for (const auto &prefix : QStringList{"homeProjectCard", "homeActionCard"}) {
         if (prefix == "homeProjectCard" && window->property("uiMode") != "mock")
             continue;
         QList<QRectF> cards;
         for (int i = 0; i < 4; ++i) {
             auto *card = item(window, prefix + QString::number(i));
-            require(card->isVisible() && card->width() >= 150 && card->height() >= 140,
-                    "Responsive card collapsed");
+            require(card->isVisible() && card->width() >= 150 && card->width() <= 430 &&
+                        card->height() >= 140,
+                    "Responsive card collapsed or stretched beyond twice reference width");
             const auto rect = card->mapRectToItem(content, card->boundingRect());
             for (const auto &previous : cards)
                 require(!rect.intersects(previous), "Responsive cards overlap");
@@ -644,16 +731,20 @@ void centeredBounds(QQuickWindow *window) {
     }
     bounds(window);
     fidelity(window);
-    std::cout << "Centered Home: " << window->width() << "x" << window->height() << " "
+    activityContract(window);
+    previewGeometry(window);
+    std::cout << "Fluid Home: " << window->width() << "x" << window->height() << " "
               << window->property("uiMode").toString().toStdString() << " DPR=" << window->devicePixelRatio()
-              << " content=" << content->width() << " margins=" << left << "/" << right
-              << " hero=" << hero->width() << " rail=" << rail->width() << '\n';
+              << " content=" << content->width() << " primary=" << primary->width() << " rightGap=" << right
+              << " hero=" << hero->width() << " rail=" << rail->width()
+              << " card=" << item(window, "homeActionCard0")->width() << '\n';
 }
 void responsive(QQuickWindow *window, ObservedBridge &bridge, const QString &output, bool hidpi = false) {
     require(window->minimumWidth() == 1080 && window->minimumHeight() == 720,
             "Home correction changed global minimum size");
     if (hidpi)
-        require(window->devicePixelRatio() == 2, "HiDPI fixture did not establish DPR 2");
+        require(window->devicePixelRatio() == qEnvironmentVariable("QT_SCALE_FACTOR").toDouble(),
+                "HiDPI fixture did not establish requested DPR");
     window->setProperty("workspace", "home");
     bridge.applyResult(snapshot(3));
     QList<QPointer<QQuickItem>> persistent;
@@ -681,10 +772,15 @@ void responsive(QQuickWindow *window, ObservedBridge &bridge, const QString &out
         window->setProperty("uiMode", mode);
         settle();
         learn->forceActiveFocus(Qt::TabFocusReason);
+        qreal previousPrimary = 0;
         for (const auto &size : sizes) {
             window->resize(size);
             resetScroll(window);
-            centeredBounds(window);
+            responsiveBounds(window);
+            const auto mainWidth = item(window, "homePrimary")->width();
+            if (size.width() >= 1536 && previousPrimary > 0)
+                require(mainWidth > previousPrimary, "Main region failed to grow at larger viewports");
+            previousPrimary = mainWidth;
             checkPersistence();
             capture(window, output, "responsive-" + mode);
             for (bool keyboard : {false, true}) {
@@ -701,12 +797,12 @@ void responsive(QQuickWindow *window, ObservedBridge &bridge, const QString &out
     // Cross the rail breakpoint, the gallery/action two-to-four-column breakpoint,
     // and the content-width ceiling in both directions, without recreating controls.
     for (int i = 0; i < 3; ++i)
-        for (const int width :
-             {1298, 1302, 1322, 1326, 1638, 1642, 3840, 1642, 1638, 1326, 1322, 1302, 1298}) {
+        for (const int width : {1248, 1252, 1298, 1302, 1322, 1326, 2282, 2286, 3840, 2286, 2282, 1326, 1322,
+                                1302, 1298, 1252, 1248}) {
             window->setProperty("uiMode", QStringList{"mock", "live", "hybrid"}[i]);
             window->resize(width, 900);
             settle();
-            centeredBounds(window);
+            responsiveBounds(window);
             checkPersistence();
         }
     window->resize(3440, 1440);
@@ -723,6 +819,142 @@ void responsive(QQuickWindow *window, ObservedBridge &bridge, const QString &out
     capture(window, output, "responsive-hybrid-showcase");
     window->setProperty("uiMode", "live");
     resetScroll(window);
+}
+void resizeContinuously(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
+    window->setProperty("workspace", "home");
+    bridge.applyResult(snapshot(3));
+    QList<QPointer<QQuickItem>> controls;
+    for (const auto &name : QStringList{"homeDevices", "homeAcquisition", "homeLearn", "homeExamples"})
+        controls.push_back(item(window, name));
+    QList<QPointer<QQuickItem>> cards;
+    for (int i = 0; i < 4; ++i) {
+        cards.push_back(item(window, "homeProjectCard" + QString::number(i)));
+        cards.push_back(item(window, "homeActionCard" + QString::number(i)));
+    }
+    auto check = [&] {
+        responsiveBounds(window);
+        for (const auto &control : controls)
+            require(control && item(window, control->objectName()) == control, "Resize recreated action");
+        for (const auto &card : cards)
+            require(card, "Resize destroyed project/action delegate");
+        require(controls[2]->hasActiveFocus(), "Continuous resize lost keyboard focus");
+    };
+    for (const auto &mode : QStringList{"mock", "live", "hybrid"}) {
+        window->setProperty("uiMode", mode);
+        controls[2]->forceActiveFocus(Qt::TabFocusReason);
+        for (int direction : {1, -1})
+            for (int i = 0; i <= 44; ++i) {
+                window->resize(direction == 1 ? 1080 + i * 62 : 3808 - i * 62, 900);
+                settle();
+                check();
+            }
+        window->resize(1536, 1024);
+        resetScroll(window);
+        const auto restored = window->geometry();
+        window->showMaximized();
+        settle();
+        require(window->visibility() == QWindow::Maximized, "Maximize state transition failed");
+        check();
+        capture(window, output, "maximized-" + mode);
+        window->showNormal();
+        settle();
+        require(window->visibility() == QWindow::Windowed && window->geometry() == restored,
+                "Restore failed to recover normal window geometry");
+        check();
+        click(window, "homeLearn", true);
+        click(window, "homeGuideClose", true);
+        resetScroll(window);
+        // Reach the final Activity row and the stacked rail at minimum height.
+        window->resize(1080, 720);
+        settle();
+        auto *row = item(window, mode == "mock" ? "home_activity_4_mock" : "home_artifacts_0_live");
+        scrollTo(window, row);
+        const auto rect = row->mapRectToItem(item(window, "homeWorkspace"), row->boundingRect());
+        require(rect.top() >= 0 && rect.bottom() <= item(window, "homeWorkspace")->height(),
+                "Lower Activity rows inaccessible");
+        click(window, "homeTips", true);
+        click(window, "homeGuideClose", true);
+        require(!bridge.busy(), "Resize interactions dispatched runtime work");
+    }
+}
+void nativeWindow(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
+    require(QTest::qWaitForWindowExposed(window, 5000), "Native window not exposed by compositor");
+    bridge.applyResult(snapshot(3));
+    for (const auto &mode : QStringList{"mock", "live", "hybrid"}) {
+        window->setProperty("uiMode", mode);
+        window->resize(1536, 1024);
+        resetScroll(window);
+        QTest::qWait(200);
+        require(QTest::qWaitForWindowExposed(window, 5000) && window->isExposed(),
+                "Native compositor did not expose normal window (check session lock)");
+        auto *learn = item(window, "homeLearn");
+        learn->forceActiveFocus(Qt::TabFocusReason);
+        std::cout << "Native window: " << window->width() << "x" << window->height()
+                  << " DPR=" << window->devicePixelRatio() << " exposed=" << window->isExposed()
+                  << " primary=" << item(window, "homePrimary")->width()
+                  << " project=" << item(window, "homeProjectCard0")->width()
+                  << " action=" << item(window, "homeActionCard0")->width() << std::endl;
+        responsiveBounds(window);
+        capture(window, output, "native-normal-" + mode);
+        const auto normalSize = window->size();
+        window->showMaximized();
+        QTest::qWait(200);
+        require(QTest::qWaitForWindowExposed(window, 5000) && window->isExposed(),
+                "Native compositor did not expose maximized window");
+        require(window->visibility() == QWindow::Maximized, "Native maximize state failed");
+        responsiveBounds(window);
+        capture(window, output, "native-maximized-" + mode);
+        window->showNormal();
+        QTest::qWait(200);
+        require(QTest::qWaitForWindowExposed(window, 5000) && window->isExposed(),
+                "Native compositor did not expose restored window");
+        require(window->visibility() == QWindow::Windowed && window->size() == normalSize,
+                "Native restore geometry failed");
+        responsiveBounds(window);
+        require(learn->hasActiveFocus(), "Native maximize/restore lost focus");
+        click(window, "homeLearn", true);
+        click(window, "homeGuideClose", true);
+        require(!bridge.busy(), "Native interaction dispatched runtime work");
+    }
+}
+void responsiveStates(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
+    window->setProperty("workspace", "home");
+    window->setProperty("uiMode", "live");
+    // This fresh window has never received a confirmed snapshot.
+    for (const auto &state : QStringList{"unconfirmed", "empty", "unconfirmed-empty", "stale"}) {
+        if (state == "empty") {
+            StudioResult empty;
+            empty.snapshot.emplace();
+            bridge.applyResult(empty);
+        } else if (state != "unconfirmed") {
+            if (state == "stale")
+                bridge.applyResult(snapshot(3));
+            StudioResult lost;
+            lost.issues.push_back({"snapshot", "Fixture peer closed",
+                                   mantis::Error{mantis::Status::io, "Fixture peer closed", "platform"}});
+            bridge.applyResult(lost);
+        }
+        for (const auto &size : QList<QSize>{{1080, 720},
+                                             {1280, 720},
+                                             {1366, 768},
+                                             {1440, 900},
+                                             {1536, 1024},
+                                             {1920, 1080},
+                                             {2560, 1440},
+                                             {3440, 1440},
+                                             {3840, 2160}}) {
+            window->resize(size);
+            resetScroll(window);
+            responsiveBounds(window);
+            require(!item(window, "homeProjectGallery")->isVisible(), "Sample history leaked into live");
+            const auto freshness = item(window, "homeFreshness")->property("text").toString();
+            require(state == "empty" ? freshness == "Confirmed runtime snapshot"
+                                     : freshness.contains(state == "unconfirmed" ? "Runtime state unconfirmed"
+                                                                                 : "Last known"),
+                    "Live state authority / stale label changed");
+            capture(window, output, "responsive-live-" + state);
+        }
+    }
 }
 void components(QQuickWindow *window, ObservedBridge &bridge, const QString &output) {
     // Local route intent only. Even with a confirmed capture-capable snapshot,
@@ -857,6 +1089,7 @@ void components(QQuickWindow *window, ObservedBridge &bridge, const QString &out
     bounds(window);
     std::cout << "Home stress: 90 immediate model/mode/route/resize transitions, observed "
               << timing.elapsed() << " ms (informational, not a latency budget)\n";
+    assetTransparency();
     responsive(window, bridge, output);
 }
 void wire(QQuickWindow *window, ObservedBridge &observed, const QString &output) {
@@ -968,10 +1201,11 @@ int main(int argc, char **argv) {
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
     try {
         const bool integration = argc > 2 && QString::fromLocal8Bit(argv[2]) == "wire";
-        const bool hidpi = argc > 2 && QString::fromLocal8Bit(argv[2]) == "hidpi";
+        const QString task = argc > 2 ? QString::fromLocal8Bit(argv[2]) : "components";
+        const bool hidpi = task == "hidpi";
         const QString output = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QDir::tempPath() + "/mantis-home";
         require(QDir().mkpath(output), "Cannot create output directory");
-        if (!integration && !hidpi)
+        if (task == "components")
             presentation();
         ObservedBridge bridge;
         CalibrationController calibration(
@@ -985,9 +1219,24 @@ int main(int argc, char **argv) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().front());
         require(window, "Home window absent");
         settle();
-        if (hidpi)
+        if (hidpi) {
+            assetTransparency();
             responsive(window, bridge, output, true);
-        else if (integration)
+        } else if (task == "resize")
+            resizeContinuously(window, bridge, output);
+        else if (task == "states")
+            responsiveStates(window, bridge, output);
+        else if (task == "native")
+            nativeWindow(window, bridge, output);
+        else if (task == "layoutcheck" || task == "previewcheck") {
+            window->resize(task == "layoutcheck" ? 3440 : 1536, 1024);
+            window->setProperty("uiMode", "mock");
+            resetScroll(window);
+            if (task == "layoutcheck")
+                responsiveBounds(window);
+            else
+                previewGeometry(window);
+        } else if (integration)
             wire(window, bridge, output);
         else
             components(window, bridge, output);

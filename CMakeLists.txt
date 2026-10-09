@@ -170,14 +170,15 @@ if(MANTIS_BUILD_STUDIO)
   ui/home/HomeDemo.qml
   ui/home/HomeRows.qml
   ui/home/HomeProjects.qml
+  ui/home/HomePreview.qml
   ui/home/HomeActivity.qml
   ui/home/HomeGuide.qml
   ui/home/assets/hero.jpg
-  ui/home/assets/scanner.jpg
-  ui/home/assets/housing.jpg
-  ui/home/assets/rotor.jpg
-  ui/home/assets/bracket.jpg
-  ui/home/assets/cover.jpg
+  ui/home/assets/scanner.png
+  ui/home/assets/housing.png
+  ui/home/assets/rotor.png
+  ui/home/assets/bracket.png
+  ui/home/assets/cover.png
   ui/home/HomeDashboard.qml
   ui/workspaces/HomeWorkspace.qml
   ui/state/AppUiState.qml
@@ -205,6 +206,11 @@ if(MANTIS_BUILD_STUDIO)
   set_tests_properties(studio-home-qml studio-home-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 60)
   add_test(NAME studio-home-hidpi COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/hidpi hidpi)
   set_tests_properties(studio-home-hidpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=2" TIMEOUT 60)
+  add_test(NAME studio-home-fractional-dpi COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/fractional-dpi hidpi)
+  set_tests_properties(studio-home-fractional-dpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=1.5" TIMEOUT 60)
+  add_test(NAME studio-home-resize COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/resize resize)
+  add_test(NAME studio-home-states COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/states states)
+  set_tests_properties(studio-home-resize studio-home-states PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 60)
   add_executable(mantis-studio-ui-m0-tests tests/unit/studio_ui_m0.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
   set_target_properties(mantis-studio-ui-m0-tests PROPERTIES AUTOMOC ON)
   target_link_libraries(mantis-studio-ui-m0-tests PRIVATE mantis-studio-home mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)

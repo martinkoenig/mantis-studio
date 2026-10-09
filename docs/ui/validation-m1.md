@@ -7,7 +7,49 @@ client/protocol or plugin ABI change. Capture and calibration retain daemon auth
 The [binding reliability standard](../architecture/reliability-performance-and-validation.md)
 and [M0 validation](validation.md) remain authoritative.
 
-## Maximized / ultrawide correction
+## Fluid workspace and transparent-preview corrective package
+
+Reviewed **rejected** baseline: `754e0da95dc824dfdb6f6b428b236ddd2f62526c`.
+Its passing CI did not establish design acceptance. The superseding corrective
+assignment requires a rail at the workspace's right edge and a fluid primary
+region, replacing the previous whole-dashboard cap. The current canonical
+[Home contract](home.md) and [corrective evidence](evidence/corrective/README.md)
+describe the implementation, visual comparisons, measurements and asset pipeline.
+Historical centered-cap assertions and images below do not describe the new target.
+
+The primary uses the complete remaining workspace beside a 348px rail and 16px
+gutter. At 1720 primary pixels it switches to two balanced lanes, with Hero/Activity
+on the left and Projects/Actions on the right. At 3440 the primary is 2876px,
+project/action cards 347.5px, and rail right gap 0px; at 3840 these are 3276px,
+397.5px and 0px. Normal 1536 composition remains 972×280 Hero and 234×198 projects.
+All nine requested viewports, Live state variants, Hybrid, DPR 1/1.5/2, progressive
+resize, threshold crossings and offscreen maximize/restore were tested and actual
+Qt frames inspected. Both rejected-layout and opaque/unpadded-preview negative
+checks fail against the reviewed baseline.
+
+Five original procedural foregrounds are lossless RGBA PNGs, automatically
+checked for real transparent/opaque/antialiased pixels and an 8px export inset.
+A shared QML preview supplies full-width graphite background, 12–22px padding,
+aspect fit and static contact shadow. The scenic Hero JPEG is unchanged. Packaged
+art grows from 221,020 to 765,878 bytes; native RGBA8 pixel inventory decreases
+from 7.37 to 5.35 MiB. Authoring dependencies remain offline only.
+
+Complete local suites passed: Qt 6.4 Studio **53/53 (224.96s)**, Qt-free headless
+**41/41 (124.38s)**, headless ASan/UBSan/LSan **41/41 (282.22s)**, and additional
+Qt 6.9 Studio ASan/UBSan/LSan **53/53 (407.02s)**. Final strengthened six Home
+checks and three further consecutive Home/public-wire repetitions are documented
+with complete logs in the [corrective evidence](evidence/corrective/README.md).
+The exact-final-commit five-job CI run, logs and both native architecture artifacts
+remain the delivery gate and are identified in the final handoff.
+
+The native Wayland attempt could not expose a window because GNOME was locked;
+this is retained as failed/unavailable evidence, including an extra native software
+sanitizer shutdown-allocation report. Physical-display/GPU certification is not
+claimed. Required offscreen rendering, resize, DPR and sanitizers passed without
+suppressions. No authority, backend, model, global minimum or other-workspace
+contract changed; the standalone artifacts card remains removed.
+
+## Previous maximized correction — rejected layout (retained history)
 
 Reviewed baseline: `1eaae357783f9a348c012ac12f11d9bf8f1199ee`. The actual
 3440×1440 Qt 6.4 baseline confirmed unbounded main-column growth. Home now uses a

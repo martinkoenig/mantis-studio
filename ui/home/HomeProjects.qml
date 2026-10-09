@@ -24,18 +24,16 @@ Column {
                 required property int index
                 objectName: "homeProjectCard" + index
                 width: (cards.width - (cards.columns - 1) * cards.spacing) / cards.columns
-                implicitHeight: 198
+                readonly property real previewHeight: Math.max(120, Math.min(180, width * 0.48))
+                implicitHeight: previewHeight + 78
                 clip: true
                 border.color: root.activeFocus ? Theme.focus : Theme.border
                 Column {
                     width: parent.width; spacing: 0
-                    Image {
+                    HomePreview {
                         objectName: "homeProjectArt" + index
-                        width: parent.width; height: 120
-                        source: visible ? "assets/" + modelData.shape + ".jpg" : ""
-                        sourceSize.width: 640; sourceSize.height: 380
-                        fillMode: Image.PreserveAspectFit
-                        Accessible.ignored: true
+                        width: parent.width; height: parent.parent.previewHeight
+                        source: "assets/" + modelData.shape + ".png"
                     }
                     Column {
                         width: parent.width - 28; x: 14; topPadding: 10; spacing: 6

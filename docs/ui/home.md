@@ -14,19 +14,23 @@ table**. The standalone Example artifacts / Current project artifacts card and
 artifacts panel is added elsewhere on Home. Artifacts remain in the bridge/model
 and in Acquisition's working browsing, replay, processing and export controls.
 
-The right rail contains differentiated Scanner, System Status, Running Jobs and
-Tips & Updates cards. Below 1100 content pixels it stacks beneath the main
-column. A centered container remains fluid up to **1440 logical pixels** and
-stops growing beyond that width, with equal margins inside the Home workspace.
-The rail uses its 348px preferred width beside the main column and fills the
-stacked row below the breakpoint. Dimensions remain logical pixels at HiDPI;
-there is no application zoom, global scale or minimum-window-size change.
-Home scrolls vertically, with no horizontal scroll. At 1536×1024 populated
-mock, the Activity heading and actual rows appear above the shell footer. The
-[visual delta inventory](evidence/m1-fidelity-delta.md) records the before/after
-comparison; [validation](validation-m1.md) scopes executed checks and screenshots.
-The [ultrawide validation](evidence/ultrawide/README.md) covers all nine requested
-viewports, mode/resize transitions, centered bounds and DPR 2.
+The right rail contains Scanner, System Status, Running Jobs and Tips & Updates.
+Below 1100 workspace-content pixels it stacks beneath the primary region. Otherwise
+its 348px preferred width stays at the **right usable workspace edge**, with a
+16px gutter. The primary region takes the remaining width; Home has no global cap.
+Below 1720 primary pixels it retains the approved vertical composition. Above that
+threshold a stable inner GridLayout places Hero/Activity in the left lane and
+Projects/current project/Quick Actions in the right lane, with a 24px gutter.
+Each lane receives half the primary width. Project/action cards remain 150–430px
+wide across supported viewports; project preview height grows modestly from 120
+up to 180px, with the existing 78px metadata body. The separate Hybrid gallery has
+a **local** 1680px reading bound, independent of the rail/dashboard layout.
+
+Dimensions remain logical pixels at HiDPI, without global zoom or a minimum-size
+change. Home scrolls vertically with no horizontal scroll. At 1536×1024 mock,
+Activity and substantive rows remain above the footer, as in the approved layout.
+See [corrective evidence](evidence/corrective/README.md) for measurements, full-size
+reference/baseline/after comparisons, DPI, maximize/restore and resize validation.
 
 | Section | Live authority / unavailable fields | Mock / hybrid | Click intent |
 | --- | --- | --- | --- |
@@ -63,12 +67,15 @@ path characters, eight device capabilities, three structured issues. Equal norma
 snapshots emit no update. Proto3 zero progress/chunks/sequence cannot prove presence.
 The bridge retains its GUI-result-delivery busy lease, one watcher and no queue.
 
-Six [original offline assets](../../ui/home/assets/README.md) replace the small
-procedural gear/sketch art. The source modelling and packaging scripts are included;
-JPEGs total 221,020 bytes, with fixed dimensions and decode bounds. No reference
-pixels, stock/vendor CAD, other-worktree dependency, image plugin, runtime image
-generation, extra rendering thread or animation timer is added. QML/resources use
-the shared `MANTIS_STUDIO_QML_FILES` list in application and relevant test bundles.
+Six [original offline assets](../../ui/home/assets/README.md) retain the original
+procedural models and accepted scenic Hero JPEG. Five genuine RGBA PNG foregrounds
+replace baked-background JPEG subjects. `HomePreview` owns the neutral graphite
+backdrop, 12–22px safe area, aspect-fit image and static contact shadow. Scanner,
+Actions and Tips also use transparent subjects; Hybrid reuses the project surface.
+Packaging validates alpha/framing and preserves RGBA. Total packaged bytes are
+765,878; native RGBA8 pixels occupy 5,609,480 bytes, plus bounded Qt cache/renderer
+overhead. No authoring tool, reference pixel, network image, extra render worker or
+animation timer is added. Application and tests share `MANTIS_STUDIO_QML_FILES`;
 Studio OFF remains Qt-free.
 
 ## Known follow-ups

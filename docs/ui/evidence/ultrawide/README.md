@@ -1,4 +1,10 @@
-# Home maximized / ultrawide validation
+# Historical Home maximized validation — rejected composition
+
+**Superseded:** the centered whole-dashboard cap delivered at `754e0da` was
+rejected in independent visual review. CI success is not design acceptance. See
+[the corrective package](../corrective/README.md) for the right-edge rail, fluid
+primary composition and transparent previews. The measurements below retain only
+the earlier implementation’s historical scope.
 
 Baseline `1eaae357783f9a348c012ac12f11d9bf8f1199ee`, Qt 6.4.2 offscreen/software.
 [Before 3440×1440](before-mock-3440.png), [after 3440×1440](after-mock-3440.png),

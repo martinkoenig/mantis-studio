@@ -1,0 +1,18 @@
+Internal ctest changing into directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+Test project /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+    Start 2: studio-home-qml
+1/6 Test #2: studio-home-qml ..................   Passed   30.71 sec
+    Start 3: studio-home-wire
+2/6 Test #3: studio-home-wire .................   Passed    1.90 sec
+    Start 4: studio-home-hidpi
+3/6 Test #4: studio-home-hidpi ................   Passed    8.32 sec
+    Start 5: studio-home-fractional-dpi
+4/6 Test #5: studio-home-fractional-dpi .......   Passed    7.47 sec
+    Start 6: studio-home-resize
+5/6 Test #6: studio-home-resize ...............   Passed   21.52 sec
+    Start 7: studio-home-states
+6/6 Test #7: studio-home-states ...............   Passed    6.94 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Total Test time (real) =  76.85 sec

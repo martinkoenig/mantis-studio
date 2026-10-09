@@ -1,29 +1,53 @@
 # Original Home illustrations
 
-These six assets were modelled locally for UI-M1, from procedural meshes in
-`render_home.py`, using Blender 4.3.2 CPU Cycles (256 fixed samples). They depict
-an unbranded scanner study, a deep flanged housing, swept impeller, gusseted
-mounting bracket and ribbed closed gearbox cover. No vendor CAD, stock image,
-reference screenshot pixels, generative API or separate worktree is used.
-Apache-2.0, like this repository. They are decorative illustrations, never
-measured geometry, actual device photos, readiness or accuracy evidence.
+The existing procedural models in `render_home.py` depict an unbranded scanner,
+deep flanged housing, swept impeller, gusseted bracket and ribbed cover. They were
+modelled locally for UI-M1; no vendor CAD, stock image, reference pixels or external
+asset service is used. Apache-2.0, like the repository. All are decorative studies,
+never physical hardware, measured geometry, readiness or accuracy evidence.
 
-Reproduction, from the repository root:
+Reproduce foregrounds with Blender 4.3.2 CPU Cycles, 256 samples, fixed seed 0:
 
 ```bash
-blender --background --threads 8 --python ui/home/assets/render_home.py
+blender --background --threads 8 --python ui/home/assets/render_home.py -- --subjects-only
 python3 ui/home/assets/compress_home.py
 ```
 
-The second step uses Pillow **offline only** to package RGB JPEGs at quality 92.
-Qt's existing JPEG decoder works in the Qt 6.4 reference/CI environment; no extra
-image plugin, compiled dependency or network asset is needed. Blender/Pillow
-are not application or build dependencies. Source scripts are not QML resources.
+Without `--subjects-only`, the original scenic hero is also reproduced. The
+accepted `hero.jpg` is unchanged by this correction. Foreground passes use
+`film_transparent`, RGBA PNG and hide the studio floor; the world still supplies
+lighting, not opaque pixels. Packaging rejects trivial alpha or a silhouette
+reaching an export boundary. It losslessly crops unused transparent camera space,
+adds an eight-pixel transparent border and optimizes PNG compression. This step is
+idempotent and never converts foregrounds to RGB. Only the scenic Hero uses JPEG.
+Blender/Pillow remain offline authoring tools, absent from build/runtime and CI.
 
-Hero: 1600×480; scanner: 480×400; four objects: 640×380 each. Combined source
-pixels decode to 7,731,200 bytes (7.37 MiB at RGBA8); optional small uses have
-explicit source-size bounds. Qt may add renderer/cache overhead; this is a pixel
-footprint, not a measured process RSS promise. Total packaged JPEG footprint is
-approximately 216 KiB. Shared local URLs and fixed source sizes reuse Qt image
-caching. Hidden galleries/optional illustrations have empty sources. No timer,
-per-frame geometry generation, runtime rendering worker or polling is added.
+| Packaged asset | Dimensions | Bytes |
+| --- | --- | ---: |
+| Hero JPEG | 1600×480 | 61,884 |
+| Housing RGBA PNG | 426×345 | 180,342 |
+| Rotor RGBA PNG | 388×328 | 171,662 |
+| Bracket RGBA PNG | 412×355 | 139,718 |
+| Cover RGBA PNG | 520×279 | 147,763 |
+| Scanner RGBA PNG | 196×351 | 64,509 |
+
+See the measured manifest in corrective validation for authoritative byte totals
+if encoder versions differ. The packaged images total approximately 748 KiB;
+native pixels occupy 5,609,480 bytes / 5.35 MiB at RGBA8. Qt may additionally hold
+bounded resized/cache variants and renderer textures; this is not a process RSS
+promise. Project images share a 520×355 decode ceiling, sufficient for their
+120–180px preview regions at DPR 2; small scanner/action/tip uses retain smaller
+source-size bounds. Identical URL/size combinations reuse Qt's image cache.
+
+`HomePreview.qml` owns a continuous neutral graphite gradient, 12–22 logical-pixel
+safe padding, centered aspect-fit foreground, eight static low-opacity shadow
+ellipses and subtle footer divider. No animation, per-frame geometry renderer,
+worker, timer, external URL or network image is added. Scanner, Actions and Tips
+use transparent PNGs directly against their card-owned backgrounds; Tips uses
+aspect-fit, preserving complete geometry. Hybrid uses the same project component.
+
+`studio-home-qml` and DPI tests decode all five packaged PNGs through Qt, verify
+nontrivial transparent/opaque/antialiased pixels and complete inset silhouettes,
+and check actual preview safe areas and continuous rendered background bands.
+The application and tests use the same CMake resource inventory. Studio OFF stays
+Qt-free and needs none of these assets or authoring tools.
