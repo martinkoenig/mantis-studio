@@ -1,5 +1,6 @@
 #include "media.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <system_error>
 #include <condition_variable>
 #include <mutex>
@@ -10,15 +11,16 @@ class FakeCamera final : public Camera {
     Mode mode_;
     std::string scenario_;
     std::string context_;
-    bool right_{}, running_{}, delayed_ready_{};
+    bool right_{}, running_{}, delayed_ready_{}, paced_fixture_{};
     Metadata diagnostics_;
     uint32_t sequence_{};
     std::chrono::steady_clock::time_point due_;
     std::mutex mutex_;
     std::condition_variable ready_;
   public:
-    FakeCamera(Mode mode, std::string scenario, bool right, std::string context)
-        : mode_(std::move(mode)), scenario_(std::move(scenario)), context_(std::move(context)), right_(right) {}
+    FakeCamera(Mode mode, std::string scenario, bool right, std::string context, bool paced_fixture)
+        : mode_(std::move(mode)), scenario_(std::move(scenario)), context_(std::move(context)), right_(right),
+          paced_fixture_(paced_fixture) {}
     void start() override {
         if (scenario_ == (right_ ? "streamon-right" : "streamon-left"))
             throw std::runtime_error(context_ + " STREAMON failed: Broken pipe (errno 32)");
@@ -70,8 +72,9 @@ class FakeCamera final : public Camera {
         if (scenario_ == "startup-left-timestamp-jump" && sequence_ == 4 && right_) timestamp = -1;
         if (scenario_ == "timestamp-jump" && sequence_ == 4 && right_) timestamp = -1;
         if (scenario_ == "lag" && right_) timestamp += (1000000000 / mode_.fps) / 2;
-        // Timestamp-only fixtures run without wall-clock pacing. Native counters
-        // and packed pixels still exercise the ordinary acquisition path.
+        // Timestamp-only unit fixtures run without wall-clock pacing by default.
+        // Integration fixtures can opt into delivery pacing; these native timing
+        // facts and packed pixels remain independent of that host scheduling.
         if (scenario_.starts_with("phase-")) {
             int64_t camera_period = 8384000;
             int64_t phase = 4192000;
@@ -111,7 +114,13 @@ class FakeCamera final : public Camera {
                        timestamp + 1000 + (right_ ? 100 : 0), clock, mode_.fourcc, {}};
         emit(view);
         ++sequence_;
-        due_ += std::chrono::nanoseconds(scenario_.starts_with("phase-") ? 0 : 1000000000 / mode_.fps);
+        if (paced_fixture_ && scenario_.starts_with("phase-")) {
+            // Integration tests model a finite-rate camera, not a CPU-speed producer.
+            // Scheduling delays affect delivery only: every native counter/timestamp
+            // above remains exact, with no dropped observations or catch-up burst.
+            due_ = std::chrono::steady_clock::now() + std::chrono::nanoseconds(period);
+        } else
+            due_ += std::chrono::nanoseconds(scenario_.starts_with("phase-") ? 0 : period);
         return true;
     }
 };
@@ -193,9 +202,16 @@ class FakeMedia final : public MediaIo {
 };
 class FakeBackend final : public Backend {
     std::string scenario_;
+    bool paced_fixture_{};
     std::unique_ptr<MediaIo> media_;
   public:
-    explicit FakeBackend(std::string scenario) : scenario_(std::move(scenario)) {}
+    explicit FakeBackend(std::string scenario) : scenario_(std::move(scenario)) {
+        if (const auto pace = std::getenv("MANTIS_X1_FAKE_PACE")) {
+            if (std::string_view(pace) != "0" && std::string_view(pace) != "1")
+                throw std::runtime_error("MANTIS_X1_FAKE_PACE must be 0 or 1");
+            paced_fixture_ = std::string_view(pace) == "1";
+        }
+    }
     std::vector<CameraInfo> discover() override {
         std::vector<CameraInfo> out{{"ov9281 18-0060", "fixture", "/dev/video42", {"GREY", "Y10P"}},
                                     {"ov9281 20-0060", "fixture", "/dev/video7", {"GREY", "Y10P"}}};
@@ -227,7 +243,8 @@ class FakeBackend final : public Backend {
     std::unique_ptr<Camera> open(const CameraInfo &info, const Mode &mode) override {
         auto selected = mode;
         if (scenario_ == "stream-mismatch" && info.sensor == "ov9281 20-0060") ++selected.width;
-        return std::make_unique<FakeCamera>(selected, scenario_, info.sensor == "ov9281 20-0060", camera_context(info));
+        return std::make_unique<FakeCamera>(selected, scenario_, info.sensor == "ov9281 20-0060",
+                                            camera_context(info), paced_fixture_);
     }
 };
 }

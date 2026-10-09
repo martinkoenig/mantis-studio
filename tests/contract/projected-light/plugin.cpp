@@ -460,6 +460,8 @@ struct Bundle {
     MantisExactCalibrationReferenceV1 source_calibration = view<MantisExactCalibrationReferenceV1>();
     MantisContentReferenceV1 source_content = view<MantisContentReferenceV1>();
     MantisHashV1 source_hash = view<MantisHashV1>();
+    MantisExactCalibrationReferenceV1 camera_source = view<MantisExactCalibrationReferenceV1>();
+    MantisContentReferenceV1 camera_content = view<MantisContentReferenceV1>();
     MantisCameraParticipantV1 camera = view<MantisCameraParticipantV1>();
     MantisEmitterEvidenceV1 emitter = emitter_evidence();
     MantisImplementationIdentityV1 implementation = view<MantisImplementationIdentityV1>();
@@ -563,7 +565,7 @@ struct Bundle {
                 image.header.sequence += publication;
                 frameset.header.sequence += publication;
             }
-            if (fault == TEST_SERVICE_CALIBRATION_EXACT) {
+            if (fault == TEST_SERVICE_CALIBRATION_EXACT || fault == TEST_SERVICE_CALIBRATION_CONTENT_MISMATCH) {
                 source_calibration.calibration = frameset.header.calibration;
                 source_content.id = "source-rig-artifact";
                 source_content.type = type("org.mantis.RigCalibration");
@@ -574,6 +576,13 @@ struct Bundle {
                 source_calibration.content = present<MantisEvidenceContentReferenceV1>(&source_content);
                 e.rig_calibration = present<MantisEvidenceExactCalibrationReferenceV1>(&source_calibration);
                 frame.rig_calibration = e.rig_calibration;
+                if (fault == TEST_SERVICE_CALIBRATION_CONTENT_MISMATCH) {
+                    camera_source = source_calibration;
+                    camera_content = source_content;
+                    camera_content.id = "contradictory-source-artifact";
+                    camera_source.content = present<MantisEvidenceContentReferenceV1>(&camera_content);
+                    frame.rig_calibration = present<MantisEvidenceExactCalibrationReferenceV1>(&camera_source);
+                }
             }
         }
         if (shape == 2) {
@@ -680,7 +689,8 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
         if (f >= TEST_SERVICE_COMPLETE)
             shape = publication == 0
                         ? (f == TEST_SERVICE_CAPTURE || f == TEST_SERVICE_CALIBRATION_MISMATCH ||
-                                   f == TEST_SERVICE_CALIBRATION_CHANGE || f == TEST_SERVICE_CALIBRATION_EXACT
+                                   f == TEST_SERVICE_CALIBRATION_CHANGE || f == TEST_SERVICE_CALIBRATION_EXACT ||
+                                   f == TEST_SERVICE_CALIBRATION_CONTENT_MISMATCH
                                ? 1
                            : f == TEST_SERVICE_TRIGGER ? 2
                                                        : 0)

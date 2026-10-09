@@ -369,6 +369,15 @@ device::ProjectedValidation ProjectedSessions::validate(const ProjectedCaptureRe
     auto g = impl_->graph(q);
     auto p = impl_->program(q);
     impl_->ownership(q.plugin_id, g);
+    try {
+        // Reuse start's pure snapshot/compatibility check before executor opening.
+        ProjectedCalibrationBinding calibration(*impl_->store, g, p);
+    } catch (const Failure &e) {
+        device::ProjectedValidation rejected;
+        rejected.limits = g.limits;
+        rejected.host_error = e.error;
+        return rejected;
+    }
     return device::ProjectedRun::validate_program(
         impl_->registry.open_projected_light(q.plugin_id, q.parent, 100), std::move(p), q.config);
 }

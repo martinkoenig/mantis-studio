@@ -12,6 +12,13 @@ bool same(const data::ExactCalibrationReference &a, const data::ExactCalibration
     auto x = a.content.get(), y = b.content.get();
     return !x || (x->id == y->id && x->type == y->type && x->revision == y->revision && x->hash == y->hash);
 }
+// Missing content evidence is not a contradictory identity. When both sides
+// establish content, every immutable identity/hash field must agree exactly.
+bool compatible_source(const data::ExactCalibrationReference &a, const data::ExactCalibrationReference &b) {
+    if (!same(a.calibration, b.calibration))
+        return false;
+    return !a.content.get() || !b.content.get() || same(a, b);
+}
 void check(bool value, std::string_view message) {
     if (!value)
         fail(Status::incompatible, std::string(message), "projected-calibration");
@@ -210,10 +217,10 @@ data::AcquisitionBundle ProjectedCalibrationBinding::stamp(data::AcquisitionBund
                 check(same(exact->calibration, *source_),
                       "Source camera rig evidence and FrameSet calibration disagree");
             if (source_rig_)
-                check(same(exact->calibration, source_rig_->calibration),
+                check(compatible_source(*exact, *source_rig_),
                       "Source camera and acquisition rig calibration disagree");
             for (const auto &[id, previous] : camera_rigs_)
-                check(same(exact->calibration, previous.calibration),
+                check(compatible_source(*exact, previous),
                       "Source camera rig calibration references disagree");
             auto [previous, inserted] = camera_rigs_.emplace(frame.frame.camera, *exact);
             check(inserted || same(previous->second, *exact),
@@ -233,7 +240,7 @@ data::AcquisitionBundle ProjectedCalibrationBinding::stamp(data::AcquisitionBund
     }
     if (source_rig_)
         for (const auto &[camera, exact] : camera_rigs_)
-            check(same(exact.calibration, source_rig_->calibration),
+            check(compatible_source(exact, *source_rig_),
                   "Source camera and acquisition rig calibration disagree");
     if (snapshot_) {
         const data::ExactCalibrationReference bound{

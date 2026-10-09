@@ -30,7 +30,10 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         socket_probe.bind(("127.0.0.1", 0)); port = socket_probe.getsockname()[1]
     env = dict(os.environ, MANTIS_TOKEN="acquisition-" + os.urandom(16).hex(), MANTIS_PORT=str(port),
                MANTIS_X1_PROFILE=str(root / "profile.json"), MANTIS_X1_FAKE="startup-left" if packed else "startup-right",
-               QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
+               # Phase fixtures retain synthetic timing facts but use finite-rate delivery.
+               # Unpaced fixtures intentionally stress algorithms in unit tests; a public
+               # successful LOSSLESS capture must not depend on CPU-speed production.
+               MANTIS_X1_FAKE_PACE="1", QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
     client = mantis.connect(port=port, token=env["MANTIS_TOKEN"])
     daemon = None
     log = open(root / "daemon.log", "w+")

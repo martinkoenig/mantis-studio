@@ -105,8 +105,11 @@ RigCalibration before executor opening/preparation. It verifies the finalized
 artifact/hash and exact logical ID/schema/revision through the existing calibration
 artifact reader. Declared image participants match typed graph component/stream,
 physical identity, role and width/height; a subset of a stereo rig is supported.
-Emitter/controller children are not cameras. A mismatch rejects before hardware
-preparation and before creating a capture artifact.
+Emitter/controller children are not cameras. Pure validation reuses this same check
+before executor opening; expected incompatibility returns accepted=false with the
+precise host_error and discovered limits, without prepare/start/abort or artifact
+creation. Start rejects the same mismatch before hardware preparation and before
+creating a capture artifact. Executor rejection/error remains a distinct field.
 
 An internal calibration-bound ProjectedExecutor delegates all lifecycle calls and
 stamps FrameSet/image headers, AcquisitionEvidence.rig_calibration and source-frame
@@ -119,7 +122,11 @@ storage access.
 
 The selected reference/dependency/hash enters provenance at durable capture
 initialization. Source parent/child references must agree and remain stable;
-established source rig identities/content cannot change or contradict those headers.
+packet headers compare logical ID/schema/revision only. Source acquisition/camera rig
+references additionally agree on exact artifact ID, type/schema, revision and hash
+presence/value whenever both establish content. Missing Unknown/Unavailable content
+is not a conflicting identity and is never filled in. Same-camera source stability
+remains checked; different CameraCalibration artifacts are independent of rig identity.
 Original source headers and initial/first-established rig references, including exact
 presence/content/hash and each camera's initial/first-established rig references,
 are retained separately under source_* provenance fields. The recorder initializes these bounded, write-once audit
@@ -309,6 +316,54 @@ legacy storage golden and frozen ABI/catalog tests remain green. Boundaries and
 `git diff --check` pass.
 
 The [follow-up baseline CI at 7171b740](https://github.com/martinkoenig/mantis-studio/actions/runs/37917677111)
-is green for x86_64 and ARM64 Studio ON/OFF and sanitizers; follow-up CI awaits push.
+is green for x86_64 and ARM64 Studio ON/OFF and sanitizers. The subsequent
+a13adf3 ARM64 failure is investigated below.
 No frozen ABI, protocol numbering, accepted storage format, hardware, extraction,
 triangulation or L6 implementation changes are included.
+
+The calibration-validation follow-up also covers pure validation of compatible,
+absent, physically/role/dimension-incompatible and corrupted active calibration;
+malformed-program host errors and executor errors retain separate results. Exact
+source tests reject acquisition/camera and camera/camera rig content conflicts,
+accept matching references and nested Unknown/Unavailable content, and confirm that
+an inconsistent native bundle produces zero authoritative L3 publications.
+
+### Acquisition integration CI investigation
+
+[Run 37923585814, ARM64 Studio OFF](https://github.com/martinkoenig/mantis-studio/actions/runs/37923585814/job/113797127401)
+failed at acquisition.py's phase-jitter-left public validator start with
+`LOSSLESS writer queue saturated; capture failed explicitly`. The corresponding
+camera Session, source fixture and integration test were unchanged from 7171b740;
+ProjectedCalibrationBinding is called only by projected start/validation, never
+that camera path. CI uses sequential CTest; resource pressure was not measured on
+the failing runner, so a specific scheduler/storage stall cannot be asserted.
+
+The same pre-existing mechanism is present in
+[run 37672328140 at 876b303c, x86_64 Studio OFF](https://github.com/martinkoenig/mantis-studio/actions/runs/37672328140/job/112966960147):
+acquisition-y10p-integration failed during phase-drift-left with the same lossless
+saturation error, before L1–L5 implementations. Phase fixtures deliberately emit
+without wall-clock pacing for fast algorithm unit tests. Successful live recording
+of that CPU-speed producer depends on uncontended writer scheduling; the recorder
+correctly refuses an enqueue after its existing finite admission deadline.
+
+Ten unchanged local acquisition runs and five under two-core/three-burner CPU
+contention passed. A worktree-local LD_PRELOAD experiment delaying the second
+phase-jitter-left `.segment.part` write by 150 ms reproduced the exact CI failure
+at the same validator start. This demonstrates storage/scheduler-stall sensitivity;
+it does not claim an observed 150 ms stall on GitHub's runner.
+
+Integration tests now explicitly set `MANTIS_X1_FAKE_PACE=1`. This option applies
+only to the fake backend's phase fixture delivery and uses the profile's finite
+frame period. Native timestamps, sequence values and pixel bytes are unchanged;
+scheduling delays do not generate a catch-up burst or discard an observation.
+Default algorithm unit fixtures remain unpaced. The Linux camera backend, camera
+Session, 32-entry queue, 50 ms admission deadline, lossless failures and all existing
+assertions remain unchanged. Ten corrected repetitions with the identical injected
+150 ms write stall passed. No fault injection library is installed or used by CI.
+
+Five GREY and five Y10P repetitions also passed with the same injected write stall
+and two-core/three-burner CPU contention. The final complete non-hardware suite
+passes **48/48** (30.43 seconds); the complete ASan + UBSan suite passes **48/48**
+(108.46 seconds), with leak detection and halt-on-error enabled. Architecture
+boundaries and `git diff --check` pass. CI acceptance additionally requires all five
+jobs to succeed for the exact final pushed SHA; local results alone are insufficient.

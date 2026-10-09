@@ -1,6 +1,7 @@
 #include "../../src/services/projected_calibration.hpp"
 #include "../contract/projected-light/fixture.h"
 #include "../fixtures/calibration_api.hpp"
+#include <fstream>
 #include <iostream>
 #include <mantis/plugin_runtime.hpp>
 #include <mantis/replay.hpp>
@@ -77,15 +78,138 @@ void rejected(services::Runtime &runtime, const TestProjectedControl &control,
               const services::ProjectedCaptureRequest &q, std::string_view diagnostic) {
     auto prepares = control.prepares(), starts = control.starts(), opens = control.opens();
     auto artifacts = runtime.artifacts().size();
+    auto validation = runtime.validate_projected(q);
+    CHECK(!validation.accepted && validation.host_error);
+    CHECK(!validation.executor_error && !validation.executor_validation);
+    CHECK(validation.host_error->code == Status::incompatible);
+    CHECK(validation.host_error->message.find(diagnostic) != std::string::npos);
+    CHECK(control.prepares() == prepares && control.starts() == starts && control.opens() == opens);
+    CHECK(runtime.artifacts().size() == artifacts);
     try {
         runtime.start_projected(q, Id::random().value);
         throw std::runtime_error("Expected calibration rejection");
     } catch (const Failure &e) {
         CHECK(e.error.code == Status::incompatible);
-        CHECK(e.error.message.find(diagnostic) != std::string::npos);
+        CHECK(e.error.message == validation.host_error->message);
     }
     CHECK(control.prepares() == prepares && control.starts() == starts && control.opens() == opens);
     CHECK(runtime.artifacts().size() == artifacts);
+}
+device::ProjectedValidation validate(services::Runtime &runtime, const TestProjectedControl &control,
+                                     const services::ProjectedCaptureRequest &q) {
+    const auto prepares = control.prepares(), starts = control.starts(), aborts = control.aborts();
+    const auto artifacts = runtime.artifacts().size();
+    auto result = runtime.validate_projected(q);
+    CHECK(control.prepares() == prepares && control.starts() == starts && control.aborts() == aborts);
+    CHECK(runtime.artifacts().size() == artifacts);
+    return result;
+}
+void source_consistency(artifact::Store &store, const device::ProjectedGraph &graph,
+                        const d::AcquisitionProgram &program, const d::AcquisitionBundle &source) {
+    const d::ExactCalibrationReference rig{
+        {{"source.rig"}, 1, 7},
+        d::ContentReference{
+            {"source-artifact-A"}, {"org.mantis.RigCalibration", 1}, Hash{"sha256", "AAAA"}, 7}};
+    auto exact_source = source;
+    exact_source.evidence.rig_calibration = rig;
+    exact_source.evidence.frames[0].rig_calibration = rig;
+    CHECK(d::validate(exact_source));
+    {
+        services::ProjectedCalibrationBinding binding(store, graph, program);
+        binding.stamp(exact_source);
+    }
+    for (int difference : {0, 1, 2, 3, 4, 5}) {
+        auto conflict = exact_source;
+        auto changed = rig;
+        auto content = *rig.content.get();
+        switch (difference) {
+        case 0:
+            content.id = {"source-artifact-B"};
+            break;
+        case 1:
+            content.hash = Hash{"sha256", "BBBB"};
+            break;
+        case 2:
+            content.revision = 8;
+            break;
+        case 3:
+            content.type = {"org.mantis.RigCalibration", 2};
+            break;
+        case 4:
+            content.hash = d::Unknown{};
+            break;
+        case 5:
+            content.hash = d::Unavailable{};
+            break;
+        }
+        changed.content = content;
+        conflict.evidence.frames[0].rig_calibration = changed;
+        services::ProjectedCalibrationBinding binding(store, graph, program);
+        bool rejected{};
+        try {
+            binding.stamp(conflict);
+        } catch (const Failure &e) {
+            rejected = e.error.code == Status::incompatible;
+        }
+        CHECK(rejected);
+    }
+    // Missing exact content does not assert a different immutable identity.
+    for (auto presence : {d::Presence::unknown, d::Presence::unavailable}) {
+        auto missing = exact_source;
+        auto reference = rig;
+        reference.content = presence == d::Presence::unknown
+                                ? d::Evidence<d::ContentReference>(d::Unknown{})
+                                : d::Evidence<d::ContentReference>(d::Unavailable{});
+        missing.evidence.frames[0].rig_calibration = reference;
+        CHECK(d::validate(missing));
+        services::ProjectedCalibrationBinding binding(store, graph, program);
+        CHECK(canonical(binding.stamp(missing)) == canonical(missing));
+        auto fields = binding.source_provenance(missing.key.sequence);
+        CHECK(fields.at("source_camera_0_rig_calibration_content_presence") ==
+              (presence == d::Presence::unknown ? "unknown" : "unavailable"));
+    }
+    auto two = program;
+    two.participants.cameras.push_back({{{"camera-beta"}}, {{"second-stream"}}, "right"});
+    auto cameras = source;
+    cameras.evidence.participants = two.participants;
+    cameras.frameset.reset();
+    cameras.evidence.rig_calibration = d::Unknown{};
+    cameras.evidence.frames[0].rig_calibration = rig;
+    auto second = cameras.evidence.frames[0];
+    second.frame.camera = {{"camera-beta"}};
+    second.frame.stream.id = {{"second-stream"}};
+    second.camera_role = "right";
+    auto other = rig;
+    auto content = *rig.content.get();
+    content.id = {"source-artifact-B"};
+    other.content = content;
+    second.rig_calibration = other;
+    cameras.evidence.frames.push_back(second);
+    for (auto &emitter : cameras.evidence.emitters) {
+        auto effective = emitter.exposure_effective[0];
+        effective.frame = second.frame;
+        emitter.exposure_effective.push_back(effective);
+    }
+    CHECK(d::validate(cameras));
+    services::ProjectedCalibrationBinding binding(store, graph, two);
+    bool rejected{};
+    try {
+        binding.stamp(cameras);
+    } catch (const Failure &e) {
+        rejected = e.error.code == Status::incompatible;
+    }
+    CHECK(rejected);
+    cameras.evidence.frames[1].rig_calibration = rig;
+    for (size_t i = 0; i < cameras.evidence.frames.size(); ++i) {
+        const auto id = "intrinsics-" + std::to_string(i);
+        cameras.evidence.frames[i].camera_calibration = d::ExactCalibrationReference{
+            {{id}, 1, 1},
+            d::ContentReference{
+                {id + "-artifact"}, {"org.mantis.CameraCalibration", 1}, Hash{"sha256", "abcd"}, 1}};
+    }
+    CHECK(d::validate(cameras));
+    services::ProjectedCalibrationBinding matching(store, graph, two);
+    CHECK(canonical(matching.stamp(cameras)) == canonical(cameras));
 }
 int main(int argc, char **argv) {
     try {
@@ -101,6 +225,7 @@ int main(int argc, char **argv) {
         {
             services::Runtime runtime({argv[2], {}, root, {}, {"org.example.projected-contract"}});
             auto store = runtime.project_store();
+            CHECK(validate(runtime, *control, request()).accepted);
             auto no_active = finish(runtime, runtime.start_projected(request(), "unbound").id);
             auto source = store->bundle(no_active.raw_artifact);
             CHECK(source.frameset);
@@ -133,6 +258,37 @@ int main(int argc, char **argv) {
                                                        implementation));
             CHECK(ca::activate_rig_calibration(*store, {"parent-alpha"}, rev1.descriptor.id));
             const auto selected = *store->active_calibration({"parent-alpha"});
+            CHECK(validate(runtime, *control, request()).accepted);
+            auto malformed = request();
+            std::get<d::AcquisitionProgram>(malformed.program).steps.clear();
+            auto invalid = validate(runtime, *control, malformed);
+            CHECK(!invalid.accepted && invalid.host_error && !invalid.executor_error);
+            control->fault(TEST_SERVICE_VALIDATE_FAILURE);
+            auto executor_failure = validate(runtime, *control, request());
+            CHECK(!executor_failure.accepted && !executor_failure.host_error &&
+                  executor_failure.executor_error);
+            control->fault(TEST_SERVICE_CAPTURE);
+            // Corrupt our test artifact bytes, then restore exactly; pure validation must fail closed.
+            const auto path = store->object_path(selected.artifact.id);
+            std::ifstream input(path, std::ios::binary);
+            std::string bytes((std::istreambuf_iterator<char>(input)), {});
+            input.close();
+            auto corrupt = bytes;
+            corrupt.back() ^= 1;
+            {
+                std::ofstream out(path, std::ios::binary | std::ios::trunc);
+                out.write(corrupt.data(), corrupt.size());
+            }
+            const auto opens = control->opens();
+            auto bad_artifact = validate(runtime, *control, request());
+            CHECK(!bad_artifact.accepted && bad_artifact.host_error && !bad_artifact.executor_error);
+            CHECK(bad_artifact.host_error->code == Status::corrupt && control->opens() == opens);
+            {
+                std::ofstream out(path, std::ios::binary | std::ios::trunc);
+                out.write(bytes.data(), bytes.size());
+            }
+            CHECK(store->active_calibration({"parent-alpha"})->artifact.hash == selected.artifact.hash);
+
             // One participating camera from a two-camera rig; emitter/controller children are excluded.
             services::ProjectedCalibrationBinding binding(*store, runtime.projected_devices()[0].graph,
                                                           std::get<d::AcquisitionProgram>(request().program));
@@ -164,10 +320,8 @@ int main(int argc, char **argv) {
             late.key.sequence.value++;
             const d::ExactCalibrationReference late_reference{
                 {{"source.rig"}, 1, 7},
-                d::ContentReference{{"late-source-artifact"},
-                                    {"org.mantis.RigCalibration", 1},
-                                    Hash{"sha256", "abcd"},
-                                    7}};
+                d::ContentReference{
+                    {"late-source-artifact"}, {"org.mantis.RigCalibration", 1}, Hash{"sha256", "abcd"}, 7}};
             late.evidence.frames[0].rig_calibration = late_reference;
             auto late_bound = late_binding.stamp(late);
             exact(late_bound.evidence.frames[0].rig_calibration, selected);
@@ -221,6 +375,14 @@ int main(int argc, char **argv) {
             }
             control->fault(TEST_SERVICE_CALIBRATION_EXACT);
             auto exact_source = finish(runtime, runtime.start_projected(request(), "source-content").id);
+            control->fault(TEST_SERVICE_CALIBRATION_CONTENT_MISMATCH);
+            auto inconsistent = finish(runtime, runtime.start_projected(request(), "source-conflict").id);
+            CHECK(inconsistent.run.state == device::ProjectedState::failed);
+            CHECK(inconsistent.committed == 0 && inconsistent.run.queue.produced == 0);
+            CHECK(inconsistent.run.terminal.initiating_error);
+            CHECK(inconsistent.run.terminal.initiating_error->message.find("rig calibration disagree") !=
+                  std::string::npos);
+            control->fault(TEST_SERVICE_CALIBRATION_EXACT);
             auto original = store->get(exact_source.raw_artifact).provenance.parameters;
             CHECK(original.at("source_established_rig_calibration_artifact_id") == "source-rig-artifact");
             CHECK(original.at("source_established_rig_calibration_hash") == "abcd");
@@ -244,6 +406,8 @@ int main(int argc, char **argv) {
                 auto unbound = store->bundle(no_active.raw_artifact);
                 CHECK(canonical(unbound) == canonical(source));
             }
+            source_consistency(*store, runtime.projected_devices()[0].graph,
+                               std::get<d::AcquisitionProgram>(request().program), source);
             // An explicit unavailable source stays unavailable when no active project binding exists.
             auto unavailable = source;
             unavailable.evidence.rig_calibration = d::Unavailable{};
