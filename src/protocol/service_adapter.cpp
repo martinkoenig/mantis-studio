@@ -1,5 +1,6 @@
-#include <mantis/service_adapter.hpp>
 #include "calibration_adapter.hpp"
+#include "projected_adapter.hpp"
+#include <mantis/service_adapter.hpp>
 namespace mantis::protocol {
 namespace {
 void device(wire::v1::Response &r, const device::Descriptor &d) {
@@ -84,6 +85,8 @@ wire::v1::Response dispatch(services::Runtime &runtime, const wire::v1::Request 
     out.set_protocol_version(version);
     out.set_request_id(request.request_id());
     try {
+        if (request.ByteSizeLong() > max_control_bytes)
+            fail(Status::invalid_argument, "Control request exceeds 4 MiB");
         if (request.protocol_version() != version)
             fail(Status::incompatible, "Unsupported control protocol version");
         using R = wire::v1::Request;
@@ -196,7 +199,7 @@ wire::v1::Response dispatch(services::Runtime &runtime, const wire::v1::Request 
         case R::kShutdown:
             break;
         default:
-            if (!dispatch_calibration(runtime, request, out))
+            if (!dispatch_projected(runtime, request, out) && !dispatch_calibration(runtime, request, out))
                 fail(Status::invalid_argument, "Missing or unknown command");
         }
     } catch (const Failure &e) {

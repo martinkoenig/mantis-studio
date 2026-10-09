@@ -48,6 +48,12 @@ struct ProjectedRunSnapshot {
 // Rejects non-final snapshots; copies queue.produced, exact optional errors and final cleanup facts.
 // Performs no cleanup, reason/state inference or hardware work.
 data::ProjectedCaptureOutcome recorded_run_outcome(const ProjectedRunSnapshot &);
+struct ProjectedValidation {
+    bool accepted{};
+    ProjectedLimits limits;
+    std::optional<Error> host_error, executor_error, close_error;
+    std::optional<ProgramValidation> executor_validation;
+};
 // Owns one executor and an immutable program snapshot. Only its worker makes ordinary
 // executor calls. Abort bypasses that worker and the authoritative queue.
 class ProjectedRun {
@@ -62,6 +68,11 @@ class ProjectedRun {
     ProjectedRun &operator=(const ProjectedRun &) = delete;
     Result<void> prepare();
     Result<void> start();
+    // Pure preflight and executor validation; never prepares, starts or aborts.
+    static ProjectedValidation validate_program(std::unique_ptr<ProjectedExecutor>, data::AcquisitionProgram,
+                                                ProjectedRunConfig = {});
+    // Daemon recorder faults use the same priority path, without user stop/cancel semantics.
+    void recording_fault(Error);
     void stop();
     void cancel();
     // Drains existing immutable publications, including after terminal cleanup.

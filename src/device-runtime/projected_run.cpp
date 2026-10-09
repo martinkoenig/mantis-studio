@@ -122,13 +122,15 @@ struct ProjectedRun::Impl {
     size_t entries{};
 
     Impl(std::unique_ptr<ProjectedExecutor> e, AcquisitionProgram p, ProjectedRunConfig c,
-         ProjectedIdentitySource ids, ProjectedClock clock)
+         ProjectedIdentitySource ids, ProjectedClock clock, bool launch = true)
         : executor(std::move(e)), program(std::move(p)), graph(executor->graph()), config(c),
           identity(ids ? ids() : ProjectedIdentity{RunId{Id::random()}, GenerationId{Id::random()}}),
           now(clock ? std::move(clock) : ProjectedClock{[] { return Clock::now(); }}) {
         view.identity = identity;
         view.transitions.reserve(7);
         view.queue.capacity = config.queue_capacity;
+        if (!launch)
+            return;
         worker = std::jthread([this] { work(); });
         try {
             watchdog = std::jthread([this] { watch(); });
@@ -140,6 +142,8 @@ struct ProjectedRun::Impl {
         }
     }
     ~Impl() {
+        if (!worker.joinable())
+            return;
         request(AcquisitionReason::user_stop, {});
         worker.join();
         watchdog.join();
@@ -1398,6 +1402,44 @@ ProjectedRun::ProjectedRun(std::unique_ptr<ProjectedExecutor> executor, data::Ac
                                    std::move(clock));
 }
 ProjectedRun::~ProjectedRun() = default;
+ProjectedValidation ProjectedRun::validate_program(std::unique_ptr<ProjectedExecutor> executor,
+                                                   data::AcquisitionProgram program,
+                                                   ProjectedRunConfig config) {
+    if (!executor)
+        fail(Status::invalid_argument, "Validation requires an executor");
+    Impl preflight(std::move(executor), std::move(program), config, {}, {}, false);
+    ProjectedValidation result;
+    result.limits = preflight.graph.limits;
+    try {
+        preflight.preflight();
+    } catch (const std::pair<data::AcquisitionReason, Error> &e) {
+        result.host_error = e.second;
+    } catch (const Failure &e) {
+        result.host_error = e.error;
+    } catch (const std::exception &e) {
+        result.host_error = error(Status::invalid_argument, e.what());
+    }
+    if (!result.host_error) {
+        auto v = guarded([&] {
+            return preflight.executor->validate(preflight.program,
+                                                preflight.bound(config.operation_timeout_ms));
+        });
+        if (v)
+            result.executor_validation = std::move(*v);
+        else
+            result.executor_error = v.error();
+    }
+    auto close =
+        guarded([&] { return preflight.executor->close(preflight.bound(config.cleanup_timeout_ms)); });
+    if (!close)
+        result.close_error = close.error();
+    result.accepted = !result.host_error && !result.executor_error && !result.close_error &&
+                      result.executor_validation && result.executor_validation->accepted;
+    return result;
+}
+void ProjectedRun::recording_fault(Error failure) {
+    impl_->request(data::AcquisitionReason::resource_limit, std::move(failure));
+}
 Result<void> ProjectedRun::prepare() {
     return impl_->submit(Impl::Job::prepare);
 }

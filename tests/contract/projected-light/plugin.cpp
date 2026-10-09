@@ -7,6 +7,7 @@
 #include <mantis/sdk.hpp>
 #include <mutex>
 #include <string>
+#include <thread>
 
 namespace {
 using mantis::sdk::boundary;
@@ -247,6 +248,9 @@ struct Reference {
         return out;
     }
 };
+std::atomic_uint opens{}, validations{}, prepares{}, starts{}, aborts{};
+void (*prepare_probe)(void *){};
+void *prepare_context{};
 struct Instance {
     const MantisHostV1 *host;
     std::mutex mutex;
@@ -352,6 +356,7 @@ int open(const MantisHostV1 *host, const char *parent, uint32_t t, void **out) {
     if (!mantis::sdk::compatible(host) || !parent || std::strcmp(parent, "parent-alpha") ||
         t > MANTIS_MAX_TIMEOUT_MS || !out)
         return MANTIS_PL_INVALID;
+    ++opens;
     std::lock_guard lock(ownership);
     *out = nullptr;
     if (owned)
@@ -367,6 +372,9 @@ int validate(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisP
              void *ctx) {
     if (!ptr || t > MANTIS_MAX_TIMEOUT_MS || !emit)
         return MANTIS_PL_INVALID;
+    ++validations;
+    if (fault == TEST_SERVICE_VALIDATE_FAILURE)
+        return MANTIS_PL_ERROR;
     Instance::Call active(*static_cast<Instance *>(ptr));
     auto v = view<MantisProgramValidationV1>();
     v.error = view<MantisContractErrorV1>();
@@ -388,6 +396,9 @@ int prepare(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisPr
     if (!ptr || !emit || t > MANTIS_MAX_TIMEOUT_MS)
         return MANTIS_PL_INVALID;
     Instance::Call active(*static_cast<Instance *>(ptr));
+    ++prepares;
+    if (prepare_probe)
+        prepare_probe(prepare_context);
     if (fault == TEST_FAILURE)
         return MANTIS_PL_ERROR;
     struct Validation {
@@ -417,6 +428,9 @@ int prepare(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisPr
 int start(void *ptr, const char *run, const char *generation, uint32_t t) {
     if (!ptr || !run || !*run || !generation || !*generation || t > MANTIS_MAX_TIMEOUT_MS)
         return MANTIS_PL_INVALID;
+    ++starts;
+    if (fault == TEST_SERVICE_START_FAILURE)
+        return MANTIS_PL_ERROR;
     auto &s = *static_cast<Instance *>(ptr);
     int rc = MANTIS_PL_OK;
     auto code = boundary([&] {
@@ -437,6 +451,7 @@ struct Bundle {
     mantis::sdk::Buffer pixels;
     MantisAcquisitionBundleV1 bundle = view<MantisAcquisitionBundleV1>();
     MantisSemanticPacketV1 semantic = view<MantisSemanticPacketV1>();
+    MantisEmitterCommandV1 command = view<MantisEmitterCommandV1>();
     MantisCameraParticipantV1 camera = view<MantisCameraParticipantV1>();
     MantisEmitterEvidenceV1 emitter = emitter_evidence();
     MantisImplementationIdentityV1 implementation = view<MantisImplementationIdentityV1>();
@@ -461,7 +476,7 @@ struct Bundle {
         b.key.run_id = s.run.c_str();
         b.key.sequence = publication;
         b.published = host_time();
-        b.published.time = 100 + publication;
+        b.published.time = 100 + (fault == TEST_SERVICE_CAPTURE ? 500000000LL * publication : publication);
         auto &e = b.evidence;
         e = view<MantisAcquisitionEvidenceV1>();
         e.type = type(MANTIS_ACQUISITION_EVIDENCE);
@@ -560,6 +575,24 @@ struct Bundle {
             e.triggers = &trigger.key;
             e.triggers_count = 1;
         }
+        if (fault >= TEST_SERVICE_COMPLETE) {
+            disposition = publication == 0 ? (shape == 1 ? MANTIS_ACQUISITION_DISPOSITION_CAPTURED
+                                                         : MANTIS_ACQUISITION_DISPOSITION_CONTROL_ONLY)
+                                           : MANTIS_ACQUISITION_DISPOSITION_COMPLETED;
+            step.run_id = s.run.c_str();
+            e.step = present<MantisEvidenceStepInstanceV1>(&step);
+            if (publication == 0) {
+                command.request = "service-off";
+                command.target = "emitter-alpha";
+                command.state = MANTIS_EMITTER_STATE_OFF;
+                command.dispatched = host_time();
+                emitter.commanded = present<MantisEvidenceEmitterCommandV1>(&command);
+            }
+        }
+        if (fault == TEST_SERVICE_TRIGGER && publication == 1) {
+            disposition = MANTIS_ACQUISITION_DISPOSITION_FAILED;
+            e.reason = MANTIS_ACQUISITION_REASON_DEVICE_FAILURE;
+        }
         b.member_count = 1 + uint32_t(b.frameset != nullptr) + b.trigger_count;
         semantic.kind = MANTIS_SEMANTIC_BUNDLE;
         semantic.bundle = &b;
@@ -589,8 +622,11 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
             s.wake.notify_all();
         }
     } guard{s};
-    if (f == TEST_PENDING) {
+    if (f == TEST_PENDING || f == TEST_SERVICE_PENDING || f == TEST_SERVICE_ABORT_STATES ||
+        f == TEST_SERVICE_ABORT_FALSE || (f == TEST_SERVICE_RECORDING_FAILURE && publication > 0)) {
         std::unique_lock lock(s.mutex);
+        if (f == TEST_SERVICE_PENDING || f == TEST_SERVICE_ABORT_STATES || f == TEST_SERVICE_ABORT_FALSE)
+            --s.publication;
         ++pending_calls;
         s.wake.wait_for(lock, std::chrono::milliseconds(t), [&] { return s.inhibited; });
         --pending_calls;
@@ -609,6 +645,11 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
             shape = (f == TEST_BAD_FRAMESET || f == TEST_DOUBLE_EMIT || f == TEST_EMIT_AFTER_FAILURE) ? 1u
                     : (f == TEST_RUN_MISMATCH) ? 2u
                                                : publication;
+        if (f >= TEST_SERVICE_COMPLETE)
+            shape = publication == 0 ? (f == TEST_SERVICE_CAPTURE   ? 1
+                                        : f == TEST_SERVICE_TRIGGER ? 2
+                                                                    : 0)
+                                     : 0;
         Bundle b(s, publication, shape);
         MantisHashV1 wrong_hash = view<MantisHashV1>();
         wrong_hash.algorithm = "sha256";
@@ -805,6 +846,7 @@ int abort(void *ptr, uint32_t reason, uint32_t t, MantisAbortEmitV1 emit, void *
     if (!ptr || !emit || t > MANTIS_MAX_TIMEOUT_MS || reason > MANTIS_ACQUISITION_REASON_CLEANUP_FAILURE)
         return MANTIS_PL_INVALID;
     auto &s = *static_cast<Instance *>(ptr);
+    ++aborts;
     Instance::Call active(s);
     // This lock is never held by pending next or its callback. Fence first, then OFF.
     std::string run, gen;
@@ -844,6 +886,13 @@ int abort(void *ptr, uint32_t reason, uint32_t t, MantisAbortEmitV1 emit, void *
         out.emitters = emitters.data();
         out.emitter_count = s.two_emitters ? 2 : 1;
         out.error = view<MantisContractErrorV1>();
+        uint32_t no = 0;
+        if (fault == TEST_SERVICE_ABORT_FALSE)
+            out.stale_work_fenced = present<MantisEvidenceUInt32V1>(&no);
+        if (fault == TEST_SERVICE_ABORT_STATES) {
+            out.stale_work_fenced = absent<MantisEvidenceUInt32V1>();
+            out.off_requested = absent<MantisEvidenceUInt32V1>(MANTIS_PRESENCE_UNAVAILABLE);
+        }
         if (fault == TEST_BAD_ABORT)
             yes = 9;
         if (fault == TEST_ABORT_EMPTY) {
@@ -881,13 +930,15 @@ int stop(void *ptr, uint32_t t) {
     if (!s.wake.wait_for(lock, std::chrono::milliseconds(t), [&] { return s.active == 0; }))
         return MANTIS_PL_BUSY;
     s.started = false;
+    if (fault == TEST_SERVICE_STOP_FAILURE)
+        return MANTIS_PL_ERROR;
     return MANTIS_PL_OK;
 }
 int destroy(void *ptr, uint32_t t) {
-    if (fault == TEST_DESTROY_REFUSE)
+    if (fault == TEST_DESTROY_REFUSE || fault == TEST_SERVICE_CLOSE_FAILURE)
         return MANTIS_PL_BUSY;
     auto rc = stop(ptr, t);
-    if (rc)
+    if (rc && fault != TEST_SERVICE_STOP_FAILURE)
         return rc;
     delete static_cast<Instance *>(ptr);
     std::lock_guard lock(ownership);
@@ -960,6 +1011,7 @@ int camera_next(void *p, uint32_t t, MantisFrameSetEmitV1 emit, void *ctx) {
         auto &s = *static_cast<Instance *>(p);
         if (!s.started)
             return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         mantis::sdk::Buffer buffer(s.host, 4);
         std::fill(buffer.writable().begin(), buffer.writable().end(), std::byte{5});
         buffer.publish();
@@ -968,7 +1020,18 @@ int camera_next(void *p, uint32_t t, MantisFrameSetEmitV1 emit, void *ctx) {
         MantisObservationV1 image{};
         image.struct_size = sizeof(image);
         image.abi_version = 1;
-        image.packet = {sizeof(MantisPacketV1), 1, MANTIS_IMAGE, 1, 7, 0, "clock", "", 0, "optical", &a, 1};
+        image.packet = {sizeof(MantisPacketV1),
+                        1,
+                        MANTIS_IMAGE,
+                        1,
+                        7 + s.publication++,
+                        0,
+                        "clock",
+                        "",
+                        0,
+                        "optical",
+                        &a,
+                        1};
         image.metadata_json = "{}";
         MantisFrameSetV1 set{};
         set.struct_size = sizeof(set);
@@ -1016,7 +1079,16 @@ const TestProjectedControl control = {[](uint32_t f) { fault = f; },
                                       [] { return initializations.load(); },
                                       [] { return shutdowns.load(); },
                                       [](uint32_t shape) { selected_shape = shape; },
-                                      [](uint32_t publication) { selected_publication = publication; }};
+                                      [](uint32_t publication) { selected_publication = publication; },
+                                      [] { return opens.load(); },
+                                      [] { return validations.load(); },
+                                      [] { return prepares.load(); },
+                                      [] { return starts.load(); },
+                                      [] { return aborts.load(); },
+                                      [](void (*probe)(void *), void *ctx) {
+                                          prepare_probe = probe;
+                                          prepare_context = ctx;
+                                      }};
 int initialize(const MantisHostV1 *h) {
     if (!mantis::sdk::compatible(h))
         return 1;

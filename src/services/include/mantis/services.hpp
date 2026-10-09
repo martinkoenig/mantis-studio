@@ -1,9 +1,10 @@
 #pragma once
 #include <filesystem>
 #include <mantis/artifact_api.hpp>
+#include <mantis/calibration_service.hpp>
 #include <mantis/device_api.hpp>
 #include <mantis/jobs.hpp>
-#include <mantis/calibration_service.hpp>
+#include <mantis/projected_light_service.hpp>
 namespace mantis::artifact { class Store; }
 namespace mantis::services {
 struct CaptureInfo {
@@ -31,6 +32,7 @@ class DeviceService {
   public:
     virtual ~DeviceService() = default;
     virtual std::vector<device::Descriptor> devices() const = 0;
+    virtual std::vector<ProjectedDeviceInfo> projected_devices() const = 0;
 };
 class CaptureService {
   public:
@@ -78,6 +80,8 @@ class DiagnosticsService {
 struct Configuration {
     std::filesystem::path plugins, plugin_host, project, recipes;
     std::vector<std::string> approved_in_process;
+    // Injectable monotonic lease clock; default is steady_clock, with the same finite lease policy.
+    std::function<std::chrono::steady_clock::time_point()> preview_clock{};
 };
 class Runtime final : public DeviceService,
                       public CaptureService,
@@ -87,6 +91,7 @@ class Runtime final : public DeviceService,
                       public JobService,
                       public PluginService,
                       public DiagnosticsService,
+                      public ProjectedLightService,
                       public CalibrationService {
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -101,6 +106,13 @@ class Runtime final : public DeviceService,
     CaptureInfo stop_capture(const Id &) override;
     std::vector<CaptureInfo> captures() const override;
     PreviewReference preview(const Id &);
+    PreviewReference projected_bundle(const Id &);
+    std::vector<ProjectedDeviceInfo> projected_devices() const override;
+    device::ProjectedValidation validate_projected(const ProjectedCaptureRequest &) override;
+    ProjectedCaptureInfo start_projected(const ProjectedCaptureRequest &, const std::string &) override;
+    ProjectedCaptureInfo projected_status(const Id &) const override;
+    std::vector<ProjectedCaptureInfo> projected_captures() const override;
+    ProjectedCaptureInfo stop_projected(const ProjectedStopRequest &) override;
     void release_preview(const Id &);
     Id replay_capture(const Id &, bool real_time, bool verify);
     Id run_pipeline(const Id &, const std::string &, const Id & = {}) override;
@@ -125,6 +137,5 @@ class Runtime final : public DeviceService,
     std::optional<ActiveCalibrationInfo> active_calibration(const Id &) const override;
     void activate_calibration(const Id &, const Id &) override;
     void clear_calibration(const Id &) override;
-
 };
 } // namespace mantis::services

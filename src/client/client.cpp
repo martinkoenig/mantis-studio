@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <mantis/client.hpp>
 #include <mantis/data_io.hpp>
+#include <mantis/projected_light_io.hpp>
 #include <thread>
 namespace mantis::client {
 Endpoint Endpoint::environment() {
@@ -19,7 +20,8 @@ wire::v1::Response Client::call(wire::v1::Request request) const {
     if (endpoint_.token.empty())
         fail(Status::invalid_argument, "Set MANTIS_TOKEN to the daemon's local access token");
     request.set_protocol_version(protocol::version);
-    request.set_request_id(Id::random().value);
+    if (request.request_id().empty())
+        request.set_request_id(Id::random().value);
     request.set_token(endpoint_.token);
     auto socket = platform::Socket::connect(endpoint_.port);
     protocol::send(socket, request);
@@ -180,5 +182,94 @@ void Client::activate_calibration(const std::string &device, const std::string &
 }
 void Client::clear_calibration(const std::string &device) const {
     wire::v1::Request r; r.mutable_calibration_clear()->set_id(device); (void)call(r);
+}
+std::vector<wire::v1::ProjectedDevice> Client::projected_devices() const {
+    wire::v1::Request q;
+    q.mutable_projected_devices_list();
+    auto r = call(q);
+    return {r.projected_devices().begin(), r.projected_devices().end()};
+}
+wire::v1::ProjectedValidation Client::validate_projected(const wire::v1::ProjectedCaptureRequest &v) const {
+    wire::v1::Request q;
+    *q.mutable_projected_validate() = v;
+    return call(q).projected_validation();
+}
+wire::v1::ProjectedCapture Client::start_projected(const wire::v1::ProjectedCaptureRequest &v,
+                                                   const std::string &id) const {
+    wire::v1::Request q;
+    *q.mutable_projected_start() = v;
+    q.set_request_id(id);
+    return call(q).projected_captures(0);
+}
+wire::v1::ProjectedCapture Client::projected_status(const std::string &id) const {
+    wire::v1::Request q;
+    q.mutable_projected_status()->set_id(id);
+    return call(q).projected_captures(0);
+}
+std::vector<wire::v1::ProjectedCapture> Client::projected_captures() const {
+    wire::v1::Request q;
+    q.mutable_projected_captures_list();
+    auto r = call(q);
+    return {r.projected_captures().begin(), r.projected_captures().end()};
+}
+wire::v1::ProjectedCapture Client::stop_projected(const std::string &id, const std::string &run,
+                                                  const std::string &generation) const {
+    wire::v1::Request q;
+    auto *s = q.mutable_projected_stop();
+    s->set_capture_id(id);
+    s->set_expected_run_id(run);
+    s->set_expected_generation_id(generation);
+    s->set_mode(wire::v1::PROJECTED_NORMAL_STOP);
+    return call(q).projected_captures(0);
+}
+wire::v1::ProjectedCapture Client::cancel_projected(const std::string &id, const std::string &run,
+                                                    const std::string &generation) const {
+    wire::v1::Request q;
+    auto *s = q.mutable_projected_stop();
+    s->set_capture_id(id);
+    s->set_expected_run_id(run);
+    s->set_expected_generation_id(generation);
+    s->set_mode(wire::v1::PROJECTED_CANCEL);
+    return call(q).projected_captures(0);
+}
+wire::v1::DataReference Client::projected_bundle_reference(const std::string &id) const {
+    wire::v1::Request q;
+    q.mutable_projected_bundle()->set_id(id);
+    return call(q).data();
+}
+std::optional<data::AcquisitionBundle> Client::projected_bundle(const std::string &id) const {
+    wire::v1::DataReference ref;
+    try {
+        ref = projected_bundle_reference(id);
+    } catch (const Failure &e) {
+        if (e.error.code == Status::busy)
+            return {};
+        throw;
+    }
+    auto release = [&] {
+        wire::v1::Request q;
+        q.mutable_preview_release()->set_id(ref.lease_id());
+        (void)call(q);
+    };
+    try {
+        if (ref.transport() != "local-mapped-file" || ref.format_version() != 3 || ref.lease_id().empty())
+            fail(Status::incompatible, "Unsupported projected bundle reference");
+        auto mapping = platform::map_read(ref.locator());
+        auto backing = std::make_shared<memory::Storage>();
+        backing->owner = mapping.owner;
+        backing->host = mapping.data;
+        backing->size = mapping.size;
+        backing->alignment = 1;
+        backing->backend = "local-mapped-file";
+        auto bundle = data::read_bundle({backing, 0, mapping.size});
+        release();
+        return bundle;
+    } catch (...) {
+        try {
+            release();
+        } catch (...) {
+        }
+        throw;
+    }
 }
 } // namespace mantis::client

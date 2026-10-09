@@ -1,5 +1,6 @@
 #pragma once
 #include <mantis/data.hpp>
+#include <mantis/projected_light.hpp>
 #include <mantis/protocol.hpp>
 namespace mantis::client {
 struct Endpoint {
@@ -14,6 +15,18 @@ class Client {
     explicit Client(Endpoint endpoint = Endpoint::environment()) : endpoint_(std::move(endpoint)) {}
     wire::v1::Response call(wire::v1::Request) const;
     wire::v1::Response snapshot() const;
+    std::vector<wire::v1::ProjectedDevice> projected_devices() const;
+    wire::v1::ProjectedValidation validate_projected(const wire::v1::ProjectedCaptureRequest &) const;
+    wire::v1::ProjectedCapture start_projected(const wire::v1::ProjectedCaptureRequest &,
+                                               const std::string &request_id = {}) const;
+    wire::v1::ProjectedCapture projected_status(const std::string &) const;
+    std::vector<wire::v1::ProjectedCapture> projected_captures() const;
+    wire::v1::ProjectedCapture stop_projected(const std::string &capture, const std::string &run,
+                                              const std::string &generation) const;
+    wire::v1::ProjectedCapture cancel_projected(const std::string &capture, const std::string &run,
+                                                const std::string &generation) const;
+    wire::v1::DataReference projected_bundle_reference(const std::string &) const;
+    std::optional<data::AcquisitionBundle> projected_bundle(const std::string &) const;
     // Control-only calibration API. Jobs never wait implicitly.
     wire::v1::CalibrationEntry create_calibration_target(const wire::v1::CalibrationTargetSpecification &,
                                                          const std::string &series_id = {}) const;

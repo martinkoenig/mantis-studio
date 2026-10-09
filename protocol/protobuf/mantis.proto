@@ -148,6 +148,13 @@ message Request {
   CalibrationRigSolve calibration_rig_solve = 35;
   Empty calibrations_list = 36; Id calibration_info = 37; Id calibration_active = 38;
   CalibrationActivate calibration_activate = 39; Id calibration_clear = 40;
+  Empty projected_devices_list = 41;
+  ProjectedCaptureRequest projected_validate = 42;
+  ProjectedCaptureRequest projected_start = 43;
+  Id projected_status = 44;
+  Empty projected_captures_list = 45;
+  ProjectedStopRequest projected_stop = 46;
+  Id projected_bundle = 47;
  }
 }
 message Response {
@@ -157,4 +164,356 @@ message Response {
  string project_path = 10; string result_id = 11; DataReference data = 12;
  repeated CalibrationEntry calibrations = 13; CalibrationInfo calibration_info = 14;
  ActiveCalibration active_calibration = 15;
+ repeated ProjectedDevice projected_devices = 16;
+ ProjectedValidation projected_validation = 17;
+ repeated ProjectedCapture projected_captures = 18;
+}
+
+// v0.4 L5: compact projected-light control. Bulk MANTIS03 remains on the data plane.
+enum ProjectedPresence {
+    PROJECTED_UNKNOWN = 0;
+    PROJECTED_UNAVAILABLE = 1;
+    PROJECTED_ESTABLISHED = 2;
+}
+enum ProjectedRunState {
+    PROJECTED_VALIDATING = 0;
+    PROJECTED_READY = 1;
+    PROJECTED_RUNNING = 2;
+    PROJECTED_STOPPING = 3;
+    PROJECTED_COMPLETED = 4;
+    PROJECTED_CANCELLED = 5;
+    PROJECTED_FAILED = 6;
+}
+enum ProjectedEmitterState {
+    PROJECTED_OFF = 0;
+    PROJECTED_ON = 1;
+}
+enum ProjectedCaptureMode {
+    PROJECTED_CAPTURE_NONE = 0;
+    PROJECTED_FREE_RUNNING = 1;
+    PROJECTED_HARDWARE_TRIGGER = 2;
+}
+enum ProjectedEvidenceRequirement {
+    PROJECTED_COMMANDED_ONLY = 0;
+    PROJECTED_CONTROLLER_ACKNOWLEDGED = 1;
+    PROJECTED_EXPOSURE_EFFECTIVE = 2;
+}
+enum ProjectedEvidenceScope {
+    PROJECTED_CONTROLLER_REGISTER = 0;
+    PROJECTED_ELECTRICAL_ENABLE = 1;
+    PROJECTED_OPTICAL_EMISSION = 2;
+}
+enum ProjectedEvidenceMethod {
+    PROJECTED_SOFTWARE_DISPATCH = 0;
+    PROJECTED_CONTROLLER_REPORT = 1;
+    PROJECTED_REGISTER_READBACK = 2;
+    PROJECTED_ELECTRICAL_READBACK = 3;
+    PROJECTED_OPTICAL_SENSOR = 4;
+    PROJECTED_VALIDATED_EXECUTOR = 5;
+    PROJECTED_CAMERA_METADATA = 6;
+    PROJECTED_SOFTWARE_ASSOCIATION = 7;
+    PROJECTED_IMPORTED = 8;
+}
+enum ProjectedStopMode {
+    PROJECTED_NORMAL_STOP = 0;
+    PROJECTED_CANCEL = 1;
+}
+enum ProjectedReason {
+    PROJECTED_REASON_NONE = 0;
+    PROJECTED_TIMEOUT = 1;
+    PROJECTED_REJECTED = 2;
+    PROJECTED_DEVICE_FAILURE = 3;
+    PROJECTED_TRANSPORT_FAILURE = 4;
+    PROJECTED_EVIDENCE_MISSING = 5;
+    PROJECTED_CONTRADICTORY_EVIDENCE = 6;
+    PROJECTED_RESOURCE_LIMIT = 7;
+    PROJECTED_USER_STOP = 8;
+    PROJECTED_USER_CANCEL = 9;
+    PROJECTED_CLEANUP_FAILURE = 10;
+}
+enum ProjectedParticipantKind {
+    PROJECTED_PARENT = 0;
+    PROJECTED_IMAGE = 1;
+    PROJECTED_EMITTER = 2;
+    PROJECTED_CONTROLLER = 3;
+}
+enum ProjectedTriggerMode {
+    PROJECTED_TRIGGER_NONE = 0;
+    PROJECTED_TRIGGER_FREE_RUNNING = 1;
+    PROJECTED_HARDWARE_TRIGGER_MODE = 2;
+}
+enum ProjectedStorageState {
+    PROJECTED_STORAGE_OPEN = 0;
+    PROJECTED_STORAGE_FINALIZING = 1;
+    PROJECTED_STORAGE_FINALIZED = 2;
+    PROJECTED_STORAGE_RECOVERABLE = 3;
+}
+enum ProjectedAcknowledgementStage {
+    PROJECTED_ACCEPTANCE = 0;
+    PROJECTED_ACK_COMPLETION = 1;
+}
+enum ProjectedAcknowledgementResult {
+    PROJECTED_ACK_SUCCESS = 0;
+    PROJECTED_ACK_REJECTED = 1;
+    PROJECTED_ACK_FAILED = 2;
+}
+message ProjectedHash {
+    string algorithm = 1;
+    string hex = 2;
+}
+message ProjectedHashEvidence {
+    ProjectedPresence presence = 1;
+    ProjectedHash value = 2;
+}
+message ProjectedContentReference {
+    string id = 1;
+    string type = 2;
+    uint32 schema_version = 3;
+    ProjectedHashEvidence hash = 4;
+    uint64 revision = 5;
+}
+message ProjectedContentEvidence {
+    ProjectedPresence presence = 1;
+    ProjectedContentReference value = 2;
+}
+message ProjectedProgramReference {
+    string id = 1;
+    ProjectedHashEvidence hash = 2;
+    ProjectedContentEvidence content = 3;
+}
+message ProjectedBoolEvidence {
+    ProjectedPresence presence = 1;
+    optional bool value = 2;
+}
+message ProjectedStringEvidence {
+    ProjectedPresence presence = 1;
+    optional string value = 2;
+}
+message ProjectedUIntEvidence {
+    ProjectedPresence presence = 1;
+    optional uint64 value = 2;
+}
+message ProjectedCameraParticipant {
+    string component = 1;
+    string stream = 2;
+    string role = 3;
+}
+message ProjectedParticipants {
+    repeated ProjectedCameraParticipant cameras = 1;
+    repeated string emitters = 2;
+    repeated string controllers = 3;
+}
+message ProjectedEmitterIntent {
+    string emitter = 1;
+    ProjectedEmitterState state = 2;
+}
+message ProjectedTriggerIntent {
+    string controller = 1;
+    string request = 2;
+    repeated string endpoints = 3;
+}
+message ProjectedCaptureIntent {
+    optional ProjectedCaptureMode mode = 1;
+    repeated string cameras = 2;
+    ProjectedTriggerIntent trigger = 3;
+}
+message ProjectedAcquisitionStep {
+    uint32 index = 1;
+    string label = 2;
+    repeated ProjectedEmitterIntent emitters = 3;
+    ProjectedCaptureIntent capture = 4;
+    optional ProjectedEvidenceRequirement evidence_requirement = 5;
+    ProjectedEvidenceScope required_scope = 6;
+    int64 settle_ns = 7;
+    int64 max_duration_ns = 8;
+}
+message ProjectedRunBounds {
+    int64 max_duration_ns = 1;
+    int64 max_on_duration_ns = 2;
+    uint64 max_step_instances = 3;
+    uint64 max_commands = 4;
+    uint64 max_events = 5;
+    uint64 max_bytes = 6;
+    uint64 max_in_flight_captures = 7;
+}
+message ProjectedAcquisitionProgram {
+    string type = 1;
+    uint32 schema_version = 2;
+    ProjectedProgramReference identity = 3;
+    ProjectedParticipants participants = 4;
+    repeated ProjectedAcquisitionStep steps = 5;
+    uint64 repetitions = 6;
+    ProjectedRunBounds bounds = 7;
+}
+message ProjectedProgramSource {
+    oneof source {
+        ProjectedAcquisitionProgram inline_program = 1;
+        string raw_capture_artifact_id = 2;
+    }
+}
+message ProjectedRuntimeConfig {
+    optional uint32 queue_capacity = 1;
+    optional uint32 operation_timeout_ms = 2;
+    optional uint32 abort_timeout_ms = 3;
+    optional uint32 cleanup_timeout_ms = 4;
+    optional uint32 publication_timeout_ms = 5;
+    optional uint32 max_correlation_entries = 6;
+}
+message ProjectedCaptureRequest {
+    string plugin_id = 1;
+    string parent_id = 2;
+    ProjectedProgramSource program = 3;
+    ProjectedRuntimeConfig config = 4;
+}
+message ProjectedStopRequest {
+    string capture_id = 1;
+    string expected_run_id = 2;
+    string expected_generation_id = 3;
+    ProjectedStopMode mode = 4;
+}
+message ProjectedImageSource {
+    string stream_id = 1;
+    string physical_identity = 2;
+    string role = 3;
+    uint32 width = 4;
+    uint32 height = 5;
+}
+message ProjectedComponent {
+    string id = 1;
+    string parent_id = 2;
+    string name = 3;
+    string role = 4;
+    ProjectedParticipantKind kind = 5;
+    repeated string capabilities = 6;
+    repeated string controls = 7;
+    repeated string participants = 8;
+    repeated string trigger_endpoints = 9;
+    ProjectedImageSource image_source = 10;
+    repeated ProjectedEmitterState emitter_states = 11;
+    repeated ProjectedCaptureMode capture_modes = 12;
+    repeated ProjectedTriggerMode trigger_modes = 13;
+    repeated ProjectedEvidenceMethod evidence_methods = 14;
+    repeated ProjectedEvidenceScope evidence_scopes = 15;
+    ProjectedStringEvidence pattern = 16;
+    ProjectedUIntEvidence pattern_revision = 17;
+}
+message ProjectedLimits {
+    uint32 max_components = 1;
+    uint32 max_steps = 2;
+    uint32 max_bundle_members = 3;
+    uint32 max_cameras = 4;
+    ProjectedRunBounds run = 5;
+    int64 max_step_duration_ns = 6;
+    uint32 max_pending_bundles = 7;
+    uint32 max_call_timeout_ms = 8;
+    ProjectedBoolEvidence watchdog = 9;
+    ProjectedBoolEvidence interlock = 10;
+    ProjectedBoolEvidence fail_off = 11;
+}
+message ProjectedDevice {
+    string plugin_id = 1;
+    string parent_id = 2;
+    repeated ProjectedComponent components = 3;
+    ProjectedLimits limits = 4;
+    ProjectedStringEvidence frameset_stream = 5;
+}
+message ProjectedContractError {
+    uint32 category = 1;
+    uint32 code = 2;
+}
+message ProjectedExecutorValidation {
+    bool accepted = 1;
+    ProjectedContractError error = 2;
+    string diagnostic = 3;
+}
+message ProjectedValidation {
+    bool accepted = 1;
+    Error host_error = 2;
+    Error executor_error = 3;
+    Error close_error = 4;
+    ProjectedExecutorValidation executor_validation = 5;
+    ProjectedLimits limits = 6;
+}
+message ProjectedStepInstance {
+    string run_id = 1;
+    uint64 repetition_index = 2;
+    uint32 step_index = 3;
+}
+message ProjectedQueue {
+    uint64 produced = 1;
+    uint64 consumed = 2;
+    uint64 occupancy = 3;
+    uint64 capacity = 4;
+    uint64 high_water = 5;
+    uint64 saturation_failures = 6;
+}
+message ProjectedEvidenceSummary {
+    uint64 bundles = 1;
+    uint64 trigger_events = 2;
+    uint64 evidence_only = 3;
+    uint64 captured = 4;
+    uint64 unresolved_request_records = 5;
+    uint64 loss_records = 6;
+    uint64 commanded_established = 7;
+    uint64 commanded_unknown = 8;
+    uint64 commanded_unavailable = 9;
+    uint64 acknowledgement_success = 10;
+    uint64 acknowledgement_rejected = 11;
+    uint64 acknowledgement_failed = 12;
+    uint64 acknowledgement_unknown = 13;
+    uint64 acknowledgement_unavailable = 14;
+    uint64 effective_established = 15;
+    uint64 effective_unknown = 16;
+    uint64 effective_unavailable = 17;
+    uint64 late_evidence = 18;
+}
+message ProjectedEmitterSummary {
+    string emitter_id = 1;
+    ProjectedPresence commanded_presence = 2;
+    optional ProjectedEmitterState commanded_state = 3;
+    ProjectedPresence acknowledgement_presence = 4;
+    optional ProjectedAcknowledgementStage acknowledgement_stage = 5;
+    optional ProjectedAcknowledgementResult acknowledgement_result = 6;
+    ProjectedPresence observed_presence = 7;
+    optional ProjectedEmitterState observed_state = 8;
+    optional ProjectedEvidenceScope observed_scope = 9;
+    uint64 effective_established = 10;
+    uint64 effective_unknown = 11;
+    uint64 effective_unavailable = 12;
+}
+message ProjectedAbortSummary {
+    ProjectedStringEvidence run = 1;
+    ProjectedStringEvidence fenced_generation = 2;
+    ProjectedBoolEvidence inhibited = 3;
+    ProjectedBoolEvidence stale_work_fenced = 4;
+    ProjectedBoolEvidence off_requested = 5;
+    repeated ProjectedEmitterSummary emitters = 6;
+    ProjectedContractError executor_error = 7;
+}
+message ProjectedCapture {
+    string id = 1;
+    string plugin_id = 2;
+    string parent_id = 3;
+    string run_id = 4;
+    string generation_id = 5;
+    string raw_artifact_id = 6;
+    ProjectedProgramReference program = 7;
+    ProjectedRunState state = 8;
+    bool cleanup_resolved = 9;
+    bool active = 10;
+    ProjectedStorageState storage_state = 11;
+    ProjectedStepInstance last_evidence_step = 12;
+    optional uint64 latest_bundle_sequence = 13;
+    ProjectedQueue queue = 14;
+    uint64 committed_bundles = 15;
+    uint64 raw_capture_bytes = 16;
+    string finalization_job_id = 17;
+    Error recording_error = 18;
+    ProjectedReason reason = 19;
+    Error initiating_error = 20;
+    Error abort_error = 21;
+    Error stop_error = 22;
+    Error close_error = 23;
+    ProjectedAbortSummary abort_outcome = 24;
+    ProjectedEvidenceSummary evidence = 25;
 }

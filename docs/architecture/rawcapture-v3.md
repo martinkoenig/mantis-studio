@@ -1,6 +1,6 @@
 # RawCapture schema 3: frozen L4 byte specification
 
-Status: implemented, acceptance pending. This specifies storage encoding version 1.
+Status: L4 FINAL ACCEPTED. This specifies storage encoding version 1.
 A change to these bytes requires an explicit new encoding version. Schemas 1/2,
 MANTIS01/MANTIS02/MRAWREC2 and their field order/alignment/footer are unchanged.
 Project manifest remains 1 and SQLite metadata remains 2.

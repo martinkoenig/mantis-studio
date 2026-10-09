@@ -2,8 +2,8 @@
 
 Branch: `feature/v0.4-laser-acquisition`. Starting commit:
 `68cec0fffaeb98a5065565854125a2e2d6ebda96`.
-L0/L1/L2/L3 are FINAL ACCEPTED. L4 is implemented, acceptance pending.
-L5–L8 remain planned. The final pushed SHA is supplied in the delivery report.
+L0/L1/L2/L3/L4 are FINAL ACCEPTED. L5 is implemented, acceptance pending.
+L6–L8 remain planned. The final pushed SHA is supplied in the delivery report.
 
 ## Delivered storage boundary
 
@@ -134,12 +134,11 @@ L5–L8 remain planned. The final pushed SHA is supplied in the delivery report.
   regression. Leak detection remained enabled; no suppression was installed.
 - `git diff --check` and `python3 tests/contract/boundaries.py .` passed.
 
-The available [previous L4 CI run](https://github.com/martinkoenig/mantis-studio/actions/runs/37785486189)
-on `a8f2f6b1357dad11e37dd7245d52b33ba27a8c5d` is green for x86_64 Studio
-ON/OFF, ARM64 Studio ON/OFF and ASan/UBSan. This hardening follow-up's matrix
-is pending its normal push; previous results are not claimed for the new SHA.
-No ARM64 or Studio-ON result is claimed locally. L4 acceptance remains pending
-matrix results and review.
+The [final L4 CI run](https://github.com/martinkoenig/mantis-studio/actions/runs/37791356298)
+on `231e53b7568b066190b3ef5644408a2686cc35d5` is green for x86_64 Studio
+ON/OFF, ARM64 Studio ON/OFF and ASan/UBSan. L4 is FINAL ACCEPTED. No ARM64 or
+Studio-ON result is claimed locally in this historical validation; L5 controls
+remain acceptance pending.
 
 ## Final daemon-outcome review correction
 

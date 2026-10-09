@@ -76,7 +76,16 @@ enum {
     TEST_SOURCE_WIDTH,
     TEST_SOURCE_HEIGHT,
     TEST_OUTPUT_FRAMESET_STREAM,
-    TEST_GRAPH_NO_FRAMESET
+    TEST_GRAPH_NO_FRAMESET,
+    TEST_SERVICE_COMPLETE,
+    TEST_SERVICE_PENDING,
+    TEST_SERVICE_START_FAILURE,
+    TEST_SERVICE_STOP_FAILURE,
+    TEST_SERVICE_CLOSE_FAILURE,
+    TEST_SERVICE_ABORT_STATES,
+    TEST_SERVICE_RECORDING_FAILURE,
+    TEST_SERVICE_CAPTURE,
+    TEST_SERVICE_ABORT_FALSE, TEST_SERVICE_TRIGGER, TEST_SERVICE_VALIDATE_FAILURE
 };
 typedef struct TestProjectedControl {
     void (*fault)(uint32_t);
@@ -87,6 +96,12 @@ typedef struct TestProjectedControl {
     uint32_t (*shutdowns)(void);
     void (*shape)(uint32_t);       /* 0 evidence, 1 frame, 2 trigger, UINT32_MAX script */
     void (*publication)(uint32_t); /* next publication sequence override */
+    uint32_t (*opens)(void);
+    uint32_t (*validations)(void);
+    uint32_t (*prepares)(void);
+    uint32_t (*starts)(void);
+    uint32_t (*aborts)(void);
+    void (*prepare_probe)(void (*)(void *), void *);
 } TestProjectedControl;
 #define TEST_PROJECTED_CONTROL "org.mantis.test.projected-control.v1"
 #endif

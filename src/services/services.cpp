@@ -1,15 +1,16 @@
+#include "projected_sessions.hpp"
 #include <fstream>
 #include <mantis/artifact_store.hpp>
 #include <mantis/calibration_artifacts.hpp>
 #include <mantis/calibration_dataset_builder.hpp>
 #include <mantis/calibration_solver_opencv.hpp>
 #include <mantis/capture_calibration.hpp>
-#include <mantis/device_runtime.hpp>
-#include <mantis/replay.hpp>
 #include <mantis/data_io.hpp>
-#include <nlohmann/json.hpp>
+#include <mantis/device_runtime.hpp>
 #include <mantis/pipeline_runtime.hpp>
+#include <mantis/replay.hpp>
 #include <mantis/services.hpp>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <sstream>
 namespace mantis::services {
@@ -42,6 +43,8 @@ struct Runtime::Impl {
     std::unique_ptr<plugins::Registry> registry;
     std::unique_ptr<device::Runtime> devices;
     std::unique_ptr<jobs::Manager> jobs;
+    std::unique_ptr<ProjectedSessions> projected;
+    std::function<std::chrono::steady_clock::time_point()> preview_now;
     struct Capture {
         Id raw;
         std::unique_ptr<device::Session> session;
@@ -69,6 +72,7 @@ struct Runtime::Impl {
         return [this](const LogRecord &r) { event(r.level, r.component, r.message); };
     }
     explicit Impl(const Configuration &c) {
+        preview_now = c.preview_clock ? c.preview_clock : [] { return std::chrono::steady_clock::now(); };
         recipes = c.recipes;
         store = std::make_shared<artifact::Store>(c.project);
         auto preview_directory = store->root() / "cache" / "previews";
@@ -82,9 +86,14 @@ struct Runtime::Impl {
         registry->discover(c.plugins, c.approved_in_process);
         devices = std::make_unique<device::Runtime>(*registry);
         jobs = std::make_unique<jobs::Manager>(logger());
+        projected = std::make_unique<ProjectedSessions>(
+            *registry, *jobs, store, [this](std::string k, std::string component, std::string m) {
+                event(std::move(k), std::move(component), std::move(m));
+            });
         event("runtime.ready", "runtime", "Project opened: " + store->root().string());
     }
     ~Impl() {
+        projected.reset();
         for (auto &[id, c] : captures) {
             c.session->stop();
             try {
@@ -96,6 +105,18 @@ struct Runtime::Impl {
             }
         }
         jobs.reset();
+        try {
+            for (const auto &a : store->list())
+                if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3 &&
+                    (a.state == artifact::ArtifactState::open ||
+                     a.state == artifact::ArtifactState::finalizing)) {
+                    store->abandon(a.id);
+                    event("projected.recording_failed", "projected",
+                          "Shutdown preserved recoverable artifact " + a.id.value);
+                }
+        } catch (const std::exception &e) {
+            event("error", "projected-storage", e.what());
+        }
     }
     CaptureInfo info(const Id &id, const Capture &c) const {
         auto m = c.session->metrics();
@@ -128,6 +149,7 @@ std::shared_ptr<artifact::Store> Runtime::project_store() const { return impl_->
 std::vector<device::Descriptor> Runtime::devices() const {
     bool active = false;
     for (auto &[id, capture] : impl_->captures) active |= capture.session->active();
+    active |= impl_->projected->active();
     if (!active) {
         // Refresh only after all adapters have stopped; historical Sessions release
         // their stream pointers while retaining descriptors/metrics/first frames.
@@ -159,6 +181,13 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
             fail(Status::incompatible, "Device lacks image stream capability");
         streams.push_back(&stream);
     }
+    std::vector<device::Descriptor> requested_resources;
+    for (auto *stream : streams) {
+        requested_resources.push_back(stream->descriptor());
+        for (const auto &child : stream->components())
+            requested_resources.push_back(child);
+    }
+    impl_->projected->check_camera(requested_resources);
     if (streams.size() > 1 && std::any_of(streams.begin(), streams.end(), [](auto *s) { return s->source_paced(); }))
         fail(Status::invalid_argument, "Capture a composite parent as one stream; independent cameras do not establish FrameSets");
     bool composite = std::find(streams.front()->descriptor().capabilities.begin(), streams.front()->descriptor().capabilities.end(), device::frameset_stream) != streams.front()->descriptor().capabilities.end();
@@ -276,7 +305,7 @@ std::vector<CaptureInfo> Runtime::captures() const {
     return out;
 }
 PreviewReference Runtime::preview(const Id &id) {
-    auto now = std::chrono::steady_clock::now();
+    auto now = impl_->preview_now();
     for (auto it = impl_->previews.begin(); it != impl_->previews.end();) {
         if (it->second.expires <= now) {
             std::error_code ec; std::filesystem::remove(it->second.path, ec);
@@ -305,12 +334,90 @@ void Runtime::release_preview(const Id &id) {
     auto it = impl_->previews.find(id);
     if (it == impl_->previews.end()) return;
     std::error_code ec; std::filesystem::remove(it->second.path, ec);
-    if (!ec) impl_->previews.erase(it); else it->second.expires = std::chrono::steady_clock::now();
+    if (!ec)
+        impl_->previews.erase(it);
+    else
+        it->second.expires = impl_->preview_now();
+}
+namespace {
+std::vector<device::Descriptor> camera_resources(device::Runtime &devices,
+                                                 const std::vector<CaptureInfo> &captures) {
+    std::vector<device::Descriptor> result;
+    for (const auto &capture : captures)
+        if (capture.active)
+            for (const auto &id : capture.devices) {
+                auto &stream = devices.find(id);
+                result.push_back(stream.descriptor());
+                for (const auto &child : stream.components())
+                    result.push_back(child);
+            }
+    return result;
+}
+} // namespace
+std::vector<ProjectedDeviceInfo> Runtime::projected_devices() const { return impl_->projected->devices(); }
+device::ProjectedValidation Runtime::validate_projected(const ProjectedCaptureRequest &q) {
+    impl_->projected->set_camera_resources(camera_resources(*impl_->devices, captures()));
+    return impl_->projected->validate(q);
+}
+ProjectedCaptureInfo Runtime::start_projected(const ProjectedCaptureRequest &q, const std::string &request) {
+    for (auto &[id, c] : impl_->captures)
+        if (!c.session->active())
+            c.session->stop();
+    if (!impl_->projected->active() &&
+        std::none_of(impl_->captures.begin(), impl_->captures.end(),
+                     [](const auto &entry) { return entry.second.session->active(); }))
+        impl_->devices->refresh(*impl_->registry);
+    impl_->projected->set_camera_resources(camera_resources(*impl_->devices, captures()));
+    return impl_->projected->start(q, request);
+}
+ProjectedCaptureInfo Runtime::projected_status(const Id &id) const { return impl_->projected->status(id); }
+std::vector<ProjectedCaptureInfo> Runtime::projected_captures() const { return impl_->projected->list(); }
+ProjectedCaptureInfo Runtime::stop_projected(const ProjectedStopRequest &q) {
+    return impl_->projected->stop(q);
+}
+PreviewReference Runtime::projected_bundle(const Id &id) {
+    const auto now = impl_->preview_now();
+    for (auto it = impl_->previews.begin(); it != impl_->previews.end();) {
+        if (it->second.expires <= now) {
+            std::error_code ec;
+            std::filesystem::remove(it->second.path, ec);
+            if (!ec)
+                it = impl_->previews.erase(it);
+            else
+                ++it;
+        } else
+            ++it;
+    }
+    if (impl_->previews.size() >= 8)
+        fail(Status::busy, "Preview lease capacity reached");
+    auto bundle = impl_->projected->latest(id);
+    if (!bundle)
+        fail(Status::busy, "No projected bundle has been published");
+    auto lease = Id::random();
+    auto directory = impl_->store->root() / "cache" / "previews";
+    std::filesystem::create_directories(directory);
+    auto path = directory / (lease.value + ".bundle");
+    try {
+        std::ofstream out(path, std::ios::binary);
+        out.exceptions(std::ios::badbit | std::ios::failbit);
+        data::write_bundle(out, *bundle);
+        out.close();
+    } catch (...) {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        throw;
+    }
+    impl_->previews.emplace(lease, Impl::Lease{path, now + std::chrono::seconds(60)});
+    return {lease, path};
 }
 Id Runtime::replay_capture(const Id &id, bool real_time, bool verify) {
     auto a = impl_->store->get(id);
     if (a.state != artifact::ArtifactState::finalized || a.type.name != "org.mantis.RawCapture")
         fail(Status::incompatible, "Replay requires a finalized RawCapture");
+    if (a.type.schema_version == 3)
+        return impl_->projected->replay(id, real_time, verify);
+    if (a.type.schema_version != 1 && a.type.schema_version != 2)
+        fail(Status::incompatible, "Unknown RawCapture replay schema");
     if (impl_->replays.size() >= 64) fail(Status::busy, "Replay history capacity reached");
     auto preview = std::make_shared<Impl::Replay>();
     auto store = impl_->store;
@@ -411,6 +518,8 @@ Id Runtime::run_pipeline(const Id &capture, const std::string &recipe, const Id 
         });
 }
 std::string Runtime::open_project(const std::filesystem::path &path, bool create) {
+    if (impl_->projected->active())
+        fail(Status::busy, "Stop projected runs before switching projects");
     if (impl_->jobs->busy())
         fail(Status::busy, "Jobs must finish before switching projects");
     for (auto &[id, c] : impl_->captures)
@@ -421,10 +530,18 @@ std::string Runtime::open_project(const std::filesystem::path &path, bool create
     if (std::filesystem::absolute(path).lexically_normal() == impl_->store->root().lexically_normal())
         return project();
     auto next = std::make_shared<artifact::Store>(path);
+    impl_->projected.reset();
     impl_->captures.clear();
     impl_->store = std::move(next);
-    impl_->diagnostic_file.close();
-    impl_->diagnostic_file.open(impl_->store->root() / "diagnostics.log", std::ios::app);
+    impl_->projected = std::make_unique<ProjectedSessions>(
+        *impl_->registry, *impl_->jobs, impl_->store, [this](std::string k, std::string c, std::string m) {
+            impl_->event(std::move(k), std::move(c), std::move(m));
+        });
+    {
+        std::lock_guard lock(impl_->event_mutex);
+        impl_->diagnostic_file.close();
+        impl_->diagnostic_file.open(impl_->store->root() / "diagnostics.log", std::ios::app);
+    }
     impl_->event("project.opened", "project", project());
     return project();
 }
@@ -438,7 +555,7 @@ std::filesystem::path Runtime::data_reference(const Id &id) const {
     auto artifact = impl_->store->get(id);
     if (artifact.state != artifact::ArtifactState::finalized)
         fail(Status::busy, "Only finalized artifacts can be visualized");
-    if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version == 2)
+    if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version >= 2)
         fail(Status::unsupported, "Segmented RawCapture uses the replay source API, not a standalone packet reference");
     return impl_->store->object_path(id);
 }
@@ -480,6 +597,7 @@ Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
 }
 artifact::ArtifactDescriptor Runtime::recover_artifact(const Id &id) {
     auto result = impl_->store->recover(id);
+    impl_->projected->artifact_update(id)(result);
     impl_->event("artifact.recovered", "artifact", id.value);
     return result;
 }
@@ -487,13 +605,17 @@ Id Runtime::recover_artifact_job(const Id &id) {
     auto store = impl_->store;
     if (store->get(id).state != artifact::ArtifactState::recoverable)
         fail(Status::invalid_argument, "Artifact is not recoverable");
-    return impl_->jobs->submit("Recover RawCapture", [this, store, id](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
-        context.update(0.1, "Validating capture records and recovering complete tail");
-        auto result = store->recover(id, context.cancellation);
-        impl_->event("artifact.recovered", "artifact", id.value);
-        context.update(1, "Recovered RawCapture");
-        return artifact::ArtifactReference{id, result.hash};
-    });
+    auto update = impl_->projected->artifact_update(id);
+    return impl_->jobs->submit(
+        "Recover RawCapture",
+        [this, store, id, update](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+            context.update(0.1, "Validating capture records and recovering complete tail");
+            auto result = store->recover(id, context.cancellation);
+            update(result);
+            impl_->event("artifact.recovered", "artifact", id.value);
+            context.update(1, "Recovered RawCapture");
+            return artifact::ArtifactReference{id, result.hash};
+        });
 }
 std::vector<jobs::Snapshot> Runtime::jobs() const {
     return impl_->jobs->list();
@@ -509,6 +631,13 @@ std::vector<PluginInfo> Runtime::plugins() const {
     return out;
 }
 void Runtime::enable_plugin(const std::string &id, bool enabled) {
+    for (const auto &[capture_id, c] : impl_->captures)
+        if (c.session->active())
+            for (const auto &resource : c.session->descriptor().devices)
+                if (impl_->devices->find(resource).descriptor().plugin_id == id)
+                    fail(Status::busy, "Plugin owns active camera resources");
+    if (impl_->projected->active(id))
+        fail(Status::busy, "Plugin owns active projected resources");
     if (impl_->jobs->busy())
         fail(Status::busy, "Plugin lifecycle change requires idle job executor");
     impl_->registry->set_enabled(id, enabled);
