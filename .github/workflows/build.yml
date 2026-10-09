@@ -22,7 +22,7 @@ jobs:
       - name: Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --assume-yes cmake ninja-build g++ libsqlite3-dev protobuf-compiler libprotobuf-dev nlohmann-json3-dev python3-protobuf libopencv-dev libopencv-contrib-dev qt6-base-dev qt6-declarative-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtqml-workerscript
+          sudo apt-get install --assume-yes cmake ninja-build g++ libsqlite3-dev protobuf-compiler libprotobuf-dev nlohmann-json3-dev python3-protobuf libopencv-dev libopencv-contrib-dev qt6-base-dev qt6-declarative-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtqml-workerscript gdb
           dpkg-query -W libopencv-dev libopencv-contrib-dev | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Configure
         run: cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMANTIS_BUILD_STUDIO=${{ matrix.studio }} -DPython3_EXECUTABLE=/usr/bin/python3
@@ -48,7 +48,21 @@ jobs:
         if: ${{ matrix.studio == 'ON' }}
         run: |
           cp build/ci/Testing/Temporary/LastTest.log build/ci/ui-m1/full-ctest.log
-          ctest --test-dir build/ci -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize)$' --repeat until-fail:3 --output-on-failure
+          ctest --test-dir build/ci -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize|studio-ui-m0-qml)$' --repeat until-fail:3 --output-on-failure
+      - name: Diagnose a failed UI route test
+        if: ${{ failure() && matrix.studio == 'ON' }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+        run: |
+          mkdir -p build/ci/ui-m2a/diagnostic
+          for attempt in $(seq 1 10); do
+            gdb -batch -ex run -ex 'thread apply all bt full' --args build/ci/bin/mantis-studio-ui-m0-tests build/ci/ui-m2a/diagnostic > "build/ci/ui-m2a/diagnostic/route-$attempt.log" 2>&1
+            if rg -q 'received signal|Program terminated with signal' "build/ci/ui-m2a/diagnostic/route-$attempt.log"; then
+              cat "build/ci/ui-m2a/diagnostic/route-$attempt.log"
+              break
+            fi
+          done
       - name: Upload UI review evidence
         if: ${{ always() && matrix.studio == 'ON' }}
         uses: actions/upload-artifact@v4

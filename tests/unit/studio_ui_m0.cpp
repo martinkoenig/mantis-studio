@@ -453,6 +453,7 @@ int main(int argc, char **argv) {
         const QStringList routes{"home",     "scan",     "process", "inspect", "reverse",
                                  "automate", "projects", "devices", "plugins", "settings"};
         for (const auto &route : routes) {
+            std::cout << "STAGE: route " << route.toStdString() << std::endl;
             auto *nav = checkedItem(window->contentItem(), "nav_" + route);
             click(window, nav);
             require(window->property("workspace") == route, "Click did not change workspace");
