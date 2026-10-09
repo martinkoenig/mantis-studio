@@ -1,4 +1,5 @@
 #include <cstring>
+#include <limits>
 #include <mantis/pipeline_runtime.hpp>
 namespace mantis::pipeline {
 namespace {
@@ -18,6 +19,48 @@ Instances instantiate(const SemanticExecutionPlan &p) {
     }
     return out;
 }
+// Charge complete backing extents once per Storage identity. Owner wrappers may conservatively
+// overcharge aliases; they carry the original backing extent without copying any payload.
+uint64_t retained_bytes(const std::vector<data::SemanticPublished> &outputs,
+                        const data::SemanticPublished &input, const data::SemanticPublished &candidate) {
+    std::map<const void *, uint64_t> storage;
+    auto attributes = [&](const auto &values) {
+        for (const auto &a : values)
+            storage[a.buffer.identity()] = a.buffer.backing_size();
+    };
+    auto packet = [&](const data::Published &p) {
+        attributes(p->attributes);
+        for (const auto &f : p->frames)
+            attributes(f->attributes);
+    };
+    auto inspect = [&](const data::SemanticPublished &value) {
+        if (!value)
+            return;
+        std::visit(
+            [&](const auto &v) {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, data::Published>)
+                    packet(v);
+                else if constexpr (std::is_same_v<T, data::AcquisitionBundle>) {
+                    if (v.frameset)
+                        packet(v.frameset);
+                } else if constexpr (std::is_same_v<T, data::LaserObservation>)
+                    attributes(v.attributes);
+            },
+            *value);
+    };
+    inspect(input);
+    inspect(candidate);
+    for (const auto &output : outputs)
+        inspect(output);
+    uint64_t bytes{};
+    for (const auto &[identity, size] : storage) {
+        if (size > std::numeric_limits<uint64_t>::max() - bytes)
+            fail(Status::invalid_argument, "Semantic retained payload arithmetic overflow");
+        bytes += size;
+    }
+    return bytes;
+}
 Result<SemanticExecutionResult> frame(const SemanticExecutionPlan &p, Instances &instances,
                                       data::SemanticPublished input, const CancellationToken &token) {
     try {
@@ -28,6 +71,19 @@ Result<SemanticExecutionResult> frame(const SemanticExecutionPlan &p, Instances 
             throw Failure(valid.error());
         SemanticExecutionResult result;
         std::vector<data::SemanticPublished> outputs(p.graph.nodes.size());
+        std::vector<size_t> consumers(p.graph.nodes.size());
+        size_t sources{};
+        for (const auto &e : p.graph.connections)
+            ++consumers[e.source];
+        for (const auto &node : p.graph.nodes)
+            sources += !node.factory;
+        auto admit = [&](const data::SemanticPublished &candidate) {
+            auto bytes = retained_bytes(outputs, input, candidate);
+            if (!p.graph.retained_payload_limit_bytes || bytes > p.graph.retained_payload_limit_bytes)
+                fail(Status::busy, "Semantic retained payload budget exhausted", "semantic-pipeline");
+            result.retained_payload_high_water = std::max(result.retained_payload_high_water, bytes);
+        };
+        admit({});
         // The reference executor visits one complete publication in the shared compiled DAG order.
         // Edges carry immutable references; at most one value per edge, no additional pixel staging.
         for (auto n : p.order) {
@@ -42,29 +98,39 @@ Result<SemanticExecutionResult> frame(const SemanticExecutionPlan &p, Instances 
                                                       node.descriptor.inputs[e.target_port].type)
                         fail(Status::incompatible, "Semantic input type/schema mismatch");
                 }
+            data::SemanticPublished candidate;
             if (node.factory) {
                 auto r = instances[n]->process(inputs, token);
                 if (!r)
                     throw Failure(r.error());
-                outputs[n] = std::move(*r);
+                candidate = std::move(*r);
             } else
-                outputs[n] = input;
+                candidate = input;
             token.check();
-            if (!outputs[n] || data::semantic_type(*outputs[n]) != node.descriptor.outputs[0].type)
+            if (!candidate || data::semantic_type(*candidate) != node.descriptor.outputs[0].type)
                 fail(Status::incompatible, "Semantic output type/schema mismatch");
-            auto r = data::validate(*outputs[n]);
+            auto r = data::validate(*candidate);
             if (!r)
                 throw Failure(r.error());
+            admit(candidate); // includes consumed input and candidate coexistence before releasing last use
+            inputs.clear();
+            for (const auto &e : p.graph.connections)
+                if (e.target == n && --consumers[e.source] == 0)
+                    outputs[e.source].reset();
+            outputs[n] = std::move(candidate);
+            if (!node.factory && --sources == 0)
+                input.reset();
             result.timings.push_back(
                 {node.descriptor.id,
                  static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                            std::chrono::steady_clock::now() - begin)
                                            .count())});
-            result.output = outputs[n];
             if (std::none_of(p.graph.connections.begin(), p.graph.connections.end(),
                              [n](const auto &e) { return e.source == n; }))
                 result.outputs.emplace(node.descriptor.id, outputs[n]);
         }
+        if (!p.order.empty())
+            result.output = outputs[p.order.back()];
         return result;
     } catch (const Failure &e) {
         return std::unexpected(e.error);
@@ -93,7 +159,9 @@ class Consumer final : public SemanticNodeInstance {
 Result<SemanticExecutionPlan> compile(const SemanticGraph &graph) {
     // Reuse the existing typed DAG compiler, schema/ports, backend planner and deterministic topological
     // order.
-    if (graph.nodes.size() > 256 || graph.connections.size() > 1024)
+    if (!graph.retained_payload_limit_bytes ||
+        graph.retained_payload_limit_bytes > 2ull * 1024 * 1024 * 1024 || graph.nodes.size() > 256 ||
+        graph.connections.size() > 1024)
         return std::unexpected(
             Error{Status::invalid_argument, "Semantic DAG exceeds finite limits", "pipeline"});
     PipelineRecipe recipe;
@@ -142,7 +210,7 @@ Result<void> execute_stream(const SemanticExecutionPlan &p, BoundedQueue<data::S
         CancellationToken token;
         std::stop_callback callback(stop, [token] { token.cancel(); });
         while (auto input = source.pop(stop)) {
-            auto r = frame(p, instances, *input, token);
+            auto r = frame(p, instances, std::move(*input), token);
             if (!r)
                 return std::unexpected(r.error());
             if (!sink.push(std::move(*r), stop)) {

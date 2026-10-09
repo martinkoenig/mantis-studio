@@ -15,6 +15,7 @@ struct Storage {
     std::shared_ptr<const void> owner;
     const std::byte *host{};
     size_t size{}, alignment{};
+    size_t retained_extent{}; // conservative backing extent for owner-retaining host wrappers
     MemoryDomain domain{MemoryDomain::host_pageable};
     std::string backend, device_id;
     std::shared_ptr<const Fence> ready;
@@ -60,6 +61,9 @@ class BufferView {
                                          "Buffer is not host-addressable; request an explicit transfer",
                                          "memory"});
         return std::span<const std::byte>{storage_->host + offset_, size_};
+    }
+    size_t backing_size() const noexcept {
+        return storage_ ? std::max(storage_->size, storage_->retained_extent) : 0;
     }
     const void *identity() const noexcept {
         return storage_.get();

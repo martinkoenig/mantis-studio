@@ -56,6 +56,20 @@ honor their frozen finite deadline; a violated deadline is diagnosed after retur
 Untrusted/noncompliant code requires isolation, where the parent can enforce a hard
 lifetime. Native cancellation is checked before/after the bounded callback.
 
+Semantic factories and instances retain a shared execution context (mutex, host
+and scratch paths, shutdown token) and their Entry, never a borrowed Registry
+pointer. Registry teardown latches shutdown: retained factories fail closed,
+pending isolated hosts are killed/reaped, and a bounded trusted call can finish
+with its context/library still alive but cannot publish after shutdown. The owner
+token is independent of the caller's cancellation token. Output BufferViews keep
+their separate library pins until released; no context/Entry ownership cycle exists.
+
+Isolated V2 invocations share the V1 isolation failure policy. Crash, deadline
+violation, callback failure and invalid output mark only that plugin FAILED, with
+the process result and bounded host diagnostic visible through `statuses()`.
+Retained instances and new factories refuse failed entries until explicit
+re-enable. Caller cancellation and invalid caller input do not quarantine plugins.
+
 Local isolated transport serializes bulk bytes explicitly across processes.
 Mapped decode performs integrity/core validation reads and returns shared mapping
 slices without an application-level column/pixel copy. It does not claim that disk
@@ -69,6 +83,20 @@ compiler's port/schema checks, single producer rules, backend selection, cycle
 rejection and deterministic topological order. The bounded reference plan has at
 most 256 nodes, 1024 edges and 64 values per declared connection. Edges are lossless.
 One complete publication is in flight, carrying shared immutable references.
+
+Per-node remaining-consumer counts release an intermediate immediately after its
+last consumer completes. Fan-out keeps it until every dependent has consumed it;
+all terminal outputs remain owned by ExecutionResult. Admission charges the full
+backing extent of distinct Storage identities, including simultaneous consumed
+inputs and the candidate output, using checked uint64 arithmetic. The explicit
+per-publication budget defaults to 256 MiB and must be finite, at most 2 GiB.
+Exhaustion fails explicitly before output publication. ExecutionResult reports
+the retained-payload high water. Slices charge their backing allocation/mapping;
+native lifetime wrappers preserve its extent and may conservatively charge aliased
+wrappers separately. Accounting reads sizes/identities, never bulk bytes or copies.
+This bounds engine-retained bulk payload, not opaque plugin-private allocations,
+caller-held results or operating-system page cache. Metadata and graph sizes retain
+their existing finite structural limits; stream queues have separate finite capacities.
 
 `execute_stream` uses finite blocking/lossless input and output queues and persistent
 node instances. It waits on condition variables, checks cancellation, propagates
@@ -116,6 +144,19 @@ Its explicit field/enum catalog and independent golden fixtures are documented i
 contains one immutable observation. Typed Store APIs begin/append/read it, with
 existing chunk journaling, fsync/rename/hash/finalization/recovery; packet append and
 packet read cannot reinterpret it. No SQLite or project-manifest migration occurs.
+
+Observation append reserves its artifact exclusively under the Store metadata
+mutex, then releases that mutex for encoding, fsync, readback, hashing, durable
+journal publication and rename. Only provenance and chunk/state metadata commits
+hold the global mutex. Same-artifact append/finalize/recover/abandon/provenance
+mutation report BUSY during the reservation; other artifacts remain usable.
+Finalization/recovery also retain the artifact reservation during verification.
+Active append owns the shared Store implementation, including project lock and
+SQLite lifetime, across wrapper teardown. No new calls may begin on a destroyed
+Store. The complete journal still promises exactly one checked chunk; errors leave
+RECOVERABLE and reopening replays the unchanged journal protocol. The optional
+observation checkpoint seam runs outside the metadata lock and permits deterministic
+concurrency/failure tests; it is unset in normal operation.
 
 Context retains exact raw artifact/hash, bundle/evidence/frame keys, calibration
 content references and producer/parameter identity. These input IDs are also added

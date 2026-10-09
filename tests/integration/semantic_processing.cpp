@@ -143,6 +143,7 @@ void processor_tests(const std::filesystem::path &library, const std::filesystem
     auto changed = native_instance->process(inputs, {});
     CHECK(!changed && changed.error().code == Status::incompatible);
     CHECK(!instance->process(inputs, {}));
+    isolated.set_enabled("org.example.processor-contract", true);
     mode(0);
     CHECK(native_instance->process(inputs, {}));
     {
@@ -155,18 +156,26 @@ void processor_tests(const std::filesystem::path &library, const std::filesystem
     }
     mode(0);
     for (unsigned n : {10, 11, 12, 13, 14, 15, 17, 18, 20, 24}) {
+        isolated.set_enabled("org.example.processor-contract", true);
         mode(n);
         auto result = instance->process(inputs, {});
         CHECK(!result);
+        auto statuses = isolated.statuses();
+        auto failed = std::find_if(statuses.begin(), statuses.end(), [](const auto &s) {
+            return s.manifest.id == "org.example.processor-contract";
+        });
+        CHECK(failed != statuses.end() && failed->state == "failed" && !failed->diagnostic.empty());
         if (n == 15)
             CHECK(result.error().code == Status::plugin_failed);
         CHECK(std::filesystem::is_empty(tmp.path / "scratch"));
     }
     mode(16);
+    isolated.set_enabled("org.example.processor-contract", true);
     auto begin = std::chrono::steady_clock::now();
     auto timed = instance->process(inputs, {});
     CHECK(!timed);
     CHECK(std::chrono::steady_clock::now() - begin < 3s);
+    isolated.set_enabled("org.example.processor-contract", true);
     CancellationToken token;
     auto pending = std::async(std::launch::async, [&] { return instance->process(inputs, token); });
     std::this_thread::sleep_for(50ms);

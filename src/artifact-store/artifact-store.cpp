@@ -8,6 +8,7 @@
 #include <mantis/platform.hpp>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <sqlite3.h>
 #include <sstream>
 namespace mantis::artifact {
@@ -104,6 +105,25 @@ struct Store::Impl {
     std::unique_ptr<platform::FileLock> lock;
     sqlite3 *db{};
     mutable std::recursive_mutex mutex;
+    Store::ObservationWriteCheckpoint observation_checkpoint;
+    std::set<Id> observation_operations;
+    void observation_idle(const Id &id) const {
+        if (observation_operations.contains(id))
+            fail(Status::busy, "Observation artifact operation in progress");
+    }
+    struct ObservationReservation {
+        Impl &impl;
+        Id id;
+        ObservationReservation(Impl &owner, const Id &value) : impl(owner), id(value) {
+            impl.observation_idle(id);
+            impl.observation_operations.insert(id);
+        }
+        ~ObservationReservation() {
+            std::lock_guard guard(impl.mutex);
+            impl.observation_operations.erase(id);
+        }
+        ObservationReservation(const ObservationReservation &) = delete;
+    };
     struct Writer {
         std::ofstream output;
         std::filesystem::path part;
@@ -406,7 +426,8 @@ struct Store::Impl {
             }
         }
     }
-    explicit Impl(std::filesystem::path path) : root(std::filesystem::absolute(path)) {
+    explicit Impl(std::filesystem::path path, Store::ObservationWriteCheckpoint checkpoint)
+        : root(std::filesystem::absolute(path)), observation_checkpoint(std::move(checkpoint)) {
         std::filesystem::create_directories(root);
         lock = std::make_unique<platform::FileLock>(root / "runtime.lock");
         for (const auto *dir : {"objects", "capture", "cache", "journal"})
@@ -507,6 +528,23 @@ struct Store::Impl {
         }
         return result;
     }
+    std::filesystem::path object_path(const Id &id, uint64_t chunk) const {
+        std::unique_lock guard(mutex);
+        Statement s(db, "SELECT path,hash FROM chunks WHERE artifact=? AND idx=?");
+        s.text(1, id.value);
+        s.integer(2, chunk);
+        if (!s.row())
+            fail(Status::not_found, "Artifact chunk not found");
+        auto path = root / s.text(0);
+        auto expected_hash = s.text(1);
+        // Finalize the statement before releasing SQLite connection ownership.
+        sqlite3_finalize(s.s);
+        s.s = nullptr;
+        guard.unlock();
+        if (file_hash(path).hex != expected_hash)
+            fail(Status::corrupt, "Object integrity check failed");
+        return path;
+    }
     void commit_chunk(const std::string &id, uint64_t index, const std::string &path, const std::string &hash,
                       uint64_t bytes) {
         Transaction txn(db);
@@ -573,7 +611,8 @@ struct Store::Impl {
         }
     }
 };
-Store::Store(std::filesystem::path root) : impl_(std::make_unique<Impl>(std::move(root))) {}
+Store::Store(std::filesystem::path root, ObservationWriteCheckpoint checkpoint)
+    : impl_(std::make_shared<Impl>(std::move(root), std::move(checkpoint))) {}
 Store::~Store() = default;
 const std::filesystem::path &Store::root() const {
     return impl_->root;
@@ -850,6 +889,7 @@ void Store::clear_active_calibration(const Id &device) {
 }
 void Store::initialize_provenance(const ArtifactId &id, Provenance provenance) {
     std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
     auto artifact = impl_->get(id);
     if (artifact.state != ArtifactState::open || artifact.chunks || impl_->writers.contains(id))
         fail(Status::invalid_argument, "Provenance initialization requires an empty OPEN artifact", "store");
@@ -892,6 +932,7 @@ void Store::initialize_projected_source_provenance(const ArtifactId &id, data::M
 }
 void Store::append(const Id &id, const data::Packet &packet) {
     std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
     if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
         if (writer->second->bundles)
             fail(Status::incompatible, "Packet append does not support RawCapture 3");
@@ -942,15 +983,18 @@ ArtifactId Store::begin_laser_observation(Provenance provenance) {
     return begin({"org.mantis.LaserObservation", 1}, std::move(provenance));
 }
 void Store::append_laser_observation(const Id &id, const data::LaserObservation &observation) {
+    auto impl = impl_; // Operation owns SQLite/file-lock lifetime independently of Store teardown.
     auto valid = data::validate(observation);
     if (!valid)
         throw Failure(valid.error());
-    std::lock_guard guard(impl_->mutex);
-    auto a = impl_->get(id);
+    std::unique_lock guard(impl->mutex);
+    impl->observation_idle(id);
+    auto a = impl->get(id);
     if (a.type.name != "org.mantis.LaserObservation" || a.type.schema_version != 1)
         fail(Status::incompatible, "Typed observation append requires observation artifact schema 1");
     if (a.state != ArtifactState::open || a.chunks != 0)
         fail(Status::invalid_argument, "Observation artifact accepts exactly one OPEN immutable value");
+    Impl::ObservationReservation reservation(*impl, id);
     // Context is authoritative. Persist its exact input IDs as ordinary artifact lineage too.
     auto lineage = a.provenance;
     if (lineage.producer.empty()) {
@@ -966,7 +1010,7 @@ void Store::append_laser_observation(const Id &id, const data::LaserObservation 
         if (cal->get() && cal->get()->content.get())
             refs.push_back(*cal->get()->content.get());
     for (const auto &ref : refs) {
-        Statement lookup(impl_->db, "SELECT state,type,version,hash FROM artifacts WHERE id=?");
+        Statement lookup(impl->db, "SELECT state,type,version,hash FROM artifacts WHERE id=?");
         lookup.text(1, ref.id.value);
         if (lookup.row()) {
             if (lookup.integer(0) != 2 || lookup.text(1) != ref.type.name ||
@@ -978,17 +1022,22 @@ void Store::append_laser_observation(const Id &id, const data::LaserObservation 
             lineage.inputs.push_back(ref.id);
     }
     auto rel = "objects/" + id.value + "/0.observation";
-    auto file = impl_->root / rel;
+    auto file = impl->root / rel;
     auto part = file;
     part += ".part";
-    auto journal = impl_->root / "journal" / (id.value + "_0.json");
+    auto journal = impl->root / "journal" / (id.value + "_0.json");
     auto journal_part = journal;
     journal_part += ".part";
     try {
-        Statement provenance(impl_->db, "UPDATE artifacts SET provenance=? WHERE id=?");
+        Statement provenance(impl->db, "UPDATE artifacts SET provenance=? WHERE id=?");
         provenance.text(1, provenance_json(lineage));
         provenance.text(2, id.value);
         provenance.row();
+        sqlite3_finalize(provenance.s);
+        provenance.s = nullptr;
+        guard.unlock();
+        if (impl->observation_checkpoint)
+            impl->observation_checkpoint(id, ObservationWriteStage::before_encode);
         data::write_laser_observation(part, observation);
         platform::durable_file(part);
         // Verify complete typed value before making the journal a durable publication promise.
@@ -1006,13 +1055,19 @@ void Store::append_laser_observation(const Id &id, const data::LaserObservation 
         platform::durable_file(journal_part);
         std::filesystem::rename(journal_part, journal);
         platform::durable_directory(journal.parent_path());
+        if (impl->observation_checkpoint)
+            impl->observation_checkpoint(id, ObservationWriteStage::journal_published);
         std::filesystem::rename(part, file);
         platform::durable_directory(file.parent_path());
-        impl_->commit_chunk(id.value, 0, rel, hash.hex, bytes);
+        guard.lock();
+        impl->commit_chunk(id.value, 0, rel, hash.hex, bytes);
+        guard.unlock();
         std::filesystem::remove(journal);
         platform::durable_directory(journal.parent_path());
     } catch (...) {
-        Statement state(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+        if (!guard.owns_lock())
+            guard.lock();
+        Statement state(impl->db, "UPDATE artifacts SET state=3 WHERE id=?");
         state.text(1, id.value);
         state.row();
         throw;
@@ -1029,31 +1084,35 @@ ArtifactDescriptor Store::finalize(const Id &id, const CancellationToken &token)
     return finalize_impl(id, token, false);
 }
 ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &token, bool recovery) {
-    std::unique_lock guard(impl_->mutex);
-    auto a = impl_->get(id);
+    auto impl = impl_;
+    std::unique_lock guard(impl->mutex);
+    impl->observation_idle(id);
+    auto a = impl->get(id);
     if (a.state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized artifacts are immutable");
     if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version != 1 && a.type.schema_version != 2 &&
         a.type.schema_version != 3)
         fail(Status::incompatible, "Unknown RawCapture schema");
+    std::unique_ptr<Impl::ObservationReservation> reservation;
+    if (a.type.name == "org.mantis.LaserObservation")
+        reservation = std::make_unique<Impl::ObservationReservation>(*impl, id);
     const bool projected = a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3;
     if (a.type.name == "org.mantis.LaserObservation" && (a.type.schema_version != 1 || a.chunks != 1))
         fail(Status::incompatible, "Observation artifacts require exactly one schema-1 observation");
     // A missing cleanup outcome is an ordinary sequencing error, not a storage failure.
     // Reject before sealing/removing a healthy live writer or changing OPEN.
-    if (projected && !recovery &&
-        !std::filesystem::exists(impl_->root / "objects" / id.value / "run.outcome"))
+    if (projected && !recovery && !std::filesystem::exists(impl->root / "objects" / id.value / "run.outcome"))
         fail(Status::invalid_argument, "Normal finalization requires final daemon outcome");
     bool entered_verification = false;
     try {
-        if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
-            impl_->seal(id, *writer->second);
-            impl_->writers.erase(writer);
-            a = impl_->get(id);
+        if (auto writer = impl->writers.find(id); writer != impl->writers.end()) {
+            impl->seal(id, *writer->second);
+            impl->writers.erase(writer);
+            a = impl->get(id);
         }
         if (!a.chunks && !projected)
             fail(Status::invalid_argument, "Cannot finalize an artifact with no committed chunks");
         {
-            Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?");
+            Statement update(impl->db, "UPDATE artifacts SET state=1 WHERE id=?");
             update.text(1, id.value);
             update.row();
         }
@@ -1066,8 +1125,8 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
         std::optional<data::ProjectedCaptureOutcome> outcome;
         if (projected) {
             bundles.emplace(capture_header(id));
-            outcome = impl_->read_outcome(id);
-            auto hash = file_hash(impl_->root / "objects" / id.value / "run.header");
+            outcome = impl->read_outcome(id);
+            auto hash = file_hash(impl->root / "objects" / id.value / "run.header");
             for (unsigned char byte : hash.hex) {
                 aggregate ^= byte;
                 aggregate *= 1099511628211ull;
@@ -1076,7 +1135,7 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
         std::optional<uint64_t> sequence;
         for (uint64_t i = 0; i < a.chunks; ++i) {
             token.check();
-            auto file = object_path(id, i);
+            auto file = impl->object_path(id, i);
             if (a.type.name == "org.mantis.LaserObservation")
                 (void)data::read_laser_observation(file);
             if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) {
@@ -1108,7 +1167,7 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
             if ((!outcome && !recovery) || (outcome && outcome->bundle_count != bundles->count))
                 fail(Status::corrupt, "Final daemon outcome/prefix mismatch");
             if (outcome)
-                for (unsigned char byte : file_hash(impl_->root / "objects" / id.value / "run.outcome").hex) {
+                for (unsigned char byte : file_hash(impl->root / "objects" / id.value / "run.outcome").hex) {
                     aggregate ^= byte;
                     aggregate *= 1099511628211ull;
                 }
@@ -1118,17 +1177,17 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
         Hash hash{"fnv1a64", digest.str()};
         token.check();
         guard.lock();
-        Statement update(impl_->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
+        Statement update(impl->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
         update.text(1, hash.hex); update.text(2, id.value); update.row();
-        return impl_->get(id);
+        return impl->get(id);
     } catch (...) {
         // Preserve legacy pre-verification failure behavior; schema 3 releases failed writers.
         if (!entered_verification && !(a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3))
             throw;
         if (!guard.owns_lock()) guard.lock();
         if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3)
-            impl_->writers.erase(id);
-        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
+            impl->writers.erase(id);
+        Statement update(impl->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
         update.text(1, id.value); update.row();
         throw;
     }
@@ -1152,20 +1211,7 @@ std::vector<ArtifactDescriptor> Store::list() const {
     return out;
 }
 std::filesystem::path Store::object_path(const Id &id, uint64_t chunk) const {
-    std::unique_lock guard(impl_->mutex);
-    Statement s(impl_->db, "SELECT path,hash FROM chunks WHERE artifact=? AND idx=?");
-    s.text(1, id.value);
-    s.integer(2, chunk);
-    if (!s.row())
-        fail(Status::not_found, "Artifact chunk not found");
-    auto path = impl_->root / s.text(0);
-    auto expected_hash = s.text(1);
-    // Finalize the statement before releasing SQLite connection ownership.
-    sqlite3_finalize(s.s); s.s = nullptr;
-    guard.unlock();
-    if (file_hash(path).hex != expected_hash)
-        fail(Status::corrupt, "Object integrity check failed");
-    return path;
+    return impl_->object_path(id, chunk);
 }
 data::Published Store::packet(const Id &id, uint64_t chunk) const {
     auto artifact = get(id);
@@ -1187,8 +1233,13 @@ data::Published Store::packet(const Id &id, uint64_t chunk) const {
 }
 ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) {
     std::unique_lock guard(impl_->mutex);
+    impl_->observation_idle(id);
     const auto a = impl_->get(id);
     if (a.state != ArtifactState::recoverable) fail(Status::invalid_argument, "Artifact is not recoverable");
+    if (a.type.name == "org.mantis.LaserObservation") {
+        guard.unlock();
+        return finalize_impl(id, token, true);
+    }
     {
         Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
     }
@@ -1221,6 +1272,7 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
 }
 void Store::prepare_finalize(const Id &id) {
     std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
     const auto a = impl_->get(id);
     if (a.state != ArtifactState::open)
         fail(Status::invalid_argument, "Only OPEN captures can begin finalization");
@@ -1247,6 +1299,7 @@ void Store::prepare_finalize(const Id &id) {
 }
 void Store::abandon(const Id &id) {
     std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
     if (impl_->get(id).state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized captures are immutable");
     impl_->writers.erase(id);
     Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?"); update.text(1, id.value); update.row();

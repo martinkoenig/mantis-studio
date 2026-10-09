@@ -2,6 +2,7 @@
  * explicit environment fixtures; no runtime-private types enter the DSO. */
 #include <mantis/projected_light.h>
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -49,6 +50,14 @@ static int process(const MantisHostV1 *h, const MantisSemanticPacketV1 *input, u
     MantisDataPacketV1 data;
     MantisAttributeV1 attr;
     int m = mode();
+    const char *started = getenv("MANTIS_PROCESSOR_STARTED_FILE");
+    if (started && *started) {
+        FILE *f = fopen(started, "wb");
+        if (f) {
+            fputc(1, f);
+            fclose(f);
+        }
+    }
     if (m == 34) {
         data = *input->data;
         data.type.name = "org.example.changed-output";
@@ -82,6 +91,23 @@ static int process(const MantisHostV1 *h, const MantisSemanticPacketV1 *input, u
         struct timespec t = {5, 0};
         nanosleep(&t, NULL);
         return 1;
+    }
+    if (m == 37) {
+        const char *release = getenv("MANTIS_PROCESSOR_RELEASE_FILE");
+        struct timespec begin, now, pause = {0, 1000000};
+        if (!release || clock_gettime(CLOCK_MONOTONIC, &begin))
+            return 1;
+        for (;;) {
+            FILE *f = fopen(release, "rb");
+            if (f) {
+                fclose(f);
+                break;
+            }
+            if (clock_gettime(CLOCK_MONOTONIC, &now) ||
+                (now.tv_sec - begin.tv_sec) * 1000 + (now.tv_nsec - begin.tv_nsec) / 1000000 >= timeout)
+                return 1;
+            nanosleep(&pause, NULL);
+        }
     }
     if (m == 17)
         return 1;
@@ -177,7 +203,9 @@ static int process(const MantisHostV1 *h, const MantisSemanticPacketV1 *input, u
     return emit(context, input); /* host explicitly retains borrowed buffers */
 }
 static const MantisProcessorV2 processor = {sizeof(processor), 1, describe, process};
-static int legacy_describe(MantisNodeDescriptorV1 *d) { return describe(1000, d); }
+static int legacy_describe(MantisNodeDescriptorV1 *d) {
+    return describe(1000, d);
+}
 static int legacy_failure(const MantisHostV1 *h, const MantisPacketV1 *p, MantisEmitV1 emit, void *context) {
     (void)h;
     (void)p;
@@ -190,7 +218,9 @@ static int initialize(const MantisHostV1 *h) {
     host = h;
     return 0;
 }
-static void shutdown(void) { host = NULL; }
+static void shutdown(void) {
+    host = NULL;
+}
 static const void *query(const char *id) {
     if (id && !strcmp(id, MANTIS_PROCESSOR_V1) && mode() == 35)
         return &legacy;
@@ -212,4 +242,6 @@ static const void *query(const char *id) {
 }
 static const MantisPluginV1 plugin = {
     sizeof(plugin), 1, "org.example.processor-contract", "1.0.0", initialize, shutdown, query};
-MANTIS_EXPORT const MantisPluginV1 *mantis_plugin_entry(uint32_t abi) { return abi == 1 ? &plugin : NULL; }
+MANTIS_EXPORT const MantisPluginV1 *mantis_plugin_entry(uint32_t abi) {
+    return abi == 1 ? &plugin : NULL;
+}

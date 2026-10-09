@@ -28,6 +28,7 @@ struct SemanticExecutionPlan {
     std::vector<std::string> backends;
 };
 struct SemanticExecutionResult {
+    uint64_t retained_payload_high_water{};
     data::SemanticPublished output;
     std::map<std::string, data::SemanticPublished> outputs;
     std::vector<NodeTiming> timings;

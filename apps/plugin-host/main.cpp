@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
             return 0;
         }
         if (operation == "process-semantic") {
-            if (argc != 6)
+            if (argc != 6 && argc != 7)
                 return 2;
             auto input = mantis::data::read_semantic_packet(argv[3]);
             auto output =
@@ -73,6 +73,11 @@ int main(int argc, char **argv) {
             return 2;
         return 0;
     } catch (const std::exception &e) {
+        if (argc == 7 && std::string_view(argv[1]) == "process-semantic") {
+            // Bounded supplemental diagnostics only; semantic output remains the checked typed format.
+            std::ofstream diagnostic(argv[6], std::ios::binary);
+            diagnostic << std::string_view(e.what()).substr(0, 2048);
+        }
         std::cerr << "plugin-host: " << e.what() << '\n';
         return 1;
     }

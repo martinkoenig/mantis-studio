@@ -157,6 +157,8 @@ struct SemanticNode {
     std::function<std::unique_ptr<SemanticNodeInstance>()> factory;
 };
 struct SemanticGraph {
+    // Per-publication engine-retained backing bytes; finite, <= 2 GiB. Includes candidate/input coexistence.
+    uint64_t retained_payload_limit_bytes{256ull * 1024 * 1024};
     std::vector<SemanticNode> nodes;
     std::vector<Connection> connections;
 };

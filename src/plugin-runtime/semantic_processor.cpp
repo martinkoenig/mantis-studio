@@ -36,6 +36,7 @@ memory::BufferView pin(memory::BufferView buffer, const std::shared_ptr<const vo
     storage->owner = std::make_shared<Owner>(Owner{library, buffer});
     storage->host = bytes->data();
     storage->size = bytes->size();
+    storage->retained_extent = buffer.backing_size();
     storage->alignment = buffer.alignment();
     storage->domain = buffer.domain();
     return {std::move(storage), 0, buffer.size()};

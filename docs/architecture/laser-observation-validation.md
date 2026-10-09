@@ -6,8 +6,10 @@ not certify optical measurements, scanner throughput or physical laser safety.
 
 ## Reproducible checks
 
-The four additive CTest entries are `laser-observation-codec`, `processor-v2`,
-`laser-observation-artifact` and `semantic-pipeline-replay`. The complete existing
+The original additive CTest entries are `laser-observation-codec`, `processor-v2`,
+`laser-observation-artifact` and `semantic-pipeline-replay`. Review hardening adds
+`observation-append-concurrency`, `semantic-registry-lifetime`,
+`semantic-isolation-state` and `semantic-pipeline-memory`. The complete existing
 non-hardware suite also runs unchanged. The C-only contract DSO compiles against
 the unchanged public headers; native and actual plugin-host execution are tested.
 
@@ -132,3 +134,43 @@ the repeated-session/leak check. The complete expanded Debug suite passed
 **107/107**, 326.29 seconds, with leak detection and halt-on-error enabled.
 Architecture boundaries and diff checks passed again. The final completion report
 identifies the corrected commit's five-job workflow and every required conclusion.
+
+## Independent-review ownership/isolation hardening
+
+The correction following reviewed HEAD `c32c6a39ae1fcb17d4db910ae142a8d7a21af2f2`
+preserves all accepted codecs, golden fixtures, C tables and L3–L5 semantics.
+The implementation and resource policy are described in
+[LaserObservation processing](laser-observation-processing.md).
+
+- Observation writes pause deterministically before encoding and after durable
+  journal publication. While paused, get/list, an independent RawCapture-3 append,
+  and another observation append/finalize complete. Same-artifact mutations return
+  BUSY. Eight concurrent writers, Store-wrapper destruction during an append,
+  injected journal failure and reopen/recovery preserve exact bytes/hash and one
+  committed chunk.
+- Retained native/isolated factories and instances fail safely after Registry
+  teardown. Pending isolated calls are killed/reaped; cancellation stays separate
+  from the owner token. A trusted successful callback is released by an explicit
+  fixture gate after teardown and cannot publish. Retained output buffers remain
+  valid. Repeated lifecycles run under leak detection.
+- Isolated crash, invalid output, callback failure and deadline violation become
+  observable FAILED entries with specific diagnostics. Later calls refuse the
+  entry until explicit re-enable. Cancellation and malformed caller input leave
+  it registered, and an unrelated synthetic processor remains usable.
+- A 25-node chain uses independent 128-KiB backings and weak owners to prove last-use
+  release. Fan-out keeps shared backing until its final consumer and preserves
+  both terminal outputs. Tests check unchanged Storage identities, finite budget
+  rejection, full backing/slice accounting, uint64 overflow, cancellation and
+  repeated execution without accumulated ownership.
+
+Both local Studio-OFF builds passed the complete non-hardware suite: **111/111
+Debug (129.17 seconds)** and **111/111 ASan/UBSan (374.96 seconds)**. Sanitizers used
+`detect_leaks=1:halt_on_error=1` and `UBSAN_OPTIONS=halt_on_error=1`. The four new
+tests each passed ten consecutive runs with two CTest workers, in Debug and under
+ASan/UBSan: **40/40 invocations per build**. Architecture boundaries and
+`git diff --check` passed. No physical hardware was used.
+
+Per the current CI handoff policy, commit/push follows successful local verification.
+The final report links the pushed commit's workflow as PENDING; the independent
+reviewer verifies all five remote jobs before acceptance. L6 remains acceptance
+pending, and L7 has not started.

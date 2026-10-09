@@ -60,7 +60,11 @@ class Registry {
         std::optional<pipeline::NodeDescriptor> semantic_node;
     };
     std::map<std::string, std::shared_ptr<Entry>> entries_;
-    mutable std::mutex mutex_;
+    struct SemanticContext;
+    std::shared_ptr<SemanticContext> semantic_;
+    std::mutex &mutex_; // shared with semantic executions; survives Registry teardown
+    static void isolation_failure(const std::shared_ptr<SemanticContext> &, const std::shared_ptr<Entry> &,
+                                  const Error &);
     std::filesystem::path host_, scratch_;
     LogSink logger_;
     std::shared_ptr<Entry> entry(const std::string &) const;
@@ -69,6 +73,9 @@ class Registry {
 
   public:
     Registry(std::filesystem::path host, std::filesystem::path scratch, LogSink logger);
+    ~Registry();
+    Registry(const Registry &) = delete;
+    Registry &operator=(const Registry &) = delete;
     void discover(const std::filesystem::path &, const std::vector<std::string> &approved_in_process);
     std::vector<PluginStatus> statuses() const;
     std::vector<std::unique_ptr<device::ImageStream>> devices();

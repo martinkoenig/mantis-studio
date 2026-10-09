@@ -16,13 +16,17 @@ struct ActiveCalibration {
 class Store {
     friend class BundleCaptureReader;
     struct Impl;
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<Impl> impl_;
     ArtifactDescriptor finalize_impl(const Id &, const CancellationToken &, bool recovery);
 
   public:
-    explicit Store(std::filesystem::path);
+    // Optional deterministic I/O/failure seam; invoked outside the metadata mutex.
+    enum class ObservationWriteStage { before_encode, journal_published };
+    using ObservationWriteCheckpoint = std::function<void(const Id &, ObservationWriteStage)>;
+    explicit Store(std::filesystem::path, ObservationWriteCheckpoint = {});
     ~Store();
     Store(const Store &) = delete;
+    Store &operator=(const Store &) = delete;
     const std::filesystem::path &root() const;
     ArtifactId begin(ArtifactType, Provenance);
     void append(const ArtifactId &, const data::Packet &);

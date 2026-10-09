@@ -399,8 +399,28 @@ pipeline::NodeDescriptor describe_node(const Loaded &p) {
     out.resources.backends = {d.backend};
     return out;
 }
+struct Registry::SemanticContext {
+    std::mutex mutex;
+    std::filesystem::path host, scratch;
+    CancellationToken shutdown;
+    SemanticContext(std::filesystem::path h, std::filesystem::path s)
+        : host(std::move(h)), scratch(std::move(s)) {}
+};
+void Registry::isolation_failure(const std::shared_ptr<SemanticContext> &context,
+                                 const std::shared_ptr<Entry> &entry, const Error &error) {
+    if (error.code == Status::cancelled)
+        return;
+    std::lock_guard lock(context->mutex);
+    entry->state = "failed";
+    entry->diagnostic = error.message;
+}
+Registry::~Registry() {
+    std::lock_guard lock(mutex_);
+    semantic_->shutdown.cancel(); // cancel isolated calls without touching caller-owned tokens
+}
 Registry::Registry(std::filesystem::path host, std::filesystem::path scratch, LogSink logger)
-    : host_(std::move(host)), scratch_(std::move(scratch)), logger_(std::move(logger)) {
+    : semantic_(std::make_shared<SemanticContext>(host, scratch)), mutex_(semantic_->mutex),
+      host_(std::move(host)), scratch_(std::move(scratch)), logger_(std::move(logger)) {
     std::filesystem::create_directories(scratch_);
 }
 std::shared_ptr<Registry::Entry> Registry::entry(const std::string &id) const {
@@ -557,11 +577,7 @@ void Registry::isolated(const std::shared_ptr<Entry> &e, const std::string &oper
     } catch (const Failure &ex) {
         if (ex.error.code == Status::cancelled)
             throw;
-        {
-            std::lock_guard lock(mutex_);
-            e->state = "failed";
-            e->diagnostic = ex.what();
-        }
+        isolation_failure(semantic_, e, ex.error);
         if (logger_)
             logger_({"error", "plugin", e->manifest.id + ": " + ex.what()});
         throw;
@@ -670,29 +686,37 @@ pipeline::SemanticNode Registry::semantic_node(const std::string &id, uint32_t m
         if (e->state != "registered" || e->manifest.kind != "processor" || !e->semantic_node)
             fail(Status::incompatible, "ProcessorV2 unavailable: " + id);
     }
+    auto context = semantic_;
     return {
-        *e->semantic_node, [this, e, ms] {
+        *e->semantic_node, [context, e, ms] {
+            context->shutdown.check();
             return std::make_unique<SemanticFunctionNode>(
-                [this, e, ms](std::span<const data::SemanticPublished> inputs,
-                              const CancellationToken &token) -> Result<data::SemanticPublished> {
+                [context, e, ms](std::span<const data::SemanticPublished> inputs,
+                                 const CancellationToken &token) -> Result<data::SemanticPublished> {
+                    bool plugin_invoked = false;
                     try {
                         token.check();
+                        context->shutdown.check();
                         {
-                            std::lock_guard lock(mutex_);
+                            std::lock_guard lock(context->mutex);
                             if (e->state != "registered")
                                 fail(Status::plugin_failed, "Processor unavailable");
                         }
                         if (inputs.size() != 1 || !inputs[0] ||
                             data::semantic_type(*inputs[0]) != e->semantic_node->inputs[0].type)
                             fail(Status::incompatible, "ProcessorV2 input type/schema mismatch");
+                        auto valid = data::validate(*inputs[0]);
+                        if (!valid)
+                            throw Failure(valid.error());
                         if (e->loaded) {
                             auto out = process_semantic(*e->loaded, *inputs[0], ms, token);
                             if (data::semantic_type(*out) != e->semantic_node->outputs[0].type)
                                 fail(Status::incompatible,
                                      "ProcessorV2 registered output type/schema changed");
+                            context->shutdown.check();
                             return out;
                         }
-                        auto dir = scratch_ / Id::random().value;
+                        auto dir = context->scratch / Id::random().value;
                         std::filesystem::create_directory(dir);
                         struct Cleanup {
                             std::filesystem::path p;
@@ -705,24 +729,44 @@ pipeline::SemanticNode Registry::semantic_node(const std::string &id, uint32_t m
                         // Parent enforces a finite lifetime even if an isolated plugin violates its callback
                         // deadline.
                         auto seconds = std::chrono::seconds((ms + 999) / 1000 + 1);
-                        auto rc =
-                            platform::run_process(host_,
-                                                  {"process-semantic", e->manifest.library.string(),
-                                                   (dir / "input.semantic").string(),
-                                                   (dir / "output.semantic").string(), std::to_string(ms)},
-                                                  token, seconds);
-                        if (rc)
-                            fail(Status::plugin_failed, "ProcessorV2 host exited " + std::to_string(rc),
+                        plugin_invoked = true;
+                        auto rc = platform::run_process(
+                            context->host,
+                            {"process-semantic", e->manifest.library.string(),
+                             (dir / "input.semantic").string(), (dir / "output.semantic").string(),
+                             std::to_string(ms), (dir / "diagnostic.txt").string()},
+                            token, seconds, &context->shutdown);
+                        token.check();
+                        context->shutdown.check();
+                        if (rc) {
+                            std::string diagnostic;
+                            std::ifstream error(dir / "diagnostic.txt", std::ios::binary);
+                            char text[2048];
+                            if (error) {
+                                error.read(text, sizeof(text));
+                                diagnostic.assign(text, static_cast<size_t>(error.gcount()));
+                            }
+                            fail(Status::plugin_failed,
+                                 "ProcessorV2 host exited " + std::to_string(rc) +
+                                     (diagnostic.empty() ? "" : ": " + diagnostic),
                                  e->manifest.id);
+                        }
+                        context->shutdown.check();
                         token.check();
                         auto out = data::read_semantic_packet(dir / "output.semantic");
                         if (data::semantic_type(out) != e->semantic_node->outputs[0].type)
                             fail(Status::incompatible, "ProcessorV2 isolated output type/schema mismatch");
+                        context->shutdown.check();
                         return data::publish(std::move(out));
                     } catch (const Failure &ex) {
+                        if (plugin_invoked)
+                            isolation_failure(context, e, ex.error);
                         return std::unexpected(ex.error);
                     } catch (const std::exception &ex) {
-                        return std::unexpected(Error{Status::plugin_failed, ex.what(), e->manifest.id});
+                        Error error{Status::plugin_failed, ex.what(), e->manifest.id};
+                        if (plugin_invoked)
+                            isolation_failure(context, e, error);
+                        return std::unexpected(error);
                     }
                 });
         }};
