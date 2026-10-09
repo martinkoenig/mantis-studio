@@ -253,8 +253,31 @@ if(BUILD_TESTING)
   add_test(NAME x1-pairing COMMAND mantis-x1-pairing-tests)
   add_executable(mantis-x1-pairing-stream-tests tests/unit/x1_pairing_stream.cpp)
   target_link_libraries(mantis-x1-pairing-stream-tests PRIVATE mantis-device-runtime mantis-artifact-store nlohmann_json::nlohmann_json)
-  add_test(NAME x1-pairing-stream COMMAND mantis-x1-pairing-stream-tests ${CMAKE_BINARY_DIR}/plugins)
-  set_tests_properties(x1-pairing-stream PROPERTIES TIMEOUT 30)
+  # These 56 independent scenarios previously shared one 30-second deadline.
+  # Sanitized CI reached that deadline despite successful individual scenarios.
+  # Retain every scenario/assertion and the deadline, with failures identified
+  # by format, fixture and acquisition mode rather than cumulative suite timing.
+  foreach(format GREY Y10P)
+    foreach(mode software hardware recorder)
+      if(mode STREQUAL "software")
+        set(pairing_scenarios normal close-timestamps startup-left startup-right unequal-origins
+          phase-out-of-bound startup-limit incomparable unknown-clock startup-left-gap
+          startup-left-repeat startup-left-reverse startup-left-timestamp-jump
+          startup-left-clock-change startup-left-steady-delta)
+      elseif(mode STREQUAL "hardware")
+        set(pairing_scenarios normal close-timestamps startup-left unequal-origins)
+      else()
+        set(pairing_scenarios phase-4000 phase-half phase-4300 phase-drift-left phase-drift-right
+          phase-drift-gap phase-limit phase-jitter-left phase-jitter-right)
+      endif()
+      foreach(scenario IN LISTS pairing_scenarios)
+        set(pairing_test x1-pairing-stream-${format}-${scenario}-${mode})
+        add_test(NAME ${pairing_test} COMMAND mantis-x1-pairing-stream-tests
+          ${CMAKE_BINARY_DIR}/plugins ${format} ${scenario} ${mode})
+        set_tests_properties(${pairing_test} PROPERTIES TIMEOUT 30)
+      endforeach()
+    endforeach()
+  endforeach()
   add_executable(mantis-x1-media-tests tests/unit/x1_media.cpp)
   target_link_libraries(mantis-x1-media-tests PRIVATE mantis-x1-backend nlohmann_json::nlohmann_json)
   add_test(NAME x1-media COMMAND mantis-x1-media-tests)
