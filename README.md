@@ -15,8 +15,8 @@ recording and deterministic replay. v0.3 is current: M0–M7 geometric calibrati
 are implemented; M8 physical acceptance remains pending. This
 `feature/v0.4-laser-acquisition` branch adds the
 [v0.4 L0 architecture baseline](docs/architecture/v0.4-laser-acquisition.md);
-L1 canonical semantics and validators are implemented; acceptance is pending.
-L2–L8 laser runtime implementation remains planned. The Virtual Scanner workflow
+L0–L6 are FINAL ACCEPTED. L7a [X1 projected fixture integration](docs/hardware/x1-projected-light-integration.md) is implemented, acceptance pending.
+L7b–L7d and L8 remain planned; physical laser enablement is blocked. The Virtual Scanner workflow
 remains available. See [milestone coverage](docs/architecture/milestone.md) and
 the [release roadmap](ROADMAP.md) for status and evidence boundaries.
 
@@ -114,7 +114,7 @@ No x86 intrinsics or pointer-width assumptions are used in public structures. Th
 
 - [Release roadmap](ROADMAP.md)
 - [v0.3 geometric calibration baseline](docs/architecture/v0.3-geometric-calibration.md)
-- [v0.4 laser acquisition architecture (L0 accepted; L1 semantics implemented)](docs/architecture/v0.4-laser-acquisition.md)
+- [v0.4 laser acquisition architecture (L0–L6 accepted; L7a acceptance pending)](docs/architecture/v0.4-laser-acquisition.md)
 - [Build and run](BUILDING.md)
 - [Implementation architecture and module map](docs/architecture/implementation.md)
 - [Acceptance evidence](docs/architecture/validation.md)

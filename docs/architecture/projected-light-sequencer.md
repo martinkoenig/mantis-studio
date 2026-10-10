@@ -1,7 +1,7 @@
 # Projected-light daemon sequencer (L3)
 
-Status: **L0, L1, L2 and L3 FINAL ACCEPTED**. L4 is implemented, acceptance
-pending; L5–L8 remain planned. This runtime proves software supervision with
+Status: **L0–L6 FINAL ACCEPTED**. L7a implemented, acceptance pending;
+L7b–L7d and L8 remain planned. This runtime proves software supervision with
 synthetic executors. It provides no physical laser, settling, exposure-skew or
 trigger-delivery acceptance.
 

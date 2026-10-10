@@ -1,6 +1,6 @@
 # L6 implementation validation
 
-L0–L5 are FINAL ACCEPTED. L6 is implemented, acceptance pending; L7–L8 remain
+L0–L6 FINAL ACCEPTED. L7a implemented, acceptance pending; L7b–L7d and L8
 planned. This record describes hardware-free infrastructure verification. It does
 not certify optical measurements, scanner throughput or physical laser safety.
 
@@ -97,7 +97,7 @@ No test or assertion was disabled. Frozen ABI snapshots, legacy/projected storag
 fixtures, L3 sequencing and L5 control DTOs remain unchanged. Required GitHub
 acceptance is the five-job matrix for the exact final pushed SHA; the completion
 report records that run and every job conclusion. Green local tests alone do not
-establish CI acceptance. Human L6 acceptance remains pending.
+establish CI acceptance. L6 is FINAL ACCEPTED per the L7a assignment baseline.
 
 ## Sanitizer CI cumulative pairing-test deadline
 
@@ -243,4 +243,4 @@ The four closed L6 implementations, accepted formats/fixtures, L3–L5 control a
 storage semantics, and real Linux camera backend are untouched. No L7 work or
 optical extraction was started. Per the CI handoff policy, remote results for
 the focused follow-up are PENDING until independent review of the pushed SHA;
-L6 is not declared FINAL ACCEPTED here.
+L6 is FINAL ACCEPTED per the subsequent L7a assignment baseline; the measurements above retain their original evidence scope.

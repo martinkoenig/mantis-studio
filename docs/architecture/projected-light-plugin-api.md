@@ -1,7 +1,7 @@
 # Projected-light native plugin API (L2)
 
-Status: **L0, L1, L2 and L3 FINAL ACCEPTED**. L4 implemented, acceptance pending;
-L5–L8 planned. This specifies an in-memory native contract, not a recorder codec,
+Status: **L0–L6 FINAL ACCEPTED**. L7a implemented, acceptance pending;
+L7b–L7d and L8 planned. This specifies an in-memory native contract, not a recorder codec,
 sequencer, transport or physical safety certification. ADR-042 is unchanged.
 
 ## Headers and identifiers

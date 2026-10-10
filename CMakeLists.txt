@@ -248,6 +248,23 @@ if(BUILD_TESTING)
   target_link_libraries(mantis-capture-calibration-tests PRIVATE mantis-services mantis-calibration-artifacts mantis-calibration-solver-opencv opencv_core opencv_calib3d nlohmann_json::nlohmann_json)
   add_test(NAME capture-calibration-binding COMMAND mantis-capture-calibration-tests ${CMAKE_BINARY_DIR}/plugins ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/x1-acceptance-env.json)
   set_tests_properties(capture-calibration-binding PROPERTIES TIMEOUT 120)
+  # Dedicated fixture is never installed/copied into the ordinary plugin directory.
+  # Deliberately omit linux.cpp: even a misconfigured fixture cannot open hardware.
+  add_library(mantis-x1-projected-fixture MODULE tests/fixtures/x1-projected/plugin.cpp
+    plugins/first-party/devices/x1/profile.cpp plugins/first-party/devices/x1/media.cpp
+    plugins/first-party/devices/x1/fake.cpp)
+  target_link_libraries(mantis-x1-projected-fixture PRIVATE mantis-sdk-cpp mantis-options nlohmann_json::nlohmann_json Threads::Threads)
+  set_target_properties(mantis-x1-projected-fixture PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/x1-fixture-plugins)
+  file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/x1-fixture-plugins/x1.json CONTENT
+    "{\"manifest_version\":1,\"id\":\"org.mantis.x1\",\"version\":\"1.0.0\",\"kind\":\"device\",\"execution\":\"in_process\",\"abi_version\":1,\"library\":\"$<TARGET_FILE_NAME:mantis-x1-projected-fixture>\",\"permissions\":[]}")
+  add_executable(mantis-x1-projected-fixture-tests tests/integration/x1_projected_fixture.cpp)
+  target_link_libraries(mantis-x1-projected-fixture-tests PRIVATE mantis-plugin-runtime nlohmann_json::nlohmann_json)
+  add_test(NAME x1-projected-fixture COMMAND mantis-x1-projected-fixture-tests $<TARGET_FILE:mantis-x1-projected-fixture> ${CMAKE_BINARY_DIR}/plugins ${CMAKE_SOURCE_DIR}/tests/fixtures/x1-projected/profile.json)
+  set_tests_properties(x1-projected-fixture PROPERTIES TIMEOUT 30)
+  add_executable(mantis-x1-projected-client-tests tests/integration/x1_projected_client.cpp)
+  target_link_libraries(mantis-x1-projected-client-tests PRIVATE mantis-client mantis-service-adapter)
+  add_test(NAME x1-projected-end-to-end COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/integration/x1_projected.py ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/tests/fixtures/x1-projected/profile.json)
+  set_tests_properties(x1-projected-end-to-end PROPERTIES TIMEOUT 120)
   add_executable(mantis-x1-pairing-tests tests/unit/x1_pairing.cpp)
   target_link_libraries(mantis-x1-pairing-tests PRIVATE mantis-options)
   add_test(NAME x1-pairing COMMAND mantis-x1-pairing-tests)

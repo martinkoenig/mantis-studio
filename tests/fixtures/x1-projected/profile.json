@@ -1,0 +1,44 @@
+{
+  "format_version": 2,
+  "measurement_cameras": {
+    "left": {
+      "sensor_identity": "ov9281 18-0060",
+      "bus_identity": "fixture",
+      "route": [
+        "ov9281 18-0060",
+        "msm_csiphy2",
+        "msm_csid2",
+        "msm_vfe2_rdi0",
+        "msm_vfe2_video0"
+      ]
+    },
+    "right": {
+      "sensor_identity": "ov9281 20-0060",
+      "bus_identity": "fixture",
+      "route": [
+        "ov9281 20-0060",
+        "msm_csiphy3",
+        "msm_csid3",
+        "msm_vfe3_rdi0",
+        "msm_vfe3_video0"
+      ]
+    }
+  },
+  "mode": {
+    "width": 64,
+    "height": 48,
+    "fourcc": "Y10P",
+    "fps": 120,
+    "media_bus_code": "Y10_1X10",
+    "vertical_blanking": 196
+  },
+  "hardware_sync_configured": false,
+  "stall_timeout_ms": 1000,
+  "max_v4l2_delta_ns": 5000000,
+  "calibration_id": "",
+  "calibration_revision": 0,
+  "runtime_setup": {
+    "ownership": "selected-routes",
+    "disable_conflicting_links": true
+  }
+}
