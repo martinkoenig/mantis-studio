@@ -1,7 +1,7 @@
 # Projected-light daemon control (v0.4 L5)
 
-Status: L0–L6 FINAL ACCEPTED. L7a implemented, acceptance pending; L7b–L7d and
-L8 planned. No production projected-light hardware, extractor, triangulation or
+Status: L0–L6 FINAL ACCEPTED. L7a FINAL ACCEPTED; L7b-1 IMPLEMENTED / AWAITING INDEPENDENT REVIEW;
+L7b-2, L7c, L7d and L8 planned. No production projected-light hardware, extractor, triangulation or
 remote network transport is introduced.
 
 ## Ownership and addressing

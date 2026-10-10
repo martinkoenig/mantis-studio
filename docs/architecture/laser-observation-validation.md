@@ -1,7 +1,7 @@
 # L6 implementation validation
 
-L0–L6 FINAL ACCEPTED. L7a implemented, acceptance pending; L7b–L7d and L8
-planned. This record describes hardware-free infrastructure verification. It does
+L0–L6 FINAL ACCEPTED. L7a FINAL ACCEPTED; L7b-1 IMPLEMENTED / AWAITING INDEPENDENT REVIEW;
+L7b-2, L7c, L7d and L8 planned. This record describes hardware-free infrastructure verification. It does
 not certify optical measurements, scanner throughput or physical laser safety.
 
 ## Reproducible checks
