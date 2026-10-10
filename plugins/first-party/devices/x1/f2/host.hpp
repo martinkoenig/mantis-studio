@@ -1,64 +1,14 @@
 #pragma once
-#include "controller.hpp"
-#include <chrono>
+#include "configuration.hpp"
+#include "transport.hpp"
 #include <condition_variable>
 #include <functional>
 #include <mutex>
+#include <string>
 #include <thread>
 
-namespace x1::f2::simulation {
+namespace x1::f2 {
 uint64_t fresh_identity();
-struct Injection {
-    uint16_t drop_message{};
-    unsigned drops{};
-    uint16_t block_message{}, reject_message{};
-    Result rejection = Result::hardware_fault;
-    uint64_t delay_us{}, terminal_delay_us{};
-    uint16_t snapshot_after_message{}, reboot_after_message{};
-    bool duplicate{}, corrupt{}, lose_terminal{}, fail_link{}, fail_stop{}, cleanup_error{},
-        disable_heartbeat{}, block_next{};
-};
-// One bounded byte link, no physical selector and no operating-system device API.
-class Link {
-    mutable std::mutex mutex_;
-    std::condition_variable wake_;
-    Controller controller_;
-    Parser endpoint_, receiver_;
-    Ring<Frame, 8> replies_, events_;
-    std::optional<Frame> stop_reply_, heartbeat_reply_, delayed_, delayed_event_;
-    std::array<uint64_t, 19> requests_{};
-    uint64_t delayed_event_at_{}, delayed_at_{}, manual_now_{}, interrupts_{}, event_waits_{};
-    bool manual_{};
-    std::chrono::steady_clock::time_point epoch_ = std::chrono::steady_clock::now();
-    Injection injection_;
-    uint64_t now_locked() const;
-    void deliver_locked(const Frame &);
-    void progress_locked();
-
-  public:
-    explicit Link(bool manual = false, uint64_t boot = 0)
-        : controller_(boot     ? boot
-                      : manual ? 0x8266000000000001
-                               : fresh_identity()),
-          manual_(manual) {}
-    bool send(const Wire &);
-    std::optional<Frame> receive(const Frame &request, std::chrono::steady_clock::time_point deadline);
-    std::optional<Frame> event(std::chrono::steady_clock::time_point deadline);
-    void advance(uint64_t now);
-    void inject(const Injection &);
-    Injection injection() const;
-    bool wait_requests(Message, uint64_t count, std::chrono::steady_clock::time_point);
-    bool wait_events(uint64_t count, std::chrono::steady_clock::time_point);
-    void saturate();
-    void inject_event(const Frame &);
-    void mutate(const std::function<void(Controller &)> &);
-    struct Metrics {
-        uint64_t frames{}, malformed{}, runs{}, pulses{}, stops{};
-        size_t collector{}, reply_high_water{}, event_high_water{};
-    };
-    Metrics metrics() const;
-    void interrupt();
-};
 class ProtocolError : public std::runtime_error {
   public:
     Result result;
@@ -69,17 +19,23 @@ class ProtocolError : public std::runtime_error {
           result(r), consumed(admitted) {}
 };
 struct Snapshot {
+    Selection selection;
     uint64_t boot{}, generation{}, calibration{}, uid{};
     Frame global, channel, status, calibration_status, sensor;
 };
-bool configuration_fits(const Snapshot &, const BenchConfig &);
+bool configuration_fits(const Snapshot &, const Selection &, const FiniteExecution &);
 struct Association {
     uint64_t boot{}, session{}, execution{};
     uint32_t arm{};
     bool operator==(const Association &) const = default;
 };
+// Ordinary public operations are caller-serialized; STOP, heartbeat service and
+// heartbeat retirement are independent side paths. Quiesce public calls before
+// destruction; the destructor interrupts and joins the worker before releasing
+// its borrowed Transport reference (see transport.hpp lifetime contract).
 class Host {
-    Link &link_;
+    Transport &transport_;
+    const Selection selection_;
     std::timed_mutex ordinary_, lifetime_;
     std::mutex control_, heartbeat_gate_;
     std::condition_variable changed_;
@@ -100,14 +56,14 @@ class Host {
   public:
     static constexpr unsigned max_attempts = 3;
     static constexpr auto retry_interval = std::chrono::milliseconds(20);
-    explicit Host(Link &, std::function<uint64_t()> identity = {});
+    explicit Host(Transport &, Selection, std::function<uint64_t()> identity = {});
     ~Host();
     Host(const Host &) = delete;
     Host &operator=(const Host &) = delete;
     Snapshot discover(std::chrono::steady_clock::time_point);
     // begin fences old work. The caller separately binds this association to immutable Studio identities.
-    Association start(const Snapshot &, const BenchConfig &, bool on, std::chrono::steady_clock::time_point,
-                      uint64_t expected_fence);
+    Association start(const Snapshot &, const FiniteExecution &, bool on,
+                      std::chrono::steady_clock::time_point, uint64_t expected_fence);
     std::optional<Payload> terminal(std::chrono::steady_clock::time_point);
     bool stop(std::chrono::steady_clock::time_point);
     bool shutdown(std::chrono::steady_clock::time_point);
@@ -127,4 +83,4 @@ class Host {
         return fence_;
     }
 };
-} // namespace x1::f2::simulation
+} // namespace x1::f2

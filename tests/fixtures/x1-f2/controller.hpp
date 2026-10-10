@@ -1,5 +1,6 @@
 #pragma once
 #include "../../../plugins/first-party/devices/x1/f2/codec.hpp"
+#include "../../../plugins/first-party/devices/x1/f2/configuration.hpp"
 #include <algorithm>
 
 namespace x1::f2::simulation {
@@ -13,10 +14,22 @@ struct BenchConfig {
                               max_high = 5'000, min_low = 100, max_pulses = 1'000, max_on = 5'000,
                               max_run_ms = 2'000;
     bool valid() const;
+    FiniteExecution execution() const {
+        return {current_ua, period_us, high_us, pulses};
+    }
     uint64_t duration_us() const {
         return uint64_t(period_us) * pulses;
     }
 };
+inline Selection host_selection() {
+    return {BenchConfig::controller,
+            BenchConfig::board,
+            BenchConfig::channel_uid,
+            BenchConfig::channel,
+            ExecutionMode::simulation_only,
+            1,
+            1};
+}
 template <class T, size_t N> class Ring {
     std::array<T, N> slots_{};
     size_t read_{}, size_{};

@@ -1,7 +1,7 @@
 # X1 projected-light integration — L7a
 
-L0–L6 FINAL ACCEPTED. L7a FINAL ACCEPTED. L7b-1 IMPLEMENTED / AWAITING INDEPENDENT REVIEW;
-L7b-2, L7c, L7d and L8 planned. This is a hardware-free TEST/BENCH foundation. Physical projected-light
+L0–L6 FINAL ACCEPTED. L7a FINAL ACCEPTED. L7b-1 FINAL ACCEPTED;
+L7b-2a IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b, L7c, L7d and L8 planned. This is a hardware-free TEST/BENCH foundation. Physical projected-light
 capability and physical laser enablement remain **BLOCKED** pending factual
 controller and independent safety review. No production controller is implemented.
 
@@ -273,4 +273,6 @@ Before L7b the user must provide and reviewers must accept:
 L7b physical integration stays BLOCKED until these facts and independent safety
 behavior are reviewed. L7c/L7d/L8 and production extraction/triangulation are outside
 L7a. L7a was independently FINAL ACCEPTED at `90d4b15850560c2f0037796770fb42e6d53e2d33`.
-The [L7b-1 framed simulation](x1-f2-simulation.md) remains a separate review gate.
+The [L7b-1 framed simulation](x1-f2-simulation.md) is independently FINAL ACCEPTED
+at `27185c198a15b9340023cf03e55938c327acc018`; this establishes no physical
+qualification. L7b-2a's transport-independent Host remains a separate review gate.

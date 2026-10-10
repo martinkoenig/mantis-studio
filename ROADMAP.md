@@ -7,7 +7,7 @@ v0.4 planning/development branch: `feature/v0.4-laser-acquisition`
 
 This document is the canonical high-level release roadmap for the Mantis Studio / Mantis X1 scanning path. Detailed architecture, implementation contracts, ADRs and validation evidence remain authoritative for their respective releases.
 
-The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has FINAL ACCEPTED L0 architecture, L1 canonical semantics, L2 contracts and L3 sequencer and L4 evidence/storage; L5 is FINAL ACCEPTED; L6 is FINAL ACCEPTED; L7a is FINAL ACCEPTED; L7b-1 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2, L7c, L7d and L8 remain planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
+The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has FINAL ACCEPTED L0 architecture, L1 canonical semantics, L2 contracts and L3 sequencer and L4 evidence/storage; L5 is FINAL ACCEPTED; L6 is FINAL ACCEPTED; L7a is FINAL ACCEPTED; L7b-1 is FINAL ACCEPTED; L7b-2a is IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b, L7c, L7d and L8 remain planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
 
 ## Release sequence
 
@@ -39,10 +39,10 @@ Canonical detail:
 
 ## v0.4 — Laser Acquisition Foundation
 
-**L0 FINAL ACCEPTED; L1 FINAL ACCEPTED; L2 FINAL ACCEPTED; L3 FINAL ACCEPTED; L4 FINAL ACCEPTED; L5 FINAL ACCEPTED; L6 FINAL ACCEPTED; L7a FINAL ACCEPTED; L7b-1 IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2, L7c, L7d and L8 planned.** See the
+**L0 FINAL ACCEPTED; L1 FINAL ACCEPTED; L2 FINAL ACCEPTED; L3 FINAL ACCEPTED; L4 FINAL ACCEPTED; L5 FINAL ACCEPTED; L6 FINAL ACCEPTED; L7a FINAL ACCEPTED; L7b-1 FINAL ACCEPTED; L7b-2a IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b, L7c, L7d and L8 planned.** See the
 [v0.4 architecture baseline and package map](docs/architecture/v0.4-laser-acquisition.md).
 
-L7a provides the [hardware-free X1 projected fixture and controller-readiness boundary](docs/hardware/x1-projected-light-integration.md). Physical enablement remains blocked. [L7b-1](docs/hardware/x1-f2-simulation.md) adds isolated framed F2 simulation; independent review remains required.
+L7a provides the [hardware-free X1 projected fixture and controller-readiness boundary](docs/hardware/x1-projected-light-integration.md). Physical enablement remains blocked. [L7b-1](docs/hardware/x1-f2-simulation.md) is independently FINAL ACCEPTED at `27185c198a15b9340023cf03e55938c327acc018`. [L7b-2a](docs/hardware/x1-f2-simulation.md#l7b-2a-private-hosttransport-boundary) extracts the private transport-independent Host and is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. L7b-2b and later physical gates remain planned.
 
 The purpose of v0.4 is to make projected-light acquisition a first-class, deterministic part of the same Mantis runtime instead of introducing a separate scanner-specific side path.
 

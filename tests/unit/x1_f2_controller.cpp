@@ -1,5 +1,5 @@
-#include "../fixtures/x1-f2/host.hpp"
 #include "../fixtures/x1-f2/layout-golden.hpp"
+#include "../fixtures/x1-f2/link.hpp"
 #include <future>
 #include <iostream>
 using namespace x1::f2;
@@ -517,7 +517,7 @@ int main() {
         for (auto scenario : {"normal", "lost_ack", "lost_event", "delayed_event", "duplicate", "snapshot"}) {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             Injection fault;
             if (std::string_view(scenario) == "snapshot")
                 fault.snapshot_after_message = 4;
@@ -536,7 +536,7 @@ int main() {
             if (std::string_view(scenario) == "duplicate")
                 fault.duplicate = true;
             link.inject(fault);
-            auto a = host.start(snapshot, {}, true, Clock::now() + 1s, host.fence());
+            auto a = host.start(snapshot, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence());
             CHECK(a.arm && a.execution);
             link.advance(200'000);
             auto terminal = host.terminal(Clock::now() + 100ms);
@@ -546,20 +546,20 @@ int main() {
         {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto snapshot = host.discover(Clock::now() + 1s);
-            auto a = host.start(snapshot, {}, false, Clock::now() + 1s, host.fence());
+            auto a = host.start(snapshot, BenchConfig{}.execution(), false, Clock::now() + 1s, host.fence());
             CHECK(!a.arm && !a.execution && link.metrics().runs == 0 && link.metrics().stops == 1);
         }
         for (auto msg : {uint16_t(0x10), uint16_t(0x11)}) {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
             Injection f;
             f.reject_message = msg;
             link.inject(f);
-            failure([&] { host.start(s, {}, true, Clock::now() + 1s, host.fence()); },
+            failure([&] { host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence()); },
                     Result::hardware_fault);
             CHECK(link.metrics().runs == 0);
             CHECK(host.stop(Clock::now() + 100ms));
@@ -567,17 +567,17 @@ int main() {
         {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
             link.mutate([](Controller &c) { c.change_snapshot(); });
-            failure([&] { host.start(s, {}, true, Clock::now() + 1s, host.fence()); },
+            failure([&] { host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence()); },
                     Result::snapshot_changed);
             CHECK(link.metrics().runs == 0);
         }
         {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
             Injection f;
             f.block_message = 0x13;
@@ -585,8 +585,8 @@ int main() {
             auto pending = std::async(std::launch::async, [&] {
                 failure(
                     [&] {
-                        host.start(s, BenchConfig{10'000, 10'000, 1'000, 100}, true, Clock::now() + 1s,
-                                   host.fence());
+                        host.start(s, BenchConfig{10'000, 10'000, 1'000, 100}.execution(), true,
+                                   Clock::now() + 1s, host.fence());
                     },
                     Result::bad_state);
             });
@@ -606,9 +606,9 @@ int main() {
         {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
-            host.start(s, {}, true, Clock::now() + 1s, host.fence());
+            host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence());
             Injection f;
             f.block_next = true;
             link.inject(f);
@@ -622,9 +622,9 @@ int main() {
         {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
-            host.start(s, {}, true, Clock::now() + 1s, host.fence());
+            host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence());
             Injection f;
             f.fail_stop = true;
             link.inject(f);
@@ -636,26 +636,31 @@ int main() {
         for (auto scenario : {"corrupt", "link", "timeout", "reboot", "cleanup", "lease"}) {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
             Injection f;
             if (std::string_view(scenario) == "corrupt") {
                 f.corrupt = true;
                 link.inject(f);
-                failure([&] { host.start(s, {}, true, Clock::now() + 1s, host.fence()); }, Result::timeout);
+                failure(
+                    [&] { host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence()); },
+                    Result::timeout);
                 continue;
             }
             if (std::string_view(scenario) == "link") {
                 f.fail_link = true;
                 link.inject(f);
-                failure([&] { host.start(s, {}, true, Clock::now() + 1s, host.fence()); },
-                        Result::unavailable);
+                failure(
+                    [&] { host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence()); },
+                    Result::unavailable);
                 continue;
             }
             if (std::string_view(scenario) == "timeout") {
                 f.block_message = 0x13;
                 link.inject(f);
-                failure([&] { host.start(s, {}, true, Clock::now() + 1s, host.fence()); }, Result::timeout);
+                failure(
+                    [&] { host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence()); },
+                    Result::timeout);
                 CHECK(link.metrics().runs == 1);
                 CHECK(host.stop(Clock::now() + 100ms));
                 continue;
@@ -669,7 +674,7 @@ int main() {
             if (std::string_view(scenario) == "cleanup")
                 f.cleanup_error = true;
             link.inject(f);
-            host.start(s, config, true, Clock::now() + 1s, host.fence());
+            host.start(s, config.execution(), true, Clock::now() + 1s, host.fence());
             if (std::string_view(scenario) == "reboot") {
                 link.mutate([](Controller &c) { c.reboot(0x8266000000000002); });
                 failure([&] { host.terminal(Clock::now() + 100ms); }, Result::stale_boot);
@@ -686,13 +691,14 @@ int main() {
         {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
             Injection f;
             f.delay_us = 30'000;
             link.inject(f);
-            auto pending = std::async(
-                std::launch::async, [&] { return host.start(s, {}, true, Clock::now() + 1s, host.fence()); });
+            auto pending = std::async(std::launch::async, [&] {
+                return host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence());
+            });
             CHECK(link.wait_requests(Message::claim, 1, Clock::now() + 1s));
             // Manual discovery delayed responses are released by explicit deterministic clock advancement.
             link.advance(30'000);
@@ -706,9 +712,9 @@ int main() {
         {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
-            auto a = host.start(s, {}, true, Clock::now() + 1s, host.fence());
+            auto a = host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence());
             Frame stale;
             stale.kind = Class::event;
             stale.session = a.session + 1;
@@ -737,13 +743,15 @@ int main() {
         {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
             Injection f;
             f.block_message = 0x11;
             link.inject(f);
             auto pending = std::async(std::launch::async, [&] {
-                failure([&] { host.start(s, {}, true, Clock::now() + 1s, host.fence()); }, Result::bad_state);
+                failure(
+                    [&] { host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence()); },
+                    Result::bad_state);
             });
             CHECK(link.wait_requests(Message::arm, 1, Clock::now() + 1s));
             CHECK(host.stop(Clock::now() + 100ms));
@@ -766,10 +774,10 @@ int main() {
         {
             Link link(true);
             uint64_t identity = 100;
-            Host host(link, [&] { return ++identity; });
+            Host host(link, host_selection(), [&] { return ++identity; });
             auto snapshot = host.discover(Clock::now() + 1s);
             for (unsigned cycle = 0; cycle < 3; ++cycle) {
-                host.start(snapshot, {}, true, Clock::now() + 1s, host.fence());
+                host.start(snapshot, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence());
                 CHECK(link.wait_requests(Message::keepalive, cycle + 1, Clock::now() + 1s));
                 link.advance((cycle + 1) * 200'000);
                 CHECK(host.terminal(Clock::now() + 100ms));
@@ -783,9 +791,9 @@ int main() {
         for (unsigned i = 0; i < 100; ++i) {
             Link link(true);
             uint64_t id = 100;
-            Host host(link, [&] { return ++id; });
+            Host host(link, host_selection(), [&] { return ++id; });
             auto s = host.discover(Clock::now() + 1s);
-            host.start(s, {}, true, Clock::now() + 1s, host.fence());
+            host.start(s, BenchConfig{}.execution(), true, Clock::now() + 1s, host.fence());
             link.advance(200'000);
             CHECK(host.terminal(Clock::now() + 100ms));
             CHECK(host.stop(Clock::now() + 100ms));

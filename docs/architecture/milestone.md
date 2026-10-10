@@ -136,7 +136,7 @@ deterministic run supervision and L4 storage/evidence are **FINAL ACCEPTED**: ex
 MRAWREC3 recovery and deterministic mapped replay. See [the exact storage format](rawcapture-v3.md).
 L5 daemon controls are **FINAL ACCEPTED**; see the
 [control API](projected-light-control-api.md). L6 processing is **FINAL ACCEPTED**; see the
-[observation boundary](laser-observation-processing.md). L7a is **FINAL ACCEPTED**; see the [X1 fixture/readiness record](../hardware/x1-projected-light-integration.md). L7b-1 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2, L7c, L7d and L8 remain planned; no real laser acceptance is claimed. Production L1/L7
+[observation boundary](laser-observation-processing.md). L7a is **FINAL ACCEPTED**; see the [X1 fixture/readiness record](../hardware/x1-projected-light-integration.md). L7b-1 is FINAL ACCEPTED; L7b-2a IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b, L7c, L7d and L8 remain planned; no real laser acceptance is claimed. Production L1/L7
 extraction, subpixel localization and laser geometry/triangulation remain v0.5;
 ADR-031 describes their final deployment partition. L0 does not complete v0.3 M8.
 

@@ -1,7 +1,7 @@
 # LaserObservation processing boundary
 
-L0–L6 FINAL ACCEPTED. L7a FINAL ACCEPTED; L7b-1 IMPLEMENTED / AWAITING INDEPENDENT REVIEW;
-L7b-2, L7c, L7d and L8 planned. This package provides processing/storage infrastructure and deterministic
+L0–L6 FINAL ACCEPTED. L7a FINAL ACCEPTED; L7b-1 FINAL ACCEPTED;
+L7b-2a IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b, L7c, L7d and L8 planned. This package provides processing/storage infrastructure and deterministic
 contract producers. It implements no production laser extraction, laser geometry,
 XYZ, triangulation, hardware controller, UI or remote streaming/security.
 

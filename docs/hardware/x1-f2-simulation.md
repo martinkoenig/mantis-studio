@@ -1,9 +1,14 @@
-# X1 F2 v1 hardware-free integration — L7b-1
+# X1 F2 v1 hardware-free integration — L7b-1 / L7b-2a
 
-**IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** L0–L6 and L7a are FINAL ACCEPTED;
-L7a baseline is `90d4b15850560c2f0037796770fb42e6d53e2d33`. L7b-2, L7c, L7d
+**L7b-1 FINAL ACCEPTED. L7b-2a IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** L0–L6 and L7a are FINAL ACCEPTED;
+L7a baseline is `90d4b15850560c2f0037796770fb42e6d53e2d33`. L7b-2b, L7c, L7d
 and L8 remain separate planned gates. This record establishes software behavior,
 not physical controller readiness or acceptance of L7 as a whole.
+
+Independent L7b-1 acceptance is Studio SHA
+`27185c198a15b9340023cf03e55938c327acc018`, with all five required CI jobs
+SUCCESS in [run 38079990496](https://github.com/martinkoenig/mantis-studio/actions/runs/38079990496).
+That acceptance includes R01 calibration revocation and R02 publication admission.
 
 ## Authority and boundaries
 
@@ -14,6 +19,10 @@ recovery corrections at that SHA are authoritative, including V12's 29-byte
 CONFIGURE and V13's unbound sensor selector. Historical draft status prose does
 not change that pinned acceptance. Firmware runtime/F3/F4 code is not used or
 modified. Firmware PR 4/main are not floating protocol dependencies.
+The L7b-2a assignment named `shared/protocol/UART_V1_0_CONTRACT.md`; the pinned
+tree does not contain that path (GitHub contents API returns 404). The five
+`docs/protocol/` transport, lifecycle, messages, discovery/calibration and recovery
+documents present at the same accepted SHA remain the protocol authority.
 
 `plugins/first-party/devices/x1/f2/codec.{hpp,cpp}` is a private standard-C++ codec,
 independent of Qt, Protobuf, SQLite, OpenCV and OS UART APIs. It defines explicit
@@ -21,9 +30,10 @@ LE fields, CRC-32C, standard COBS, framing, bounded streaming recovery and typed
 schema validation. It changes no Studio public header or persistent format.
 
 `tests/fixtures/x1-f2/controller.*` owns a bounded deterministic MCU-local model.
-`host.*` provides framed in-memory byte transport, coherent discovery, session and
-transaction handling, lease servicing, immutable terminal recovery and STOP.
-`plugin.cpp` bridges those software facts through the frozen ProjectedLightV1.
+`link.*` provides the in-memory framed byte transport and per-instance injection.
+The reusable `plugins/first-party/devices/x1/f2/host.*` owns coherent discovery,
+session/transaction handling, lease servicing, terminal recovery and STOP through
+`transport.hpp`. `plugin.cpp` bridges those facts through frozen ProjectedLightV1.
 The simulator receives bytes through its own parser; replies/events are encoded
 and pass through a second host parser. Studio never directly calls an execution
 method to bypass F2. Controller mutation hooks are per-instance test facilities;
@@ -32,6 +42,130 @@ their callbacks must be nonblocking. No such callback runs on a hardware path.
 mantisd remains authoritative for canonical program, RunId/GenerationId, resource
 ownership, sequencing, recording, final outcome and replay. There is no X1 branch
 in L3 and no replacement service API.
+
+## L7b-2a private host/transport boundary
+
+The codec and new `mantis-x1-f2-host` static target compile in ordinary builds,
+including `BUILD_TESTING=OFF`. Their sources/headers require only standard C++ and
+Threads; they are private implementation modules, uninstalled and unlinked to the
+production camera plugin. The simulator and alternative plugin remain test-only.
+There is one Host implementation and no Host copy under `tests/fixtures/`.
+
+| Layer | Ownership |
+| --- | --- |
+| Codec | Unchanged framing, bounded incremental parser, CRC/COBS and typed schemas |
+| Transport contract | Bounded exact-wire submission; matched replies, separate events, deadlines and explicit timeout/interrupted/closed/unavailable outcomes |
+| Host | One ordinary transaction, request IDs, byte-identical retries, coherent discovery, session/ARM/execution association, heartbeat, fencing, STOP and terminal recovery |
+| Simulated Link | Two parsers, finite reply/event rings, dedicated STOP/heartbeat slots, manual time, response matching, disconnect/interruption and fault injection |
+| Simulated Controller | Boot/session/configuration/ARM, finite pulse accounting, lease enforcement, faults and canonical terminal retention |
+| ProjectedLight fixture | Strict existing JSON/activation/mapping, Studio-to-controller association, pure preflight, L2 evidence, abort and callback admission |
+| mantisd / ProjectedRun | Canonical program, Studio RunId/GenerationId, resource ownership, sequencing, recording, final outcome and controller-free replay |
+
+`configuration.hpp` separates an explicit controller/board/channel selection and
+calibration provenance policy from finite current/period/high/pulse parameters.
+No BenchConfig constants, synthetic MCU, concrete Link, injection or fixture hook
+enter Host. The fixture converts its unchanged, strictly validated JSON values
+into these private representations. Only an explicit SimulationOnly policy exists;
+no synthetic token or readiness can qualify a physical output. The current host
+execution profile retains the accepted single-channel/register-inventory v1 limits.
+
+Host borrows a caller-owned Transport without a shared ownership allocation. The
+transport must outlive every Host call and its joined heartbeat worker; callers
+quiesce public operations before destruction. In the fixture, Link is declared
+before Host and destroyed afterward. Shutdown fences admission, dispatches STOP,
+interrupts reads and retires heartbeat within the deadline; refused plugin destroy
+retains ownership until active callbacks retire. No detached worker was added.
+
+Transport waits release the lock needed for byte dispatch. STOP remains request ID
+zero, with its own reply slot, independent of ordinary/event capacity and pending
+heartbeat replies. Interrupt wakes ordinary/heartbeat/event reads but cannot cancel
+priority STOP reception. A closed link wakes all reads and refuses submission.
+Host never inspects injection settings: suppressed heartbeats are dropped at the
+simulated byte peer before lease admission; a blocked terminal read reports
+interruption, preventing that read's status reconciliation. Lost events report
+timeout and retain the accepted status/exact-terminal recovery path.
+
+`x1-f2-transport` adds actual-byte fragmentation, corrupt COBS/CRC, idle recovery,
+matching/stale reply filtering, event separation, closure/interruption, identical
+RUN retry bytes, one outstanding ordinary transaction, heartbeat progress during
+blocked RUN, shutdown during receive, saturation and STOP versus blocked heartbeat.
+Existing controller tests retain delayed/duplicate replies, calibration revocation,
+snapshot/lease/reboot recovery and repeated lifetimes. R02 callback barriers and
+the actual daemon/recording/replay tests are unchanged. `x1-f2-boundaries` checks
+the entire private include graph, forbidden fixture/API types, non-test target
+placement, absence of duplicate Host and the fixture binary's physical API symbols.
+No image copy, extra frame queue or per-byte allocation is introduced.
+
+A real UART backend, physical policy, electrical qualification, device selection,
+USB HIL, hardware commissioning and physical output remain separate blocked gates.
+The existing [hardware readiness checklist](x1-projected-light-integration.md#physical-controller-readiness-facts)
+remains authoritative. L7b-2a is implemented/awaiting independent review, not
+acceptance of physical L7b-2 integration.
+
+### L7b-2a local validation — 2026-10-10
+
+All four complete builds succeeded. Local results for the extraction:
+
+| Check | Result |
+| --- | --- |
+| Linux x86_64 Studio ON, full CTest | 129/129 PASS, 159.25 s |
+| Linux x86_64 Studio OFF, full CTest | 126/126 PASS, 146.30 s |
+| ASan/UBSan, complete full CTest | 126/126 PASS, 385.23 s; leak detection and fatal UB enabled |
+| Fresh complete BUILD_TESTING=OFF / Studio OFF build | PASS; codec/Host libraries present, simulator/fixture targets and plugin directories absent, 0 tests |
+| Controller, fixture and transport, 100 repetitions each | 300 executions PASS, 82.68 s |
+| All six F2 and both L7a tests, 10 repetitions each | 80 executions PASS, 83.51 s |
+| ASan/UBSan: all six F2 and both L7a tests, 10 repetitions each | 80 executions PASS, 195.96 s; leak detection and fatal UB enabled |
+| Source/binary boundaries, frozen ABI/catalog, changed-C++ formatting, Python syntax, whitespace and local documentation links | PASS |
+
+The full suites retain camera-only acquisition/pairing, calibration, L2/L3/L4/L5,
+L6 processing, protocol/storage goldens and daemon/controller-free exact replay.
+No assertions, tests, sanitizer checks or physical activation guards were weakened.
+The existing full configure/build/CTest commands below were reused, with
+`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1` and `UBSAN_OPTIONS=halt_on_error=1`.
+Additional reproduction commands (same dependency cache/loader environment):
+
+```bash
+cmake -S . -B build/l7b2a-no-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+  -DMANTIS_BUILD_STUDIO=OFF -DBUILD_TESTING=OFF \
+  -DOpenCV_DIR="$PWD/build/l2-deps/opencv" -DPython3_EXECUTABLE=/usr/bin/python3
+cmake --build build/l7b2a-no-tests --parallel 4
+cmake --build build/l7b2a-no-tests --target help
+ctest --test-dir build/l7b2a-no-tests -N
+
+export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
+export OPENCV_OPENCL_RUNTIME=disabled
+ctest --test-dir build/l2 -R '^x1-f2-(controller|fixture|transport)$' \
+  --repeat until-fail:100 --output-on-failure
+ctest --test-dir build/l2 -R '^x1-(f2-|projected-)' \
+  --repeat until-fail:10 --output-on-failure
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+  ctest --test-dir build/l2-sanitized -R '^x1-(f2-|projected-)' \
+  --repeat until-fail:10 --output-on-failure
+python3 tests/contract/x1_f2_boundaries.py . \
+  build/l2/x1-f2-plugins/libmantis-x1-f2-fixture.so
+python3 tests/contract/boundaries.py .
+python3 tests/contract/l2/generate_catalog.py --check
+git diff --check
+```
+
+The environment is the same Ubuntu 25.10/GCC 15.2/x86_64 Debug environment
+recorded below. A standalone Studio-ON sample gave 314,854 V13 encode + standalone
+and streaming decode iterations/s, zero counted hot-loop heap allocations,
+GET_STATUS p50/p99/max 10.85/11.782/16 µs, STOP with blocked RUN acknowledgement
+17.843 µs, and 100 complete manual-clock lifetimes in 0.0285209 s. These are
+scheduler-sensitive software samples, not physical timings or throughput floors;
+the codec source is unchanged. Reproduce with the three standalone protocol,
+controller and transport test executables. Queue high-water remains 8/8, with
+separate STOP/heartbeat slots; parser remains 216 B with a 161 B collector.
+
+On this compiler/ABI, compiling the accepted and extracted headers for `sizeof`
+comparison gives Host 336 → 368 B, Snapshot 872 → 904 B and simulated Link
+7312 → 7472 B. Selection is 32 B and FiniteExecution 16 B. The per-fixture fixed
+increase is 224 B: two stored selections plus Link's virtual interface and bounded
+receive-barrier counters. No new per-instance heap ownership, worker, queue or
+image copy is added; the existing joined worker/function storage remains.
+Native ARM64 and the exact submitted SHA's five-job remote matrix remain
+independent-review gates. Real UART/USB HIL and hardware qualification remain blocked.
 
 ## Exact activation and mapping
 
@@ -222,9 +356,9 @@ explicit `MANTIS_X1_F2_RELEASE_FILE`; checks occur outside the priority lock and
 wake on abort. They establish deterministic filesystem-failure/ownership barriers.
 Protocol tests use the richer per-instance Injection structure directly.
 
-### Final local results
+### L7b-1 initial local results
 
-Final local verification on 2026-10-10:
+Historical implementation verification on 2026-10-10 (before R01/R02 acceptance):
 
 | Configuration/check | Result |
 | --- | --- |
@@ -396,8 +530,8 @@ alongside local validation on the environment described above; it is not a
 physical timing guarantee or a machine-specific throughput threshold. Admission
 barrier regressions require acknowledged STOP with a 100 ms caller budget while
 the callback remains blocked, with a 500 ms scheduler allowance on wall time.
-Independent review and the exact submitted SHA's five remote CI jobs remain
-required before acceptance.
+R01/R02 are included in the independently accepted L7b-1 SHA and five-job CI
+evidence recorded above. L7b-2a requires its own independent review/CI.
 
 ## Physical gates still blocked
 

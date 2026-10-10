@@ -2,7 +2,7 @@
 #define MANTIS_X1_PROJECTED_FIXTURE 1
 #include "../../../plugins/first-party/devices/x1/acquisition.hpp"
 #include "../x1-projected/views.hpp"
-#include "host.hpp"
+#include "link.hpp"
 #include "publication-test-hook.hpp"
 #include <fstream>
 #include <set>
@@ -197,8 +197,8 @@ struct Instance {
     Graph graph;
     sim::BenchConfig config;
     sim::Link link;
-    sim::Host host;
-    sim::Snapshot snapshot;
+    f2::Host host;
+    f2::Snapshot snapshot;
     Reference reference;
     std::mutex control;
     std::condition_variable wake;
@@ -213,7 +213,7 @@ struct Instance {
     int64_t dispatch_ns{};
     explicit Instance(std::unique_ptr<camera::Device> d)
         : camera(std::move(d)), graph(camera->config.profile, camera->cameras), config(configuration()),
-          host(link) {
+          host(link, sim::host_selection()) {
         sim::Injection f;
         if (auto fault = std::getenv("MANTIS_X1_F2_FAULT")) {
             std::string_view v = fault;
@@ -330,7 +330,7 @@ int enumerate(uint32_t t, MantisProjectedGraphEmitV1 emit, void *ctx) {
         return MANTIS_PL_OK;
     configuration();
     sim::Link link;
-    sim::Host host(link);
+    f2::Host host(link, sim::host_selection());
     host.discover(Clock::now() + std::chrono::milliseconds(t));
     auto config = camera::configuration();
     auto cameras = x1::assign(config.profile, config.backend->discover(config.profile));
@@ -359,7 +359,8 @@ int validate(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisP
     Instance::Call call(s);
     auto v = view<MantisProgramValidationV1>();
     v.error = view<MantisContractErrorV1>();
-    v.accepted = accepts(s, p) && sim::configuration_fits(s.snapshot, s.config);
+    v.accepted =
+        accepts(s, p) && f2::configuration_fits(s.snapshot, sim::host_selection(), s.config.execution());
     if (v.accepted)
         try {
             auto current = s.host.discover(Clock::now() + std::chrono::milliseconds(t));
@@ -393,7 +394,9 @@ int prepare(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisPr
     }
     auto v = view<MantisProgramValidationV1>();
     v.error = view<MantisContractErrorV1>();
-    v.accepted = accepts(s, p) && sim::configuration_fits(s.snapshot, s.config) && s.diagnostic != "prepare";
+    v.accepted = accepts(s, p) &&
+                 f2::configuration_fits(s.snapshot, sim::host_selection(), s.config.execution()) &&
+                 s.diagnostic != "prepare";
     if (v.accepted)
         try {
             auto current = s.host.discover(Clock::now() + std::chrono::milliseconds(t));
@@ -454,7 +457,7 @@ int start(void *ptr, const char *run, const char *generation, uint32_t t) {
         hf = s.host.fence();
     }
     try {
-        s.host.start(s.snapshot, s.config, s.intent == MANTIS_EMITTER_STATE_ON,
+        s.host.start(s.snapshot, s.config.execution(), s.intent == MANTIS_EMITTER_STATE_ON,
                      Clock::now() + std::chrono::milliseconds(t), hf);
         std::lock_guard lock(s.control);
         if (s.fence != f || s.inhibited)

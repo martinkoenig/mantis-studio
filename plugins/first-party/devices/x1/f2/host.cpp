@@ -1,219 +1,10 @@
 #include "host.hpp"
+#include <algorithm>
 #include <random>
 
-namespace x1::f2::simulation {
+namespace x1::f2 {
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
-uint64_t Link::now_locked() const {
-    return manual_
-               ? manual_now_
-               : static_cast<uint64_t>(
-                     std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - epoch_).count());
-}
-void Link::deliver_locked(const Frame &f) {
-    auto wire = encode(f);
-    if (!wire)
-        throw std::logic_error("Simulator invalid frame");
-    if (injection_.corrupt && f.kind == Class::response)
-        wire->bytes[wire->size - 3] ^= 0x80;
-    for (auto byte : wire->data())
-        if (auto decoded = receiver_.feed(byte, now_locked())) {
-            if (decoded->kind == Class::event) {
-                if (!injection_.lose_terminal || decoded->message != 0x8001)
-                    events_.push(*decoded);
-            } else if (decoded->message == 0x14)
-                stop_reply_ = *decoded;
-            else if (decoded->message == 0x12)
-                heartbeat_reply_ = *decoded;
-            else
-                replies_.push(*decoded);
-        }
-    wake_.notify_all();
-}
-void Link::progress_locked() {
-    auto now = now_locked();
-    controller_.advance(now);
-    if (delayed_ && now >= delayed_at_) {
-        auto f = *delayed_;
-        delayed_.reset();
-        deliver_locked(f);
-    }
-    if (delayed_event_ && now >= delayed_event_at_) {
-        auto f = *delayed_event_;
-        delayed_event_.reset();
-        deliver_locked(f);
-    }
-    while (auto f = controller_.event()) {
-        if (injection_.terminal_delay_us && f->message == 0x8001) {
-            delayed_event_ = *f;
-            delayed_event_at_ = now + injection_.terminal_delay_us;
-        } else
-            deliver_locked(*f);
-    }
-}
-bool Link::send(const Wire &wire) {
-    if (wire.size > max_wire)
-        return false;
-    std::lock_guard lock(mutex_);
-    if (injection_.fail_link)
-        return false;
-    progress_locked();
-    for (auto byte : wire.data())
-        if (auto f = endpoint_.feed(byte, now_locked())) {
-            auto found = layout(f->message);
-            if (found)
-                ++requests_[static_cast<size_t>(found - registry.data())];
-            wake_.notify_all();
-            auto response = controller_.receive(*f, now_locked());
-            if (injection_.snapshot_after_message == f->message) {
-                controller_.change_snapshot();
-                injection_.snapshot_after_message = 0;
-            }
-            if (injection_.reboot_after_message == f->message) {
-                controller_.reboot(0x8266000000000002);
-                injection_.reboot_after_message = 0;
-            }
-            if (!response)
-                continue;
-            if (injection_.block_message == f->message || (f->message == 0x14 && injection_.fail_stop))
-                continue;
-            if (injection_.drop_message == f->message && injection_.drops) {
-                --injection_.drops;
-                continue;
-            }
-            if (injection_.delay_us && f->request && f->message != 0x14) {
-                if (!delayed_) {
-                    delayed_ = *response;
-                    delayed_at_ = now_locked() + injection_.delay_us;
-                }
-            } else {
-                deliver_locked(*response);
-                if (injection_.duplicate && f->message != 0x14 && f->message != 0x12)
-                    deliver_locked(*response);
-            }
-        }
-    progress_locked();
-    return true;
-}
-std::optional<Frame> Link::receive(const Frame &q, Clock::time_point deadline) {
-    std::unique_lock lock(mutex_);
-    auto match = [&](const Frame &f) {
-        return f.kind == Class::response && f.message == q.message && f.request == q.request &&
-               f.session == q.session;
-    };
-    do {
-        progress_locked();
-        if (q.message == 0x14 || q.message == 0x12) {
-            auto &slot = q.message == 0x14 ? stop_reply_ : heartbeat_reply_;
-            if (slot) {
-                auto f = *slot;
-                slot.reset();
-                if (match(f))
-                    return f;
-            }
-        } else
-            while (auto f = replies_.pop())
-                if (match(*f))
-                    return f;
-        if (Clock::now() >= deadline || injection_.fail_link)
-            return {};
-        auto until = deadline;
-        if (!manual_) {
-            auto due = std::min(controller_.next_deadline(), delayed_ ? delayed_at_ : UINT64_MAX);
-            if (due != UINT64_MAX)
-                until = std::min(until, epoch_ + std::chrono::microseconds(due));
-        }
-        wake_.wait_until(lock, until);
-    } while (true);
-}
-std::optional<Frame> Link::event(Clock::time_point deadline) {
-    std::unique_lock lock(mutex_);
-    auto interrupted = interrupts_;
-    ++event_waits_;
-    wake_.notify_all();
-    do {
-        progress_locked();
-        if (interrupted != interrupts_)
-            return {};
-        if (!injection_.block_next)
-            if (auto f = events_.pop())
-                return f;
-        if (Clock::now() >= deadline || injection_.fail_link)
-            return {};
-        auto until = deadline;
-        if (!manual_ && controller_.next_deadline() != UINT64_MAX)
-            until = std::min(until, epoch_ + std::chrono::microseconds(controller_.next_deadline()));
-        wake_.wait_until(lock, until);
-    } while (true);
-}
-bool Link::wait_requests(Message message, uint64_t count, Clock::time_point deadline) {
-    std::unique_lock lock(mutex_);
-    auto l = layout(static_cast<uint16_t>(message));
-    if (!l)
-        return false;
-    return wake_.wait_until(lock, deadline,
-                            [&] { return requests_[static_cast<size_t>(l - registry.data())] >= count; });
-}
-bool Link::wait_events(uint64_t count, Clock::time_point deadline) {
-    std::unique_lock lock(mutex_);
-    return wake_.wait_until(lock, deadline, [&] { return event_waits_ >= count; });
-}
-void Link::saturate() {
-    std::lock_guard lock(mutex_);
-    Frame f;
-    f.kind = Class::response;
-    f.message = 3;
-    f.session = UINT64_MAX;
-    f.payload.size = 51;
-    for (unsigned i = 0; i < 8; ++i) {
-        replies_.push(f);
-        f.kind = Class::event;
-        events_.push(f);
-        f.kind = Class::response;
-    }
-}
-void Link::inject_event(const Frame &f) {
-    std::lock_guard lock(mutex_);
-    deliver_locked(f);
-}
-void Link::interrupt() {
-    std::lock_guard lock(mutex_);
-    ++interrupts_;
-    wake_.notify_all();
-}
-void Link::advance(uint64_t now) {
-    std::lock_guard lock(mutex_);
-    if (!manual_ || now < manual_now_)
-        throw std::invalid_argument("Manual clock advance");
-    manual_now_ = now;
-    progress_locked();
-    wake_.notify_all();
-}
-void Link::inject(const Injection &v) {
-    std::lock_guard lock(mutex_);
-    injection_ = v;
-    controller_.reject(v.reject_message, v.rejection);
-    controller_.cleanup_error(v.cleanup_error ? Result::internal_error : Result::ok);
-    wake_.notify_all();
-}
-Injection Link::injection() const {
-    std::lock_guard lock(mutex_);
-    return injection_;
-}
-void Link::mutate(const std::function<void(Controller &)> &f) {
-    std::lock_guard lock(mutex_);
-    progress_locked();
-    f(controller_);
-    progress_locked();
-    wake_.notify_all();
-}
-Link::Metrics Link::metrics() const {
-    std::lock_guard lock(mutex_);
-    return {endpoint_.accepted,        endpoint_.rejected + receiver_.rejected,
-            controller_.admitted_runs, controller_.completed_pulses,
-            controller_.stop_requests, std::max(endpoint_.high_water, receiver_.high_water),
-            replies_.high_water,       events_.high_water};
-}
 uint64_t fresh_identity() {
     // Linux libstdc++ random_device uses the OS entropy source, never a clock or PRNG seed.
     std::random_device r;
@@ -232,8 +23,11 @@ Result code(const Frame &f) {
     return static_cast<Result>(get(f.payload, 0, 2));
 }
 } // namespace
-Host::Host(Link &l, std::function<uint64_t()> identity)
-    : link_(l), identity_(identity ? std::move(identity) : fresh_identity) {
+Host::Host(Transport &transport, Selection selection, std::function<uint64_t()> identity)
+    : transport_(transport), selection_(selection),
+      identity_(identity ? std::move(identity) : fresh_identity) {
+    if (!selection_.valid())
+        throw ProtocolError(Result::invalid_argument, "Invalid explicit controller selection");
     heartbeat_ = std::jthread([this](std::stop_token s) { heartbeat(s); });
 }
 Host::~Host() {
@@ -242,7 +36,7 @@ Host::~Host() {
         heartbeat_.request_stop();
         changed_.notify_all();
     }
-    link_.interrupt();
+    transport_.interrupt();
     if (heartbeat_.joinable())
         heartbeat_.join();
 }
@@ -260,7 +54,7 @@ bool Host::retire_heartbeat(Clock::time_point deadline) {
         heartbeat_.request_stop();
         changed_.notify_all();
     }
-    link_.interrupt();
+    transport_.interrupt();
     std::unique_lock lock(control_);
     if (!changed_.wait_until(lock, deadline, [&] { return exited_; }))
         return false;
@@ -298,16 +92,29 @@ Frame Host::exchange(const Frame &q, Clock::time_point deadline, bool enabling, 
             std::lock_guard lock(control_);
             if (enabling && (inhibited_ || fence != fence_))
                 throw ProtocolError(Result::bad_state, "Fenced host operation");
-            if (!link_.send(*wire))
-                throw ProtocolError(Result::unavailable, "Simulated link unavailable");
+            auto submitted = transport_.submit(*wire);
+            if (submitted != TransportStatus::ready)
+                throw ProtocolError(submitted == TransportStatus::invalid ? Result::invalid_argument
+                                                                          : Result::unavailable,
+                                    "F2 transport submission failed");
             if (attempt == 0 && q.message == 0x13)
                 command_dispatch_ns_ =
                     std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch())
                         .count();
         }
-        auto r = link_.receive(q, std::min(deadline, Clock::now() + retry_interval));
+        auto r = transport_.receive(q, std::min(deadline, Clock::now() + retry_interval));
+        if (r.status == TransportStatus::interrupted) {
+            std::lock_guard lock(control_);
+            throw ProtocolError(enabling && (inhibited_ || fence != fence_) ? Result::bad_state
+                                                                            : Result::unavailable,
+                                "F2 response read interrupted");
+        }
+        if (r.status != TransportStatus::ready && r.status != TransportStatus::timeout)
+            throw ProtocolError(Result::unavailable, "F2 transport response unavailable");
         if (!r)
             continue;
+        if (!matches_response(*r, q))
+            throw ProtocolError(Result::stale_request, "Unmatched F2 transport response");
         if (!valid_message(*r))
             throw ProtocolError(Result::invalid_argument, "Malformed typed response");
         if (code(*r) != Result::ok)
@@ -361,7 +168,8 @@ Snapshot Host::discover(Clock::time_point deadline) {
             auto hello = exchange(request(Message::hello), deadline);
             Snapshot s;
             s.boot = get(hello.payload, 4, 8);
-            if (get(hello.payload, 12, 4) != BenchConfig::controller)
+            s.selection = selection_;
+            if (get(hello.payload, 12, 4) != selection_.controller_id)
                 throw ProtocolError(Result::unsupported, "Controller identity mismatch");
             s.global = exchange(request(Message::capabilities), deadline);
             s.generation = get(s.global.payload, 40, 8);
@@ -369,10 +177,11 @@ Snapshot Host::discover(Clock::time_point deadline) {
                 throw ProtocolError(Result::unsupported, "Simulation capability mismatch");
             auto query = [&](Message m) {
                 auto q = request(m);
+                q.payload.bytes[0] = selection_.channel_index;
                 put(q.payload, 1, 8, s.generation);
                 auto r = exchange(q, deadline);
-                if (get(r.payload, 4, 8) != s.generation ||
-                    get(r.payload, 12, 8) != BenchConfig::channel_uid || r.payload.bytes[20] != 0)
+                if (get(r.payload, 4, 8) != s.generation || get(r.payload, 12, 8) != selection_.channel_uid ||
+                    r.payload.bytes[20] != selection_.channel_index)
                     throw ProtocolError(Result::snapshot_changed, "Mixed snapshot");
                 return r;
             };
@@ -382,9 +191,10 @@ Snapshot Host::discover(Clock::time_point deadline) {
             s.calibration_status = query(Message::calibration);
             if (s.status.payload.bytes[21] != 4 || s.status.payload.bytes[22] > 1 ||
                 s.status.payload.bytes[23] != 2 || s.calibration_status.payload.bytes[21] != 2 ||
-                s.calibration_status.payload.bytes[23] != 1 ||
-                get(s.calibration_status.payload, 32, 4) != BenchConfig::board ||
-                !get(s.calibration_status.payload, 36, 4))
+                s.calibration_status.payload.bytes[23] != selection_.calibration_scope ||
+                get(s.calibration_status.payload, 32, 4) != selection_.board_revision ||
+                !get(s.calibration_status.payload, 36, 4) ||
+                get(s.calibration_status.payload, 44, 2) != selection_.calibration_provenance)
                 throw ProtocolError(Result::unavailable, "Synthetic readiness/calibration unavailable");
             s.calibration = get(s.calibration_status.payload, 24, 8);
             if (s.channel.payload.bytes[63] != 1 || get(s.channel.payload, 21, 2) != 3 ||
@@ -409,8 +219,10 @@ Snapshot Host::discover(Clock::time_point deadline) {
     }
     throw ProtocolError(Result::snapshot_changed, "Complete discovery retry limit");
 }
-bool configuration_fits(const Snapshot &s, const BenchConfig &c) {
-    if (!c.valid() || !s.generation || !s.boot || !s.calibration || s.uid != BenchConfig::channel_uid)
+bool configuration_fits(const Snapshot &s, const Selection &selection, const FiniteExecution &c) {
+    if (!selection.valid() || !c.valid() || !s.generation || !s.boot || !s.calibration ||
+        !valid_message(s.channel) || !valid_message(s.global) || s.uid != selection.channel_uid ||
+        s.selection != selection)
         return false;
     auto &p = s.channel.payload;
     auto &g = s.global.payload;
@@ -424,11 +236,11 @@ bool configuration_fits(const Snapshot &s, const BenchConfig &c) {
            c.pulses <= get(p, 55, 4) && c.pulses <= get(g, 32, 4) && c.high_us <= get(p, 59, 4) &&
            c.duration_us() <= get(g, 36, 4) * 1'000;
 }
-Association Host::start(const Snapshot &s, const BenchConfig &config, bool on, Clock::time_point deadline,
+Association Host::start(const Snapshot &s, const FiniteExecution &config, bool on, Clock::time_point deadline,
                         uint64_t expected_fence) {
     resume_heartbeat(deadline);
-    if (!configuration_fits(s, config))
-        throw ProtocolError(Result::limit_exceeded, "Invalid bench configuration");
+    if (!configuration_fits(s, selection_, config))
+        throw ProtocolError(Result::limit_exceeded, "Invalid finite configuration");
     auto fresh = discover(deadline);
     if (fresh.boot != s.boot || fresh.generation != s.generation || fresh.calibration != s.calibration)
         throw ProtocolError(Result::snapshot_changed, "Prepared snapshot changed");
@@ -463,7 +275,7 @@ Association Host::start(const Snapshot &s, const BenchConfig &config, bool on, C
         return association();
     }
     auto p = request(Message::configure).payload;
-    p.bytes[0] = BenchConfig::channel;
+    p.bytes[0] = selection_.channel_index;
     put(p, 1, 4, config.current_ua);
     put(p, 5, 4, config.period_us);
     put(p, 9, 4, config.high_us);
@@ -516,7 +328,7 @@ void Host::heartbeat(std::stop_token token) {
 }
 void Host::service_heartbeat() {
     std::unique_lock heartbeat(heartbeat_gate_, std::try_to_lock);
-    if (!heartbeat.owns_lock() || link_.injection().disable_heartbeat)
+    if (!heartbeat.owns_lock())
         return;
     Association a;
     uint64_t f;
@@ -546,7 +358,12 @@ std::optional<Payload> Host::terminal(Clock::time_point deadline) {
         return valid_terminal(p.data()) && get(p, 0, 8) == a.boot && get(p, 8, 8) == a.session &&
                get(p, 16, 8) == a.execution && get(p, 24, 4) == a.arm;
     };
-    if (auto event = link_.event(std::min(deadline, Clock::now() + 5ms))) {
+    auto event = transport_.event(std::min(deadline, Clock::now() + 5ms));
+    if (event.status == TransportStatus::interrupted)
+        return {};
+    if (event.status != TransportStatus::ready && event.status != TransportStatus::timeout)
+        throw ProtocolError(Result::unavailable, "F2 event transport unavailable");
+    if (event) {
         if (f != fence())
             return {};
         if (event->message == 0x8001 && !valid_message(*event))
@@ -558,7 +375,7 @@ std::optional<Payload> Host::terminal(Clock::time_point deadline) {
             return event->payload;
         }
     }
-    if (f != fence() || link_.injection().block_next || Clock::now() + 1ms >= deadline)
+    if (f != fence() || Clock::now() + 1ms >= deadline)
         return {};
     // Bounded read-only reconciliation; never submit another RUN_FINITE.
     Frame status;
@@ -609,7 +426,7 @@ bool Host::stop(Clock::time_point deadline) {
     // No ordinary lock, no event slot, no heartbeat backlog. Dedicated response slot.
     auto q = request(Message::stop);
     auto wire = encode(q);
-    if (!link_.send(*wire)) {
+    if (transport_.submit(*wire) != TransportStatus::ready) {
         std::lock_guard lock(control_);
         stop_error_ = Result::unavailable;
         return false;
@@ -619,13 +436,17 @@ bool Host::stop(Clock::time_point deadline) {
         stop_dispatch_ns_ =
             std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count();
     }
-    link_.interrupt();
-    auto r = link_.receive(q, deadline);
-    auto error = !r ? Result::timeout : !valid_message(*r) ? Result::invalid_argument : code(*r);
+    transport_.interrupt();
+    auto r = transport_.receive(q, deadline);
+    auto error = r.status != TransportStatus::ready && r.status != TransportStatus::timeout
+                     ? Result::unavailable
+                 : !r                                             ? Result::timeout
+                 : !matches_response(*r, q) || !valid_message(*r) ? Result::invalid_argument
+                                                                  : code(*r);
     {
         std::lock_guard lock(control_);
         stop_error_ = error;
     }
     return error == Result::ok && r->payload.bytes[4] == 2;
 }
-} // namespace x1::f2::simulation
+} // namespace x1::f2
