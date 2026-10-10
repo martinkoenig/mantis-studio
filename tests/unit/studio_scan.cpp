@@ -20,6 +20,7 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QWheelEvent>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 
@@ -109,6 +110,79 @@ StudioResult snapshot(QString project = "/fixture/Scan-A.mantis", bool active = 
     e->set_component("fixture");
     e->set_message("No physical readiness published");
     return r;
+}
+// Exercise the production DTO projection, not a synthetic scan/job association.
+void jobAuthority(ScanModel &m, Observed &b, const std::function<void()> &presentation = {}) {
+    const auto verify = [&] {
+        check(m.data()["processingStatus"] == "Not reported",
+              "Runtime-wide inventory invented scan processing authority");
+        for (const auto &v : m.data()["jobs"].toList()) {
+            const auto row = v.toMap();
+            const bool current = m.data()["confirmed"].toBool();
+            check(row["stateConfirmed"].toBool() == current &&
+                      row["state"].toString().startsWith("Last known: ") == !current,
+                  "Job state freshness disagrees with strict snapshot confirmation");
+        }
+        if (presentation)
+            presentation();
+    };
+    for (const auto &states :
+         {QStringList{"Completed", "Running"}, QStringList{"Running", "Completed"}, QStringList{"Running"}}) {
+        auto r = snapshot();
+        r.snapshot->clear_jobs();
+        for (int i = 0; i < states.size(); ++i) {
+            auto *j = r.snapshot->add_jobs();
+            j->set_id("unrelated-runtime-job-" + std::to_string(i));
+            j->set_name("Background task");
+            j->set_state(states[i].toStdString());
+        }
+        b.applyResult(r);
+        verify();
+        const auto rows = m.data()["jobs"].toList();
+        check(rows.size() == states.size(), "Runtime-wide job inventory lost");
+        for (int i = 0; i < rows.size(); ++i)
+            check(rows[i].toMap()["id"] == "unrelated-runtime-job-" + QString::number(i) &&
+                      rows[i].toMap()["state"] == states[i],
+                  "Job inventory reordered or associated by name/state");
+    }
+    StudioResult offline;
+    offline.issues.push_back(
+        {"snapshot", "Offline", mantis::Error{mantis::Status::io, "Offline", "wire.fixture"}});
+    b.applyResult(offline);
+    verify();
+    check(m.data()["jobs"].toList()[0].toMap()["state"] == "Last known: Running",
+          "Disconnected running job lost its per-row stale qualifier");
+    check(m.data()["artifacts"].toList()[0].toMap()["state"] == "FINALIZED",
+          "Immutable artifact state incorrectly qualified as a current job");
+    StudioResult unrelated;
+    unrelated.issues.push_back(
+        {"artifact", "Refused", mantis::Error{mantis::Status::io, "Refused", "wire.fixture"}});
+    b.applyResult(unrelated);
+    verify();
+    check(!m.data()["confirmed"].toBool(), "Non-snapshot result confirmed old job state");
+    b.applyResult(snapshot());
+    verify();
+    check(m.data()["jobs"].toList()[0].toMap()["state"] == "Running",
+          "Confirmed reconnect retained stale qualifier");
+    auto malformed = snapshot();
+    malformed.snapshot->clear_jobs();
+    malformed.snapshot->add_jobs()->set_state("Running"); // No authority ID.
+    malformed.snapshot->add_jobs()->set_id("state-unavailable");
+    b.applyResult(malformed);
+    verify();
+    check(m.data()["jobs"].toList().size() == 1 &&
+              m.data()["jobs"].toList()[0].toMap()["id"] == "state-unavailable" &&
+              m.data()["jobs"].toList()[0].toMap()["state"] == "Unknown",
+          "Malformed production job invented an ID or execution state");
+    auto empty = snapshot("/fixture/Scan-B.mantis");
+    empty.snapshot->clear_jobs();
+    b.applyResult(empty);
+    verify();
+    check(m.data()["jobs"].toList().empty(), "Project B inherited project A jobs");
+    b.applyResult({});
+    verify();
+    b.applyResult(snapshot());
+    verify();
 }
 void modelTests() {
     ScanModel m;
@@ -217,6 +291,8 @@ void modelTests() {
     check(m.children().empty(), "Read-only model owns timer/worker");
     Observed actual;
     m.setBridge(&actual);
+    check(m.data()["jobs"].toList().empty() && m.data()["processingStatus"] == "Not reported",
+          "Production bridge without snapshot invented processing");
     actual.applyResult(snapshot());
     check(m.data()["confirmed"].toBool() && m.data()["captureActive"].toBool(),
           "Production bridge DTO signal seam failed");
@@ -240,6 +316,27 @@ void modelTests() {
           "Unrelated snapshot erased artifact-phase error");
     actual.applyResult(snapshot("/fixture/Scan-A.mantis", false));
     check(m.data()["captureStatus"] == "Idle", "Production confirmed idle misclassified");
+    jobAuthority(m, actual);
+    m.setBridge(&p);
+    p.setProperty("hasSnapshot", false);
+    p.setProperty("jobs", QVariantList{QVariantMap{{"id", "old-job"}, {"state", "Running"}}});
+    emit p.changed();
+    check(m.data()["jobs"].toList().empty() && m.data()["processingStatus"] == "Not reported",
+          "No snapshot exposed job state");
+    p.setProperty("hasSnapshot", true);
+    p.setProperty("project", "A");
+    for (const auto &invalid :
+         {QVariant("not a list"), QVariant(QVariantList{}),
+          QVariant(QVariantList{42, QVariantMap{{"state", "Running"}}, QVariantMap{{"id", 42}}})}) {
+        p.setProperty("jobs", invalid);
+        emit p.changed();
+        check(m.data()["jobs"].toList().empty() && m.data()["processingStatus"] == "Not reported",
+              "Malformed/empty job inventory invented IDs or processing");
+    }
+    p.setProperty("jobs", QVariantList{QVariantMap{{"id", "unknown-state"}, {"state", 42}}});
+    emit p.changed();
+    check(m.data()["jobs"].toList()[0].toMap()["state"] == "Unknown",
+          "Malformed job state fabricated execution");
 }
 QQuickItem *find(QQuickItem *p, const QString &name) {
     if (p->objectName() == name)
@@ -477,6 +574,55 @@ void interactions(QQuickWindow *w, Observed &b, const QString &out) {
     check(b.commands == 0 && b.capturing(), "Scan initiated runtime commands or stopped active capture");
     capture(w, out, "live-classic-roundtrip");
 }
+void jobPresentation(QQuickWindow *w, Observed &b, const QString &out) {
+    auto *r = item(w, "scanWorkspace");
+    w->resize(1920, 1080);
+    w->setProperty("uiMode", "live");
+    settle();
+    const auto verify = [&] {
+        settle();
+        check(item(w, "scanStatusProcessing")->property("text") == "Not reported",
+              "Production status strip claimed an unscoped processing state");
+        const auto timeline = item(w, "scanTimelineProcessing")->property("text").toString();
+        check(timeline.contains("Scan processing: Not reported") &&
+                  timeline.contains("runtime jobs are not linked to this timeline") &&
+                  !timeline.contains("Running") && !timeline.contains("Completed"),
+              "Production timeline implied scan/job execution association");
+    };
+    jobAuthority(*model(w), b, verify);
+    StudioResult offline;
+    offline.issues.push_back(
+        {"snapshot", "Offline", mantis::Error{mantis::Status::io, "Offline", "wire.fixture"}});
+    b.applyResult(offline);
+    verify();
+    capture(w, out, "job-authority-stale-1920x1080");
+    for (const auto &mode : {"mock", "hybrid"}) {
+        w->setProperty("uiMode", mode);
+        if (QString(mode) == "hybrid")
+            click(w, "scanDemoSource", true);
+        verify();
+        check(!model(w)->bridge() && model(w)->data()["jobs"].toList().empty(),
+              "Mock/demo retained live job inventory");
+    }
+    click(w, "scanLiveSource", true);
+    verify();
+    check(model(w)->data()["jobs"].toList()[0].toMap()["state"] == "Last known: Running",
+          "Returning to live promoted an old job to current");
+    b.applyResult(snapshot());
+    verify();
+    check(model(w)->data()["jobs"].toList()[0].toMap()["state"] == "Running",
+          "Production shell reconnect did not clear stale job qualifier");
+    auto empty = snapshot("/fixture/New-project.mantis");
+    empty.snapshot->clear_jobs();
+    b.applyResult(empty);
+    verify();
+    check(model(w)->data()["jobs"].toList().empty(), "Shell project switch inherited old jobs");
+    r->setProperty("bridge", QVariant::fromValue<QObject *>(nullptr));
+    verify();
+    check(model(w)->data()["jobs"].toList().empty(), "Waiting shell retained old jobs");
+    r->setProperty("bridge", QVariant::fromValue<QObject *>(&b));
+    check(b.commands == 0, "Job presentation issued a runtime command");
+}
 void stress(QQuickWindow *w, Observed &b, const QString &out) {
     w->setProperty("uiMode", "live");
     b.applyResult(snapshot());
@@ -650,8 +796,10 @@ int main(int argc, char **argv) {
                 wire(window, *publicBridge, out);
             else if (task == "native")
                 native(window, observed, out);
-            else
+            else {
                 interactions(window, observed, out);
+                jobPresentation(window, observed, out);
+            }
             check(observed.commands == 0, "Scan invoked runtime mutation/data request");
         }
         check(warnings.empty(), "Qt/QML warning in Scan tests");

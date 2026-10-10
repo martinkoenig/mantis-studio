@@ -12,6 +12,7 @@ uses the actual application/runtime failure path.
 | [After, Mock 1536×1024](mock-1536x1024.png) | Reference-aligned camera/viewport/setup/notes/status/dock hierarchy, labelled illustrations |
 | [Unreachable Live 1080×720](unreachable-live-1080x720.png) | Actual CLI startup, unknown runtime/capture, usable compact viewport and Classic entry |
 | [Stale Live 1920×1080](stale-1920x1080.png) | Explicit last-known capture, no live frames or fabricated readiness |
+| [Job authority correction, stale 1920×1080](job-authority-stale-1920x1080.png) | M3B-F01: actual disconnected Main.qml, Processing Not reported, Timeline explicitly unlinked from runtime-wide jobs |
 | [Hybrid Live 3440×1440](hybrid-live-3440x1440.png) | Elastic center, bounded rails, separate Live / Demo source controls |
 | [Compact Setup 1080×720](compact-setup-1080x720.png) | Visible pane controls, independently scrolling settings and stationary Notes |
 
@@ -31,3 +32,8 @@ Illustrations are labelled and never imply measured coverage. Compact pages use
 pane selection; the shared accepted shell/nav typography remains unchanged.
 See [complete validation and limitations](../../validation-m3b.md) and
 [local verification receipt](local-verification.json).
+
+M3B-F01 replaces the stale matrix capture and adds the production-QML regression
+frame above. Other versioned images retain the original M3b implementation evidence.
+The correction's complete local checks are recorded separately in
+[the correction receipt](correction-verification.json).

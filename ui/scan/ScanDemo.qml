@@ -8,6 +8,6 @@ QtObject {
         selectedArtifact: "None · illustrative study", latestPointCloud: "No runtime artifact", runtimeError: "", issues: [], diagnostics: [],
         devices: [{id: "illustrative-scanner", name: "Stereo scanner study", source: "mock", actionable: false, state: "Illustrative · hardware unavailable", detail: "Local presentation sample"}],
         artifacts: [{id: "illustrative-housing", label: "Mechanical housing study", name: "Study", type: "Illustration", state: "Demo / Mock", source: "mock", actionable: false, detail: "Unsequenced illustration · not a recorded capture"}],
-        jobs: [], commandsAllowed: false, canOpenClassicAcquisition: false
+        jobs: [], processingStatus: "Not reported", commandsAllowed: false, canOpenClassicAcquisition: false
     })
 }

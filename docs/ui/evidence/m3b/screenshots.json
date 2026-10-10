@@ -40,13 +40,13 @@
     {
       "file": "stale-1920x1080.png",
       "origin": "build/qt64/ui-m3b/matrix/stale-1920x1080.png",
-      "description": "Injected production bridge DTO with retained last-known capture and artifacts",
+      "description": "M3B-F01 corrected injected production bridge DTO: retained last-known capture/artifacts, Processing Not reported; runtime jobs explicitly unlinked from Timeline",
       "physical_size": [
         1920,
         1080
       ],
       "dpr": 1,
-      "sha256": "99c2916423b8889e1e8a88e95177e90ffd8e48c9fd8b88dd72e9a598684d5d11"
+      "sha256": "ba05ec715962d503614c496399c1db1dc1c9cd9b0b74123ecee3b64c2f4081be"
     },
     {
       "file": "hybrid-live-3440x1440.png",
@@ -69,6 +69,17 @@
       ],
       "dpr": 1,
       "sha256": "e5362566783855281261579828418dd95cf78b4c247721d0d51f27cdd9d19cb7"
+    },
+    {
+      "file": "job-authority-stale-1920x1080.png",
+      "origin": "build/qt64/ui-m3b/qml/job-authority-stale-1920x1080.png",
+      "description": "M3B-F01 corrected actual production shell: disconnected retained Running job remains Last known in ScanModel; Processing Not reported and no job state in Timeline",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "dpr": 1,
+      "sha256": "e4c2d08b4520b4014f4ed9b517d3951ca4d5bce4a7a34c0da99c15d06c60ff9b"
     }
   ]
 }

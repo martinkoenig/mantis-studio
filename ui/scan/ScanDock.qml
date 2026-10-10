@@ -74,7 +74,7 @@ Item {
                         Rectangle { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 10; height: 1; color: Theme.border }
                         ScanText { anchors.centerIn: parent; text: "No timeline contract"; font.pixelSize: 11; padding: 6; background: Rectangle { color: Theme.canvas } }
                     }
-                    ScanText { text: root.workspace.presentation.jobs.length ? root.workspace.presentation.jobs[0].name + " · " + root.workspace.presentation.jobs[0].state : "Processing: not reported"; Layout.fillWidth: true; font.pixelSize: 11; maximumLineCount: 1; elide: Text.ElideRight }
+                    ScanText { objectName: "scanTimelineProcessing"; text: "Scan processing: " + root.workspace.presentation.processingStatus + " · runtime jobs are not linked to this timeline"; Layout.fillWidth: true; font.pixelSize: 11 }
                 }
             }
             Rectangle {

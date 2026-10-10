@@ -71,6 +71,11 @@ QVariantList inventory(const QVariant &value, const QString &kind, bool confirme
             item["name"] = type == "org.mantis.RawCapture" ? "RawCapture" : "PointCloud";
             item["detail"] = display(id, 80);
         } else {
+            // Runtime-wide inventory has no typed association with the selected scan.
+            // Qualify each retained state rather than relying on the page freshness banner.
+            item["stateConfirmed"] = confirmed;
+            if (!confirmed)
+                item["state"] = "Last known: " + item["state"].toString();
             item["detail"] = display(row.value("diagnostics"), 512, {});
         }
         out.push_back(item);
@@ -145,6 +150,7 @@ void ScanModel::refresh() {
         {"runtimeError", display(field("error"), 512, {})},
         {"canOpenClassicAcquisition", true},
         {"commandsAllowed", false},
+        {"processingStatus", "Not reported"}, // No scan-specific processing contract.
         {"readiness", "Unknown · no readiness contract"},
         {"previewStatus", confirmed && flag(field("dualPreview")) ? "Available in Classic Acquisition"
                                                                   : "Not reported · Classic Acquisition"}};

@@ -35,6 +35,7 @@ retry/loading and project/preview invalidation remain unchanged.
 | Runtime connection/capture | Confirmed bridge snapshot | Read-only; capture active only while confirmed |
 | Device summary | Advertised capture-capable top-level descriptors | Descriptor discovered, hardware readiness unknown |
 | Artifacts/jobs/issues | Existing structured bridge properties | Passive bounded source-order rows; no replay/load/cancel |
+| Scan processing | No typed job-to-scan association or processing-state contract | Not reported; runtime-wide jobs never establish scan execution |
 | Live Scanner/Replay, display/setup/dock tabs | Local QML selection | Presentation only; no execution change |
 | Classic Acquisition entry | Shell route | Navigation permission, separate from command permission |
 | Mock or hybrid Demo / Mock | Dedicated ScanDemo fixture | Illustrative, permanently non-actionable |
@@ -62,6 +63,7 @@ There are no commands, client, RPC, timer, thread, pixel/Published buffers or re
 | source, hasSnapshot, confirmed, freshness | Model source is live; strict bool snapshot AND connection confirms current state; otherwise waiting or explicit last-known |
 | project, projectEpoch, identityValid | Sanitized display identity; monotonic invalidation token for full raw identity transitions including A→B→A and source replacement |
 | captureActive, lastKnownCaptureActive, captureStatus, captureStatusText | Confirmed active/idle or unknown, separately retaining last-known evidence |
+| processingStatus | Always Not reported until a typed scan-specific processing contract exists; independent of job count/order/state |
 | busy, runtimeError, issues | Existing bridge operation/error state; issues preserve phase/kind/integer code/component/message; unrelated success cannot erase bridge phase policy |
 | devices, artifacts, jobs, diagnostics | Bounded live/source-tagged read-only inventories, preserving source order |
 | selectedArtifact, latestPointCloud | Advertised finalized cloud status labels only; “last advertised” means source order, not timestamp/chronology; never loads a packet |
@@ -76,6 +78,16 @@ RawCapture/PointCloud records. Missing/wrong map/list/string/bool types have
 explicit empty/unknown semantics. Display strings are bounded (normally 192,
 identity labels 80, status 64, errors/diagnostics/project 512) and plain text;
 control/bidi format characters are removed from display.
+
+Jobs are runtime-wide advertised inventory, with no inferred association to the
+selected scan, artifact or timeline. Each job row's `stateConfirmed` follows the
+model's strict `confirmed` field; disconnected retained `state` text is prefixed
+`Last known:`, including unknown states. A new confirmed snapshot replaces the
+inventory and removes stale qualifiers. The fixed qualifier is added after the
+64-character source-state display bound. Immutable recorded artifact states remain
+unchanged. The status strip never derives Processing from any job. The Timeline
+reports scan processing as unavailable and explicitly states that runtime jobs
+are not linked to it; it displays no job name or execution state.
 
 Exact inventory IDs up to 4096 UTF-16 code units are retained, never truncated into
 keys; oversized/empty IDs are omitted, repeated IDs deduplicated in source order.

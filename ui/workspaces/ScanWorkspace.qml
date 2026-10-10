@@ -131,13 +131,13 @@ FocusScope {
                 id: statuses
                 anchors.fill: parent; anchors.margins: 10
                 Repeater {
-                    model: [{name: "Capture", value: root.presentation.captureStatus}, {name: "Processing", value: root.presentation.jobs.length ? root.presentation.jobs[0].state : "Not reported"}, {name: "Preview", value: root.illustrative ? "Illustrative" : "Classic view"}, {name: "Tracking", value: "Unavailable"}, {name: "Points / distance", value: "Unavailable"}, {name: "CPU / GPU", value: "Not reported"}]
+                    model: [{name: "Capture", value: root.presentation.captureStatus}, {name: "Processing", value: root.presentation.processingStatus}, {name: "Preview", value: root.illustrative ? "Illustrative" : "Classic view"}, {name: "Tracking", value: "Unavailable"}, {name: "Points / distance", value: "Unavailable"}, {name: "CPU / GPU", value: "Not reported"}]
                     Item {
                         required property var modelData
                         required property int index
                         x: index * (statuses.width + 12) / 6
                         width: Math.max(0, (statuses.width - 60) / 6); height: statuses.height
-                        ScanText { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.topMargin: 4; text: modelData.value; color: Theme.text; font.pixelSize: 12; wrapMode: Text.NoWrap; elide: Text.ElideRight }
+                        ScanText { objectName: "scanStatus" + modelData.name; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.topMargin: 4; text: modelData.value; color: Theme.text; font.pixelSize: 12; wrapMode: Text.NoWrap; elide: Text.ElideRight }
                         ScanText { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; text: modelData.name; font.pixelSize: 10; wrapMode: Text.NoWrap; elide: Text.ElideRight }
                     }
                 }

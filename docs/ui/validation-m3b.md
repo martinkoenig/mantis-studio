@@ -122,3 +122,27 @@ Software/native UI evidence does not validate real sensor timing, laser safety,
 calibration accuracy, ARM64 locally, or Windows/macOS. The known backend
 project/replay isolation gate remains pending. No scope deviation introduces
 capture/replay commands, new views/transport, notes persistence or M3c/d/e work.
+
+## Independent-review correction M3B-F01
+
+The reviewed `cbfd43fe5e19e94cfbc30f32841bf85f6841b2b2` incorrectly used
+the first runtime-wide job as scan Processing and timeline execution evidence.
+The correction keeps scan Processing `Not reported` and removes job execution
+states from the Timeline, explicitly stating that runtime jobs are not linked to
+it. ScanModel retains bounded source-order job inventory and prefixes every stale
+job state `Last known:` based on strict snapshot confirmation. Artifact states,
+bridge/transport, Classic Acquisition and CI configuration remain unchanged.
+
+The existing production-model and Main.qml tests now cover Completed/Running in
+both orders, an unrelated Running job, disconnect/non-snapshot results/reconnect,
+invalid IDs and missing states, empty inventories, absent/malformed model fields,
+project replacement, and mock/hybrid detach/rebind. Actual status-strip and
+Timeline text assertions reject scan-processing claims at each transition.
+The new unaltered [stale shell screenshot](evidence/m3b/job-authority-stale-1920x1080.png)
+was inspected for both labels; the stale matrix evidence is also refreshed.
+
+All five build configurations and their full suites are rerun for the correction,
+using the commands and sanitizer settings above. The original receipt records the
+initial M3b verification; [the correction receipt](evidence/m3b/correction-verification.json)
+records the reviewed parent, new results and source/log checksums. No tests,
+sanitizer suppression, CI job, or capture/replay authority are weakened.
