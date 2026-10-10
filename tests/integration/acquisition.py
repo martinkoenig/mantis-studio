@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         socket_probe.bind(("127.0.0.1", 0)); port = socket_probe.getsockname()[1]
     env = dict(os.environ, MANTIS_TOKEN="acquisition-" + os.urandom(16).hex(), MANTIS_PORT=str(port),
                MANTIS_X1_PROFILE=str(root / "profile.json"), MANTIS_X1_FAKE="startup-left" if packed else "startup-right",
-               # Phase fixtures retain synthetic timing facts but use finite-rate delivery.
+               # Every paced fixture retains its native facts but uses non-catch-up delivery.
                # Unpaced fixtures intentionally stress algorithms in unit tests; a public
                # successful LOSSLESS capture must not depend on CPU-speed production.
                MANTIS_X1_FAKE_PACE="1", QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
@@ -170,7 +170,11 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         daemon = start()
         drifting = json.loads(subprocess.check_output([sys.executable,
             str(Path(__file__).resolve().parents[2] / "tools/validate_x1_pairing.py"),
-            "--allow-fixture", "--duration", "0.2"], env=dict(env, PYTHONPATH=str(build / "python")), text=True))
+            "--allow-fixture", "--duration", "0.2", "--minimum-framesets", "32"],
+            env=dict(env, PYTHONPATH=str(build / "python")), text=True))
+        # The native 25-ppm drift crosses half-period after ~24 pairs. Host
+        # delivery under load may need longer than 0.2s to reach that observation.
+        assert drifting["verification"]["framesets"] >= 32
         assert int(drifting["capture"]["diagnostics"]["steady_state_unmatched_left"]) > 0
         assert drifting["short_pairing_check"] == "PASS"
         assert drifting["verification"]["raw_integrity"] == drifting["verification"]["replay"] == "PASS"

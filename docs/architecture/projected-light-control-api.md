@@ -352,12 +352,14 @@ phase-jitter-left `.segment.part` write by 150 ms reproduced the exact CI failur
 at the same validator start. This demonstrates storage/scheduler-stall sensitivity;
 it does not claim an observed 150 ms stall on GitHub's runner.
 
-Integration tests now explicitly set `MANTIS_X1_FAKE_PACE=1`. This option applies
-only to the fake backend's phase fixture delivery and uses the profile's finite
-frame period. Native timestamps, sequence values and pixel bytes are unchanged;
+Integration tests explicitly set `MANTIS_X1_FAKE_PACE=1`. This option applies
+to every fake camera fixture, including startup-left/right and phase delivery,
+and uses the profile's finite frame period after the previous callback completes.
+Native timestamps, sequence values and pixel bytes are unchanged;
 scheduling delays do not generate a catch-up burst or discard an observation.
-Default algorithm unit fixtures remain unpaced. The Linux camera backend, camera
-Session, 32-entry queue, 50 ms admission deadline, lossless failures and all existing
+With the option unset or `0`, phase algorithm fixtures remain unpaced and other
+fixtures retain their original cumulative schedule for stress tests. The Linux
+camera backend, camera Session, 32-entry queue, 50 ms admission deadline, lossless failures and all existing
 assertions remain unchanged. Ten corrected repetitions with the identical injected
 150 ms write stall passed. No fault injection library is installed or used by CI.
 

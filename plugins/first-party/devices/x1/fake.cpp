@@ -1,3 +1,4 @@
+#include "fake.hpp"
 #include "media.hpp"
 #include <algorithm>
 #include <cstdlib>
@@ -17,14 +18,25 @@ class FakeCamera final : public Camera {
     std::chrono::steady_clock::time_point due_;
     std::mutex mutex_;
     std::condition_variable ready_;
+    std::shared_ptr<const FakeTiming> timing_;
+    auto now() const { return timing_ ? timing_->now() : std::chrono::steady_clock::now(); }
+    std::cv_status wait_until(std::chrono::steady_clock::time_point target) {
+        if (timing_) {
+            timing_->wait_until(target);
+            return std::cv_status::timeout;
+        }
+        std::unique_lock lock(mutex_);
+        return ready_.wait_until(lock, target);
+    }
   public:
-    FakeCamera(Mode mode, std::string scenario, bool right, std::string context, bool paced_fixture)
+    FakeCamera(Mode mode, std::string scenario, bool right, std::string context, bool paced_fixture,
+               std::shared_ptr<const FakeTiming> timing)
         : mode_(std::move(mode)), scenario_(std::move(scenario)), context_(std::move(context)), right_(right),
-          paced_fixture_(paced_fixture) {}
+          paced_fixture_(paced_fixture), timing_(std::move(timing)) {}
     void start() override {
         if (scenario_ == (right_ ? "streamon-right" : "streamon-left"))
             throw std::runtime_error(context_ + " STREAMON failed: Broken pipe (errno 32)");
-        running_ = true; delayed_ready_ = false; sequence_ = 0; due_ = std::chrono::steady_clock::now(); }
+        running_ = true; delayed_ready_ = false; sequence_ = 0; due_ = now(); }
     void stop() noexcept override {
         if (running_ && scenario_ == (right_ ? "streamoff-right" : "streamoff-left")) {
             try { diagnostics_["streamoff_error"] = context_ + " STREAMOFF failed: Input/output error (errno 5)"; } catch (...) {}
@@ -34,24 +46,22 @@ class FakeCamera final : public Camera {
     Metadata diagnostics() const override { return diagnostics_; }
     bool next(uint32_t timeout, const std::function<void(const FrameView &)> &emit) override {
         if (!running_) throw std::runtime_error("Camera stopped");
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
+        const auto deadline = now() + std::chrono::milliseconds(timeout);
         if (scenario_ == "startup-delayed-right" && right_ && !delayed_ready_) {
-            due_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+            due_ = now() + std::chrono::milliseconds(250);
             delayed_ready_ = true;
         }
         if ((scenario_ == "stall-left" && !right_) || (scenario_ == "stall-right" && right_) ||
             (scenario_ == "stop-right" && right_ && sequence_ >= 4)) {
-            std::unique_lock lock(mutex_); ready_.wait_until(lock, deadline); return false;
+            wait_until(deadline); return false;
         }
         if (scenario_ == "eagain" && sequence_ % 2 == 0) {
             // Still waits for the next readiness deadline; does not busy-spin.
-            std::unique_lock lock(mutex_);
-            if (ready_.wait_until(lock, std::min(deadline, due_)) == std::cv_status::timeout &&
-                std::chrono::steady_clock::now() < due_) return false;
+            if (wait_until(std::min(deadline, due_)) == std::cv_status::timeout && now() < due_) return false;
         }
-        if (std::chrono::steady_clock::now() < due_) {
-            std::unique_lock lock(mutex_); ready_.wait_until(lock, std::min(deadline, due_));
-            if (std::chrono::steady_clock::now() < due_) return false;
+        if (now() < due_) {
+            wait_until(std::min(deadline, due_));
+            if (now() < due_) return false;
         }
         if (sequence_ == 4 && scenario_ == "disconnect" && right_) throw std::runtime_error("Fake camera disconnected");
         uint32_t native = sequence_;
@@ -114,11 +124,11 @@ class FakeCamera final : public Camera {
                        timestamp + 1000 + (right_ ? 100 : 0), clock, mode_.fourcc, {}};
         emit(view);
         ++sequence_;
-        if (paced_fixture_ && scenario_.starts_with("phase-")) {
+        if (paced_fixture_) {
             // Integration tests model a finite-rate camera, not a CPU-speed producer.
             // Scheduling delays affect delivery only: every native counter/timestamp
             // above remains exact, with no dropped observations or catch-up burst.
-            due_ = std::chrono::steady_clock::now() + std::chrono::nanoseconds(period);
+            due_ = now() + std::chrono::nanoseconds(period);
         } else
             due_ += std::chrono::nanoseconds(scenario_.starts_with("phase-") ? 0 : period);
         return true;
@@ -204,8 +214,12 @@ class FakeBackend final : public Backend {
     std::string scenario_;
     bool paced_fixture_{};
     std::unique_ptr<MediaIo> media_;
+    std::shared_ptr<const FakeTiming> timing_;
   public:
-    explicit FakeBackend(std::string scenario) : scenario_(std::move(scenario)) {
+    explicit FakeBackend(std::string scenario, std::shared_ptr<const FakeTiming> timing = {})
+        : scenario_(std::move(scenario)), timing_(std::move(timing)) {
+        if (timing_ && (!timing_->now || !timing_->wait_until))
+            throw std::runtime_error("Incomplete fake-camera timing callbacks");
         if (const auto pace = std::getenv("MANTIS_X1_FAKE_PACE")) {
             if (std::string_view(pace) != "0" && std::string_view(pace) != "1")
                 throw std::runtime_error("MANTIS_X1_FAKE_PACE must be 0 or 1");
@@ -244,7 +258,7 @@ class FakeBackend final : public Backend {
         auto selected = mode;
         if (scenario_ == "stream-mismatch" && info.sensor == "ov9281 20-0060") ++selected.width;
         return std::make_unique<FakeCamera>(selected, scenario_, info.sensor == "ov9281 20-0060",
-                                            camera_context(info), paced_fixture_);
+                                            camera_context(info), paced_fixture_, timing_);
     }
 };
 }
@@ -252,4 +266,7 @@ std::unique_ptr<MediaIo> fake_media(const Profile &p, const std::array<CameraInf
     return std::make_unique<FakeMedia>(p, cameras, scenario);
 }
 std::unique_ptr<Backend> fake_backend(const std::string &scenario) { return std::make_unique<FakeBackend>(scenario); }
+std::unique_ptr<Backend> fake_backend(const std::string &scenario, std::shared_ptr<const FakeTiming> timing) {
+    return std::make_unique<FakeBackend>(scenario, std::move(timing));
+}
 } // namespace x1

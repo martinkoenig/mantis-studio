@@ -174,3 +174,73 @@ Per the current CI handoff policy, commit/push follows successful local verifica
 The final report links the pushed commit's workflow as PENDING; the independent
 reviewer verifies all five remote jobs before acceptance. L6 remains acceptance
 pending, and L7 has not started.
+
+## Fake-camera host pacing follow-up
+
+The [reviewed sanitizer run](https://github.com/martinkoenig/mantis-studio/actions/runs/38001379898)
+for `c98d33262493e636002227fd18e40a7e3239e8b8` passed 110/111 tests. All
+ProcessorV2/ownership tests passed; `acquisition-integration` failed during the
+first GREY camera-only CLI capture start with an explicit LOSSLESS queue
+saturation. The other four matrix jobs passed. That path does not run semantic
+processing. The log contains no per-frame host delivery or writer-latency trace.
+
+`MANTIS_X1_FAKE_PACE=1` previously selected non-catch-up scheduling only for
+`phase-*`. Startup fixtures advanced a cumulative host deadline from camera
+start, permitting overdue frames to burst after a scheduling delay. Every paced
+fake camera now schedules its next delivery one configured frame period after
+the preceding callback completes. A late caller can receive one frame immediately;
+the following delivery waits a full period. A delayed callback cannot accumulate
+deadline debt. No native frame is skipped or fabricated. Native timestamps,
+received timestamps, counters, clock domains, sensor identities, formats,
+metadata and packed pixels do not depend on that scheduling clock.
+
+The private `FakeTiming` seam supplies host time and waits to the actual fake
+backend. Seven deterministic tests cover startup-left/right, phase delivery,
+delays before the first frame and between frames, a delayed callback, timeout
+without consuming a frame, paced/unpaced exact native-frame equality for both
+cameras and formats, and unchanged failure injection. With pacing absent or `0`,
+phase fixtures remain CPU-speed and other fixtures retain their cumulative
+schedule for stress tests. No real camera, pairing algorithm, queue capacity,
+50-ms admission deadline or lossless failure policy was changed.
+
+A worktree-local injection experiment delayed Session thread creation by 500 ms
+after camera start and the first `.segment.part` write by 150 ms. With the original
+pacing branch it reproduced the exact initial CLI saturation error in Debug for
+GREY and Y10P. A virtual-clock test also failed against that branch because
+overdue startup frames did not wait between deliveries. The controlled runtime
+experiment did not reproduce saturation with the original branch in the local
+sanitizer build. It proves a matching failure mechanism, not the exact scheduling
+history of the GitHub runner or that this was its sole cause. The injection tools
+live only in ignored build scratch space and are not installed or run by CI.
+
+Two-core CPU contention (three scoped burners at 85%, 85%, 25% duty) and repeated
+8-MiB file writes/fsync exposed another fixture assumption: the 0.2-second drift
+validator run could finish before the native half-period crossing at about 24
+pairs. Its existing drift-exclusion assertion remains intact. The integration
+test now requests at least 32 committed pairs through the optional
+`--minimum-framesets` validator argument and verifies that count. Progress has a
+finite 15-second allowance, matching the integration test's existing progress
+budget. Default validator requests retain their duration-based behavior. This
+changes the test completion condition, not camera cadence or recorder deadlines.
+
+Final local verification for this correction passed:
+
+- Complete Debug Studio-OFF suite: **118/118**, 136.20 seconds.
+- Complete ASan/UBSan Studio-OFF suite: **118/118**, 370.92 seconds, with
+  `detect_leaks=1:halt_on_error=1` and `UBSAN_OPTIONS=halt_on_error=1`.
+- Seven pacing cases and the existing explicit saturation/write-failure QoS
+  case, ten repetitions each: **80/80 in each build**. Genuine queue saturation
+  still reports failure, with saturation counted and no silently dropped packet.
+- Corrected ASan/UBSan acquisition integrations under the CPU/storage pressure
+  above: **10 GREY + 10 Y10P**, 158.27 seconds, without recorder saturation.
+- Corrected Debug acquisitions with the same injected startup/write delays and
+  CPU/storage pressure: **5 GREY + 5 Y10P**, all passed.
+- Architecture boundaries and `git diff --check` passed. All eight L6 processing/
+  ownership regressions, frozen ABI contracts and legacy/projected storage
+  goldens passed in both complete suites.
+
+The four closed L6 implementations, accepted formats/fixtures, L3–L5 control and
+storage semantics, and real Linux camera backend are untouched. No L7 work or
+optical extraction was started. Per the CI handoff policy, remote results for
+the focused follow-up are PENDING until independent review of the pushed SHA;
+L6 is not declared FINAL ACCEPTED here.
