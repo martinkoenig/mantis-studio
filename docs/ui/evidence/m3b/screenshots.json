@@ -1,0 +1,74 @@
+{
+  "format": 1,
+  "qt": "6.4.2",
+  "backend": "offscreen/software",
+  "unaltered_png": true,
+  "screenshots": [
+    {
+      "file": "before-mock-1536x1024.png",
+      "origin": "build/ui-m3b-verification/before/mock-scan.png",
+      "description": "Accepted 8a4a150 baseline, mock Scan foundation",
+      "physical_size": [
+        1536,
+        1024
+      ],
+      "dpr": 1,
+      "sha256": "c5d1cca4e50b5cd65a540e62775373c701d6626a51e8966f6ad0d9d502e0ebb5"
+    },
+    {
+      "file": "mock-1536x1024.png",
+      "origin": "build/qt64/ui-m3b/matrix/mock-1536x1024.png",
+      "description": "M3b standalone illustrative Mock, no runtime authority",
+      "physical_size": [
+        1536,
+        1024
+      ],
+      "dpr": 1,
+      "sha256": "a3e7ce2b6a176861863fe8e7a084b7c0fca5b75a6561db6453acda7ef52fefef"
+    },
+    {
+      "file": "unreachable-live-1080x720.png",
+      "origin": "build/qt64/ui-m0/cli/unreachable-live-scan.png",
+      "description": "Actual CLI startup with unreachable runtime, no initial snapshot",
+      "physical_size": [
+        1080,
+        720
+      ],
+      "dpr": 1,
+      "sha256": "2e853134f1e42cb830e898250e53402490590b7b2228a3a50be9e75c65e6a6f7"
+    },
+    {
+      "file": "stale-1920x1080.png",
+      "origin": "build/qt64/ui-m3b/matrix/stale-1920x1080.png",
+      "description": "Injected production bridge DTO with retained last-known capture and artifacts",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "dpr": 1,
+      "sha256": "99c2916423b8889e1e8a88e95177e90ffd8e48c9fd8b88dd72e9a598684d5d11"
+    },
+    {
+      "file": "hybrid-live-3440x1440.png",
+      "origin": "build/qt64/ui-m3b/matrix/hybrid-live-3440x1440.png",
+      "description": "Injected production bridge DTO, live source segregated from demo",
+      "physical_size": [
+        3440,
+        1440
+      ],
+      "dpr": 1,
+      "sha256": "04b768477aecb7f80b41e3e4b46f6d66bdb27f264f457905de1b2505ee8a604f"
+    },
+    {
+      "file": "compact-setup-1080x720.png",
+      "origin": "build/qt64/ui-m3b/matrix/mock-1080x720-Setup.png",
+      "description": "Compact settings access and stationary read-only notes",
+      "physical_size": [
+        1080,
+        720
+      ],
+      "dpr": 1,
+      "sha256": "e5362566783855281261579828418dd95cf78b4c247721d0d51f27cdd9d19cb7"
+    }
+  ]
+}

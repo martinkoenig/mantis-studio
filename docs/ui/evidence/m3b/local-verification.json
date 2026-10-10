@@ -1,0 +1,142 @@
+{
+  "format": 1,
+  "date_utc": "2026-10-10T14:26:45.423863+00:00",
+  "branch": "feature/ui-m3-scan",
+  "verified_parent": "8a4a150edddfa5a7271ff3c119814a23bbcd128f",
+  "final_commit": "Reported in independent handoff; CI revision.json records exact pushed SHA",
+  "build_parallelism": 3,
+  "full_suites": [
+    {
+      "build": "build/qt64",
+      "tests_passed": 79,
+      "outcome": "PASS",
+      "sanitizers": "off",
+      "seconds": 419.56,
+      "log": "build/ui-m3b-verification/qt64-final-full.log",
+      "log_sha256": "0477024d3c539d8b558e831495d0a88371a0484d7bb597d10db713b6b7505e80",
+      "command": "ctest --test-dir build/qt64 --output-on-failure"
+    },
+    {
+      "build": "build/debug",
+      "tests_passed": 79,
+      "outcome": "PASS",
+      "sanitizers": "off",
+      "seconds": 405.11,
+      "log": "build/ui-m3b-verification/qt69-final-full.log",
+      "log_sha256": "7f78683c54c730fd75fb7cad835d0af1458791f88164a7c5a3599de059f679c9",
+      "command": "ctest --test-dir build/debug --output-on-failure"
+    },
+    {
+      "build": "build/qt69-sanitizers",
+      "tests_passed": 79,
+      "outcome": "PASS",
+      "sanitizers": "ASan/UBSan, detect_leaks=1, halt_on_error=1",
+      "seconds": 672.0,
+      "log": "build/ui-m3b-verification/qt69-sanitizers-final-full.log",
+      "log_sha256": "97e4b940ce837c619ea46889fce7ca276004842b92ffb9fe1e449a3a89d1e473",
+      "command": "ctest --test-dir build/qt69-sanitizers --output-on-failure"
+    },
+    {
+      "build": "build/qt64-headless",
+      "tests_passed": 42,
+      "outcome": "PASS",
+      "sanitizers": "off",
+      "seconds": 105.31,
+      "log": "build/ui-m3b-verification/headless-full.log",
+      "log_sha256": "2b5c164840f179f126091db0dc996ee7742f1426794e2a89449230d5e39d50f9",
+      "command": "ctest --test-dir build/qt64-headless --output-on-failure"
+    },
+    {
+      "build": "build/qt64-headless-sanitizers",
+      "tests_passed": 42,
+      "outcome": "PASS",
+      "sanitizers": "ASan/UBSan, detect_leaks=1, halt_on_error=1",
+      "seconds": 229.73,
+      "log": "build/ui-m3b-verification/headless-sanitizers-full.log",
+      "log_sha256": "6c6d355d7393002100193adbeb84e2bc9cfaca8f05b61c8e2a194cf44f0b7575",
+      "command": "ctest --test-dir build/qt64-headless-sanitizers --output-on-failure"
+    }
+  ],
+  "ui_repeat": {
+    "outcome": "PASS",
+    "distinct_tests": 9,
+    "runs_each": 3,
+    "invocations_passed": 27,
+    "log": "build/ui-m3b-verification/qt64-ui-repeat.log"
+  },
+  "native": {
+    "outcome": "PASS",
+    "qt": "6.9.2",
+    "platform": "Wayland/software",
+    "dpr": 1.25,
+    "modes": [
+      "mock",
+      "live",
+      "hybrid"
+    ],
+    "states": [
+      "normal",
+      "maximized",
+      "restored"
+    ],
+    "captures": 9,
+    "directory": "build/ui-m3b-verification/native"
+  },
+  "scan_screenshots": {
+    "qt64_directory": "build/qt64/ui-m3b",
+    "qt64_png_count": 168,
+    "logical_sizes": [
+      "1080x720",
+      "1280x720",
+      "1366x768",
+      "1440x900",
+      "1536x1024",
+      "1920x1080",
+      "2560x1440",
+      "3440x1440",
+      "3840x2160"
+    ],
+    "offscreen_dpr": [
+      1,
+      1.5,
+      2
+    ]
+  },
+  "wire_requests_qt64": {
+    "snapshot": 6,
+    "preview": 23,
+    "events": 3
+  },
+  "source_sha256": {
+    "apps/studio/scan_model.cpp": "244dc2f5e0d66e80598d24c906fade0ca7e12acbf6669baa1c72681f5aa93b34",
+    "apps/studio/scan_model.hpp": "f7272d1a8cceb7e57d1b0becdb319f7aff8df6e43e0cdf0074535c70a6019024",
+    "apps/studio/main.cpp": "6750bd9979dd33058be48fc13bfba0769f4280f0a816f010a3c3a738efdcffd6",
+    "tests/unit/studio_scan.cpp": "d56b507f0117796996788edbc79765524c78dbae5ea86c9879495b51182cf17b",
+    "tests/integration/studio_scan.py": "e238781076f6d9f3c7fa868e9851d4629456022a1e53a1ae80373a5143889fc1",
+    "tests/integration/studio_ui_m0.py": "7629e28d091dfd6101c921bee7d26cc2a65b926f47d6e566862202a50e31c188",
+    "ui/shell/Main.qml": "b2378b7190b37817f5566cf0117a174bfa8267ab390770eef538bb47e8d0f908",
+    "ui/state/AppUiState.qml": "43772edc91c756402bc614f0153cbe8201973e18ed4434bb455d30c67ebc5fc9",
+    "ui/workspaces/ScanWorkspace.qml": "853a057d7fb96af6753994461ed7fa6dcd60618929d9c8d2d4bf67d50dc25b84",
+    "CMakeLists.txt": "4aa50a890e16e2e0dcbbbbbbdbaedda661ac16dde82169aeef18123976690b52",
+    ".github/workflows/build.yml": "9bd7050c12d8242c917839eef7d33dfbb2ded5ecb8f225719fcdb5583b4728d6",
+    "ui/scan/ScanCameras.qml": "fc6d50eadbc1eb5047432d69657c792dde0e24a945dbc2ad4882b8aa1fc83f5a",
+    "ui/scan/ScanDemo.qml": "57e3f126b1484eafdd86a7a9ca56bd169bac291c1f3010c365bfd21a3d41e027",
+    "ui/scan/ScanDock.qml": "a1eaf7303c06bf1c5342c06f52a60e81edba798e72c84261ffc0201e58fb0ec8",
+    "ui/scan/ScanSetup.qml": "564bdeb63ef2e5bf78b91fa0283f18e2e0b48db42414ab460cfa71a2810c8d06",
+    "ui/scan/ScanText.qml": "de8e5d25fc2c1823ff22a273325d521c16e5330ceae9384ffebb642608c7712d",
+    "ui/scan/ScanUnavailable.qml": "3058b5be34c70f2bb69d65f35034428cb63b83c7020b2c4fd7516b84a420744a",
+    "ui/scan/ScanViewport.qml": "762f51b86052ba4805f959d63d4b80670ca731d7e799e9eba820041a45ff6c21",
+    "tests/unit/studio_home.cpp": "7e407722df5a2d20ee90a262840c93ac24bb70112d760c3757fa04e321e77542",
+    "tests/unit/studio_devices.cpp": "622521bf6d0a0a4cae5b94186e66c7367c50f4891c56be8b0dde118f123cf1eb",
+    "tests/unit/studio_projects.cpp": "2a0973167ce66ce9ada7d76d1e48fb531e90d7e5db72f856c281fd36e8c496bc",
+    "tests/unit/studio_ui_m0.cpp": "a1845b9e021dbcdfe2a3a89d9878de79c20b36f0743e36b91f59df2904684961",
+    "tests/unit/studio_calibration_qml.cpp": "e509c810e23ff4cd0a6ad2ae3d766af97d69df5d68b8bdf977449a495650f0eb"
+  },
+  "remaining": [
+    "Exact-SHA five-job remote CI acceptance gate",
+    "Real hardware validation not performed",
+    "M3c/d/e integrations deferred",
+    "Backend project/replay isolation remains pending"
+  ],
+  "deviations": []
+}

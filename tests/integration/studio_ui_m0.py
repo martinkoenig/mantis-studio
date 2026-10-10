@@ -76,4 +76,15 @@ with socket.socket() as trap:
     else:
         connection.close()
         raise AssertionError("Mock attempted a runtime connection")
-print("PASS: CLI validation, short screenshot timeout, token-free offline startup, twelve initial routes without network access")
+# Live/hybrid Scan must use the new foundation even without a reachable daemon;
+# the separate Classic route must still start. Binding without listening makes
+# connection refusal deterministic without racing another process for a port.
+with socket.socket() as unavailable:
+    unavailable.bind(("127.0.0.1", 0))
+    env.update(MANTIS_PORT=str(unavailable.getsockname()[1]), MANTIS_TOKEN="ui-m3b-unreachable-token")
+    for mode, route in (("live", "scan"), ("hybrid", "scan"), ("live", "acquisition")):
+        picture = output / f"unreachable-{mode}-{route}.png"
+        run(f"--ui-mode={mode}", f"--workspace={route}", "--window-size=1080x720",
+            "--quit-after=650", "--screenshot", str(picture))
+        assert_rendered(picture, (1080, 720))
+print("PASS: CLI validation, rendered deadlines, twelve offline routes, unreachable live/hybrid Scan and Classic Acquisition")

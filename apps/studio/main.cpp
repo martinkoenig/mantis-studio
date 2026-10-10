@@ -4,6 +4,7 @@
 #include "home_model.hpp"
 #include "projects_model.hpp"
 #include "projects_scroll.hpp"
+#include "scan_model.hpp"
 #include "screenshot.hpp"
 #include <QCommandLineParser>
 #include <QGuiApplication>
@@ -18,12 +19,13 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("Mantis Studio");
     QQuickStyle::setStyle("Basic");
+    qmlRegisterType<ScanModel>("Mantis.Studio", 1, 0, "ScanModel");
     qmlRegisterType<DevicesModel>("Mantis.Studio", 1, 0, "DevicesModel");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
     qmlRegisterType<ProjectsScrollInput>("Mantis.Studio", 1, 0, "ProjectsScrollInput");
     QCommandLineParser parser;
-    parser.setApplicationDescription("Mantis Studio desktop client · UI-M2a");
+    parser.setApplicationDescription("Mantis Studio desktop client · UI-M3b");
     parser.addHelpOption();
     parser.addOptions(
         {{"ui-mode", "UI data source: live, hybrid or mock (default: live).", "mode", "live"},

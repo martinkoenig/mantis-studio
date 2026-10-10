@@ -4,6 +4,7 @@
 #include "home_model.hpp"
 #include "projects_model.hpp"
 #include "projects_scroll.hpp"
+#include "scan_model.hpp"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -29,6 +30,7 @@ bool hasStage(QQuickItem *item, const QString &name) {
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
+    qmlRegisterType<ScanModel>("Mantis.Studio", 1, 0, "ScanModel");
     qmlRegisterType<DevicesModel>("Mantis.Studio", 1, 0, "DevicesModel");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");

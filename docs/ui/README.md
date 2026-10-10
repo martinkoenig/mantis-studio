@@ -1,4 +1,4 @@
-# Mantis Studio UI (UI-M0, Home, Projects and Devices)
+# Mantis Studio UI (UI-M0 through UI-M3b)
 
 UI-M0 establishes the Qt 6 / Qt Quick desktop shell, ten routes, a small design
 system and an explicit presentation data contract. UI-M1 adds the dedicated
@@ -10,6 +10,11 @@ does not change v0.3/v0.4 implementation or hardware acceptance status.
 UI-M3a adds [bounded PointCloud auto-load/retry](pointcloud-retry.md) in the existing
 bridge, with no Scan UI redesign. [Validation and reproduction](validation-m3a.md)
 cover request counts, source authority, manual recovery and complete local suites.
+
+UI-M3b adds the [read-only Scan foundation](scan.md), with a bounded authoritative
+presentation model and responsive camera/viewport/setup/dock layout. Working
+capture, previews, rendering and replay remain in Classic Acquisition. M3c/d/e
+are deferred. See [UI-M3b verification and visual evidence](validation-m3b.md).
 
 ## Visual intent
 
@@ -77,6 +82,9 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
 ./build/debug/bin/mantis-studio --ui-mode=hybrid --workspace=home
 
 # Existing real workflow, with the usual runtime endpoint/token:
+./build/debug/bin/mantis-studio --ui-mode=live --workspace=acquisition
+
+# Read-only Scan foundation, with an explicit link to Classic Acquisition:
 ./build/debug/bin/mantis-studio --ui-mode=live --workspace=scan
 ```
 
@@ -117,9 +125,11 @@ selection and page title. Tab traverses controls, Up/Down traverses navigation,
 and Space/Enter activate buttons. Hover, pressed, disabled and keyboard-focus
 states are explicit. Accessible names are set on navigation and shared controls.
 
-`scan` uses the preserved acquisition workspace in live/hybrid. In mock it shows
-its M0 foundation, with an explicit action to inspect the disabled existing view.
-`acquisition` remains a supported internal alias and initial live route.
+`scan` renders the dedicated Scan foundation in all three modes. Its prominent
+Open Classic Acquisition button navigates to `acquisition` in live/hybrid;
+mock is permanently non-actionable. `acquisition` remains the preserved working
+internal route and initial live landing page. Hybrid Scan has separate Live and
+Demo / Mock presentations; illustrative values never merge with runtime rows.
 Devices exposes the existing calibration workflow by an explicit action, plus
 calibration actions for devices validated by `CalibrationController`: a composite
 FrameSet-stream parent with image-stream children. A discovered parent or isolated
@@ -198,7 +208,7 @@ work from the master roadmap.
 | Route | Existing real functionality retained | Planned UI / milestone | Migration to live |
 | --- | --- | --- | --- |
 | `home` | UI-M1: truthful project/devices/jobs/artifacts/events, stale/error states and navigation | History, telemetry and tutorial browser remain unavailable | Read-only HomeModel consumes existing bridge notifications; no extra transport |
-| `scan` | All acquisition, dual preview, replay and viewport tools | Redesigned scan setup/review · UI-M3 | Wrap existing bridge/controller intents; replace legacy layout incrementally |
+| `scan` | UI-M3b: read-only runtime ScanModel, responsive foundation, explicit Classic Acquisition navigation | Camera/geometry integration M3c, replay M3d, supported setup M3e deferred | Existing acquisition/preview/render ownership stays in `acquisition`; no second engine or transport |
 | `process` | Recipe execution and jobs in acquisition | Recipes, lineage and stages · UI-M4 | Bind supported pipeline/job descriptors to a workspace model |
 | `inspect` | Geometry viewing in acquisition; no metrology tools | Selection/measurement evidence · UI-M5 | Feed versioned analysis artifacts, units and validity into visual components |
 | `reverse` | No CAD fitting workflow | Fitting/sections/CAD handoff · UI-M5 | Bind capability-backed derived artifacts; no UI-owned geometry computation |

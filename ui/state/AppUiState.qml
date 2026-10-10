@@ -42,7 +42,7 @@ QtObject {
     readonly property var demoDevices: mode === "hybrid" ? fixtures.devices : []
     readonly property var routes: [
         {route: "home", title: "Home", milestone: "UI-M1", description: "Your starting point for acquisition and engineering.", planned: "Home dashboard", detail: "Current runtime information and explicitly separated illustrative examples."},
-        {route: "scan", title: "Scan", milestone: "UI-M3", description: "Acquire and replay data from runtime-owned captures.", planned: "Acquisition workspace and capture review", detail: "Camera previews, scan setup and timeline will adopt the new design in UI-M3."},
+        {route: "scan", title: "Scan", milestone: "UI-M3", description: "Read-only scan foundation and existing acquisition workflows.", planned: "Scan workspace foundation", detail: "Live rendering and capture controls remain in Classic Acquisition pending M3c–e."},
         {route: "process", title: "Process", milestone: "UI-M4", description: "Build reproducible processing workflows.", planned: "Recipes, artifact lineage and processing stages", detail: "Registration, fusion, mesh and texture tools depend on supported runtime capabilities."},
         {route: "inspect", title: "Inspect", milestone: "UI-M5", description: "Explore geometry and its measurement evidence.", planned: "Selection, measurements and evidence review", detail: "Measurement results and uncertainty require validated runtime data."},
         {route: "reverse", title: "Reverse", milestone: "UI-M5", description: "Take geometry into an engineering workflow.", planned: "Geometry fitting, sections and CAD handoff", detail: "Fitting and CAD tools are planned; no derived geometry is produced here."},

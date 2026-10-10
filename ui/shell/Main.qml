@@ -14,7 +14,7 @@ ApplicationWindow {
     readonly property alias appUiState: state
     readonly property string activeRoute: workspace === "acquisition" ? "scan" : workspace === "calibration" ? "devices" : workspace
     readonly property var currentPage: state.routeInfo(workspace)
-    readonly property bool legacyVisible: workspace === "acquisition" || (workspace === "scan" && uiMode !== "mock")
+    readonly property bool legacyVisible: workspace === "acquisition"
     readonly property bool compact: width < 1250
     visible: true
     width: 1536; height: 1024
@@ -103,10 +103,10 @@ ApplicationWindow {
             }
             ColumnLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.margins: window.workspace === "home" || window.workspace === "projects" || window.workspace === "devices" ? 12 : window.compact ? 16 : Theme.padding
+                Layout.margins: window.workspace === "home" || window.workspace === "projects" || window.workspace === "devices" || window.workspace === "scan" ? 12 : window.compact ? 16 : Theme.padding
                 spacing: Theme.gap
                 RowLayout {
-                    visible: window.workspace !== "home" && window.workspace !== "projects" && window.workspace !== "devices"
+                    visible: window.workspace !== "home" && window.workspace !== "projects" && window.workspace !== "devices" && window.workspace !== "scan"
                     Layout.fillWidth: true
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 6
@@ -150,10 +150,17 @@ ApplicationWindow {
                     onCalibrate: function(deviceId) { window.openCalibration(deviceId) }
                     onNavigate: function(route) { window.workspace = route }
                 }
+                ScanWorkspace {
+                    objectName: "scanWorkspace"
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    visible: window.workspace === "scan"
+                    bridge: window.studioBridge; mode: window.uiMode
+                    onNavigate: function(route) { window.workspace = route }
+                }
                 FoundationWorkspace {
                     objectName: "foundationWorkspace"
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    visible: !window.legacyVisible && window.workspace !== "calibration" && window.workspace !== "home" && window.workspace !== "projects" && window.workspace !== "devices"
+                    visible: !window.legacyVisible && window.workspace !== "scan" && window.workspace !== "calibration" && window.workspace !== "home" && window.workspace !== "projects" && window.workspace !== "devices"
                     page: window.currentPage; state: window.appUiState
                     onOpenAcquisition: window.workspace = "acquisition"
                     onOpenDevices: window.workspace = "devices"

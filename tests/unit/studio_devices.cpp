@@ -4,6 +4,7 @@
 #include "home_model.hpp"
 #include "projects_model.hpp"
 #include "projects_scroll.hpp"
+#include "scan_model.hpp"
 #include <QAccessible>
 #include <QDir>
 #include <QElapsedTimer>
@@ -675,6 +676,7 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
     qInstallMessageHandler(messages);
+    qmlRegisterType<ScanModel>("Mantis.Studio", 1, 0, "ScanModel");
     qmlRegisterType<DevicesModel>("Mantis.Studio", 1, 0, "DevicesModel");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
