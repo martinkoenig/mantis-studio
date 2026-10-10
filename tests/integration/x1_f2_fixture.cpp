@@ -1,10 +1,13 @@
 #include "../fixtures/x1-f2/program.hpp"
+#include "../fixtures/x1-f2/publication-test-hook.hpp"
 #include <fstream>
 #include <future>
 #include <iostream>
 #include <mantis/plugin_runtime.hpp>
+#include <mantis/projected_light_io.hpp>
 #include <mantis/semantic_views.hpp>
 #include <nlohmann/json.hpp>
+#include <sstream>
 using namespace mantis;
 using namespace std::chrono_literals;
 namespace d = mantis::data;
@@ -30,6 +33,98 @@ std::optional<d::AcquisitionBundle> read(device::ProjectedExecutor &e) {
             return b;
     } while (std::chrono::steady_clock::now() < deadline);
     throw std::runtime_error("F2 publication timeout");
+}
+void publication_admission(const plugins::Loaded &fixture, const device::ProjectedGraph &graph,
+                           const d::AcquisitionProgram &program, const char *library_path) {
+    namespace sim = x1::f2::simulation;
+    platform::Library library(library_path);
+    auto set_hook =
+        reinterpret_cast<sim::SetPublicationTestHook>(library.symbol(sim::publication_test_hook_symbol));
+    CHECK(set_hook);
+    auto api = fixture.query<MantisProjectedLightV1>(MANTIS_PROJECTED_LIGHT_V1);
+    auto camera = fixture.query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1);
+    plugins::semantic::ProgramView view(program);
+    auto accepted = [](void *, const MantisProgramValidationV1 *v) { return v->accepted ? 0 : 1; };
+    for (bool admitted : {false, true}) {
+        void *raw{};
+        CHECK(api->open(plugins::host_api(), graph.parent.value.c_str(), 100, &raw) == 0);
+        CHECK(api->prepare(raw, view.get(), 100, accepted, nullptr) == 0);
+        CHECK(api->start(raw, "admission-run", "admission-generation", 100) == 0);
+        struct Gate {
+            bool target{}, timed_out{};
+            unsigned callbacks{};
+            std::promise<void> entered, release;
+            std::shared_future<void> future = release.get_future().share();
+        } gate;
+        gate.target = admitted;
+        auto entered = gate.entered.get_future();
+        auto hook = [](void *ptr, bool phase) noexcept {
+            auto &g = *static_cast<Gate *>(ptr);
+            if (phase == g.target) {
+                g.entered.set_value();
+                g.timed_out = g.future.wait_for(1s) != std::future_status::ready;
+            }
+        };
+        CHECK(set_hook(raw, hook, &gate) == 0);
+        auto publication = [](void *ptr, const MantisSemanticPacketV1 *v) noexcept {
+            auto &g = *static_cast<Gate *>(ptr);
+            return sdk::boundary([&] {
+                auto b = std::get<d::AcquisitionBundle>(plugins::semantic::packet(v, plugins::host_api()));
+                CHECK(b.key.run_id.id.value == "admission-run" && b.key.sequence.value == 0);
+                ++g.callbacks;
+            });
+        };
+        auto pending =
+            std::async(std::launch::async, [&] { return api->next(raw, 1000, publication, &gate); });
+        CHECK(entered.wait_for(1s) == std::future_status::ready);
+        CHECK(set_hook(raw, nullptr, nullptr) == MANTIS_PL_BUSY);
+        device::AbortOutcome outcome;
+        auto aborted = [](void *ptr, const MantisAbortOutcomeV1 *v) noexcept {
+            return sdk::boundary(
+                [&] { *static_cast<device::AbortOutcome *>(ptr) = plugins::semantic::abort_outcome(v); });
+        };
+        auto begin = std::chrono::steady_clock::now();
+        CHECK(api->abort(raw, MANTIS_ACQUISITION_REASON_DEVICE_FAILURE, 100, aborted, &outcome) == 0);
+        CHECK(std::chrono::steady_clock::now() - begin < 500ms);
+        CHECK(outcome.fenced_generation.get()->id.value == "admission-generation" &&
+              outcome.off_requested.get() && *outcome.off_requested.get());
+        CHECK(api->abort(raw, MANTIS_ACQUISITION_REASON_USER_CANCEL, 100, aborted, &outcome) == 0);
+        CHECK(api->destroy(raw, 0) == MANTIS_PL_BUSY);
+        void *camera_instance{};
+        CHECK(camera->open(plugins::host_api(), graph.parent.value.c_str(), &camera_instance) == 3 &&
+              !camera_instance); // Refused destroy keeps the parent owned.
+        gate.release.set_value();
+        CHECK(pending.get() == (admitted ? MANTIS_PL_OK : MANTIS_PL_NOT_READY));
+        CHECK(!gate.timed_out && gate.callbacks == (admitted ? 1u : 0u));
+        CHECK(api->next(raw, 0, publication, &gate) == MANTIS_PL_NOT_READY);
+        nlohmann::json metrics;
+        auto diagnostic = [](void *ptr, const char *text) noexcept {
+            return sdk::boundary([&] { *static_cast<nlohmann::json *>(ptr) = nlohmann::json::parse(text); });
+        };
+        CHECK(api->diagnostics(raw, 100, diagnostic, &metrics) == 0);
+        CHECK(metrics["run_admissions"] == 1 && metrics["stop_requests"] == 2 &&
+              metrics["first_reason"] == MANTIS_ACQUISITION_REASON_DEVICE_FAILURE);
+        CHECK(api->stop(raw, 0) == 0);
+        CHECK(set_hook(raw, nullptr, nullptr) == 0);
+        CHECK(api->prepare(raw, view.get(), 100, accepted, nullptr) == 0);
+        CHECK(api->start(raw, "fresh-run", "fresh-generation", 100) == 0);
+        unsigned fresh_callbacks{};
+        auto fresh = [](void *ptr, const MantisSemanticPacketV1 *v) noexcept {
+            return sdk::boundary([&] {
+                auto b = std::get<d::AcquisitionBundle>(plugins::semantic::packet(v, plugins::host_api()));
+                CHECK(b.key.run_id.id.value == "fresh-run" &&
+                      b.published.clock.generation.id.value == "fresh-generation" &&
+                      b.key.sequence.value == 0);
+                ++*static_cast<unsigned *>(ptr);
+            });
+        };
+        CHECK(api->next(raw, 100, fresh, &fresh_callbacks) == 0 && fresh_callbacks == 1);
+        CHECK(gate.callbacks == (admitted ? 1u : 0u)); // No old work reaches the fresh execution.
+        CHECK(api->abort(raw, MANTIS_ACQUISITION_REASON_USER_CANCEL, 100, aborted, &outcome) == 0);
+        CHECK(api->stop(raw, 0) == 0 && api->destroy(raw, 0) == 0);
+        CHECK(camera->open(plugins::host_api(), graph.parent.value.c_str(), &camera_instance) == 0);
+        camera->destroy(camera_instance);
+    }
 }
 int main(int argc, char **argv) {
     try {
@@ -146,6 +241,7 @@ int main(int argc, char **argv) {
         take(executor->close(100));
         executor.reset();
         unsetenv("MANTIS_X1_F2_FAULT");
+        publication_admission(*fixture, graph, p, argv[1]);
         // Entered callback state is pinned across priority abort; destroy must refuse it.
         auto api = fixture->query<MantisProjectedLightV1>(MANTIS_PROJECTED_LIGHT_V1);
         void *raw{};
@@ -167,8 +263,15 @@ int main(int argc, char **argv) {
             return sdk::boundary([&] {
                 g.bundle = std::get<d::AcquisitionBundle>(plugins::semantic::packet(v, plugins::host_api()));
                 g.entered.set_value();
-                g.future.wait();
+                CHECK(g.future.wait_for(1s) == std::future_status::ready);
                 CHECK(g.bundle->key.run_id.id.value == "entered-run");
+                auto after =
+                    std::get<d::AcquisitionBundle>(plugins::semantic::packet(v, plugins::host_api()));
+                std::ostringstream before_bytes, after_bytes;
+                d::write_bundle(before_bytes, *g.bundle);
+                d::write_bundle(after_bytes, after);
+                CHECK(before_bytes.str() ==
+                      after_bytes.str()); // Borrowed views stay immutable through abort.
             });
         };
         auto pending_callback =
@@ -182,7 +285,11 @@ int main(int argc, char **argv) {
         CHECK(api->abort(raw, MANTIS_ACQUISITION_REASON_DEVICE_FAILURE, 100, aborted, &outcome) == 0);
         CHECK(outcome.fenced_generation.get()->id.value == "entered-generation" &&
               outcome.off_requested.get());
+        CHECK(api->abort(raw, MANTIS_ACQUISITION_REASON_USER_CANCEL, 100, aborted, &outcome) == 0);
         CHECK(api->destroy(raw, 0) == MANTIS_PL_BUSY);
+        camera_instance = nullptr;
+        CHECK(camera->open(plugins::host_api(), graph.parent.value.c_str(), &camera_instance) == 3 &&
+              !camera_instance);
         gate.release.set_value();
         CHECK(pending_callback.get() == 0);
         CHECK(api->next(raw, 0, callback, &gate) == MANTIS_PL_NOT_READY);

@@ -34,12 +34,23 @@ void Controller::change_snapshot() {
     ++snapshot_;
 }
 void Controller::revoke_calibration() {
+    if (!calibrated_)
+        return;
     calibrated_ = false;
-    change_snapshot();
+    // Revocation removes execution authority, unlike a harmless discovery revision.
+    // The running fault path captures the old identities/count at this clock instant,
+    // latches the initiating cause and invalidates the snapshot exactly once.
+    if (state_ == State::running)
+        inject_fault(Result::calibration_invalid);
+    else {
+        change_snapshot();
+        if (state_ == State::configured || state_ == State::armed)
+            finish(5, Result::calibration_invalid);
+    }
 }
 Result Controller::basis() const {
     if (!calibrated_)
-        return Result::not_calibrated;
+        return Result::calibration_invalid;
     if (basis_ != snapshot_)
         return Result::snapshot_changed;
     if (fault_ != Result::ok)
@@ -375,7 +386,7 @@ Frame Controller::semantic(const Frame &q, bool bound) {
         if (state_ != State::inhibited && state_ != State::configured)
             return response(q, Result::bad_state);
         if (!calibrated_)
-            return response(q, Result::not_calibrated);
+            return response(q, Result::calibration_invalid);
         if (!get(p, 13, 8))
             return response(q, Result::not_calibrated);
         if (get(p, 13, 8) != calibration_)

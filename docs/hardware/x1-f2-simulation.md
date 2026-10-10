@@ -323,6 +323,82 @@ unavailable on this x86_64 host and remains a mandatory remote CI review gate.
 | L7B-37–39 | Fixed collectors/queues/history, zero parser allocations/pixel copies, reproducible synthetic timings and resource checks |
 | L7B-40–41 | This validation record, consistent acceptance status and unchanged physical-readiness blockers |
 
+## Independent review corrections R01/R02
+
+R01 revocation of the active synthetic calibration immediately removes execution
+authority. CONFIGURED/ARMED invalidation clears the configuration basis, arm and
+lease, retaining the session for diagnosis; it reports NotReady/invalid calibration
+without inventing a controller fault. During RUNNING, revocation uses the existing
+controller fault/termination path with CALIBRATION_INVALID (18). It retains origin
+boot/session/arm/execution, counts only periods completed at the revocation clock
+instant, and records software OFF request presence and initiating/cleanup errors
+separately. Cleanup failure retains its existing terminal-result precedence without
+overwriting the calibration initiating error. Later STOP or clock advancement
+cannot rewrite the canonical terminal or execute more pulses. Repeated revocation
+is idempotent. A harmless snapshot revision remains distinct from revocation;
+normal CONFIGURE/ARM/RUNNING/completion does not increment the snapshot.
+
+The manual-clock regressions cover CONFIGURED, ARMED, zero completed pulses and
+three completed pulses, both successful and failed cleanup, exact event/lookup
+terminal bytes, fault/status fields, rejected stale configuration/arming/execution,
+and a fresh boot-scoped synthetic token followed by new CLAIM/CONFIGURE/ARM.
+Revoked bindings return the frozen CALIBRATION_INVALID code; with an otherwise
+valid record, a missing request token still returns NOT_CALIBRATED. No remote
+calibration operation was added.
+
+R02 constructs the immutable publication views before callback admission, then
+atomically checks the generation fence and reserves the publication under the
+short control mutex. That reservation is the callback-admission boundary. Callback
+execution occurs outside the priority lock; reservation retirement uses only a
+short state update. The existing ordinary call pin retains all borrowed state.
+A callback admitted before abort may finish;
+a fence before admission returns NOT_READY without calling the host. Destruction
+continues to refuse active calls, retaining the camera parent ownership.
+
+A private export in the isolated test DSO installs per-instance pre/post-admission
+barriers only while calls are quiescent. No hook is installed through daemon/bench
+activation or the public plugin interface. Promise/future barriers reproduce abort
+before admission, after admission and inside a blocked callback, repeated abort,
+BUSY destruction/retained ownership, quiescent retry and a fresh generation. The
+blocked callback compares canonical bundle bytes before/after abort to verify
+borrowed-view immutability. STOP succeeds while each barrier remains closed;
+publication count, first-error precedence and single execution admission are checked.
+No queue, worker, public ABI, wire/recording format or image copy was added.
+
+Correction validation uses the configure/build/full-suite commands above with
+`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1` and
+`UBSAN_OPTIONS=halt_on_error=1`. All complete builds succeeded. Full Linux x86_64
+Studio ON passed 127/127 tests (128.74 s); Studio OFF passed 124/124 (114.50 s);
+ASan/UBSan passed 124/124 (312.12 s), with leak detection and no suppressions.
+These suites include frozen ABI/catalog, V1–V13, F2/L7a daemon recording/replay,
+sequencer, storage, ownership, camera pairing and L6 regressions. The expanded
+controller and fixture tests additionally passed 100 consecutive runs each
+(200 invocations, 80.99 s). All four F2 tests and both L7a fixture/integration tests
+also passed ten consecutive runs each under ASan/UBSan (60 invocations, 178.53 s),
+including the expanded revocation/admission regressions, with leak detection.
+Boundary, frozen catalog, formatting, local document link-target and diff checks
+passed. Native ARM64 remains an unexecuted local gate.
+
+```bash
+LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu OPENCV_OPENCL_RUNTIME=disabled \
+  ctest --test-dir build/l2 -R '^x1-f2-(controller|fixture)$' \
+  --repeat until-fail:100 --output-on-failure
+LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu OPENCV_OPENCL_RUNTIME=disabled \
+  ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+  ctest --test-dir build/l2-sanitized -R '^x1-(f2-|projected-)' \
+  --repeat until-fail:10 --output-on-failure
+```
+
+The correction-focused Studio ON sample retained 0 image copies; framed STOP with
+ordinary RUN acknowledgement blocked took 20.057 µs. GET_STATUS p50/p99/max were
+10.44/11.882/16.491 µs; 100 manual-clock lifetimes took 0.015248 s. This sample ran
+alongside local validation on the environment described above; it is not a
+physical timing guarantee or a machine-specific throughput threshold. Admission
+barrier regressions require acknowledged STOP with a 100 ms caller budget while
+the callback remains blocked, with a 500 ms scheduler allowance on wall time.
+Independent review and the exact submitted SHA's five remote CI jobs remain
+required before acceptance.
+
 ## Physical gates still blocked
 
 There is **no physical UART, GPIO, laser/LED output, flashing, physical calibration,

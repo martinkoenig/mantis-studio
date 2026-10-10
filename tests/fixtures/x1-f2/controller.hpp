@@ -77,7 +77,10 @@ class Controller {
     std::optional<Frame> receive(const Frame &, uint64_t now_us);
     void advance(uint64_t now_us);
     void reboot(uint64_t new_boot);
+    // Synthetic eligibility invalidation at the current manual/controller clock.
+    // Running revocation faults; idle configuration/arming is merely invalidated.
     void revoke_calibration();
+    // A discovery revision alone does not assert an execution-time controller fault.
     void change_snapshot();
     void inject_fault(Result code, bool resolved = false);
     void reject(uint16_t message, Result result) {

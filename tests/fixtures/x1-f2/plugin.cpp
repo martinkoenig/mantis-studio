@@ -3,6 +3,7 @@
 #include "../../../plugins/first-party/devices/x1/acquisition.hpp"
 #include "../x1-projected/views.hpp"
 #include "host.hpp"
+#include "publication-test-hook.hpp"
 #include <fstream>
 #include <set>
 
@@ -206,6 +207,9 @@ struct Instance {
     std::string run, generation, request, diagnostic, release_file, terminal_bytes;
     uint32_t terminal_reason{}, terminal_cleanup{};
     bool inhibited = true, done{}, control_published{}, stop_failed{};
+    bool publishing{};
+    sim::PublicationTestHook publication_hook{};
+    void *publication_hook_context{};
     int64_t dispatch_ns{};
     explicit Instance(std::unique_ptr<camera::Device> d)
         : camera(std::move(d)), graph(camera->config.profile, camera->cameras), config(configuration()),
@@ -255,6 +259,14 @@ struct Instance {
         ~Call() {
             std::lock_guard lock(s.control);
             --s.active;
+            s.wake.notify_all();
+        }
+    };
+    struct PublicationCall {
+        Instance &s;
+        ~PublicationCall() {
+            std::lock_guard lock(s.control);
+            s.publishing = false;
             s.wake.notify_all();
         }
     };
@@ -594,13 +606,33 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
             s.fence_work(MANTIS_ACQUISITION_REASON_DEVICE_FAILURE);
             return MANTIS_PL_ERROR;
         }
+    std::optional<Publication> publication;
+    sim::PublicationTestHook hook;
+    void *hook_context;
     {
         std::lock_guard lock(s.control);
         if (s.fence != f || s.inhibited)
             return MANTIS_PL_NOT_READY;
+        publication.emplace(s, terminal);
+        hook = s.publication_hook;
+        hook_context = s.publication_hook_context;
     }
-    Publication publication(s, terminal);
-    auto rc = publication.emit(emit, ctx);
+    if (hook)
+        hook(hook_context, false);
+    {
+        std::lock_guard lock(s.control);
+        if (s.fence != f || s.inhibited)
+            return MANTIS_PL_NOT_READY;
+        if (s.publishing)
+            return MANTIS_PL_BUSY;
+        // Callback admission linearizes with fence_work under this short lock.
+        // The enclosing Call pins all borrowed publication state until retirement.
+        s.publishing = true;
+    }
+    Instance::PublicationCall admission{s};
+    if (hook)
+        hook(hook_context, true);
+    auto rc = publication->emit(emit, ctx);
     if (!rc) {
         std::lock_guard lock(s.control);
         ++s.sequence;
@@ -791,4 +823,20 @@ const MantisPluginV1 plugin{sizeof(plugin), 1, "org.mantis.x1", "1.1.0", initial
 } // namespace
 extern "C" MANTIS_EXPORT const MantisPluginV1 *mantis_plugin_entry(uint32_t abi) {
     return abi == 1 ? &plugin : nullptr;
+}
+extern "C" MANTIS_EXPORT int mantis_x1_f2_set_publication_test_hook(void *ptr, sim::PublicationTestHook hook,
+                                                                    void *context) noexcept {
+    if (!ptr)
+        return MANTIS_PL_INVALID;
+    try {
+        auto &s = *static_cast<Instance *>(ptr);
+        std::lock_guard lock(s.control);
+        if (s.active || s.publishing)
+            return MANTIS_PL_BUSY;
+        s.publication_hook = hook;
+        s.publication_hook_context = context;
+        return MANTIS_PL_OK;
+    } catch (...) {
+        return MANTIS_PL_ERROR;
+    }
 }

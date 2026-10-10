@@ -95,8 +95,122 @@ Payload literal(std::string_view text) {
         p.bytes[i] = static_cast<uint8_t>(std::stoul(std::string(text.substr(2 * i, 2)), nullptr, 16));
     return p;
 }
+void calibration_revocation() {
+    // CONFIGURED/ARMED invalidation removes authority without inventing a controller fault.
+    for (bool armed : {false, true}) {
+        Rig r;
+        r.claim();
+        tx(r.link, r.configure());
+        if (armed)
+            r.arm = static_cast<uint32_t>(get(tx(r.link, r.arm_request()).payload, 4, 4));
+        r.link.mutate([](Controller &c) {
+            CHECK(c.snapshot() == 1);
+            c.revoke_calibration();
+            CHECK(c.state() == State::inhibited && !c.lease_end() && c.session() == 42);
+            CHECK(c.snapshot() == 2 && c.configuration_generation() == 1);
+            c.revoke_calibration();
+            CHECK(c.snapshot() == 2); // Repeated revocation is not another eligibility change.
+        });
+        CHECK(!r.link.event(Clock::now())); // No invented execution terminal or fault.
+        tx(r.link, r.arm_request(), Result::bad_state);
+        tx(r.link, r.run(), Result::bad_state);
+        tx(r.link, r.configure(), Result::snapshot_changed);
+        auto revoked = r.configure(0, 2);
+        auto rejection = tx(r.link, revoked, Result::calibration_invalid);
+        CHECK(tx(r.link, revoked, Result::calibration_invalid) == rejection);
+        auto status = request(Message::channel_status);
+        put(status.payload, 1, 8, 2);
+        auto response = tx(r.link, status);
+        CHECK(response.payload.bytes[21] == 1 && response.payload.bytes[23] == 3 &&
+              !get(response.payload, 24, 2)); // NotReady/invalid calibration, no controller fault.
+        CHECK(r.link.metrics().runs == 0 && r.link.metrics().pulses == 0);
+    }
+    for (auto now : {uint64_t(0), uint64_t(35'000)})
+        for (auto cleanup : {Result::ok, Result::internal_error}) {
+            Rig r;
+            r.ready();
+            tx(r.link, r.run());
+            r.link.advance(now);
+            r.link.mutate([&](Controller &c) {
+                CHECK(c.snapshot() == 1 && c.state() == State::running);
+                c.cleanup_error(cleanup);
+                c.revoke_calibration();
+                CHECK(c.state() == State::fault && !c.lease_end() && c.session() == r.session);
+                CHECK(c.snapshot() == 2 && c.completed_pulses == now / 10'000);
+            });
+            auto event = r.link.event(Clock::now());
+            CHECK(event && valid_message(*event) && event->message == 0x8001);
+            const auto &record = event->payload;
+            CHECK(event->session == r.session && record.size == 58);
+            CHECK(get(record, 0, 8) == r.boot && get(record, 8, 8) == r.session &&
+                  get(record, 16, 8) == 777 && get(record, 24, 4) == r.arm);
+            CHECK(record.bytes[28] == 5 &&
+                  get(record, 29, 2) ==
+                      static_cast<uint16_t>(cleanup == Result::ok ? Result::calibration_invalid : cleanup));
+            CHECK(get(record, 31, 4) == now / 10'000 && record.bytes[35] == 2 && record.bytes[36] == 1 &&
+                  get(record, 37, 8) == now && !get(record, 45, 4));
+            CHECK(record.bytes[49] == 2 && get(record, 50, 2) == 18 &&
+                  get(record, 52, 2) == static_cast<uint16_t>(cleanup) && get(record, 54, 4) == 1);
+            auto fault = r.link.event(Clock::now());
+            CHECK(fault && valid_message(*fault) && fault->message == 0x8002 && fault->session == r.session);
+            CHECK(get(fault->payload, 0, 2) == 18 && fault->payload.bytes[2] == 4 &&
+                  fault->payload.bytes[3] == 2 && get(fault->payload, 4, 4) == r.arm &&
+                  get(fault->payload, 8, 8) == 777 && get(fault->payload, 16, 8) == now);
+            auto recovered = tx(r.link, r.terminal());
+            CHECK(
+                std::equal(record.data().begin(), record.data().end(), recovered.payload.bytes.begin() + 4));
+            r.link.advance(1'000'000); // Beyond completion and original lease, still no more pulses.
+            tx(r.link, request(Message::stop), cleanup);
+            CHECK(r.link.metrics().pulses == now / 10'000 && r.link.metrics().runs == 1);
+            CHECK(!r.link.event(Clock::now())); // STOP cannot rewrite the immutable terminal.
+            auto retained = tx(r.link, r.terminal());
+            CHECK(std::equal(record.data().begin(), record.data().end(), retained.payload.bytes.begin() + 4));
+            CHECK(tx(r.link, request(Message::status)).payload.bytes[3] == 6);
+            auto channel = request(Message::channel_status);
+            put(channel.payload, 1, 8, 2);
+            auto channel_status = tx(r.link, channel);
+            CHECK(channel_status.payload.bytes[21] == 3 && channel_status.payload.bytes[23] == 3 &&
+                  get(channel_status.payload, 24, 2) == 18);
+            tx(r.link, r.configure(), Result::snapshot_changed);
+            tx(r.link, r.configure(0, 2), Result::bad_state);
+            tx(r.link, r.arm_request(), Result::bad_state);
+            tx(r.link, r.run(), Result::bad_state);
+            tx(r.link, r.heartbeat(1), Result::bad_state);
+            tx(r.link, request(Message::clear_fault, r.session, r.id++), Result::hardware_fault);
+            // Reboot loads a fresh synthetic boot-scoped record. Old authority cannot resume.
+            ++r.boot;
+            r.link.mutate([&](Controller &c) { c.reboot(r.boot); });
+            tx(r.link, r.configure(), Result::no_session);
+            auto calibration = request(Message::calibration);
+            put(calibration.payload, 1, 8, 1);
+            auto fresh_token = get(tx(r.link, calibration).payload, 24, 8);
+            CHECK(fresh_token && fresh_token != r.calibration);
+            r.claim();
+            tx(r.link, r.configure(), Result::calibration_invalid);
+            tx(r.link, r.arm_request(), Result::bad_state);
+            r.calibration = fresh_token;
+            tx(r.link, r.configure());
+            r.arm = static_cast<uint32_t>(get(tx(r.link, r.arm_request()).payload, 4, 4));
+            tx(r.link, r.run(778));
+            r.link.advance(1'200'000);
+            CHECK(tx(r.link, r.terminal(778)).payload.bytes[32] == 1);
+            r.link.mutate([](Controller &c) { CHECK(c.snapshot() == 1); });
+        }
+    // A harmless discovery revision is distinct from calibration revocation/fault.
+    Rig harmless;
+    harmless.ready();
+    tx(harmless.link, harmless.run());
+    harmless.link.mutate([](Controller &c) {
+        c.change_snapshot();
+        CHECK(c.state() == State::running && c.snapshot() == 2);
+    });
+    harmless.link.advance(200'000);
+    CHECK(tx(harmless.link, harmless.terminal()).payload.bytes[32] == 1);
+    CHECK(harmless.link.metrics().pulses == 20);
+}
 int main() {
     try {
+        calibration_revocation();
         {
             Rig r;
             for (auto [opcode, expected] : f2_payloads) {
@@ -345,7 +459,7 @@ int main() {
             CHECK(r.link.metrics().stops == 0);
             r.claim();
             r.link.mutate([](Controller &c) { c.revoke_calibration(); });
-            tx(r.link, r.configure(0, 2), Result::not_calibrated);
+            tx(r.link, r.configure(0, 2), Result::calibration_invalid);
         }
         {
             Rig r;
