@@ -71,5 +71,6 @@ response. Never automatically retry a possibly completed mutation.
 
 Acceptance and backend changes require independent review under the existing ADRs
 and reliability standard; this proposal is not permission to implement them here.
-The pre-existing unreadable PointCloud retry (~500ms) remains a separate required
-reliability correction before UI-M3, with no hidden fix in this milestone.
+The unreadable PointCloud retry (~500ms), unchanged in UI-M2a, is corrected by the
+separate frontend [UI-M3a reliability package](pointcloud-retry.md). Project/replay
+isolation remains a backend follow-up; retry suppression does not repair it.

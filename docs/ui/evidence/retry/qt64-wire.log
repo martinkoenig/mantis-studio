@@ -1,0 +1,4 @@
+Permanent missing: 41 confirmed refreshes, exactly one artifact_data request
+Transient IO: six attempts at 0/2/6/14/30/60s; no requests after exhaustion; manual recovery
+PASS: exact project/revision keys, manual validation/recovery, stale confirmation, auth loss and pending/late-worker authority
+PASS: structured operation/data failures, confirmed snapshots, loss, authentication and recovery

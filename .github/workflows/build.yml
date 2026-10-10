@@ -53,6 +53,9 @@ jobs:
           devices = Path('build/ci/ui-m2b')
           devices.mkdir(parents=True, exist_ok=True)
           devices.joinpath('revision.json').write_text(receipt)
+          retry = Path('build/ci/ui-m3a')
+          retry.mkdir(parents=True, exist_ok=True)
+          retry.joinpath('revision.json').write_text(receipt)
           PY
       - name: Repeat Home, Projects and Devices transition regressions
         if: ${{ matrix.studio == 'ON' }}
@@ -84,6 +87,7 @@ jobs:
             build/ci/ui-m1/
             build/ci/ui-m2a/
             build/ci/ui-m2b/
+            build/ci/ui-m3a/
             build/ci/Testing/Temporary/LastTest.log
             docs/ui/evidence/
 

@@ -1,0 +1,7 @@
+PASS: structured operation/data failures, confirmed snapshots, loss, authentication and recovery
+Baseline stable-project failed-auto request count: 2
+Traceback (most recent call last):
+  File "/work/tests/integration/studio_bridge.py", line 126, in <module>
+    assert data_requests[("auto-missing", "missing")] == 1, dict(data_requests)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {('active', 'valid'): 1, ('active', 'missing'): 1, ('active', 'corrupt'): 1, ('active', 'transport-data'): 1, ('idle', 'valid'): 1, ('auto-missing', 'missing'): 2}

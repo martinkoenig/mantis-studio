@@ -80,9 +80,8 @@ Studio OFF remains Qt-free.
 
 ## Known follow-ups
 
-- Before UI-M3: the bridge may retry automatic loading of a permanently unreadable
-  PointCloud every 500ms. Home adds no loading/retry; bounded retry/backoff remains
-  a separate acquisition reliability correction.
+- [UI-M3a](pointcloud-retry.md) resolves the bridge's repeated automatic loading
+  of unreadable PointClouds with bounded retries. Home adds no loading/retry logic.
 - UI-M2 project history/browser/control and telemetry remain planned. This task
   adds a static local guide, not a tutorial browser, marketplace or release feed.
 - Physical scanner, optical accuracy, calibration quality, native OS screen-reader,

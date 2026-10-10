@@ -27,7 +27,7 @@ with socket.socket() as listener:
             data.extend(chunk)
         return bytes(data)
     def serve():
-        offline, reconnected = False, False
+        offline, reconnected, point_advertised = False, False, False
         try:
             while not stop.is_set():
                 try:
@@ -52,10 +52,15 @@ with socket.socket() as listener:
                         reply.jobs.add(id="wire-job", name="Wire processing", state="Running", progress=0.64)
                         reply.jobs.add(id="wire-failed", name="Wire storage", state="Failed", diagnostics="Fixture write rejected")
                         reply.artifacts.add(id="wire-raw", type="org.mantis.RawCapture", state="FINALIZED", chunks=12)
+                        if point_advertised:
+                            reply.artifacts.add(id="missing-home-data", type="org.mantis.PointCloud", state="FINALIZED", schema_version=1)
                         reply.events.add(sequence=74, kind="info", component="wire.fixture", message="Read-only Home fixture snapshot")
                     elif command == "plugin_enable":
-                        assert request.plugin_enable.id == "home-fixture-reconnect"
-                        offline, reconnected = False, True
+                        if request.plugin_enable.id == "home-fixture-advertise-cloud":
+                            point_advertised = True
+                        else:
+                            assert request.plugin_enable.id == "home-fixture-reconnect"
+                            offline, reconnected, point_advertised = False, True, False
                     elif command == "pipeline_run":
                         operations.append(request.pipeline_run.recipe)
                         if request.pipeline_run.recipe == "transport-home":
@@ -94,6 +99,6 @@ with socket.socket() as listener:
     assert not failures, failures
     assert result.returncode == 0, result.returncode
     assert operations == ["reject-home", "transport-home"], operations
-    assert commands.count("artifact_data") == 1 and commands.count("plugin_enable") == 1, commands
+    assert commands.count("artifact_data") == 1 and commands.count("plugin_enable") == 2, commands
     assert set(commands) == {"snapshot", "pipeline_run", "artifact_data", "plugin_enable"}, commands
 print("PASS: bounded public-wire fixture; no capture, project, calibration or cancellation mutation")

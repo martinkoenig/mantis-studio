@@ -1,4 +1,5 @@
 #pragma once
+#include "cloud_retry.hpp"
 #include "preview.hpp"
 #include <QFutureWatcher>
 #include <QObject>
@@ -19,6 +20,8 @@ struct StudioResult {
     std::string cloud_id, newest_id, cloud_project;
     std::vector<StudioIssue> issues;
     bool operationAttempted{}, artifactAttempted{};
+    std::optional<CloudRetry> retry;
+    std::optional<quint64> requestGeneration;
 };
 class StudioBridge : public QObject {
     Q_OBJECT
@@ -40,7 +43,10 @@ class StudioBridge : public QObject {
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString selectedArtifact READ selectedArtifact NOTIFY changed)
     QVariantList devices_, artifacts_, jobs_, plugins_, diagnostics_;
-    QString project_, error_, capture_, selected_, newest_;
+    QString project_, error_, capture_, selected_;
+    std::string project_identity_;
+    CloudRetry cloud_retry_;
+    CloudRetry::Clock retry_clock_;
     QVariantList error_details_;
     bool connected_{}, has_snapshot_{}, request_pending_{};
     const bool runtime_enabled_;
@@ -64,14 +70,19 @@ class StudioBridge : public QObject {
     quint64 projectGeneration() const {
         return project_generation_;
     }
+    CloudRetry retryState() const {
+        return cloud_retry_;
+    }
     static StudioResult collectResult(const mantis::client::Client &client,
                                       const std::function<void(const mantis::client::Client &)> &action = {},
                                       std::optional<std::string> artifact = {},
                                       const std::string &displayedNewest = {},
-                                      const std::string &expectedProject = {});
+                                      std::optional<std::string> expectedProject = {}, CloudRetry retry = {},
+                                      CloudRetry::Clock clock = CloudRetry::monotonicNow);
 
   public:
-    explicit StudioBridge(QObject *parent = nullptr, bool runtimeEnabled = true);
+    explicit StudioBridge(QObject *parent = nullptr, bool runtimeEnabled = true,
+                          CloudRetry::Clock clock = CloudRetry::monotonicNow);
     ~StudioBridge() override;
     QVariantList devices() const {
         return devices_;

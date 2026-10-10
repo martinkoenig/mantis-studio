@@ -1,0 +1,112 @@
+[
+  {
+    "project": "",
+    "artifact": "valid",
+    "artifact_data": 1
+  },
+  {
+    "project": "/retry/A",
+    "artifact": "same",
+    "artifact_data": 1
+  },
+  {
+    "project": "/retry/B",
+    "artifact": "same",
+    "artifact_data": 1
+  },
+  {
+    "project": "/retry/async-A",
+    "artifact": "held",
+    "artifact_data": 1
+  },
+  {
+    "project": "/retry/async-B",
+    "artifact": "held",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-project-10",
+    "artifact": "missing",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-project-12",
+    "artifact": "corrupt",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-project-14",
+    "artifact": "transport-data",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-project-16",
+    "artifact": "valid",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-project-9",
+    "artifact": "valid",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "auth-data",
+    "artifact_data": 2
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "clock-failure",
+    "artifact_data": 2
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "corrupt",
+    "artifact_data": 3
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "current",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "fresh",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "loss",
+    "artifact_data": 2
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "missing",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "older",
+    "artifact_data": 2
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "revision",
+    "artifact_data": 2
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "transient",
+    "artifact_data": 7
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "valid",
+    "artifact_data": 1
+  },
+  {
+    "project": "fixture-stable-project",
+    "artifact": "wrong-type",
+    "artifact_data": 1
+  }
+]

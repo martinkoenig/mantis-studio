@@ -1162,6 +1162,10 @@ void wire(QQuickWindow *window, ObservedBridge &observed, const QString &output)
             "Rejected operation disconnected Home");
     capture(window, output, "wire-rejected-operation");
     wait("idle watcher", [&] { return !bridge.busy(); });
+    // The strengthened bridge validates an advertised finalized PointCloud before mapping.
+    mantis::wire::v1::Request advertise;
+    advertise.mutable_plugin_enable()->set_id("home-fixture-advertise-cloud");
+    (void)mantis::client::Client{}.call(advertise);
     bridge.selectArtifact("missing-home-data");
     wait("artifact confirmation", [&] { return !bridge.busy() && bridge.errorDetails().size() == 2; });
     require(bridge.connected(), "Data access failure corrupted confirmed state");

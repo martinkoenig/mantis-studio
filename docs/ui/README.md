@@ -7,6 +7,10 @@ system and an explicit presentation data contract. UI-M1 adds the dedicated
 and the [master roadmap](../../ROADMAP.md) remain authoritative. This UI milestone
 does not change v0.3/v0.4 implementation or hardware acceptance status.
 
+UI-M3a adds [bounded PointCloud auto-load/retry](pointcloud-retry.md) in the existing
+bridge, with no Scan UI redesign. [Validation and reproduction](validation-m3a.md)
+cover request counts, source authority, manual recovery and complete local suites.
+
 ## Visual intent
 
 The [ten approved references](reference/README.md) guide the near-black teal

@@ -3,13 +3,27 @@
 #include <algorithm>
 #include <iostream>
 #include <mantis/image_layout.hpp>
-StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled)
-    : QObject(parent), runtime_enabled_(runtimeEnabled),
+namespace {
+std::optional<CloudRetry::Key> cloudCandidate(const mantis::wire::v1::Response &snapshot) {
+    const mantis::wire::v1::Artifact *candidate{};
+    for (const auto &entry : snapshot.artifacts())
+        if (!entry.id().empty() && entry.type() == mantis::schema::points.name &&
+            entry.state() == "FINALIZED")
+            candidate = &entry;
+    if (!candidate)
+        return {};
+    return CloudRetry::Key{snapshot.project_path(),     candidate->id(),    candidate->hash(),
+                           candidate->schema_version(), candidate->bytes(), candidate->chunks()};
+}
+} // namespace
+StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled, CloudRetry::Clock clock)
+    : QObject(parent), retry_clock_(std::move(clock)), runtime_enabled_(runtimeEnabled),
       client_(runtimeEnabled ? mantis::client::Endpoint::environment() : mantis::client::Endpoint{}) {
     connect(&watcher_, &QFutureWatcher<StudioResult>::finished, this, [this] {
         const auto result = watcher_.result();
-        request_pending_ = false;
         applyResult(result);
+        request_pending_ = false;
+        emit changed();
     });
     connect(&preview_watcher_, &QFutureWatcher<PreviewResult>::finished, this,
             [this] { applyPreview(preview_watcher_.result()); });
@@ -41,6 +55,10 @@ void StudioBridge::applyPreview(PreviewResult result) {
     }
 }
 void StudioBridge::applyResult(const StudioResult &result) {
+    if (result.requestGeneration && *result.requestGeneration != project_generation_)
+        return; // Late work cannot replace a newer confirmed project, including A → B → A.
+    if (!result.snapshot && result.retry)
+        cloud_retry_ = *result.retry;
     // A snapshot confirms usable runtime access. Failure codes alone cannot do so:
     // the client uses the same Failure type for server, socket and mapped-file errors.
     connected_ = result.snapshot.has_value();
@@ -68,15 +86,15 @@ void StudioBridge::applyResult(const StudioResult &result) {
     }
     error_ = messages.join(" · ");
     if (!result.snapshot) {
-        emit changed();
+        if (!request_pending_)
+            emit changed();
         return; // Keep the authoritative last-known state; send no runtime command.
     }
     const auto &snapshot = *result.snapshot;
-    const auto nextProject = QString::fromStdString(snapshot.project_path());
-    if (has_snapshot_ && nextProject != project_) {
+    if (!has_snapshot_ || snapshot.project_path() != project_identity_) {
         ++project_generation_;
         selected_.clear();
-        newest_.clear();
+        cloud_retry_.observe({});
         replay_.clear();
         capture_.clear();
         dual_preview_ = false;
@@ -90,8 +108,10 @@ void StudioBridge::applyResult(const StudioResult &result) {
     }
     has_snapshot_ = true;
     emit snapshotReady(snapshot);
-    if (!result.newest_id.empty())
-        newest_ = QString::fromStdString(result.newest_id);
+    // Worker policy is authoritative only for the confirmed final snapshot candidate.
+    if (result.retry && (!result.cloud || result.cloud_project == snapshot.project_path()))
+        cloud_retry_ = *result.retry;
+    cloud_retry_.observe(cloudCandidate(snapshot));
     devices_.clear();
     artifacts_.clear();
     jobs_.clear();
@@ -99,7 +119,8 @@ void StudioBridge::applyResult(const StudioResult &result) {
     diagnostics_.clear();
     capture_.clear();
     acquisition_text_.clear();
-    project_ = QString::fromStdString(snapshot.project_path());
+    project_identity_ = snapshot.project_path();
+    project_ = QString::fromStdString(project_identity_);
     auto s = [](const std::string &v) { return QString::fromStdString(v); };
     for (auto &d : snapshot.devices())
         if (d.parent().empty()) {
@@ -181,12 +202,14 @@ void StudioBridge::applyResult(const StudioResult &result) {
                                            {"kind", s(e.kind())},
                                            {"component", s(e.component())},
                                            {"message", s(e.message())}});
-    if (result.cloud && (result.cloud_project.empty() || result.cloud_project == snapshot.project_path())) {
+    if (result.cloud && (result.cloud_project == snapshot.project_path() ||
+                         (!result.requestGeneration && !result.retry && result.cloud_project.empty()))) {
         selected_ = s(result.cloud_id);
         if (view_)
             view_->setCloud(result.cloud);
     }
-    emit changed();
+    if (!request_pending_)
+        emit changed();
 }
 
 StudioBridge::~StudioBridge() {
@@ -202,11 +225,15 @@ void StudioBridge::execute(std::function<void(const mantis::client::Client &)> a
     if (!runtime_enabled_ || request_pending_)
         return;
     auto client = client_;
-    auto selected = newest_.toStdString();
-    auto project = project_.toStdString();
+    auto project = project_identity_;
+    auto retry = cloud_retry_;
+    auto clock = retry_clock_;
+    const auto generation = project_generation_;
     request_pending_ = true; // The lease includes queued GUI completion, not just worker execution.
-    watcher_.setFuture(QtConcurrent::run([client, action, selected, project] {
-        return collectResult(client, action, {}, selected, project);
+    watcher_.setFuture(QtConcurrent::run([client, action, project, retry, clock, generation] {
+        auto result = collectResult(client, action, {}, {}, project, retry, clock);
+        result.requestGeneration = generation;
+        return result;
     }));
     emit changed();
 }
@@ -214,7 +241,8 @@ StudioResult StudioBridge::collectResult(const mantis::client::Client &client,
                                          const std::function<void(const mantis::client::Client &)> &action,
                                          std::optional<std::string> artifact,
                                          const std::string &displayedNewest,
-                                         const std::string &expectedProject) {
+                                         std::optional<std::string> expectedProject, CloudRetry retry,
+                                         CloudRetry::Clock clock) {
     StudioResult result;
     auto attempt = [&](const char *phase, auto work) {
         try {
@@ -225,6 +253,8 @@ StudioResult StudioBridge::collectResult(const mantis::client::Client &client,
         } catch (const std::exception &failure) {
             // Preserve untyped exceptions without inventing a transport status.
             result.issues.push_back({phase, failure.what(), std::nullopt});
+        } catch (...) {
+            result.issues.push_back({phase, "Unknown local exception", std::nullopt});
         }
         return false;
     };
@@ -236,29 +266,78 @@ StudioResult StudioBridge::collectResult(const mantis::client::Client &client,
     if (!attempt("snapshot", [&] { result.snapshot = client.snapshot(); }))
         return result;
     const auto snapshotProject = result.snapshot->project_path();
-    const bool projectChanged = !expectedProject.empty() && expectedProject != snapshotProject;
+    const bool projectChanged = expectedProject && *expectedProject != snapshotProject;
     if (artifact && projectChanged)
         return result; // Explicit selection belongs to the previous project.
-    std::string newest;
-    if (!artifact) {
-        for (const auto &entry : result.snapshot->artifacts())
-            if (entry.type() == mantis::schema::points.name && entry.state() == "FINALIZED")
-                newest = entry.id();
-        if (newest.empty() || (!projectChanged && newest == displayedNewest))
-            return result;
-        artifact = newest;
+    auto now = [&]() -> std::optional<CloudRetry::Millis> {
+        try {
+            return clock ? clock() : std::nullopt;
+        } catch (...) {
+            return {};
+        }
+    };
+    const auto automatic = cloudCandidate(*result.snapshot);
+    const bool legacyDisplayed =
+        !retry.key() && automatic && !projectChanged && automatic->artifact == displayedNewest;
+    retry.observe(automatic);
+    if (legacyDisplayed)
+        retry.succeeded();
+    result.retry = retry;
+    const bool manual = artifact.has_value();
+    if (!manual) {
+        if (!retry.due(now()))
+            return result; // Confirm snapshots without clearing or manufacturing an artifact error.
+        artifact = automatic->artifact;
     }
+    // Selection is checked against this fresh authoritative snapshot, not a cached display list.
+    const mantis::wire::v1::Artifact *advertised{};
+    int matches{};
+    for (const auto &entry : result.snapshot->artifacts())
+        if (entry.id() == *artifact) {
+            advertised = &entry;
+            ++matches;
+        }
     result.artifactAttempted = true;
-    if (attempt("artifact", [&] { result.cloud = client.data(*artifact); })) {
+    if (!advertised || matches != 1 || advertised->type() != mantis::schema::points.name ||
+        advertised->state() != "FINALIZED") {
+        result.issues.push_back(
+            {"artifact", "Select a unique advertised FINALIZED PointCloud in the current project.",
+             mantis::Error{mantis::Status::invalid_argument,
+                           "Select a unique advertised FINALIZED PointCloud in the current project.",
+                           "studio.artifact"}});
+        // Ambiguous automatic descriptors fail closed; an invalid manual request grants no authority.
+        if (!manual)
+            result.retry->failed(mantis::Status::invalid_argument, {});
+        return result;
+    }
+    const CloudRetry::Key requested{snapshotProject,     *artifact,
+                                    advertised->hash(),  advertised->schema_version(),
+                                    advertised->bytes(), advertised->chunks()};
+    if (attempt("artifact", [&] {
+            auto cloud = client.data(*artifact);
+            if (!cloud || cloud->type != mantis::schema::points ||
+                (advertised->schema_version() != 0 && advertised->schema_version() != cloud->type.version))
+                mantis::fail(mantis::Status::incompatible, "Mapped packet is not a supported PointCloud",
+                             "studio.artifact");
+            result.cloud = std::move(cloud);
+        })) {
         result.cloud_id = *artifact;
         result.cloud_project = snapshotProject;
-        result.newest_id = newest; // A failed load must not mark a cloud as already displayed.
+        if (automatic && requested == *automatic) {
+            result.retry->succeeded();
+            result.newest_id = *artifact;
+        }
     } else {
-        // data() includes a control call and a local mapping. Its failure does not
-        // identify which connection is usable. One fresh snapshot resolves that
-        // uncertainty, preserving both root causes if confirmation also fails.
+        if (automatic && requested == *automatic)
+            result.retry->failed(result.issues.back().cause ? std::optional{result.issues.back().cause->code}
+                                                            : std::nullopt,
+                                 now());
+        // A mapped-file failure alone says nothing about daemon reachability.
+        // One confirmation, never an operation replay, determines current authority.
         result.snapshot.reset();
         attempt("snapshot", [&] { result.snapshot = client.snapshot(); });
+        if (result.snapshot)
+            result.retry->observe(cloudCandidate(*result.snapshot));
     }
     return result;
 }
@@ -308,13 +387,19 @@ void StudioBridge::cancelJob(QString id) {
     });
 }
 void StudioBridge::selectArtifact(QString id) {
-    if (!runtime_enabled_ || !connected_ || request_pending_)
+    if (!runtime_enabled_ || !connected_ || request_pending_ || id.isEmpty())
         return;
     auto client = client_;
-    auto project = project_.toStdString();
+    auto project = project_identity_;
+    auto retry = cloud_retry_;
+    auto clock = retry_clock_;
+    const auto generation = project_generation_;
     request_pending_ = true; // The lease includes queued GUI completion, not just worker execution.
-    watcher_.setFuture(QtConcurrent::run(
-        [client, id, project] { return collectResult(client, {}, id.toStdString(), {}, project); }));
+    watcher_.setFuture(QtConcurrent::run([client, id, project, retry, clock, generation] {
+        auto result = collectResult(client, {}, id.toStdString(), {}, project, retry, clock);
+        result.requestGeneration = generation;
+        return result;
+    }));
     emit changed();
 }
 void StudioBridge::enablePlugin(QString id, bool enabled) {

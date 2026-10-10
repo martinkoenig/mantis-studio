@@ -1,0 +1,21 @@
+[1/28] Automatic MOC and UIC for target mantis-studio
+[2/27] Automatic MOC and UIC for target mantis-studio-devices-tests
+[3/26] Automatic MOC and UIC for target mantis-studio-projects-tests
+[4/25] Automatic MOC and UIC for target mantis-studio-calibration-qml
+[5/24] Automatic MOC and UIC for target mantis-studio-home-tests
+[6/23] Automatic MOC and UIC for target mantis-studio-ui-m0-tests
+[7/22] Automatic MOC and UIC for target mantis-studio-bridge-tests
+[8/21] Building CXX object CMakeFiles/mantis-studio.dir/apps/studio/bridge.cpp.o
+[9/21] Building CXX object CMakeFiles/mantis-studio-devices-tests.dir/apps/studio/bridge.cpp.o
+[10/21] Building CXX object CMakeFiles/mantis-studio-projects-tests.dir/apps/studio/bridge.cpp.o
+[11/21] Building CXX object CMakeFiles/mantis-studio-ui-m0-tests.dir/apps/studio/bridge.cpp.o
+[12/21] Building CXX object CMakeFiles/mantis-studio-home-tests.dir/apps/studio/bridge.cpp.o
+[13/21] Linking CXX executable bin/mantis-studio
+[14/21] Building CXX object CMakeFiles/mantis-studio-calibration-qml.dir/apps/studio/bridge.cpp.o
+[15/21] Linking CXX executable bin/mantis-studio-devices-tests
+[16/21] Linking CXX executable bin/mantis-studio-projects-tests
+[17/21] Linking CXX executable bin/mantis-studio-home-tests
+[18/21] Linking CXX executable bin/mantis-studio-ui-m0-tests
+[19/21] Linking CXX executable bin/mantis-studio-calibration-qml
+[20/21] Building CXX object CMakeFiles/mantis-studio-bridge-tests.dir/apps/studio/bridge.cpp.o
+[21/21] Linking CXX executable bin/mantis-studio-bridge-tests

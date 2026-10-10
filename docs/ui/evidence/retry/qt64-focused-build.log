@@ -1,0 +1,11 @@
+[1/5] Automatic MOC and UIC for target mantis-studio-bridge-tests
+[2/4] Building CXX object CMakeFiles/mantis-studio-bridge-tests.dir/tests/integration/studio_bridge.cpp.o
+/work/tests/integration/studio_bridge.cpp: In function 'uint64_t dataCount(const mantis::client::Client&, const std::string&, const std::string&)':
+/work/tests/integration/studio_bridge.cpp:39:58: warning: possibly dangling reference to a temporary [-Wdangling-reference]
+   39 |     for (const auto &event : client.call(request).events())
+      |                                                          ^
+/work/tests/integration/studio_bridge.cpp:39:57: note: the temporary was destroyed at the end of the full expression 'mantis::client::Client::call(mantis::wire::v1::Request) const(mantis::wire::v1::Request(request)).mantis::wire::v1::Response::events()'
+   39 |     for (const auto &event : client.call(request).events())
+      |                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~
+[3/4] Building CXX object CMakeFiles/mantis-studio-bridge-tests.dir/apps/studio/bridge.cpp.o
+[4/4] Linking CXX executable bin/mantis-studio-bridge-tests
