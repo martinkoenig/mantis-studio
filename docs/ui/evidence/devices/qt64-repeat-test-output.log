@@ -1,0 +1,1560 @@
+Start testing: Oct 10 11:16 UTC
+----------------------------------------------------------
+3/71 Testing: studio-devices-qml
+3/71 Test: studio-devices-qml
+Command: "/work/build/qt64/bin/mantis-studio-devices-tests" "/work/build/qt64/ui-m2b/qml" "qml"
+Directory: /work/build/qt64
+"studio-devices-qml" start time: Oct 10 11:16 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+PASS: Devices qml
+<end of output>
+Test time =   2.47 sec
+----------------------------------------------------------
+Test Passed.
+"studio-devices-qml" end time: Oct 10 11:16 UTC
+"studio-devices-qml" time elapsed: 00:00:02
+----------------------------------------------------------
+
+3/71 Testing: studio-devices-qml
+3/71 Test: studio-devices-qml
+Command: "/work/build/qt64/bin/mantis-studio-devices-tests" "/work/build/qt64/ui-m2b/qml" "qml"
+Directory: /work/build/qt64
+"studio-devices-qml" start time: Oct 10 11:16 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+PASS: Devices qml
+<end of output>
+Test time =   2.48 sec
+----------------------------------------------------------
+Test Passed.
+"studio-devices-qml" end time: Oct 10 11:16 UTC
+"studio-devices-qml" time elapsed: 00:00:02
+----------------------------------------------------------
+
+3/71 Testing: studio-devices-qml
+3/71 Test: studio-devices-qml
+Command: "/work/build/qt64/bin/mantis-studio-devices-tests" "/work/build/qt64/ui-m2b/qml" "qml"
+Directory: /work/build/qt64
+"studio-devices-qml" start time: Oct 10 11:16 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+PASS: Devices qml
+<end of output>
+Test time =   2.51 sec
+----------------------------------------------------------
+Test Passed.
+"studio-devices-qml" end time: Oct 10 11:16 UTC
+"studio-devices-qml" time elapsed: 00:00:02
+----------------------------------------------------------
+
+5/71 Testing: studio-devices-stress
+5/71 Test: studio-devices-stress
+Command: "/work/build/qt64/bin/mantis-studio-devices-tests" "/work/build/qt64/ui-m2b/stress" "stress"
+Directory: /work/build/qt64
+"studio-devices-stress" start time: Oct 10 11:16 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+150 persistent-pane/selection/resize transitions + 95 keyboard rows + 30 source/graph transitions
+PASS: Devices stress
+<end of output>
+Test time =  15.68 sec
+----------------------------------------------------------
+Test Passed.
+"studio-devices-stress" end time: Oct 10 11:16 UTC
+"studio-devices-stress" time elapsed: 00:00:15
+----------------------------------------------------------
+
+5/71 Testing: studio-devices-stress
+5/71 Test: studio-devices-stress
+Command: "/work/build/qt64/bin/mantis-studio-devices-tests" "/work/build/qt64/ui-m2b/stress" "stress"
+Directory: /work/build/qt64
+"studio-devices-stress" start time: Oct 10 11:16 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+150 persistent-pane/selection/resize transitions + 95 keyboard rows + 30 source/graph transitions
+PASS: Devices stress
+<end of output>
+Test time =  16.01 sec
+----------------------------------------------------------
+Test Passed.
+"studio-devices-stress" end time: Oct 10 11:16 UTC
+"studio-devices-stress" time elapsed: 00:00:16
+----------------------------------------------------------
+
+5/71 Testing: studio-devices-stress
+5/71 Test: studio-devices-stress
+Command: "/work/build/qt64/bin/mantis-studio-devices-tests" "/work/build/qt64/ui-m2b/stress" "stress"
+Directory: /work/build/qt64
+"studio-devices-stress" start time: Oct 10 11:16 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+150 persistent-pane/selection/resize transitions + 95 keyboard rows + 30 source/graph transitions
+PASS: Devices stress
+<end of output>
+Test time =  15.82 sec
+----------------------------------------------------------
+Test Passed.
+"studio-devices-stress" end time: Oct 10 11:16 UTC
+"studio-devices-stress" time elapsed: 00:00:15
+----------------------------------------------------------
+
+9/71 Testing: studio-projects-qml
+9/71 Test: studio-projects-qml
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/qml" "qml"
+Directory: /work/build/qt64
+"studio-projects-qml" start time: Oct 10 11:16 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=656ms updates=0
+STUDIO_DUAL_PREVIEW_READY
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=1 card=320 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=2996 columns=6 card=420 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=2996 columns=6 card=420 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=2996 columns=6 card=420 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+PASS: Projects qml contracts and actual Qt evidence
+<end of output>
+Test time =  10.48 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-qml" end time: Oct 10 11:17 UTC
+"studio-projects-qml" time elapsed: 00:00:10
+----------------------------------------------------------
+
+9/71 Testing: studio-projects-qml
+9/71 Test: studio-projects-qml
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/qml" "qml"
+Directory: /work/build/qt64
+"studio-projects-qml" start time: Oct 10 11:17 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=699ms updates=0
+STUDIO_DUAL_PREVIEW_READY
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=1 card=320 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=2996 columns=6 card=420 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=2996 columns=6 card=420 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=2996 columns=6 card=420 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+PASS: Projects qml contracts and actual Qt evidence
+<end of output>
+Test time =  10.40 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-qml" end time: Oct 10 11:17 UTC
+"studio-projects-qml" time elapsed: 00:00:10
+----------------------------------------------------------
+
+9/71 Testing: studio-projects-qml
+9/71 Test: studio-projects-qml
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/qml" "qml"
+Directory: /work/build/qt64
+"studio-projects-qml" start time: Oct 10 11:17 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=650ms updates=0
+STUDIO_DUAL_PREVIEW_READY
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=1 card=320 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=2996 columns=6 card=420 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=2996 columns=6 card=420 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=2996 columns=6 card=420 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+PASS: Projects qml contracts and actual Qt evidence
+<end of output>
+Test time =  10.22 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-qml" end time: Oct 10 11:17 UTC
+"studio-projects-qml" time elapsed: 00:00:10
+----------------------------------------------------------
+
+11/71 Testing: studio-projects-resize
+11/71 Test: studio-projects-resize
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/resize" "resize"
+Directory: /work/build/qt64
+"studio-projects-resize" start time: Oct 10 11:17 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=608 columns=3 card=194.667 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=892 columns=4 card=214 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=608 columns=3 card=194.667 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+PASS: Projects resize contracts and actual Qt evidence
+<end of output>
+Test time =  10.31 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-resize" end time: Oct 10 11:17 UTC
+"studio-projects-resize" time elapsed: 00:00:10
+----------------------------------------------------------
+
+11/71 Testing: studio-projects-resize
+11/71 Test: studio-projects-resize
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/resize" "resize"
+Directory: /work/build/qt64
+"studio-projects-resize" start time: Oct 10 11:17 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=608 columns=3 card=194.667 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=892 columns=4 card=214 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=608 columns=3 card=194.667 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+PASS: Projects resize contracts and actual Qt evidence
+<end of output>
+Test time =  10.22 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-resize" end time: Oct 10 11:17 UTC
+"studio-projects-resize" time elapsed: 00:00:10
+----------------------------------------------------------
+
+11/71 Testing: studio-projects-resize
+11/71 Test: studio-projects-resize
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/resize" "resize"
+Directory: /work/build/qt64
+"studio-projects-resize" start time: Oct 10 11:17 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=608 columns=3 card=194.667 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=892 columns=4 card=214 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=608 columns=3 card=194.667 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+PASS: Projects resize contracts and actual Qt evidence
+<end of output>
+Test time =  10.35 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-resize" end time: Oct 10 11:18 UTC
+"studio-projects-resize" time elapsed: 00:00:10
+----------------------------------------------------------
+
+14/71 Testing: studio-projects-scroll
+14/71 Test: studio-projects-scroll
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/scroll" "scroll"
+Directory: /work/build/qt64
+"studio-projects-scroll" start time: Oct 10 11:18 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Native release gentle/fast: velocity=500/4000 travel=48.8366/350.958
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: mock
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: live
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: hybrid
+PASS: Projects scroll contracts and actual Qt evidence
+<end of output>
+Test time =  19.47 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-scroll" end time: Oct 10 11:18 UTC
+"studio-projects-scroll" time elapsed: 00:00:19
+----------------------------------------------------------
+
+14/71 Testing: studio-projects-scroll
+14/71 Test: studio-projects-scroll
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/scroll" "scroll"
+Directory: /work/build/qt64
+"studio-projects-scroll" start time: Oct 10 11:18 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Native release gentle/fast: velocity=500/4000 travel=48.192/347.126
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: mock
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: live
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: hybrid
+PASS: Projects scroll contracts and actual Qt evidence
+<end of output>
+Test time =  19.04 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-scroll" end time: Oct 10 11:18 UTC
+"studio-projects-scroll" time elapsed: 00:00:19
+----------------------------------------------------------
+
+14/71 Testing: studio-projects-scroll
+14/71 Test: studio-projects-scroll
+Command: "/work/build/qt64/bin/mantis-studio-projects-tests" "/work/build/qt64/ui-m2a/scroll" "scroll"
+Directory: /work/build/qt64
+"studio-projects-scroll" start time: Oct 10 11:18 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Native release gentle/fast: velocity=500/4000 travel=46.5542/307.196
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: mock
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: live
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: hybrid
+PASS: Projects scroll contracts and actual Qt evidence
+<end of output>
+Test time =  19.13 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-scroll" end time: Oct 10 11:18 UTC
+"studio-projects-scroll" time elapsed: 00:00:19
+----------------------------------------------------------
+
+19/71 Testing: studio-home-qml
+19/71 Test: studio-home-qml
+Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/screenshots"
+Directory: /work/build/qt64
+"studio-home-qml" start time: Oct 10 11:18 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: local Home actions in live
+STAGE: local Home actions in mock
+STAGE: local Home actions in hybrid
+Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
+Home stress: 90 immediate model/mode/route/resize transitions, observed 5212 ms (informational, not a latency budget)
+RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
+RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
+RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
+RGBA cover 520x279 transparent=67033 opaque=75300 edge=2747 inset=8/8
+RGBA scanner 196x351 transparent=33366 opaque=33322 edge=2108 inset=8/8
+Fluid Home: 1080x720 mock DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 mock DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 mock DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 mock DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
+Fluid Home: 1536x1024 mock DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 mock DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 mock DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 mock DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 mock DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 live DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 live DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 live DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 live DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 live DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 hybrid DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 hybrid DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 hybrid DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 hybrid DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 hybrid DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 hybrid DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 hybrid DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 hybrid DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 hybrid DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1248x900 mock DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 mock DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 mock DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 mock DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 mock DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 mock DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 mock DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 mock DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 mock DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 mock DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 mock DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 mock DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 mock DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 mock DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 mock DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 mock DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 mock DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 live DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 live DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 live DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 live DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 live DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 live DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 live DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 live DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 live DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 live DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 live DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 live DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 live DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 live DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 live DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 live DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 hybrid DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 hybrid DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 hybrid DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 hybrid DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 hybrid DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 hybrid DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 hybrid DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 hybrid DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 hybrid DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 hybrid DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 hybrid DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 hybrid DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 hybrid DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+PASS: Home presentation, authority, accessibility and visual evidence
+<end of output>
+Test time =  24.89 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-qml" end time: Oct 10 11:19 UTC
+"studio-home-qml" time elapsed: 00:00:24
+----------------------------------------------------------
+
+19/71 Testing: studio-home-qml
+19/71 Test: studio-home-qml
+Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/screenshots"
+Directory: /work/build/qt64
+"studio-home-qml" start time: Oct 10 11:19 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: local Home actions in live
+STAGE: local Home actions in mock
+STAGE: local Home actions in hybrid
+Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
+Home stress: 90 immediate model/mode/route/resize transitions, observed 5153 ms (informational, not a latency budget)
+RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
+RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
+RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
+RGBA cover 520x279 transparent=67033 opaque=75300 edge=2747 inset=8/8
+RGBA scanner 196x351 transparent=33366 opaque=33322 edge=2108 inset=8/8
+Fluid Home: 1080x720 mock DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 mock DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 mock DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 mock DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
+Fluid Home: 1536x1024 mock DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 mock DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 mock DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 mock DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 mock DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 live DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 live DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 live DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 live DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 live DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 hybrid DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 hybrid DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 hybrid DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 hybrid DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 hybrid DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 hybrid DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 hybrid DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 hybrid DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 hybrid DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1248x900 mock DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 mock DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 mock DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 mock DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 mock DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 mock DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 mock DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 mock DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 mock DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 mock DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 mock DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 mock DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 mock DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 mock DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 mock DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 mock DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 mock DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 live DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 live DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 live DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 live DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 live DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 live DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 live DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 live DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 live DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 live DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 live DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 live DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 live DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 live DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 live DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 live DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 hybrid DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 hybrid DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 hybrid DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 hybrid DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 hybrid DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 hybrid DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 hybrid DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 hybrid DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 hybrid DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 hybrid DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 hybrid DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 hybrid DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 hybrid DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+PASS: Home presentation, authority, accessibility and visual evidence
+<end of output>
+Test time =  24.75 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-qml" end time: Oct 10 11:19 UTC
+"studio-home-qml" time elapsed: 00:00:24
+----------------------------------------------------------
+
+19/71 Testing: studio-home-qml
+19/71 Test: studio-home-qml
+Command: "/work/build/qt64/bin/mantis-studio-home-tests" "/work/build/qt64/ui-m1/screenshots"
+Directory: /work/build/qt64
+"studio-home-qml" start time: Oct 10 11:19 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: local Home actions in live
+STAGE: local Home actions in mock
+STAGE: local Home actions in hybrid
+Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
+Home stress: 90 immediate model/mode/route/resize transitions, observed 5023 ms (informational, not a latency budget)
+RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
+RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
+RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
+RGBA cover 520x279 transparent=67033 opaque=75300 edge=2747 inset=8/8
+RGBA scanner 196x351 transparent=33366 opaque=33322 edge=2108 inset=8/8
+Fluid Home: 1080x720 mock DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 mock DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 mock DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 mock DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Primary layout: hero 972x280, actions bottom 803, activity 815, first row bottom 905, viewport bottom 982
+Fluid Home: 1536x1024 mock DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 mock DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 mock DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 mock DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 mock DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 live DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 live DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 live DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 live DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 live DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 hybrid DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 hybrid DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 hybrid DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 hybrid DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 hybrid DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 hybrid DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 hybrid DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 hybrid DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 hybrid DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1248x900 mock DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 mock DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 mock DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 mock DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 mock DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 mock DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 mock DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 mock DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 mock DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 mock DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 mock DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 mock DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 mock DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 mock DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 mock DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 mock DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 mock DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 live DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 live DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 live DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 live DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 live DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 live DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 live DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 live DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 live DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 live DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 live DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 live DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 live DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 live DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 live DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 live DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 hybrid DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 hybrid DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 hybrid DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 hybrid DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 hybrid DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 hybrid DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 hybrid DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 hybrid DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 hybrid DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 hybrid DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 hybrid DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 hybrid DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 hybrid DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+PASS: Home presentation, authority, accessibility and visual evidence
+<end of output>
+Test time =  24.78 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-qml" end time: Oct 10 11:20 UTC
+"studio-home-qml" time elapsed: 00:00:24
+----------------------------------------------------------
+
+25/71 Testing: studio-ui-m0-qml
+25/71 Test: studio-ui-m0-qml
+Command: "/work/build/qt64/bin/mantis-studio-ui-m0-tests" "/work/build/qt64/ui-m0/screenshots"
+Directory: /work/build/qt64
+"studio-ui-m0-qml" start time: Oct 10 11:20 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
+STAGE: dynamic device removal followed by immediate resize
+STAGE: presentation provider
+STAGE: controller eligibility and stale snapshot transitions
+STAGE: button interactions
+STAGE: rendered-frame screenshot deadlines
+PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
+<end of output>
+Test time =   6.56 sec
+----------------------------------------------------------
+Test Passed.
+"studio-ui-m0-qml" end time: Oct 10 11:20 UTC
+"studio-ui-m0-qml" time elapsed: 00:00:06
+----------------------------------------------------------
+
+25/71 Testing: studio-ui-m0-qml
+25/71 Test: studio-ui-m0-qml
+Command: "/work/build/qt64/bin/mantis-studio-ui-m0-tests" "/work/build/qt64/ui-m0/screenshots"
+Directory: /work/build/qt64
+"studio-ui-m0-qml" start time: Oct 10 11:20 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
+STAGE: dynamic device removal followed by immediate resize
+STAGE: presentation provider
+STAGE: controller eligibility and stale snapshot transitions
+STAGE: button interactions
+STAGE: rendered-frame screenshot deadlines
+PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
+<end of output>
+Test time =   6.53 sec
+----------------------------------------------------------
+Test Passed.
+"studio-ui-m0-qml" end time: Oct 10 11:20 UTC
+"studio-ui-m0-qml" time elapsed: 00:00:06
+----------------------------------------------------------
+
+25/71 Testing: studio-ui-m0-qml
+25/71 Test: studio-ui-m0-qml
+Command: "/work/build/qt64/bin/mantis-studio-ui-m0-tests" "/work/build/qt64/ui-m0/screenshots"
+Directory: /work/build/qt64
+"studio-ui-m0-qml" start time: Oct 10 11:20 UTC
+Output:
+----------------------------------------------------------
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
+STAGE: dynamic device removal followed by immediate resize
+STAGE: presentation provider
+STAGE: controller eligibility and stale snapshot transitions
+STAGE: button interactions
+STAGE: rendered-frame screenshot deadlines
+PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
+<end of output>
+Test time =   6.49 sec
+----------------------------------------------------------
+Test Passed.
+"studio-ui-m0-qml" end time: Oct 10 11:20 UTC
+"studio-ui-m0-qml" time elapsed: 00:00:06
+----------------------------------------------------------
+
+End testing: Oct 10 11:20 UTC

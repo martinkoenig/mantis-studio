@@ -1,0 +1,48 @@
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start  3: studio-devices-qml
+    Test  #3: studio-devices-qml ...............   Passed    2.47 sec
+    Start  3: studio-devices-qml
+    Test  #3: studio-devices-qml ...............   Passed    2.48 sec
+    Start  3: studio-devices-qml
+1/7 Test  #3: studio-devices-qml ...............   Passed    2.51 sec
+    Start  5: studio-devices-stress
+    Test  #5: studio-devices-stress ............   Passed   15.68 sec
+    Start  5: studio-devices-stress
+    Test  #5: studio-devices-stress ............   Passed   16.01 sec
+    Start  5: studio-devices-stress
+2/7 Test  #5: studio-devices-stress ............   Passed   15.82 sec
+    Start  9: studio-projects-qml
+    Test  #9: studio-projects-qml ..............   Passed   10.48 sec
+    Start  9: studio-projects-qml
+    Test  #9: studio-projects-qml ..............   Passed   10.40 sec
+    Start  9: studio-projects-qml
+3/7 Test  #9: studio-projects-qml ..............   Passed   10.22 sec
+    Start 11: studio-projects-resize
+    Test #11: studio-projects-resize ...........   Passed   10.31 sec
+    Start 11: studio-projects-resize
+    Test #11: studio-projects-resize ...........   Passed   10.22 sec
+    Start 11: studio-projects-resize
+4/7 Test #11: studio-projects-resize ...........   Passed   10.35 sec
+    Start 14: studio-projects-scroll
+    Test #14: studio-projects-scroll ...........   Passed   19.47 sec
+    Start 14: studio-projects-scroll
+    Test #14: studio-projects-scroll ...........   Passed   19.04 sec
+    Start 14: studio-projects-scroll
+5/7 Test #14: studio-projects-scroll ...........   Passed   19.13 sec
+    Start 19: studio-home-qml
+    Test #19: studio-home-qml ..................   Passed   24.89 sec
+    Start 19: studio-home-qml
+    Test #19: studio-home-qml ..................   Passed   24.75 sec
+    Start 19: studio-home-qml
+6/7 Test #19: studio-home-qml ..................   Passed   24.78 sec
+    Start 25: studio-ui-m0-qml
+    Test #25: studio-ui-m0-qml .................   Passed    6.56 sec
+    Start 25: studio-ui-m0-qml
+    Test #25: studio-ui-m0-qml .................   Passed    6.53 sec
+    Start 25: studio-ui-m0-qml
+7/7 Test #25: studio-ui-m0-qml .................   Passed    6.49 sec
+
+100% tests passed, 0 tests failed out of 7
+
+Total Test time (real) = 268.57 sec

@@ -1,8 +1,9 @@
-# Mantis Studio UI (UI-M0, UI-M1 Home and UI-M2a Projects)
+# Mantis Studio UI (UI-M0, Home, Projects and Devices)
 
 UI-M0 establishes the Qt 6 / Qt Quick desktop shell, ten routes, a small design
 system and an explicit presentation data contract. UI-M1 adds the dedicated
-[Home dashboard](home.md); UI-M2a adds the dedicated [Projects workspace](projects.md). Other full workspace tools remain deferred. [Architecture v1](../../MANTIS_STUDIO_ARCHITECTURE.md)
+[Home dashboard](home.md); UI-M2a adds the dedicated [Projects workspace](projects.md). UI-M2b adds the read-only
+[Devices workspace](devices.md). Other full workspace tools remain deferred. [Architecture v1](../../MANTIS_STUDIO_ARCHITECTURE.md)
 and the [master roadmap](../../ROADMAP.md) remain authoritative. This UI milestone
 does not change v0.3/v0.4 implementation or hardware acceptance status.
 
@@ -45,6 +46,12 @@ metadata and explicit unknown fields. New/Open use a visible safety gate: the
 published operation retains old replay/preview context after a project switch.
 There is no GUI filesystem catalog or mutable project operation in this milestone.
 See [UI-M2a validation and review evidence](validation-m2a.md).
+
+Devices presents the complete bounded descriptor graph, exact plugin provenance,
+explicit stale/unknown states and capability-authorized calibration navigation.
+Its three desktop panes adapt to discoverable compact views; mock/hybrid demo
+counts and identities stay separate from live. Device configuration and projected
+light controls remain disabled with explanations. See [UI-M2b validation](validation-m2b.md).
 
 ## Launch and data sources
 
@@ -147,6 +154,9 @@ true only for Devices/Calibration in live/hybrid; mock never starts its polling.
   hybrid showcase. `HomeModel` owns bounded, read-only snapshot formatting and
   emits no notification for equal normalized results; mock detaches it from the
   bridge. `ui/home/` contains original static illustrations, the single activity table, local guide and reusable cards.
+- `DevicesWorkspace.qml` composes the read-only DevicesModel, isolated local demo,
+  grouped navigator, responsive overview and four-tab inspector. No additional
+  client/transport/timer/preview is added.
 - `FoundationWorkspace.qml` renders route descriptors and provider data through
   the shared components. New full workspaces should receive presentation models
   and emit intents; runtime commands belong in frontend controllers using the
@@ -190,7 +200,7 @@ work from the master roadmap.
 | `reverse` | No CAD fitting workflow | Fitting/sections/CAD handoff · UI-M5 | Bind capability-backed derived artifacts; no UI-owned geometry computation |
 | `automate` | Existing jobs/cancellation in acquisition | Sequences and execution history · UI-M6 | Introduce public service-backed intent controller when supported |
 | `projects` | UI-M2a: current runtime project, bounded artifact search/filter/selection, separate twelve-study mock gallery and inspector | Catalog/CRUD/revisions unavailable; New/Open blocked by verified replay isolation defect | ProjectsModel observes the existing bridge; [safety gate and future public APIs](projects-backend-gap.md) |
-| `devices` | Runtime descriptors; existing seven-stage calibration | Device detail/configuration · UI-M2 | Map real advertised capabilities and evidence; keep controller authority |
+| `devices` | UI-M2b: bounded read-only graph, inspector, plugin diagnostics and safe seven-stage calibration entry | Editable configuration/firmware/presets unavailable | DevicesModel observes existing snapshot; shared controller eligibility, explicit source/freshness guards |
 | `plugins` | Runtime inventory/status/recovery in acquisition | Inventory and permissions · UI-M6 | Bind existing plugin descriptors/commands; marketplace is deferred |
 | `settings` | Fixed canonical units, launch mode/viewport | Preferences/appearance/diagnostics · UI-M7 | Add local preferences provider; backend settings require supported services |
 
@@ -251,3 +261,7 @@ See [M1 validation](validation-m1.md) for executed checks and exact-SHA CI evide
 Studio ON CI jobs upload generated screenshots and CTest diagnostics as
 `ui-m0-ubuntu-24.04` and `ui-m0-ubuntu-24.04-arm` artifacts on the matching Actions run.
 These captures are software presentation evidence, never physical scanner results.
+
+`studio-devices-{model,qml,matrix,stress,wire,dpi-1.5,dpi-2}` adds graph,
+authority, public-wire, accessibility and nine-viewport/DPR evidence using the
+same QML resource list. See [UI-M2b validation](validation-m2b.md) for actual results.

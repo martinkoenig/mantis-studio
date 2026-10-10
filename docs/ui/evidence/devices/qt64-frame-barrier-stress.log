@@ -1,0 +1,15 @@
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start 5: studio-devices-stress
+    Test #5: studio-devices-stress ............***Failed    3.98 sec
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Clipped workspace control devicesInspector rect=901,175,3,483 workspace=1080x610
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   3.98 sec
+
+The following tests FAILED:
+	  5 - studio-devices-stress (Failed)
+Errors while running CTest

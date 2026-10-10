@@ -103,10 +103,10 @@ ApplicationWindow {
             }
             ColumnLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.margins: window.workspace === "home" || window.workspace === "projects" ? 12 : window.compact ? 16 : Theme.padding
+                Layout.margins: window.workspace === "home" || window.workspace === "projects" || window.workspace === "devices" ? 12 : window.compact ? 16 : Theme.padding
                 spacing: Theme.gap
                 RowLayout {
-                    visible: window.workspace !== "home" && window.workspace !== "projects"
+                    visible: window.workspace !== "home" && window.workspace !== "projects" && window.workspace !== "devices"
                     Layout.fillWidth: true
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 6
@@ -142,10 +142,18 @@ ApplicationWindow {
                     bridge: window.studioBridge; mode: window.uiMode
                     onNavigate: function(route) { window.workspace = route }
                 }
+                DevicesWorkspace {
+                    objectName: "devicesWorkspace"
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    visible: window.workspace === "devices"
+                    bridge: window.studioBridge; mode: window.uiMode
+                    onCalibrate: function(deviceId) { window.openCalibration(deviceId) }
+                    onNavigate: function(route) { window.workspace = route }
+                }
                 FoundationWorkspace {
                     objectName: "foundationWorkspace"
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    visible: !window.legacyVisible && window.workspace !== "calibration" && window.workspace !== "home" && window.workspace !== "projects"
+                    visible: !window.legacyVisible && window.workspace !== "calibration" && window.workspace !== "home" && window.workspace !== "projects" && window.workspace !== "devices"
                     page: window.currentPage; state: window.appUiState
                     onOpenAcquisition: window.workspace = "acquisition"
                     onOpenDevices: window.workspace = "devices"

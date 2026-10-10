@@ -1,0 +1,313 @@
+Internal ctest changing into directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+Test project /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+      Start  1: studio-bridge-errors
+ 1/71 Test  #1: studio-bridge-errors ...............   Passed    0.21 sec
+      Start  2: studio-devices-model
+ 2/71 Test  #2: studio-devices-model ...............   Passed    0.73 sec
+      Start  3: studio-devices-qml
+ 3/71 Test  #3: studio-devices-qml .................***Failed    3.55 sec
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+Qt/QML warnings in Devices tests
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+
+      Start  4: studio-devices-matrix
+ 4/71 Test  #4: studio-devices-matrix ..............***Failed   21.62 sec
+mock 1080x720 dpr=1
+live 1080x720 dpr=1
+hybrid 1080x720 dpr=1
+empty 1080x720 dpr=1
+waiting 1080x720 dpr=1
+stale 1080x720 dpr=1
+third-party 1080x720 dpr=1
+hybrid-stale 1080x720 dpr=1
+mock 1280x720 dpr=1
+live 1280x720 dpr=1
+hybrid 1280x720 dpr=1
+empty 1280x720 dpr=1
+waiting 1280x720 dpr=1
+stale 1280x720 dpr=1
+third-party 1280x720 dpr=1
+hybrid-stale 1280x720 dpr=1
+mock 1366x768 dpr=1
+live 1366x768 dpr=1
+hybrid 1366x768 dpr=1
+empty 1366x768 dpr=1
+waiting 1366x768 dpr=1
+stale 1366x768 dpr=1
+third-party 1366x768 dpr=1
+hybrid-stale 1366x768 dpr=1
+mock 1440x900 dpr=1
+live 1440x900 dpr=1
+hybrid 1440x900 dpr=1
+empty 1440x900 dpr=1
+waiting 1440x900 dpr=1
+stale 1440x900 dpr=1
+third-party 1440x900 dpr=1
+hybrid-stale 1440x900 dpr=1
+mock 1536x1024 dpr=1
+live 1536x1024 dpr=1
+hybrid 1536x1024 dpr=1
+empty 1536x1024 dpr=1
+waiting 1536x1024 dpr=1
+stale 1536x1024 dpr=1
+third-party 1536x1024 dpr=1
+hybrid-stale 1536x1024 dpr=1
+mock 1920x1080 dpr=1
+live 1920x1080 dpr=1
+hybrid 1920x1080 dpr=1
+empty 1920x1080 dpr=1
+waiting 1920x1080 dpr=1
+stale 1920x1080 dpr=1
+third-party 1920x1080 dpr=1
+hybrid-stale 1920x1080 dpr=1
+mock 2560x1440 dpr=1
+live 2560x1440 dpr=1
+hybrid 2560x1440 dpr=1
+empty 2560x1440 dpr=1
+waiting 2560x1440 dpr=1
+stale 2560x1440 dpr=1
+third-party 2560x1440 dpr=1
+hybrid-stale 2560x1440 dpr=1
+mock 3440x1440 dpr=1
+live 3440x1440 dpr=1
+hybrid 3440x1440 dpr=1
+empty 3440x1440 dpr=1
+waiting 3440x1440 dpr=1
+stale 3440x1440 dpr=1
+third-party 3440x1440 dpr=1
+hybrid-stale 3440x1440 dpr=1
+mock 3840x2160 dpr=1
+live 3840x2160 dpr=1
+hybrid 3840x2160 dpr=1
+empty 3840x2160 dpr=1
+waiting 3840x2160 dpr=1
+stale 3840x2160 dpr=1
+third-party 3840x2160 dpr=1
+hybrid-stale 3840x2160 dpr=1
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+Qt/QML warnings in Devices tests
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+
+      Start  5: studio-devices-stress
+ 5/71 Test  #5: studio-devices-stress ..............***Failed   26.06 sec
+150 persistent-pane/selection/resize transitions + 95 keyboard rows + 30 source/graph transitions
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+Qt/QML warnings in Devices tests
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+
+      Start  6: studio-devices-dpi-1.5
+ 6/71 Test  #6: studio-devices-dpi-1.5 .............***Failed    7.89 sec
+mock 1080x720 dpr=1.5
+live 1080x720 dpr=1.5
+hybrid 1080x720 dpr=1.5
+mock 1280x720 dpr=1.5
+live 1280x720 dpr=1.5
+hybrid 1280x720 dpr=1.5
+mock 1366x768 dpr=1.5
+live 1366x768 dpr=1.5
+hybrid 1366x768 dpr=1.5
+mock 1440x900 dpr=1.5
+live 1440x900 dpr=1.5
+hybrid 1440x900 dpr=1.5
+mock 1536x1024 dpr=1.5
+live 1536x1024 dpr=1.5
+hybrid 1536x1024 dpr=1.5
+mock 1920x1080 dpr=1.5
+live 1920x1080 dpr=1.5
+hybrid 1920x1080 dpr=1.5
+mock 2560x1440 dpr=1.5
+live 2560x1440 dpr=1.5
+hybrid 2560x1440 dpr=1.5
+mock 3440x1440 dpr=1.5
+live 3440x1440 dpr=1.5
+hybrid 3440x1440 dpr=1.5
+mock 3840x2160 dpr=1.5
+live 3840x2160 dpr=1.5
+hybrid 3840x2160 dpr=1.5
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+Qt/QML warnings in Devices tests
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+
+      Start  7: studio-devices-dpi-2
+ 7/71 Test  #7: studio-devices-dpi-2 ...............***Failed   10.01 sec
+mock 1080x720 dpr=2
+live 1080x720 dpr=2
+hybrid 1080x720 dpr=2
+mock 1280x720 dpr=2
+live 1280x720 dpr=2
+hybrid 1280x720 dpr=2
+mock 1366x768 dpr=2
+live 1366x768 dpr=2
+hybrid 1366x768 dpr=2
+mock 1440x900 dpr=2
+live 1440x900 dpr=2
+hybrid 1440x900 dpr=2
+mock 1536x1024 dpr=2
+live 1536x1024 dpr=2
+hybrid 1536x1024 dpr=2
+mock 1920x1080 dpr=2
+live 1920x1080 dpr=2
+hybrid 1920x1080 dpr=2
+mock 2560x1440 dpr=2
+live 2560x1440 dpr=2
+hybrid 2560x1440 dpr=2
+mock 3440x1440 dpr=2
+live 3440x1440 dpr=2
+hybrid 3440x1440 dpr=2
+mock 3840x2160 dpr=2
+live 3840x2160 dpr=2
+hybrid 3840x2160 dpr=2
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+Qt/QML warnings in Devices tests
+qrc:/ui/projects/ProjectsInspector.qml:66:13: QML QQuickItem: Binding loop detected for property "implicitHeight":
+qrc:/ui/projects/ProjectsInspector.qml:67:41
+
+      Start  8: studio-devices-wire
+ 8/71 Test  #8: studio-devices-wire ................   Passed    2.28 sec
+      Start  9: studio-projects-qml
+ 9/71 Test  #9: studio-projects-qml ................   Passed   14.78 sec
+      Start 10: studio-projects-states
+10/71 Test #10: studio-projects-states .............   Passed    7.90 sec
+      Start 11: studio-projects-resize
+11/71 Test #11: studio-projects-resize .............   Passed   15.05 sec
+      Start 12: studio-projects-hidpi
+12/71 Test #12: studio-projects-hidpi ..............   Passed   11.00 sec
+      Start 13: studio-projects-fidelity
+13/71 Test #13: studio-projects-fidelity ...........   Passed    0.67 sec
+      Start 14: studio-projects-scroll
+14/71 Test #14: studio-projects-scroll .............   Passed   31.19 sec
+      Start 15: studio-projects-fractional-dpi
+15/71 Test #15: studio-projects-fractional-dpi .....   Passed    7.79 sec
+      Start 16: studio-projects-scroll-dpi-1.5
+16/71 Test #16: studio-projects-scroll-dpi-1.5 .....   Passed   32.06 sec
+      Start 17: studio-projects-scroll-dpi-2
+17/71 Test #17: studio-projects-scroll-dpi-2 .......   Passed   32.22 sec
+      Start 18: studio-projects-wire
+18/71 Test #18: studio-projects-wire ...............   Passed    2.81 sec
+      Start 19: studio-home-qml
+19/71 Test #19: studio-home-qml ....................   Passed   32.01 sec
+      Start 20: studio-home-wire
+20/71 Test #20: studio-home-wire ...................   Passed    1.98 sec
+      Start 21: studio-home-hidpi
+21/71 Test #21: studio-home-hidpi ..................   Passed    7.96 sec
+      Start 22: studio-home-fractional-dpi
+22/71 Test #22: studio-home-fractional-dpi .........   Passed    7.00 sec
+      Start 23: studio-home-resize
+23/71 Test #23: studio-home-resize .................   Passed   19.96 sec
+      Start 24: studio-home-states
+24/71 Test #24: studio-home-states .................   Passed    6.70 sec
+      Start 25: studio-ui-m0-qml
+25/71 Test #25: studio-ui-m0-qml ...................   Passed    7.51 sec
+      Start 26: studio-ui-m0-cli
+26/71 Test #26: studio-ui-m0-cli ...................   Passed   21.92 sec
+      Start 27: studio-calibration-controller
+27/71 Test #27: studio-calibration-controller ......   Passed    0.30 sec
+      Start 28: studio-calibration-daemon
+28/71 Test #28: studio-calibration-daemon ..........   Passed    9.16 sec
+      Start 29: studio-calibration-qml
+29/71 Test #29: studio-calibration-qml .............   Passed    0.85 sec
+      Start 30: project-public-capabilities
+30/71 Test #30: project-public-capabilities ........   Passed    1.41 sec
+      Start 31: calibration-service-protocol
+31/71 Test #31: calibration-service-protocol .......   Passed   19.59 sec
+      Start 32: calibration-client-integration
+32/71 Test #32: calibration-client-integration .....   Passed   12.62 sec
+      Start 33: python-calibration
+33/71 Test #33: python-calibration .................   Passed    0.06 sec
+      Start 34: protocol-field-compatibility
+34/71 Test #34: protocol-field-compatibility .......   Passed    0.05 sec
+      Start 35: calibration-artifacts
+35/71 Test #35: calibration-artifacts ..............   Passed    8.96 sec
+      Start 36: active-calibration-binding
+36/71 Test #36: active-calibration-binding .........   Passed    8.11 sec
+      Start 37: calibration-revision-store
+37/71 Test #37: calibration-revision-store .........   Passed    0.04 sec
+      Start 38: project-migration-v1-v2
+38/71 Test #38: project-migration-v1-v2 ............   Passed    0.02 sec
+      Start 39: provenance-calibration-reference
+39/71 Test #39: provenance-calibration-reference ...   Passed    0.02 sec
+      Start 40: calibration-solver-opencv
+40/71 Test #40: calibration-solver-opencv ..........   Passed    1.36 sec
+      Start 41: calibration-solve
+41/71 Test #41: calibration-solve ..................   Passed    0.08 sec
+      Start 42: calibration-dataset
+42/71 Test #42: calibration-dataset ................   Passed    0.04 sec
+      Start 43: calibration-dataset-ingestion
+43/71 Test #43: calibration-dataset-ingestion ......   Passed   20.44 sec
+      Start 44: calibration-opencv
+44/71 Test #44: calibration-opencv .................   Passed    2.62 sec
+      Start 45: calibration-observation
+45/71 Test #45: calibration-observation ............   Passed    0.01 sec
+      Start 46: calibration-target
+46/71 Test #46: calibration-target .................   Passed    0.01 sec
+      Start 47: legacy-abi
+47/71 Test #47: legacy-abi .........................   Passed    0.01 sec
+      Start 48: frozen-l2-abi
+48/71 Test #48: frozen-l2-abi ......................   Passed    0.01 sec
+      Start 49: frozen-l2-catalog
+49/71 Test #49: frozen-l2-catalog ..................   Passed    0.03 sec
+      Start 50: calibration-service-activation
+50/71 Test #50: calibration-service-activation .....   Passed    9.98 sec
+      Start 51: capture-calibration-binding
+51/71 Test #51: capture-calibration-binding ........   Passed   23.47 sec
+      Start 52: x1-pairing
+52/71 Test #52: x1-pairing .........................   Passed    1.28 sec
+      Start 53: x1-pairing-stream
+53/71 Test #53: x1-pairing-stream ..................   Passed   17.40 sec
+      Start 54: x1-media
+54/71 Test #54: x1-media ...........................   Passed    0.03 sec
+      Start 55: acquisition
+55/71 Test #55: acquisition ........................   Passed    1.43 sec
+      Start 56: acquisition-integration
+56/71 Test #56: acquisition-integration ............   Passed   10.91 sec
+      Start 57: acquisition-y10p-integration
+57/71 Test #57: acquisition-y10p-integration .......   Passed   11.17 sec
+      Start 58: control-listener
+58/71 Test #58: control-listener ...................   Passed    6.34 sec
+      Start 59: acquisition-qos
+59/71 Test #59: acquisition-qos ....................   Passed    0.07 sec
+      Start 60: raw-capture
+60/71 Test #60: raw-capture ........................   Passed    0.10 sec
+      Start 61: projected-sequencer
+61/71 Test #61: projected-sequencer ................   Passed    0.43 sec
+      Start 62: projected-light-semantics
+62/71 Test #62: projected-light-semantics ..........   Passed    0.08 sec
+      Start 63: packed-image
+63/71 Test #63: packed-image .......................   Passed    0.01 sec
+      Start 64: core
+64/71 Test #64: core ...............................   Passed    0.19 sec
+      Start 65: projected-light-contract
+65/71 Test #65: projected-light-contract ...........   Passed    0.21 sec
+      Start 66: c-abi
+66/71 Test #66: c-abi ..............................   Passed    0.00 sec
+      Start 67: boundaries
+67/71 Test #67: boundaries .........................   Passed    0.02 sec
+      Start 68: python-capture
+68/71 Test #68: python-capture .....................   Passed    0.05 sec
+      Start 69: acceptance
+69/71 Test #69: acceptance .........................   Passed    4.31 sec
+      Start 70: q6a-validation-harness
+70/71 Test #70: q6a-validation-harness .............   Passed    0.84 sec
+      Start 71: x1-calibration-validation
+71/71 Test #71: x1-calibration-validation ..........   Passed   72.20 sec
+
+93% tests passed, 5 tests failed out of 71
+
+Total Test time (real) = 579.20 sec
+
+The following tests FAILED:
+	  3 - studio-devices-qml (Failed)
+	  4 - studio-devices-matrix (Failed)
+	  5 - studio-devices-stress (Failed)
+	  6 - studio-devices-dpi-1.5 (Failed)
+	  7 - studio-devices-dpi-2 (Failed)
+Errors while running CTest

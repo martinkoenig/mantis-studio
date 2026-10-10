@@ -37,6 +37,8 @@ class CalibrationController : public QObject {
     void setVisible(bool);
     // Presence is expressed by explicit keys, independently of UI expansion.
     static mantis::wire::v1::CalibrationTargetSpecification targetSpecification(const QVariantMap &);
+    // Shared read-only eligibility; device presentation must not invent another rule.
+    static bool isCalibrationCandidate(const mantis::wire::v1::Device &, const mantis::wire::v1::Response &);
     void observeSnapshot(const mantis::wire::v1::Response &);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void selectDevice(QString);

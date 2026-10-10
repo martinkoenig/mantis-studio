@@ -1,5 +1,6 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
+#include "devices_model.hpp"
 #include "home_model.hpp"
 #include "projects_model.hpp"
 #include "projects_scroll.hpp"
@@ -28,6 +29,7 @@ bool hasStage(QQuickItem *item, const QString &name) {
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
+    qmlRegisterType<DevicesModel>("Mantis.Studio", 1, 0, "DevicesModel");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
     qmlRegisterType<ProjectsScrollInput>("Mantis.Studio", 1, 0, "ProjectsScrollInput");

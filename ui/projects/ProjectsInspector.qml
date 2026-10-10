@@ -22,7 +22,7 @@ Panel {
         contentHeight: body.implicitHeight + 28
         ColumnLayout {
             id: body
-            x: 14; y: 14; width: parent.parent.contentWidth - 28; spacing: 8
+            x: 14; y: 14; width: Math.max(0, parent.parent.contentWidth - 28); spacing: 8
             Item {
                 Layout.fillWidth: true; implicitHeight: Math.min(root.compact ? 128 : 220, root.width * .54)
                 HomePreview { anchors.fill: parent; visible: root.illustrative; source: root.sample.image ? Qt.resolvedUrl(root.sample.image) : "" }
@@ -72,7 +72,7 @@ Panel {
                         delegate: RowLayout {
                             required property string modelData
                             required property int index
-                            width: tree.width; spacing: 8
+                            width: tree.width; height: implicitHeight; spacing: 8
                             ProjectsText { text: "›"; color: Theme.muted }
                             StudioIcon { name: index === 0 ? "scan" : index === 4 ? "reverse" : "projects"; color: ["#edc94c", "#aa6de3", "#24c88d", "#ef963e", "#3996ed", "#24c88d", "#94a1aa"][index]; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
                             ProjectsText { text: modelData; Layout.fillWidth: true; color: Theme.secondary }

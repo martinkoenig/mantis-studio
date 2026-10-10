@@ -362,10 +362,13 @@ QVariantList CalibrationController::choices(QString slot) const {
     }
     return out;
 }
+bool CalibrationController::isCalibrationCandidate(const w::Device &d, const w::Response &s) {
+    return d.parent().empty() && calibrationCapable(d, s);
+}
 QVariantList CalibrationController::devices() const {
     QVariantList out;
     for (const auto &d : snapshot_.devices()) {
-        if (!d.parent().empty() || !calibrationCapable(d, snapshot_))
+        if (!isCalibrationCandidate(d, snapshot_))
             continue;
         QStringList caps;
         for (const auto &c : d.capabilities())
