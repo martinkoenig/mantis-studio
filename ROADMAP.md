@@ -49,11 +49,15 @@ L7a provides the [hardware-free X1 projected fixture and controller-readiness bo
 is FINAL ACCEPTED at `f23a5fd47935010efc7e88ffbebe5ba484df5ec2`
 ([five-job CI SUCCESS](https://github.com/martinkoenig/mantis-studio/actions/runs/38089039961)).
 
-L7b-2a-E1 implements the ACCEPTED / NORMATIVE F2-ERR-001 clarification and is
-IMPLEMENTED / AWAITING INDEPENDENT REVIEW. The accepted firmware protocol main is
-`091d5702417ba6c9c67e82806b8014c7cf4d86a0`; firmware F4a is NOT independently
-accepted. L7b-2b is PLANNED / BLOCKED by separate physical and
-controller-implementation qualification gates.
+L7b-2a-E1 is FINAL ACCEPTED at `229c508c47738f5759e67cb7667563845e07a292`.
+[L7b-2a-E2](docs/hardware/x1-f2-interoperability.md) is IMPLEMENTED / AWAITING
+INDEPENDENT REVIEW: real firmware F3/F4a wire interoperability and self-contained
+firmware captures. F4a is FINAL ACCEPTED at
+`963f583addd2b89da9a0f6548d428dad208689f8` / PR #9 MERGED; F4b-0 is FINAL ACCEPTED /
+MERGED via PR #10. The accepted firmware main baseline is
+`92197ce99da9b6b86a3a6139c4bdf2ab696ec3d8`; F2-ERR-001 remains ACCEPTED / NORMATIVE.
+L7b-2b is PLANNED, with physical authorization BLOCKED. Firmware acceptance and
+Xtensa compilation do not qualify deployment, electrical/optical behavior or safety.
 
 The purpose of v0.4 is to make projected-light acquisition a first-class, deterministic part of the same Mantis runtime instead of introducing a separate scanner-specific side path.
 

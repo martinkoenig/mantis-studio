@@ -278,9 +278,14 @@ at `27185c198a15b9340023cf03e55938c327acc018`; this establishes no physical
 qualification. L7b-2a's transport-independent Host is FINAL ACCEPTED at
 `f23a5fd47935010efc7e88ffbebe5ba484df5ec2`
 ([five-job CI SUCCESS](https://github.com/martinkoenig/mantis-studio/actions/runs/38089039961)).
-[L7b-2a-E1](x1-f2-simulation.md#l7b-2a-e1-f2-err-001-conformance) is IMPLEMENTED /
-AWAITING INDEPENDENT REVIEW against the accepted firmware protocol main
+[L7b-2a-E1](x1-f2-simulation.md#l7b-2a-e1-f2-err-001-conformance) is FINAL ACCEPTED at
+`229c508c47738f5759e67cb7667563845e07a292`, against its normative firmware baseline
 `091d5702417ba6c9c67e82806b8014c7cf4d86a0` and normative F2-ERR-001.
-Firmware F4a is NOT independently accepted. L7b-2b is PLANNED / BLOCKED by
+[L7b-2a-E2](x1-f2-interoperability.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW
+against accepted firmware main `92197ce99da9b6b86a3a6139c4bdf2ab696ec3d8`.
+F4a is FINAL ACCEPTED at `963f583addd2b89da9a0f6548d428dad208689f8` / PR #9 MERGED;
+F4b-0 is FINAL ACCEPTED / MERGED via PR #10. These software/Xtensa acceptances
+establish no deployment or physical electrical/optical qualification.
+L7b-2b is PLANNED / BLOCKED by
 separate physical and controller-implementation qualification gates; the
 readiness facts above remain unchanged.

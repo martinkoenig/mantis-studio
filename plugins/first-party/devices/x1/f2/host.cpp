@@ -209,14 +209,18 @@ Snapshot Host::discover(Clock::time_point deadline) {
                 get(s.calibration_status.payload, 44, 2) != selection_.calibration_provenance)
                 throw ProtocolError(Result::unavailable, "Synthetic readiness/calibration unavailable");
             s.calibration = get(s.calibration_status.payload, 24, 8);
-            if (s.channel.payload.bytes[63] != 1 || get(s.channel.payload, 21, 2) != 3 ||
+            if (s.channel.payload.bytes[63] > 1 || get(s.channel.payload, 21, 2) != 3 ||
                 get(s.status.payload, 30, 2) != 13)
                 throw ProtocolError(Result::unsupported, "Unexpected sensor inventory");
-            s.sensor = query(Message::sensor);
-            if (s.sensor.payload.bytes[29] != 4 || s.sensor.payload.bytes[30] != 1 ||
-                s.sensor.payload.bytes[31] != 1 || s.sensor.payload.bytes[32] != 4 ||
-                s.sensor.payload.bytes[33] != 1 || get(s.sensor.payload, 46, 4))
-                throw ProtocolError(Result::unsupported, "Synthetic register descriptor required");
+            // D-01 permits an empty inventory. It supplies no measurement evidence.
+            // Preserve strict validation of the supported synthetic descriptor when present.
+            if (s.channel.payload.bytes[63]) {
+                s.sensor = query(Message::sensor);
+                if (s.sensor.payload.bytes[29] != 4 || s.sensor.payload.bytes[30] != 1 ||
+                    s.sensor.payload.bytes[31] != 1 || s.sensor.payload.bytes[32] != 4 ||
+                    s.sensor.payload.bytes[33] != 1 || get(s.sensor.payload, 46, 4))
+                    throw ProtocolError(Result::unsupported, "Synthetic register descriptor required");
+            }
             auto end = exchange(request(Message::capabilities), deadline);
             auto boot = exchange(request(Message::hello), deadline);
             if (end.payload != s.global.payload || get(boot.payload, 4, 8) != s.boot ||

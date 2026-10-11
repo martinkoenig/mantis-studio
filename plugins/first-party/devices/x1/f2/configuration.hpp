@@ -11,11 +11,12 @@ struct Selection {
     uint8_t channel_index{};
     ExecutionMode mode = ExecutionMode::simulation_only;
     uint8_t calibration_scope = 1;
+    // Exact opaque wire code, including zero; never a wildcard or physical qualification.
     uint16_t calibration_provenance{};
     bool operator==(const Selection &) const = default;
     bool valid() const {
         return controller_id && board_revision && channel_uid && mode == ExecutionMode::simulation_only &&
-               calibration_scope == 1 && calibration_provenance;
+               calibration_scope == 1;
     }
 };
 // Explicit selected finite operation, not a controller's advertised limits or a

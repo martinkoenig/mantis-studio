@@ -13,7 +13,7 @@ That acceptance includes R01 calibration revocation and R02 publication admissio
 Independent L7b-2a acceptance is Studio SHA
 `f23a5fd47935010efc7e88ffbebe5ba484df5ec2`, with all five required jobs SUCCESS in
 [run 38089039961](https://github.com/martinkoenig/mantis-studio/actions/runs/38089039961).
-L7b-2a-E1 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW.
+L7b-2a-E1 is FINAL ACCEPTED at `229c508c47738f5759e67cb7667563845e07a292`.
 
 ## Authority and boundaries
 
@@ -22,21 +22,27 @@ The historical accepted shared F2 baseline is firmware commit
 The transport/lifecycle/message dictionary plus discovery/calibration and terminal
 recovery corrections at that SHA are authoritative, including V12's 29-byte
 CONFIGURE and V13's unbound sensor selector. Historical draft status prose does
-not change that pinned acceptance. Firmware runtime/F3/F4 code is not used or
-modified. Firmware PR 4/main are not floating protocol dependencies.
+not change that pinned acceptance. The original simulated backend does not use
+firmware runtime/F3/F4 code. Firmware PR 4/main are not floating protocol dependencies.
 The L7b-2a assignment named `shared/protocol/UART_V1_0_CONTRACT.md`; the pinned
 tree does not contain that path (GitHub contents API returns 404). The five
 `docs/protocol/` transport, lifecycle, messages, discovery/calibration and recovery
 documents present at that historical accepted SHA supplied the original protocol authority.
 
-The newer accepted firmware protocol main is
+The E1 normative firmware protocol baseline was
 `091d5702417ba6c9c67e82806b8014c7cf4d86a0`. Its
 [UART v1.0 contract](https://github.com/martinkoenig/mantis-x1-firmware/blob/091d5702417ba6c9c67e82806b8014c7cf4d86a0/shared/protocol/UART_V1_0_CONTRACT.md)
 and [F2-ERR-001](https://github.com/martinkoenig/mantis-x1-firmware/blob/091d5702417ba6c9c67e82806b8014c7cf4d86a0/docs/protocol/F2-ERR-001-unknown-request-ids.md)
 are ACCEPTED / NORMATIVE. The entrypoint exists at this newer SHA. The erratum
 clarifies unknown REQUEST rejection without changing version, known layouts or
-V1–V13. Firmware F4a is NOT independently accepted and is not protocol authority.
-No firmware source was modified or used to infer the clarification.
+V1–V13. At E1, firmware F4a was not independently accepted or used as authority.
+The subsequently accepted firmware main is
+`92197ce99da9b6b86a3a6139c4bdf2ab696ec3d8`: F4a FINAL ACCEPTED at
+`963f583addd2b89da9a0f6548d428dad208689f8` / PR #9 MERGED; F4b-0 FINAL ACCEPTED /
+MERGED via PR #10. The [E2 interoperability record](x1-f2-interoperability.md)
+uses those real portable implementations only in an opt-in conformance executable.
+E2 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. No firmware source is modified
+or vendored, and normal production/CI builds remain independent of firmware access.
 
 `plugins/first-party/devices/x1/f2/codec.{hpp,cpp}` is a private standard-C++ codec,
 independent of Qt, Protobuf, SQLite, OpenCV and OS UART APIs. It defines explicit
@@ -59,7 +65,7 @@ in L3 and no replacement service API.
 
 ## L7b-2a-E1 F2-ERR-001 conformance
 
-**IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** E1-01–E1-10 implement the
+**FINAL ACCEPTED at `229c508c47738f5759e67cb7667563845e07a292`.** E1-01–E1-10 implement the
 normative erratum identified above. Classification now uses the frozen REQUEST
 registry: EVENT-only IDs are unknown when submitted as REQUEST. An envelope-valid
 unknown unbound request returns exactly four bytes, UNSUPPORTED / TERMINAL and
@@ -656,7 +662,7 @@ barrier regressions require acknowledged STOP with a 100 ms caller budget while
 the callback remains blocked, with a 500 ms scheduler allowance on wall time.
 R01/R02 are included in the independently accepted L7b-1 SHA and five-job CI
 evidence recorded above. L7b-2a acceptance and its independent CI are recorded above;
-L7b-2a-E1 requires separate independent review/CI.
+L7b-2a-E1 is independently FINAL ACCEPTED; L7b-2a-E2 requires separate review/CI.
 
 ## Physical gates still blocked
 
