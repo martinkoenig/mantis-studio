@@ -1,6 +1,6 @@
 # Linux F2 FD transport foundation — L7b-2b-1
 
-**IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** Accepted predecessor E2 is Studio
+**FINAL ACCEPTED at `6489c6eec05ac61f685f71df5805cc825a912b2d` (five required CI jobs SUCCESS).** Accepted predecessor E2 is Studio
 `fd18decf6b509254fe104fa7b280cf02765f2296`; its live firmware and reference-wire
 evidence remains in the [E2 record](x1-f2-interoperability.md). Firmware authority
 remains the accepted UART v1.0 / ERR-001 contract at
@@ -107,7 +107,7 @@ Independent review of `0c771627f9c42f396584c5d46b52658a6c9ec44a` identified
 L2B1-REV-001: logical Host fencing alone did not remove previously admitted FD
 frames. An abandoned RUN or CLAIM could still start transmission after Host had
 reported failure. That commit's five remote jobs passed; this correctness correction
-keeps L7b-2b-1 IMPLEMENTED / AWAITING INDEPENDENT REVIEW.
+was included in the independently accepted L7b-2b-1 baseline `6489c6eec05ac61f685f71df5805cc825a912b2d`.
 
 Host now dispatches priority containment STOP before returning an ambiguous
 enabling-transaction failure. An ambiguous ordinary reconciliation failure during
@@ -321,7 +321,7 @@ test seam. Native ARM64 remains a remote acceptance gate.
 
 ## Independent physical gates
 
-L7b-2b-2 is PLANNED / NOT STARTED. L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY
+L7b-2b-2 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY
 GATES. The [existing hardware readiness facts](x1-projected-light-integration.md#physical-controller-readiness-facts)
 remain authoritative and unchanged. No physical UART/USB/GPIO, Q6A pinmux, ESP8266
 access/flashing, laser output, current/power control, hardware trigger, commissioning
@@ -329,3 +329,5 @@ or deployment is performed or enabled. PTY STOP is a software request; local wri
 or ACK is not measured electrical/optical OFF. A disconnected UART does not establish
 physical inhibition. Controller runtime acceptance, independent watchdog/interlock
 qualification and physical timing/output evidence remain separate gates.
+
+[L7b-2b-2 Q6A readiness and serial policy](x1-q6a-uart-readiness.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.

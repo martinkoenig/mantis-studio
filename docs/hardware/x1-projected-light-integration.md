@@ -1,7 +1,7 @@
 # X1 projected-light integration — L7a
 
 L0–L6 FINAL ACCEPTED. L7a FINAL ACCEPTED. L7b-1 FINAL ACCEPTED;
-L7b-2a FINAL ACCEPTED; L7b-2b-1 awaits independent review; L7b-2b-2/-3, L7c, L7d and L8 planned. This is a hardware-free TEST/BENCH foundation. Physical projected-light
+L7b-2a FINAL ACCEPTED; L7b-2b-1 FINAL ACCEPTED; L7b-2b-2 awaits independent review; L7b-2b-3, L7c, L7d and L8 planned. This is a hardware-free TEST/BENCH foundation. Physical projected-light
 capability and physical laser enablement remain **BLOCKED** pending factual
 controller and independent safety review. No production controller is implemented.
 
@@ -286,7 +286,10 @@ qualification. L7b-2a's transport-independent Host is FINAL ACCEPTED at
 F4a is FINAL ACCEPTED at `963f583addd2b89da9a0f6548d428dad208689f8` / PR #9 MERGED;
 F4b-0 is FINAL ACCEPTED / MERGED via PR #10. These software/Xtensa acceptances
 establish no deployment or physical electrical/optical qualification.
-[L7b-2b-1](x1-f2-posix-transport.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW:
-Linux FD transport compiled only into PTY test targets. L7b-2b-2 is PLANNED /
-NOT STARTED; L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY GATES; the
+[L7b-2b-1](x1-f2-posix-transport.md) is FINAL ACCEPTED at
+`6489c6eec05ac61f685f71df5805cc825a912b2d`:
+Linux FD transport compiled only into PTY test targets. L7b-2b-2 is IMPLEMENTED /
+AWAITING INDEPENDENT REVIEW; L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY GATES; the
 readiness facts above remain unchanged.
+
+[L7b-2b-2 Q6A readiness and serial policy](x1-q6a-uart-readiness.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.

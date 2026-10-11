@@ -207,12 +207,15 @@ git diff --check
 
 ## Physical gates
 
-[L7b-2b-1](x1-f2-posix-transport.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW,
-exercising a separate Linux FD transport only in PTY tests. L7b-2b-2 is PLANNED /
-NOT STARTED; L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY GATES.
+[L7b-2b-1](x1-f2-posix-transport.md) is FINAL ACCEPTED at
+`6489c6eec05ac61f685f71df5805cc825a912b2d`,
+exercising a separate Linux FD transport only in PTY tests. L7b-2b-2 is IMPLEMENTED /
+AWAITING INDEPENDENT REVIEW; L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY GATES.
 Physical authorization remains BLOCKED. The existing
 [hardware readiness checklist](x1-projected-light-integration.md#physical-controller-readiness-facts)
 remains authoritative. No physical UART, GPIO, USB HIL, ESP8266 access/flashing,
 emitter/laser control, optical/electrical measurement or independently verified
 inhibit/fail-OFF is implemented or exercised. F4b-1 and later firmware runtime,
 deployment and physical qualification are separate milestones.
+
+[L7b-2b-2 Q6A readiness and serial policy](x1-q6a-uart-readiness.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.

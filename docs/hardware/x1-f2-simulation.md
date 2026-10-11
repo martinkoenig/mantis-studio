@@ -44,7 +44,7 @@ uses those real portable implementations only in an opt-in conformance executabl
 E2 is FINAL ACCEPTED at Studio `fd18decf6b509254fe104fa7b280cf02765f2296`. No firmware source is modified
 or vendored, and normal production/CI builds remain independent of firmware access.
 The [L7b-2b-1 Linux FD foundation](x1-f2-posix-transport.md) is separate and
-IMPLEMENTED / AWAITING INDEPENDENT REVIEW, compiled only for PTY tests.
+FINAL ACCEPTED at `6489c6eec05ac61f685f71df5805cc825a912b2d`, compiled only for PTY tests.
 This simulation retains its original in-memory byte transport and activation guard.
 
 `plugins/first-party/devices/x1/f2/codec.{hpp,cpp}` is a private standard-C++ codec,
