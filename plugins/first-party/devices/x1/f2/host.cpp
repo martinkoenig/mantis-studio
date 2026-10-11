@@ -94,49 +94,64 @@ Frame Host::exchange(const Frame &q, Clock::time_point deadline, bool enabling, 
     auto wire = encode(q);
     if (!wire)
         throw ProtocolError(Result::invalid_argument, "Invalid host frame");
-    for (unsigned attempt = 0; attempt < max_attempts; ++attempt) {
-        if (Clock::now() > deadline)
-            break;
-        // Gate only the bounded byte dispatch, never response waiting. STOP fences under this lock.
-        {
-            std::lock_guard lock(control_);
-            if (enabling && (inhibited_ || fence != fence_))
-                throw ProtocolError(Result::bad_state, "Fenced host operation");
-            auto submitted = transport_.submit(*wire);
-            if (submitted != TransportStatus::ready)
-                throw ProtocolError(submitted == TransportStatus::invalid ? Result::invalid_argument
-                                                                          : Result::unavailable,
-                                    "F2 transport submission failed");
-            if (attempt == 0 && q.message == 0x13)
-                command_dispatch_ns_ =
-                    std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch())
-                        .count();
+    try {
+        for (unsigned attempt = 0; attempt < max_attempts; ++attempt) {
+            if (Clock::now() > deadline)
+                break;
+            // Gate only the bounded byte dispatch, never response waiting. STOP fences under this lock.
+            {
+                std::lock_guard lock(control_);
+                if (enabling && (inhibited_ || fence != fence_))
+                    throw ProtocolError(Result::bad_state, "Fenced host operation");
+                auto submitted = transport_.submit(*wire);
+                if (submitted != TransportStatus::ready)
+                    throw ProtocolError(submitted == TransportStatus::invalid ? Result::invalid_argument
+                                                                              : Result::unavailable,
+                                        "F2 transport submission failed");
+                if (attempt == 0 && q.message == 0x13)
+                    command_dispatch_ns_ =
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch())
+                            .count();
+            }
+            auto r = transport_.receive(q, std::min(deadline, Clock::now() + retry_interval));
+            if (r.status == TransportStatus::interrupted) {
+                std::lock_guard lock(control_);
+                throw ProtocolError(enabling && (inhibited_ || fence != fence_) ? Result::bad_state
+                                                                                : Result::unavailable,
+                                    "F2 response read interrupted");
+            }
+            if (r.status != TransportStatus::ready && r.status != TransportStatus::timeout)
+                throw ProtocolError(Result::unavailable, "F2 transport response unavailable");
+            if (!r)
+                continue;
+            if (!matches_response(*r, q))
+                throw ProtocolError(Result::stale_request, "Unmatched F2 transport response");
+            const bool typed_response = valid_message(*r);
+            if (!typed_response && !unknown_rejection(q, *r))
+                throw ProtocolError(Result::invalid_argument, "Malformed typed response");
+            if (code(*r) != Result::ok)
+                throw ProtocolError(code(*r), "Controller rejected transaction",
+                                    (typed_response || (q.session && q.request)) &&
+                                        code(*r) != Result::no_session && code(*r) != Result::stale_session &&
+                                        code(*r) != Result::stale_request &&
+                                        code(*r) != Result::conflicting_duplicate);
+            if (enabling) {
+                std::lock_guard lock(control_);
+                if (inhibited_ || fence != fence_)
+                    throw ProtocolError(Result::bad_state, "Fenced host acknowledgement");
+            }
+            return *r;
         }
-        auto r = transport_.receive(q, std::min(deadline, Clock::now() + retry_interval));
-        if (r.status == TransportStatus::interrupted) {
-            std::lock_guard lock(control_);
-            throw ProtocolError(enabling && (inhibited_ || fence != fence_) ? Result::bad_state
-                                                                            : Result::unavailable,
-                                "F2 response read interrupted");
-        }
-        if (r.status != TransportStatus::ready && r.status != TransportStatus::timeout)
-            throw ProtocolError(Result::unavailable, "F2 transport response unavailable");
-        if (!r)
-            continue;
-        if (!matches_response(*r, q))
-            throw ProtocolError(Result::stale_request, "Unmatched F2 transport response");
-        const bool typed_response = valid_message(*r);
-        if (!typed_response && !unknown_rejection(q, *r))
-            throw ProtocolError(Result::invalid_argument, "Malformed typed response");
-        if (code(*r) != Result::ok)
-            throw ProtocolError(code(*r), "Controller rejected transaction",
-                                (typed_response || (q.session && q.request)) &&
-                                    code(*r) != Result::no_session && code(*r) != Result::stale_session &&
-                                    code(*r) != Result::stale_request &&
-                                    code(*r) != Result::conflicting_duplicate);
-        return *r;
+        throw ProtocolError(Result::timeout, "Ambiguous F2 transaction deadline");
+    } catch (const ProtocolError &e) {
+        if (enabling && q.message != static_cast<uint16_t>(Message::keepalive) && !e.consumed)
+            abandon(fence);
+        throw;
+    } catch (...) {
+        if (enabling && q.message != static_cast<uint16_t>(Message::keepalive))
+            abandon(fence);
+        throw;
     }
-    throw ProtocolError(Result::timeout, "Ambiguous F2 transaction deadline");
 }
 Frame Host::ordinary(Message m, const Payload &p, Clock::time_point deadline, bool enabling) {
     std::unique_lock transaction(ordinary_, std::defer_lock);
@@ -161,13 +176,10 @@ Frame Host::ordinary(Message m, const Payload &p, Clock::time_point deadline, bo
     } catch (const ProtocolError &e) {
         if (e.consumed)
             next_id_ = next_id_ == UINT32_MAX ? 0 : next_id_ + 1;
-        else {
-            std::lock_guard lock(control_);
-            inhibited_ = true;
-            lease_active_ = false;
-            ++fence_;
-            changed_.notify_all();
-        }
+        else
+            // Includes read-only reconciliation failure while execution/heartbeat
+            // authority is active. A logical fence must also cancel its queued TX.
+            abandon(f);
         throw;
     }
 }
@@ -266,61 +278,77 @@ Association Host::start(const Snapshot &s, const FiniteExecution &config, bool o
         std::lock_guard lock(control_);
         if (fence_ != expected_fence)
             throw ProtocolError(Result::bad_state, "Start fenced during discovery");
+        if (!session || session == last_session_)
+            throw ProtocolError(Result::invalid_argument, "Fresh nonzero session required");
         ++fence_;
         f = fence_;
         inhibited_ = false;
-        if (!session || session == association_.session)
-            throw ProtocolError(Result::invalid_argument, "Fresh nonzero session required");
+        lease_active_ = false;
+        last_session_ = session;
         association_ = {s.boot, session, 0, 0};
         counter_ = 0;
     }
-    if (!association().session)
-        throw ProtocolError(Result::invalid_argument, "Zero session identity");
-    {
-        std::unique_lock transaction(ordinary_, std::defer_lock);
-        if (!transaction.try_lock_until(deadline))
-            throw ProtocolError(Result::busy, "Ordinary transaction already outstanding");
-        auto q = request(Message::claim, association().session, 1);
-        put(q.payload, 0, 8, s.boot);
-        exchange(q, deadline, true, f);
-        next_id_ = 2;
+    bool claimed = false;
+    try {
+        {
+            std::unique_lock transaction(ordinary_, std::defer_lock);
+            if (!transaction.try_lock_until(deadline))
+                throw ProtocolError(Result::busy, "Ordinary transaction already outstanding");
+            auto q = request(Message::claim, session, 1);
+            put(q.payload, 0, 8, s.boot);
+            auto ack = exchange(q, deadline, true, f);
+            if (get(ack.payload, 4, 8) != s.boot)
+                throw ProtocolError(Result::stale_boot, "Mismatched CLAIM boot acknowledgement");
+            claimed = true;
+            next_id_ = 2;
+        }
+        if (!on) {
+            if (!stop(deadline))
+                throw ProtocolError(Result::timeout, "OFF STOP acknowledgement unavailable");
+            return association();
+        }
+        auto p = request(Message::configure).payload;
+        p.bytes[0] = selection_.channel_index;
+        put(p, 1, 4, config.current_ua);
+        put(p, 5, 4, config.period_us);
+        put(p, 9, 4, config.high_us);
+        put(p, 13, 8, s.calibration);
+        put(p, 21, 8, s.generation);
+        ordinary(Message::configure, p, deadline, true);
+        p = request(Message::arm).payload;
+        put(p, 0, 8, identity_());
+        auto armed = ordinary(Message::arm, p, deadline, true);
+        auto execution = identity_();
+        {
+            std::lock_guard lock(control_);
+            if (f != fence_ || inhibited_)
+                throw ProtocolError(Result::bad_state, "ARM reply fenced");
+            association_.arm = static_cast<uint32_t>(get(armed.payload, 4, 4));
+            lease_active_ = true;
+            association_.execution = execution;
+        }
+        changed_.notify_all();
+        auto a = association();
+        p = request(Message::run).payload;
+        put(p, 0, 4, a.arm);
+        put(p, 4, 8, a.execution);
+        put(p, 12, 4, config.pulses);
+        auto admitted = ordinary(Message::run, p, deadline, true);
+        if (get(admitted.payload, 4, 8) != a.execution || get(admitted.payload, 12, 4) != config.pulses ||
+            admitted.payload.bytes[2] != 0)
+            throw ProtocolError(Result::invalid_argument, "Mismatched RUN admission");
+        return a;
+    } catch (...) {
+        // Includes CLAIM failures and semantic rejections after configuration.
+        // Preserve the initiating exception; cleanup has its own stop_error().
+        abandon(f);
+        if (!claimed) {
+            std::lock_guard lock(control_);
+            association_ = {s.boot, 0, 0, 0};
+            next_id_ = 0;
+        }
+        throw;
     }
-    if (!on) {
-        if (!stop(deadline))
-            throw ProtocolError(Result::timeout, "OFF STOP acknowledgement unavailable");
-        return association();
-    }
-    auto p = request(Message::configure).payload;
-    p.bytes[0] = selection_.channel_index;
-    put(p, 1, 4, config.current_ua);
-    put(p, 5, 4, config.period_us);
-    put(p, 9, 4, config.high_us);
-    put(p, 13, 8, s.calibration);
-    put(p, 21, 8, s.generation);
-    ordinary(Message::configure, p, deadline, true);
-    p = request(Message::arm).payload;
-    put(p, 0, 8, identity_());
-    auto armed = ordinary(Message::arm, p, deadline, true);
-    auto execution = identity_();
-    {
-        std::lock_guard lock(control_);
-        if (f != fence_ || inhibited_)
-            throw ProtocolError(Result::bad_state, "ARM reply fenced");
-        association_.arm = static_cast<uint32_t>(get(armed.payload, 4, 4));
-        lease_active_ = true;
-        association_.execution = execution;
-    }
-    changed_.notify_all();
-    auto a = association();
-    p = request(Message::run).payload;
-    put(p, 0, 4, a.arm);
-    put(p, 4, 8, a.execution);
-    put(p, 12, 4, config.pulses);
-    auto admitted = ordinary(Message::run, p, deadline, true);
-    if (get(admitted.payload, 4, 8) != a.execution || get(admitted.payload, 12, 4) != config.pulses ||
-        admitted.payload.bytes[2] != 0)
-        throw ProtocolError(Result::invalid_argument, "Mismatched RUN admission");
-    return a;
 }
 Association Host::association() {
     std::lock_guard lock(control_);
@@ -432,27 +460,48 @@ std::optional<Payload> Host::terminal(Clock::time_point deadline) {
     return record;
 }
 bool Host::stop(Clock::time_point deadline) {
+    return stop_impl(deadline, {});
+}
+void Host::abandon(uint64_t expected_fence) noexcept {
+    try {
+        // Dispatch containment before reporting abandonment. Leave the ACK slot
+        // to explicit stop/abort: do not extend the failed operation's deadline
+        // or steal a concurrently completing cleanup's acknowledgement.
+        stop_impl(Clock::now(), expected_fence);
+    } catch (...) {
+        std::lock_guard lock(control_);
+        stop_error_ = Result::internal_error;
+    }
+}
+bool Host::stop_impl(Clock::time_point deadline, std::optional<uint64_t> expected_fence) {
+    auto q = request(Message::stop);
+    auto wire = encode(q);
+    uint64_t stopped_fence;
     {
         std::lock_guard lock(control_);
+        // External STOP already contains this generation; do not dispatch another
+        // STOP or steal its acknowledgement when an interrupted operation unwinds.
+        if (expected_fence && (*expected_fence != fence_ || inhibited_))
+            return false;
         inhibited_ = true;
         lease_active_ = false;
         ++fence_;
+        stopped_fence = fence_;
         changed_.notify_all();
-    }
-    // No ordinary lock, no event slot, no heartbeat backlog. Dedicated response slot.
-    auto q = request(Message::stop);
-    auto wire = encode(q);
-    if (transport_.submit(*wire) != TransportStatus::ready) {
-        std::lock_guard lock(control_);
-        stop_error_ = Result::unavailable;
-        return false;
-    }
-    {
-        std::lock_guard lock(control_);
+        // Same bounded dispatch gate as exchange: fence and transport cancellation
+        // are ordered against first-byte admission, never against response waits.
+        if (transport_.submit(*wire) != TransportStatus::ready) {
+            stop_error_ = Result::unavailable;
+            return false;
+        }
         stop_dispatch_ns_ =
             std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count();
+        if (expected_fence)
+            stop_error_ = Result::timeout; // Dispatched containment, ACK not established.
     }
     transport_.interrupt();
+    if (expected_fence)
+        return false;
     auto r = transport_.receive(q, deadline);
     auto error = r.status != TransportStatus::ready && r.status != TransportStatus::timeout
                      ? Result::unavailable
@@ -461,7 +510,8 @@ bool Host::stop(Clock::time_point deadline) {
                                                                   : code(*r);
     {
         std::lock_guard lock(control_);
-        stop_error_ = error;
+        if (stopped_fence == fence_)
+            stop_error_ = error;
     }
     return error == Result::ok && r->payload.bytes[4] == 2;
 }

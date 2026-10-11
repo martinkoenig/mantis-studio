@@ -43,7 +43,7 @@ class Host {
     std::condition_variable changed_;
     Association association_;
     uint32_t next_id_ = 2, counter_{};
-    uint64_t fence_{};
+    uint64_t fence_{}, last_session_{};
     int64_t command_dispatch_ns_{}, stop_dispatch_ns_{};
     Result stop_error_ = Result::ok;
     bool inhibited_ = true, exited_{}, lease_active_{};
@@ -54,6 +54,8 @@ class Host {
     Frame ordinary(Message, const Payload &, std::chrono::steady_clock::time_point, bool enabling = false);
     void heartbeat(std::stop_token);
     void resume_heartbeat(std::chrono::steady_clock::time_point);
+    bool stop_impl(Deadline, std::optional<uint64_t> expected_fence);
+    void abandon(uint64_t expected_fence) noexcept;
 
   public:
     static constexpr unsigned max_attempts = 3;

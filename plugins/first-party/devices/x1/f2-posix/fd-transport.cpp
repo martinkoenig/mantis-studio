@@ -264,6 +264,20 @@ void FdTransport::run() noexcept {
                 } else
                     active_ = tx_.pop();
                 offset_ = 0;
+#ifdef MANTIS_F2_POSIX_TESTING
+                if (active_ && pause_message_) {
+                    auto q = decode(active_->data().subspan(1, active_->size - 2));
+                    if (q && q->message == pause_message_) {
+                        pause_message_ = 0;
+                        message_paused_ = true;
+                        hold_write_ = !pause_bytes_;
+                        if (pause_bytes_) {
+                            write_limit_ = pause_bytes_;
+                            pause_after_write_ = true;
+                        }
+                    }
+                }
+#endif
                 changed_.notify_all();
             }
             bool writable = active_.has_value();

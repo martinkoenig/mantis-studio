@@ -34,6 +34,8 @@ void Peer::send(Frame f) {
                 f.payload.bytes[2] = 3;
             if (mutation_ == 3)
                 f.payload.bytes[3] = 7;
+            if (mutation_ == 4 && f.message == static_cast<uint16_t>(Message::claim))
+                put(f.payload, 4, 8, get(f.payload, 4, 8) + 1);
         }
     }
     auto w = encode(f);

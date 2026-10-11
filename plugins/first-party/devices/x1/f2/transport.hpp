@@ -32,6 +32,12 @@ inline bool matches_response(const Frame &reply, const Frame &request) {
 // drain, and reports admission failure. One ordinary transaction, one KEEPALIVE
 // and priority STOP may operate concurrently. STOP admission and its response
 // slot MUST be independent of ordinary/event saturation and heartbeat waits.
+// STOP admission is also the asynchronous TX fence: atomically cancel all queued
+// ordinary/KEEPALIVE frames whose first byte has not been transmitted, including
+// retries. Serialize an already-started frame without byte interleaving, then STOP
+// before other traffic. A timeout of one receive is NOT transaction abandonment;
+// Host retains identical retries until it explicitly admits containment STOP.
+// Neither local admission nor complete kernel transmission establishes peer ACK.
 // receive matches RESPONSE class + session/request/message exactly, rejecting
 // stale/unrelated replies; event returns EVENT frames through a separate bounded
 // queue. These waits release all locks needed by submit/interrupt and respect the

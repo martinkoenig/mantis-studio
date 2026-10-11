@@ -56,6 +56,18 @@ struct FdTransportConformanceAccess {
         t.metrics_.discarded = UINT64_MAX;
         t.metrics_.tx_rejected = UINT64_MAX;
     }
+    static void pause_message(FdTransport &t, Message m, size_t bytes = 0) {
+        std::lock_guard lock(t.mutex_);
+        t.pause_message_ = static_cast<uint16_t>(m);
+        t.pause_bytes_ = bytes;
+        t.message_paused_ = false;
+        t.wake_locked();
+    }
+    static bool await_message(FdTransport &t, size_t bytes = 0) {
+        std::unique_lock lock(t.mutex_);
+        return t.changed_.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::seconds(2),
+                                     [&] { return t.message_paused_ && t.offset_ == bytes; });
+    }
 };
 } // namespace x1::f2::posix
 namespace ptytest {

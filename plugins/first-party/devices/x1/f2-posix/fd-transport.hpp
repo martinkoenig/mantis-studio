@@ -85,6 +85,9 @@ class FdTransport final : public Transport {
     bool hold_write_{}, pause_after_write_{};
     size_t write_limit_ = max_wire, read_limit_ = 1024;
     unsigned write_eintr_{}, read_eintr_{}, write_eagain_{};
+    uint16_t pause_message_{};
+    size_t pause_bytes_{};
+    bool message_paused_{};
 #endif
     void run() noexcept;
     void wake_locked() noexcept;

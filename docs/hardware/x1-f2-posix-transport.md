@@ -101,6 +101,86 @@ TX/RX opportunities and wakes all consumers. Local close returns closed. Neither
 path fabricates STOP acknowledgement. There is no reconnect: a fresh object has
 empty buffers and a fresh Host requires discovery/session/configuration/ARM again.
 
+### R1 — asynchronous transaction abandonment
+
+Independent review of `0c771627f9c42f396584c5d46b52658a6c9ec44a` identified
+L2B1-REV-001: logical Host fencing alone did not remove previously admitted FD
+frames. An abandoned RUN or CLAIM could still start transmission after Host had
+reported failure. That commit's five remote jobs passed; this correctness correction
+keeps L7b-2b-1 IMPLEMENTED / AWAITING INDEPENDENT REVIEW.
+
+Host now dispatches priority containment STOP before returning an ambiguous
+enabling-transaction failure. An ambiguous ordinary reconciliation failure during
+execution also contains its authority, including queued heartbeat renewals.
+Retryable receive timeouts retain the same session,
+request ID and complete wire; only final abandonment fences authority and cancels
+unstarted TX through STOP. The private Transport contract makes this STOP admission
+requirement explicit, using the existing submit/receive/event/interrupt methods.
+No interface method, public ABI or wire format changes. The existing FD cancellation
+and partial-frame scheduler remain unchanged; synchronous byte transports have no
+unstarted TX backlog to withdraw.
+
+Host's control mutex orders generation inhibition, heartbeat deactivation and
+bounded STOP submission against other Host dispatch. Transport's queue mutex
+orders that submission against its first kernel byte. Lock order is Host control
+then transport queue; the I/O worker never acquires Host locks. No response wait,
+queue drain or kernel progress wait occurs under either dispatch gate. Enabling
+ACK admission rechecks the generation fence after receive, including cancellation
+after a validated ACK arrives but before Host admits it.
+
+Local admission, first accepted kernel byte, complete kernel frame submission,
+controller ACK and controller execution remain separate facts. A started frame
+cannot be withdrawn: it finishes, followed by STOP before queued retries. Its
+controller outcome remains ambiguous until actual controller evidence is received.
+If the line remains blocked or disconnects, STOP delivery is not established.
+Containment does not consume the STOP response slot, avoiding interference with a
+concurrent explicit cleanup, and does not extend the failed call's deadline.
+The original exception remains primary; stop_error reports TIMEOUT while the
+containment ACK is unestablished, UNAVAILABLE on failed submission, or a separate
+cleanup error. Explicit stop/abort can subsequently establish a matching software
+ACK. Old cleanup completion cannot overwrite a newer generation's diagnostic.
+None of these facts establishes electrical/optical OFF.
+
+Start now contains failures throughout CLAIM/CONFIGURE/ARM/RUN. An unconfirmed
+CLAIM clears the local session/ARM/execution association and invalidates ordinary
+sequencing; its last attempted session token remains separately retained so a
+fresh attempt cannot silently reuse it. Boot identity is retained and the CLAIM
+ACK must echo the expected boot. An unstarted CLAIM is canceled; a partial CLAIM
+may reach the controller before STOP and leave an inhibited MCU-local session.
+That uncertainty does not grant local authority: recovery requires fresh
+discovery and a fresh CLAIM, followed by CONFIGURE/ARM. Confirmed execution
+identities remain available for causal terminal evidence. Normal heartbeat lease
+expiry policy and exact consumed rejection/request-ID semantics remain unchanged.
+
+The new `x1-f2-pty-abandonment` test uses the actual Host, FD transport, PTY and
+accepted simulation controller. Per-instance one-shot byte barriers select CLAIM
+or RUN, without callbacks or physical activation. Receive barriers wrap genuine
+transport outcomes and release before teardown.
+
+| R1 tests | Evidence |
+| --- | --- |
+| T01 | Three queued RUN attempts exhausted; original TIMEOUT, all unstarted retries canceled, no MCU execution after barrier release |
+| T02 | Three bytes of RUN committed; exactly one complete RUN followed by STOP, no interleaving/retry execution, exact stopped terminal identities and zero completed pulses after later clock advance |
+| T03 | Queued and partial CLAIM timeouts; no confirmed local session, no late queued claim; explicit fresh-session recovery and wrong-boot CLAIM ACK rejection |
+| T04 | Barriers before receive registration and after actual CLAIM/ARM/RUN ACK receipt; external STOP independently completes, failed start remains fenced, no duplicate containment or post-fence RUN |
+| T05 | Pending STOP under a held write barrier, actual PTY HUP, and distinct controller cleanup failure; initiating TIMEOUT preserved and uncertainty/error reported separately |
+| T06 | Existing discovery, retry deduplication, heartbeat, priority, terminal recovery, F2/E1/E2, daemon artifacts and replay regressions retained; failed ordinary reconciliation also cancels queued heartbeat authority |
+
+```bash
+cmake --build build/l2 --target mantis-x1-f2-pty-abandonment-tests --parallel 4
+ctest --test-dir build/l2 -R '^x1-f2-pty-abandonment$' --output-on-failure
+ctest --test-dir build/l2 -R '^x1-f2-pty(-abandonment)?$' \
+  --repeat until-fail:100 --output-on-failure
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+  ctest --test-dir build/l2-sanitized -R '^x1-f2-pty(-abandonment)?$' \
+  --repeat until-fail:100 --output-on-failure
+```
+
+R1 adds one retained uint64 session token in Host and fixed fields only in the
+compile-time FD test seam. It adds no queue, worker, hot-path allocation or image
+copy. The original package's measured results below remain historical; R1 final
+verification and refreshed measurements are recorded separately below.
+
 ## PTY verification
 
 The joined test peer receives actual PTY bytes through an independent Parser and
@@ -140,7 +220,7 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   ctest --test-dir build/l2-sanitized -R '^x1-f2-pty$' --repeat until-fail:100 --output-on-failure
 ```
 
-### Local validation — 2026-10-11
+### Initial package local validation — 2026-10-11
 
 | Configuration/check | Result |
 | --- | --- |
@@ -211,6 +291,33 @@ hardware trigger, laser behavior, safety latency or hard real-time performance.
 
 Native ARM64 remains mandatory in the remote matrix; no local ARM64 toolchain is
 available. No platform-specific integer width or x86 instruction is assumed.
+
+### R1 final validation — 2026-10-11
+
+Using the same configure/build commands, cached dependencies, loader environment
+and sanitizer settings recorded above:
+
+| Check | Result |
+| --- | --- |
+| Complete Linux x86_64 Studio ON configure/build/CTest | 135/135 PASS, optional firmware dependency disabled |
+| Complete Linux x86_64 Studio OFF configure/build/CTest | 133/133 PASS, exact-SHA E2 live enabled |
+| Complete ASan/UBSan configure/build/CTest | 133/133 PASS with detect_leaks=1, halt_on_error=1 for ASan and UBSan |
+| PTY and abandonment repetitions | 100 repetitions of each suite, both normal and sanitized: all PASS |
+| BUILD_TESTING=OFF configure/build | PASS, absent firmware source path; zero tests and no FD/simulation/interop targets |
+| Frozen ABI/catalog, protocol/storage/replay, source/binary boundaries | PASS |
+| Formatting, whitespace and local documentation links | PASS |
+
+Refreshed 1,000-roundtrip measurement on the same x86_64/GCC Debug PTY setup:
+instrumented FD transport 5,792 bytes (16 additional test-only barrier bytes);
+Host 376 bytes, including the added eight-byte retained session token. One worker
+startup C++ allocation and zero representative steady-state C++ allocations;
+queue capacities remain 8/8/8 and measured high-water 1/1/0. Combined throughput
+2,205,940 bytes/s; roundtrip p50/p95/p99 82.123/115.996/134.150 µs. Idle observation
+100.130 ms with zero worker wakes and zero measured worker CPU ns. Congested
+STOP enqueue/complete-wire delivery 3.857/64.190 µs. Allocation exclusions and
+software-only timing limitations remain those stated above. No new resource
+growth or image copies; the uninstrumented FD module also compiles without the
+test seam. Native ARM64 remains a remote acceptance gate.
 
 ## Independent physical gates
 
