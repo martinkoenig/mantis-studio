@@ -75,6 +75,17 @@ int main() {
         auto check = hex("313233343536373839");
         CHECK(crc32c(check) == 0xe3069283);
         CHECK(crc32c({}) == 0);
+        // E1-01: a combined registry allocation does not imply REQUEST registration.
+        for (const auto &l : registry) {
+            CHECK(bool(request_layout(l.id)) == !bool(l.event));
+            if (l.event) {
+                Frame q;
+                q.message = l.id;
+                CHECK(encode(q) && !valid_message(q));
+            }
+        }
+        for (auto id : {uint16_t(0), uint16_t(0x1234), uint16_t(0xffff)})
+            CHECK(!request_layout(id));
         for (size_t i = 0; i < f2_golden.size(); ++i) {
             auto bytes = hex(f2_golden[i]);
             auto f = parse(bytes);

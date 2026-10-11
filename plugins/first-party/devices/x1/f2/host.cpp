@@ -22,6 +22,16 @@ namespace {
 Result code(const Frame &f) {
     return static_cast<Result>(get(f.payload, 0, 2));
 }
+bool unknown_rejection(const Frame &q, const Frame &r) {
+    // F2-ERR-001 is a transaction exception, never a typed-registry relaxation.
+    if (q.kind != Class::request || request_layout(q.message) || !matches_response(r, q) ||
+        r.payload.size != 4)
+        return false;
+    auto result = get(r.payload, 0, 2);
+    return result && result <= static_cast<uint16_t>(Result::calibration_invalid) &&
+           r.payload.bytes[2] == static_cast<uint8_t>(Stage::terminal) &&
+           r.payload.bytes[3] <= static_cast<uint8_t>(State::fault);
+}
 } // namespace
 Host::Host(Transport &transport, Selection selection, std::function<uint64_t()> identity)
     : transport_(transport), selection_(selection),
@@ -115,11 +125,13 @@ Frame Host::exchange(const Frame &q, Clock::time_point deadline, bool enabling, 
             continue;
         if (!matches_response(*r, q))
             throw ProtocolError(Result::stale_request, "Unmatched F2 transport response");
-        if (!valid_message(*r))
+        const bool typed_response = valid_message(*r);
+        if (!typed_response && !unknown_rejection(q, *r))
             throw ProtocolError(Result::invalid_argument, "Malformed typed response");
         if (code(*r) != Result::ok)
             throw ProtocolError(code(*r), "Controller rejected transaction",
-                                code(*r) != Result::no_session && code(*r) != Result::stale_session &&
+                                (typed_response || (q.session && q.request)) &&
+                                    code(*r) != Result::no_session && code(*r) != Result::stale_session &&
                                     code(*r) != Result::stale_request &&
                                     code(*r) != Result::conflicting_duplicate);
         return *r;

@@ -62,6 +62,7 @@ template <class T, size_t N> class Ring {
     }
 };
 class Controller {
+    friend struct ControllerConformanceAccess;
     uint64_t boot_, snapshot_ = 1, session_{}, calibration_, basis_{}, execution_{}, last_execution_{};
     uint32_t next_id_ = 1, config_generation_{}, arm_{}, next_arm_{}, counter_{}, revision_{},
              provisioning_ = 1;

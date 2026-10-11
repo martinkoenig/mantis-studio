@@ -2,6 +2,7 @@
 #include "../fixtures/x1-f2/link.hpp"
 #include <future>
 #include <iostream>
+#include <tuple>
 using namespace x1::f2;
 using namespace x1::f2::simulation;
 using namespace std::chrono_literals;
@@ -94,6 +95,276 @@ Payload literal(std::string_view text) {
     for (size_t i = 0; i < p.size; ++i)
         p.bytes[i] = static_cast<uint8_t>(std::stoul(std::string(text.substr(2 * i, 2)), nullptr, 16));
     return p;
+}
+namespace x1::f2::simulation {
+// Test-only state observation and bounded positioning at the u32 exhaustion edge.
+struct ControllerConformanceAccess {
+    struct Facts {
+        State state;
+        Result fault, cleanup;
+        uint64_t boot, session, snapshot, calibration, basis, execution, lease;
+        uint32_t next, arm, counter, configuration_generation;
+        std::array<uint32_t, 4> configuration;
+        std::optional<Frame> cached_request, cached_response;
+        std::optional<Payload> terminal;
+        bool operator==(const Facts &) const = default;
+    };
+    static Facts facts(const Controller &c) {
+        return {
+            c.state_,
+            c.fault_,
+            c.cleanup_,
+            c.boot_,
+            c.session_,
+            c.snapshot_,
+            c.calibration_,
+            c.basis_,
+            c.execution_,
+            c.lease_end_,
+            c.next_id_,
+            c.arm_,
+            c.counter_,
+            c.config_generation_,
+            {c.configured_.current_ua, c.configured_.period_us, c.configured_.high_us, c.configured_.pulses},
+            c.cached_request_,
+            c.cached_response_,
+            c.terminal_};
+    }
+    static void exhaustion_edge(Controller &c) {
+        c.next_id_ = UINT32_MAX - 1;
+    }
+};
+} // namespace x1::f2::simulation
+using ControllerAccess = ControllerConformanceAccess;
+auto facts(Link &link) {
+    std::optional<ControllerAccess::Facts> result;
+    link.mutate([&](Controller &c) { result = ControllerAccess::facts(c); });
+    return *result;
+}
+Frame unknown(uint16_t message, uint64_t session = 0, uint32_t id = 0, size_t bytes = 0) {
+    Frame q;
+    q.message = message;
+    q.session = session;
+    q.request = id;
+    q.payload.size = bytes;
+    for (size_t i = 0; i < bytes; ++i)
+        q.payload.bytes[i] = static_cast<uint8_t>(i);
+    return q;
+}
+Frame rejection(Link &link, const Frame &q, Result expected) {
+    CHECK(q.kind == Class::request && !request_layout(q.message) && !valid_message(q));
+    CHECK(link.send(*encode(q)));
+    auto r = link.receive(q, Clock::now());
+    CHECK(r && matches_response(*r, q) && r->payload.size == 4 && !valid_message(*r));
+    CHECK(get(r->payload, 0, 2) == static_cast<uint16_t>(expected) && r->payload.bytes[2] == 2 &&
+          r->payload.bytes[3] <= 6);
+    return *r;
+}
+// Independent raw-envelope/COBS construction isolates header checks from CRC.
+Wire raw_unknown(size_t offset, uint8_t value, bool bad_crc = false) {
+    std::array<uint8_t, 28> raw{0x4d, 0x58, 1, 0, 24, 1};
+    raw[8] = 42;
+    raw[16] = 5;
+    raw[20] = 0x34;
+    raw[21] = 0x12;
+    raw[offset] = value;
+    uint32_t crc = 0xffffffff;
+    for (size_t i = 0; i < 24; ++i) {
+        crc ^= raw[i];
+        for (unsigned k = 0; k < 8; ++k)
+            crc = (crc & 1) ? (crc >> 1) ^ 0x82f63b78 : crc >> 1;
+    }
+    crc ^= 0xffffffff;
+    for (unsigned k = 0; k < 4; ++k)
+        raw[24 + k] = static_cast<uint8_t>(crc >> (8 * k));
+    if (bad_crc)
+        raw[24] ^= 1;
+    Wire wire;
+    size_t mark = 1, next = 2;
+    uint8_t code = 1;
+    for (auto b : raw) {
+        if (!b) {
+            wire.bytes[mark] = code;
+            mark = next++;
+            code = 1;
+        } else {
+            wire.bytes[next++] = b;
+            ++code;
+        }
+    }
+    wire.bytes[mark] = code;
+    wire.bytes[next++] = 0;
+    wire.size = next;
+    return wire;
+}
+void unknown_requests() {
+    // T01-T04: opaque payloads, EVENT-only IDs, and active-session unbound probes.
+    for (auto opcode : {uint16_t(0), uint16_t(0x1234), uint16_t(0x8001), uint16_t(0x8002), uint16_t(0x8003),
+                        uint16_t(0xffff)})
+        for (auto bytes : {size_t(0), size_t(1), size_t(58), max_payload}) {
+            Rig r;
+            auto q = unknown(opcode, 0, 0, bytes);
+            auto before = facts(r.link);
+            auto first = rejection(r.link, q, Result::unsupported);
+            CHECK(first.payload.bytes[3] == static_cast<uint8_t>(State::inhibited));
+            CHECK(facts(r.link) == before);
+            r.ready();
+            tx(r.link, r.run(777, 100)); // Remains active beyond the original 500 ms lease.
+            r.link.advance(100'000);
+            before = facts(r.link);
+            auto active = rejection(r.link, q, Result::unsupported);
+            CHECK(active.payload.bytes[3] == static_cast<uint8_t>(State::running));
+            CHECK(facts(r.link) == before && active.session == 0 && active.request == 0);
+            // Known unbound control commands receive their original admission error.
+            tx(r.link, request(Message::configure), Result::stale_session);
+            CHECK(facts(r.link) == before);
+            // T05: partial-unbound combinations do not acquire or consume authority.
+            for (auto [session, id, result] :
+                 {std::tuple{uint64_t(0), uint32_t(2), Result::stale_session},
+                  std::tuple{r.session, uint32_t(0), Result::stale_request},
+                  std::tuple{r.session + 1, uint32_t(0), Result::stale_session}}) {
+                rejection(r.link, unknown(opcode, session, id, bytes), result);
+                CHECK(facts(r.link) == before);
+            }
+            r.link.advance(500'000);
+            CHECK(facts(r.link).session == 0 && facts(r.link).execution == 0);
+            CHECK(r.link.metrics().pulses == 50); // Probes never renewed the lease.
+            auto no_session = facts(r.link);
+            rejection(r.link, unknown(opcode, r.session, 2, bytes), Result::no_session);
+            CHECK(facts(r.link) == no_session);
+        }
+    // T06-T08: expected regular rejection changes only sequence/cache. A later
+    // state transition must not change the original cached state byte or header.
+    for (auto opcode : {uint16_t(0x1234), uint16_t(0x8001), uint16_t(0x8002), uint16_t(0x8003)}) {
+        Rig r;
+        r.ready();
+        tx(r.link, r.run());
+        auto q = unknown(opcode, r.session, r.id++, 132);
+        auto before = facts(r.link);
+        auto first = rejection(r.link, q, Result::unsupported);
+        auto expected = before;
+        ++expected.next;
+        expected.cached_request = q;
+        expected.cached_response = first;
+        CHECK(facts(r.link) == expected);
+        r.link.advance(200'000); // Completion changes RUNNING to INHIBITED, retains session/cache.
+        auto finished = facts(r.link);
+        CHECK(finished.state == State::inhibited);
+        CHECK(rejection(r.link, q, Result::unsupported) == first);
+        CHECK(*encode(rejection(r.link, q, Result::unsupported)) == *encode(first));
+        CHECK(facts(r.link) == finished && first.payload.bytes[3] == 4);
+        for (bool change_message : {false, true}) {
+            auto conflict = q;
+            if (change_message)
+                conflict.message = 0x4321;
+            else
+                conflict.payload.bytes[131] ^= 1;
+            rejection(r.link, conflict, Result::conflicting_duplicate);
+            CHECK(facts(r.link) == finished);
+            CHECK(rejection(r.link, q, Result::unsupported) == first);
+        }
+        for (auto bad_id : {uint32_t(0), uint32_t(1), r.id + 1}) {
+            rejection(r.link, unknown(opcode, r.session, bad_id), Result::stale_request);
+            CHECK(facts(r.link) == finished);
+        }
+        // Next known regular request demonstrates exactly one consumption.
+        tx(r.link, r.configure());
+        CHECK(facts(r.link).configuration_generation == 2);
+    }
+    // T09: deterministic position near exhaustion, then exercise framed admission.
+    {
+        Rig r;
+        r.claim();
+        r.link.mutate([](Controller &c) { ControllerAccess::exhaustion_edge(c); });
+        Frame last;
+        for (auto id : {UINT32_MAX - 1, UINT32_MAX})
+            last = rejection(r.link, unknown(0x1234, r.session, id), Result::unsupported);
+        auto exhausted = facts(r.link);
+        CHECK(exhausted.next == 0);
+        CHECK(rejection(r.link, unknown(0x1234, r.session, UINT32_MAX), Result::unsupported) == last);
+        for (auto id : {uint32_t(0), uint32_t(1), UINT32_MAX - 1})
+            rejection(r.link, unknown(0x1234, r.session, id), Result::stale_request);
+        CHECK(facts(r.link) == exhausted);
+        tx(r.link, request(Message::stop)); // Priority STOP survives sequence exhaustion.
+    }
+    // T10: session replacement and reboot invalidate old request/cache authority.
+    {
+        Rig r;
+        r.claim();
+        auto old = unknown(0x1234, r.session, r.id++);
+        rejection(r.link, old, Result::unsupported);
+        auto claim = request(Message::claim, r.session + 1, 1);
+        put(claim.payload, 0, 8, r.boot);
+        tx(r.link, claim);
+        auto replaced = facts(r.link);
+        rejection(r.link, old, Result::stale_session);
+        CHECK(facts(r.link) == replaced);
+        rejection(r.link, unknown(0x8001, claim.session, 2), Result::unsupported);
+        r.link.mutate([&](Controller &c) { c.reboot(r.boot + 1); });
+        auto rebooted = facts(r.link);
+        CHECK(!rebooted.session && !rebooted.cached_request && !rebooted.cached_response);
+        rejection(r.link, old, Result::no_session);
+        CHECK(facts(r.link) == rebooted);
+        tx(r.link, claim, Result::stale_boot);
+        put(claim.payload, 0, 8, r.boot + 1);
+        tx(r.link, claim);
+        rejection(r.link, unknown(0x1234, claim.session, 2), Result::unsupported);
+        CHECK(r.link.metrics().runs == 0);
+    }
+    // T15: corrupt framing or wrong direction cannot admit a command or refresh a lease.
+    {
+        Rig r;
+        r.ready();
+        tx(r.link, r.run(777, 100));
+        r.link.advance(100'000);
+        auto before = facts(r.link);
+        auto query = unknown(0x1234, r.session, r.id);
+        for (auto [offset, value] : std::array<std::pair<size_t, uint8_t>, 10>{
+                 {{0, 0x51}, {2, 2}, {3, 1}, {4, 23}, {5, 4}, {6, 1}, {7, 1}, {22, 1}, {5, 2}, {5, 3}}}) {
+            CHECK(r.link.send(raw_unknown(offset, value)));
+            CHECK(!r.link.receive(query, Clock::now()));
+            CHECK(facts(r.link) == before);
+        }
+        CHECK(r.link.send(raw_unknown(0, 0x4d, true)));
+        auto cobs = raw_unknown(0, 0x4d);
+        cobs.bytes[1] = 255;
+        CHECK(r.link.send(cobs));
+        CHECK(!r.link.receive(query, Clock::now()) && facts(r.link) == before);
+        CHECK(r.link.metrics().malformed >= 10 && r.link.metrics().runs == 1);
+        rejection(r.link, query, Result::unsupported); // Valid delimiter recovery, same expected ID.
+        CHECK(facts(r.link).next == r.id + 1 && facts(r.link).lease == before.lease);
+    }
+    // T13/T14: all known rejection layouts retain full zero-filled extensions.
+    for (const auto &l : registry) {
+        if (!request_layout(l.id))
+            continue;
+        Rig r;
+        auto q = request(static_cast<Message>(l.id));
+        ++q.payload.size; // Malformed known payload; its registered reply length stays mandatory.
+        auto response = [&] {
+            CHECK(r.link.send(*encode(q)));
+            auto v = r.link.receive(q, Clock::now());
+            CHECK(v && valid_message(*v));
+            return *v;
+        }();
+        CHECK(get(response.payload, 0, 2) != 0);
+        CHECK(response.payload.size == l.response && response.payload.bytes[2] == 2);
+        for (size_t i = 4; i < response.payload.size; ++i)
+            CHECK(response.payload.bytes[i] == 0);
+        auto bad = response;
+        bad.payload.bytes[2] = 1;
+        CHECK(!valid_message(bad));
+        if (l.response > 4) {
+            bad = response;
+            bad.payload.size = 4;
+            CHECK(!valid_message(bad));
+            bad = response;
+            bad.payload.bytes[4] = 1;
+            CHECK(!valid_message(bad));
+        }
+    }
+    std::cout << "F2-ERR-001 controller T01-T10/T13-T14: opaque probes, admission, exact replay, "
+                 "exhaustion, reboot and strict known layouts passed\n";
 }
 void calibration_revocation() {
     // CONFIGURED/ARMED invalidation removes authority without inventing a controller fault.
@@ -210,6 +481,7 @@ void calibration_revocation() {
 }
 int main() {
     try {
+        unknown_requests();
         calibration_revocation();
         {
             Rig r;

@@ -69,17 +69,18 @@ TransportStatus Link::submit(const Wire &wire) {
             if (f->message == 0x12 && injection_.disable_heartbeat)
                 continue;
             auto response = controller_.receive(*f, now_locked());
-            if (injection_.snapshot_after_message == f->message) {
+            if (injection_.snapshot_after_message && injection_.snapshot_after_message == f->message) {
                 controller_.change_snapshot();
                 injection_.snapshot_after_message = 0;
             }
-            if (injection_.reboot_after_message == f->message) {
+            if (injection_.reboot_after_message && injection_.reboot_after_message == f->message) {
                 controller_.reboot(0x8266000000000002);
                 injection_.reboot_after_message = 0;
             }
             if (!response)
                 continue;
-            if (injection_.block_message == f->message || (f->message == 0x14 && injection_.fail_stop))
+            if ((injection_.block_message && injection_.block_message == f->message) ||
+                (f->message == 0x14 && injection_.fail_stop))
                 continue;
             if (injection_.drop_message == f->message && injection_.drops) {
                 --injection_.drops;
@@ -102,8 +103,8 @@ TransportStatus Link::submit(const Wire &wire) {
 FrameRead Link::receive(const Frame &q, Clock::time_point deadline) {
     std::unique_lock lock(mutex_);
     auto interrupted = interrupts_;
-    if (auto l = layout(q.message))
-        ++response_waits_[static_cast<size_t>(l - registry.data())];
+    auto l = layout(q.message);
+    ++response_waits_[l ? static_cast<size_t>(l - registry.data()) : registry.size()];
     wake_.notify_all();
     do {
         if (closed_)
@@ -177,8 +178,8 @@ bool Link::wait_events(uint64_t count, Clock::time_point deadline) {
 bool Link::wait_receives(Message message, uint64_t count, Deadline deadline) {
     std::unique_lock lock(mutex_);
     auto l = layout(static_cast<uint16_t>(message));
-    return l && wake_.wait_until(lock, deadline, [&] {
-        return response_waits_[static_cast<size_t>(l - registry.data())] >= count;
+    return wake_.wait_until(lock, deadline, [&] {
+        return response_waits_[l ? static_cast<size_t>(l - registry.data()) : registry.size()] >= count;
     });
 }
 void Link::saturate() {

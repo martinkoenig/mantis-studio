@@ -22,7 +22,8 @@ class Link final : public Transport {
     Ring<Frame, 8> replies_, events_;
     std::optional<Frame> stop_reply_, heartbeat_reply_, delayed_, delayed_event_;
     std::array<uint64_t, 19> requests_{};
-    std::array<uint64_t, 19> response_waits_{};
+    // One additional bounded barrier bucket for unallocated IDs (test instrumentation only).
+    std::array<uint64_t, registry.size() + 1> response_waits_{};
     uint64_t delayed_event_at_{}, delayed_at_{}, manual_now_{}, interrupts_{}, event_waits_{};
     bool manual_{};
     bool closed_{};

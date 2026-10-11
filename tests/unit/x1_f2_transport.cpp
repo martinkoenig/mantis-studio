@@ -54,8 +54,197 @@ template <class F> void error(F f, Result result) {
     }
     throw std::runtime_error("Missing expected error");
 }
+namespace x1::f2 {
+// Defined only in this unit test; production Host exposes no arbitrary opcode API.
+struct HostConformanceAccess {
+    static Frame transaction(Host &host, const Frame &q, Deadline d) {
+        std::unique_lock ordinary(host.ordinary_, std::defer_lock);
+        if (!ordinary.try_lock_until(d))
+            throw ProtocolError(Result::busy, "Conformance transaction busy");
+        return host.exchange(q, d);
+    }
+};
+} // namespace x1::f2
+Frame unknown_request(uint16_t message = 0x1234, uint64_t session = 0, uint32_t id = 0) {
+    Frame q;
+    q.message = message;
+    q.session = session;
+    q.request = id;
+    return q;
+}
+Frame negative(const Frame &q, Result code = Result::unsupported) {
+    Frame r;
+    r.kind = Class::response;
+    r.message = q.message;
+    r.session = q.session;
+    r.request = q.request;
+    r.payload.size = 4;
+    put(r.payload, 0, 2, static_cast<uint16_t>(code));
+    r.payload.bytes[2] = 2;
+    r.payload.bytes[3] = 1;
+    return r;
+}
+// Replacement replies still traverse Link's real encoder and host-side parser.
+// This is response mutation instrumentation, not an alternative controller or Host.
+class Reply final : public Transport {
+    Link &link_;
+    Frame reply_;
+
+  public:
+    Reply(Link &link, const Frame &q, Frame reply) : link_(link), reply_(reply) {
+        Injection injection;
+        injection.block_message = q.message;
+        link_.inject(injection);
+    }
+    TransportStatus submit(const Wire &wire) override {
+        auto status = link_.submit(wire);
+        if (status == TransportStatus::ready)
+            link_.inject_event(reply_);
+        return status;
+    }
+    FrameRead receive(const Frame &q, Deadline d) override {
+        return link_.receive(q, d);
+    }
+    FrameRead event(Deadline d) override {
+        return link_.event(d);
+    }
+    void interrupt() noexcept override {
+        link_.interrupt();
+    }
+};
+void host_failure(Host &host, const Frame &q, Result expected, bool consumed) {
+    try {
+        HostConformanceAccess::transaction(host, q, Clock::now() + 100ms);
+    } catch (const ProtocolError &e) {
+        CHECK(e.result == expected && e.consumed == consumed);
+        return;
+    }
+    throw std::runtime_error("Negative transaction succeeded");
+}
+void unknown_responses() {
+    // T11: actual private transaction receives the simulator's four-byte error.
+    for (auto opcode : {uint16_t(0x1234), uint16_t(0x8001), uint16_t(0x8002), uint16_t(0x8003)}) {
+        Link link(true);
+        Host host(link, host_selection());
+        auto q = unknown_request(opcode);
+        host_failure(host, q, Result::unsupported, false); // Unbound probes consume no regular ID.
+        CHECK(!host.association().session && link.metrics().runs == 0);
+    }
+    // Every defined nonzero code/state, including unconsumed admission failures.
+    for (uint16_t result = 1; result <= 18; ++result)
+        for (uint8_t state = 0; state <= 6; ++state) {
+            Link link(true);
+            auto q = unknown_request(0x8001, 42, 2);
+            auto r = negative(q, static_cast<Result>(result));
+            r.payload.bytes[3] = state;
+            Reply replies(link, q, r);
+            Host host(replies, host_selection());
+            bool consumed = result != 4 && result != 6 && result != 7 && result != 8;
+            host_failure(host, q, static_cast<Result>(result), consumed);
+            CHECK(!valid_message(r)); // F3b remains strict even for an accepted adapter rejection.
+        }
+    // T12: wrong length, positive/undefined result, non-terminal stage and invalid state.
+    for (unsigned mutation = 0; mutation < 10; ++mutation) {
+        Link link(true);
+        auto q = unknown_request();
+        auto r = negative(q);
+        if (mutation < 4)
+            r.payload.size = std::array<size_t, 4>{0, 3, 5, max_payload}[mutation];
+        else if (mutation == 4)
+            put(r.payload, 0, 2, 0);
+        else if (mutation == 5)
+            put(r.payload, 0, 2, 19);
+        else if (mutation < 9)
+            r.payload.bytes[2] = std::array<uint8_t, 3>{0, 1, 3}[mutation - 6];
+        else
+            r.payload.bytes[3] = 7;
+        Reply replies(link, q, r);
+        Host host(replies, host_selection());
+        host_failure(host, q, Result::invalid_argument, false);
+    }
+    // Mismatches/direction errors are discarded by the framed transport before Host admission.
+    for (unsigned mismatch = 0; mismatch < 5; ++mismatch) {
+        Link link(true);
+        auto q = unknown_request();
+        auto r = negative(q);
+        if (mismatch == 0)
+            ++r.message;
+        else if (mismatch == 1)
+            ++r.session;
+        else if (mismatch == 2)
+            ++r.request;
+        else
+            r.kind = mismatch == 3 ? Class::event : Class::request;
+        Reply replies(link, q, r);
+        Host host(replies, host_selection());
+        host_failure(host, q, Result::timeout, false);
+        CHECK(link.metrics().runs == 0);
+    }
+    {
+        Link link(true);
+        auto unsolicited = negative(unknown_request());
+        link.inject_event(unsolicited);
+        Host host(link, host_selection());
+        auto snapshot = host.discover(Clock::now() + 1s);
+        CHECK(snapshot.boot == 0x8266000000000001 && !host.association().session);
+        CHECK(!link.receive(unknown_request(), Clock::now())); // Discarded during matched HELLO.
+    }
+    // T13/T14: the exception cannot accept short known replies or relaxed rejection stages.
+    for (const auto &l : registry) {
+        if (!request_layout(l.id))
+            continue;
+        for (bool wrong_stage : {false, true}) {
+            Link link(true);
+            auto q = request(static_cast<Message>(l.id));
+            auto r = negative(q);
+            if (wrong_stage) {
+                r.payload.size = l.response;
+                r.payload.bytes[2] = 1;
+            } else if (l.response == 4)
+                r.payload.size = 3;
+            Reply replies(link, q, r);
+            Host host(replies, host_selection());
+            host_failure(host, q, Result::invalid_argument, false);
+            CHECK(!valid_message(r));
+        }
+    }
+    // T16: a blocked unknown ordinary receive does not gate heartbeat or priority STOP.
+    {
+        Link link(true);
+        uint64_t id = 100;
+        Host host(link, host_selection(), [&] { return ++id; });
+        auto snapshot = host.discover(Clock::now() + 1s);
+        auto association = host.start(snapshot, BenchConfig{10'000, 10'000, 1'000, 100}.execution(), true,
+                                      Clock::now() + 1s, host.fence());
+        auto q = unknown_request(0x1234, association.session, 5);
+        Injection injection;
+        injection.block_message = q.message;
+        link.inject(injection);
+        auto pending =
+            std::async(std::launch::async, [&] { host_failure(host, q, Result::unavailable, false); });
+        CHECK(link.wait_receives(static_cast<Message>(q.message), 1, Clock::now() + 1s));
+        link.advance(100'000);
+        for (unsigned i = 0; i < 32; ++i)
+            CHECK(link.send(*encode(unknown_request())));
+        link.mutate([&](Controller &c) {
+            CHECK(c.session() == association.session && c.state() == State::running &&
+                  c.lease_end() == 500'000 && c.configuration_generation() == 1);
+        });
+        host.service_heartbeat();
+        CHECK(link.wait_requests(Message::keepalive, 1, Clock::now() + 1s));
+        link.mutate([](Controller &c) { CHECK(c.lease_end() == 600'000); });
+        link.saturate();
+        CHECK(host.stop(Clock::now() + 100ms));
+        pending.get();
+        CHECK(host.retire_heartbeat(Clock::now() + 100ms));
+        CHECK(link.metrics().stops == 1 && link.metrics().runs == 1 && link.metrics().pulses == 10);
+    }
+    std::cout << "F2-ERR-001 actual Host T11-T16: framed errors, correlation, strict known layouts, "
+                 "heartbeat and priority STOP passed\n";
+}
 int main() {
     try {
+        unknown_responses();
         {
             Link link(true);
             Transport &transport = link;

@@ -1,7 +1,7 @@
 # X1 projected-light integration — L7a
 
 L0–L6 FINAL ACCEPTED. L7a FINAL ACCEPTED. L7b-1 FINAL ACCEPTED;
-L7b-2a IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b, L7c, L7d and L8 planned. This is a hardware-free TEST/BENCH foundation. Physical projected-light
+L7b-2a FINAL ACCEPTED; L7b-2b, L7c, L7d and L8 planned. This is a hardware-free TEST/BENCH foundation. Physical projected-light
 capability and physical laser enablement remain **BLOCKED** pending factual
 controller and independent safety review. No production controller is implemented.
 
@@ -275,4 +275,12 @@ behavior are reviewed. L7c/L7d/L8 and production extraction/triangulation are ou
 L7a. L7a was independently FINAL ACCEPTED at `90d4b15850560c2f0037796770fb42e6d53e2d33`.
 The [L7b-1 framed simulation](x1-f2-simulation.md) is independently FINAL ACCEPTED
 at `27185c198a15b9340023cf03e55938c327acc018`; this establishes no physical
-qualification. L7b-2a's transport-independent Host remains a separate review gate.
+qualification. L7b-2a's transport-independent Host is FINAL ACCEPTED at
+`f23a5fd47935010efc7e88ffbebe5ba484df5ec2`
+([five-job CI SUCCESS](https://github.com/martinkoenig/mantis-studio/actions/runs/38089039961)).
+[L7b-2a-E1](x1-f2-simulation.md#l7b-2a-e1-f2-err-001-conformance) is IMPLEMENTED /
+AWAITING INDEPENDENT REVIEW against the accepted firmware protocol main
+`091d5702417ba6c9c67e82806b8014c7cf4d86a0` and normative F2-ERR-001.
+Firmware F4a is NOT independently accepted. L7b-2b is PLANNED / BLOCKED by
+separate physical and controller-implementation qualification gates; the
+readiness facts above remain unchanged.

@@ -34,6 +34,8 @@ struct Association {
 // destruction; the destructor interrupts and joins the worker before releasing
 // its borrowed Transport reference (see transport.hpp lifetime contract).
 class Host {
+    // Narrow conformance seam: no outbound arbitrary-opcode public operation.
+    friend struct HostConformanceAccess;
     Transport &transport_;
     const Selection selection_;
     std::timed_mutex ordinary_, lifetime_;

@@ -140,6 +140,10 @@ const Layout *layout(uint16_t id) {
     auto i = std::find_if(registry.begin(), registry.end(), [&](auto l) { return l.id == id; });
     return i == registry.end() ? nullptr : &*i;
 }
+const Layout *request_layout(uint16_t id) {
+    auto l = layout(id);
+    return l && !l->event ? l : nullptr;
+}
 bool valid_terminal(std::span<const uint8_t> b) {
     if (b.size() != 58)
         return false;

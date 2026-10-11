@@ -1,5 +1,6 @@
 #pragma once
-// Private F2 v1 codec. Authority: firmware 854220b1717ef1e299bbd840d4cb5005dbcc31ed.
+// Private F2 v1 codec. Original F2: 854220b1717ef1e299bbd840d4cb5005dbcc31ed.
+// Normative F2-ERR-001: firmware 091d5702417ba6c9c67e82806b8014c7cf4d86a0.
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -129,6 +130,8 @@ inline constexpr std::array<Layout, 19> registry{{{1, 0, 24, 0},
                                                   {0x8002, 0, 0, 24},
                                                   {0x8003, 0, 0, 16}}};
 const Layout *layout(uint16_t);
+// REQUEST registration is distinct from allocation in the combined EVENT registry.
+const Layout *request_layout(uint16_t);
 bool valid_terminal(std::span<const uint8_t>);
 // Typed response/event validation is separate from framing and direction admission.
 bool valid_message(const Frame &);

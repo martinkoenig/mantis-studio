@@ -19,7 +19,7 @@ Frame Controller::response(const Frame &q, Result result, Stage stage) const {
     r.session = q.session;
     r.request = q.request;
     r.message = q.message;
-    auto l = layout(q.message);
+    auto l = request_layout(q.message);
     r.payload.size = l && l->response ? l->response : 4;
     put(r.payload, 0, 2, static_cast<uint16_t>(result));
     r.payload.bytes[2] = static_cast<uint8_t>(result == Result::ok ? stage : Stage::terminal);
@@ -178,7 +178,7 @@ std::optional<Frame> Controller::receive(const Frame &q, uint64_t now) {
     advance(now);
     if (q.kind != Class::request)
         return {};
-    auto l = layout(q.message);
+    auto l = request_layout(q.message);
     // Envelope-valid ordinary payload errors still consume/cache their admitted request ID.
     auto typed = [&] { return l && !l->event && q.payload.size == l->request; };
     if (q.message == 0x14 && q.request == 0) {
@@ -237,6 +237,10 @@ std::optional<Frame> Controller::receive(const Frame &q, uint64_t now) {
         return r;
     }
     bool unbound = !q.session && !q.request;
+    // A negative compatibility probe grants no discovery/control authority and
+    // cannot replace the regular request cache, even with an active session.
+    if (unbound && !l)
+        return response(q, Result::unsupported);
     auto m = static_cast<Message>(q.message);
     bool query = m == Message::hello || m == Message::status || m == Message::capabilities ||
                  m == Message::channel_capabilities || m == Message::channel_status ||

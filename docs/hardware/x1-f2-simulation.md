@@ -1,6 +1,6 @@
 # X1 F2 v1 hardware-free integration — L7b-1 / L7b-2a
 
-**L7b-1 FINAL ACCEPTED. L7b-2a IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** L0–L6 and L7a are FINAL ACCEPTED;
+**L7b-1 FINAL ACCEPTED. L7b-2a FINAL ACCEPTED.** L0–L6 and L7a are FINAL ACCEPTED;
 L7a baseline is `90d4b15850560c2f0037796770fb42e6d53e2d33`. L7b-2b, L7c, L7d
 and L8 remain separate planned gates. This record establishes software behavior,
 not physical controller readiness or acceptance of L7 as a whole.
@@ -10,9 +10,14 @@ Independent L7b-1 acceptance is Studio SHA
 SUCCESS in [run 38079990496](https://github.com/martinkoenig/mantis-studio/actions/runs/38079990496).
 That acceptance includes R01 calibration revocation and R02 publication admission.
 
+Independent L7b-2a acceptance is Studio SHA
+`f23a5fd47935010efc7e88ffbebe5ba484df5ec2`, with all five required jobs SUCCESS in
+[run 38089039961](https://github.com/martinkoenig/mantis-studio/actions/runs/38089039961).
+L7b-2a-E1 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW.
+
 ## Authority and boundaries
 
-The accepted shared F2 contract is firmware commit
+The historical accepted shared F2 baseline is firmware commit
 [`854220b1717ef1e299bbd840d4cb5005dbcc31ed`](https://github.com/martinkoenig/mantis-x1-firmware/tree/854220b1717ef1e299bbd840d4cb5005dbcc31ed).
 The transport/lifecycle/message dictionary plus discovery/calibration and terminal
 recovery corrections at that SHA are authoritative, including V12's 29-byte
@@ -22,7 +27,16 @@ modified. Firmware PR 4/main are not floating protocol dependencies.
 The L7b-2a assignment named `shared/protocol/UART_V1_0_CONTRACT.md`; the pinned
 tree does not contain that path (GitHub contents API returns 404). The five
 `docs/protocol/` transport, lifecycle, messages, discovery/calibration and recovery
-documents present at the same accepted SHA remain the protocol authority.
+documents present at that historical accepted SHA supplied the original protocol authority.
+
+The newer accepted firmware protocol main is
+`091d5702417ba6c9c67e82806b8014c7cf4d86a0`. Its
+[UART v1.0 contract](https://github.com/martinkoenig/mantis-x1-firmware/blob/091d5702417ba6c9c67e82806b8014c7cf4d86a0/shared/protocol/UART_V1_0_CONTRACT.md)
+and [F2-ERR-001](https://github.com/martinkoenig/mantis-x1-firmware/blob/091d5702417ba6c9c67e82806b8014c7cf4d86a0/docs/protocol/F2-ERR-001-unknown-request-ids.md)
+are ACCEPTED / NORMATIVE. The entrypoint exists at this newer SHA. The erratum
+clarifies unknown REQUEST rejection without changing version, known layouts or
+V1–V13. Firmware F4a is NOT independently accepted and is not protocol authority.
+No firmware source was modified or used to infer the clarification.
 
 `plugins/first-party/devices/x1/f2/codec.{hpp,cpp}` is a private standard-C++ codec,
 independent of Qt, Protobuf, SQLite, OpenCV and OS UART APIs. It defines explicit
@@ -42,6 +56,116 @@ their callbacks must be nonblocking. No such callback runs on a hardware path.
 mantisd remains authoritative for canonical program, RunId/GenerationId, resource
 ownership, sequencing, recording, final outcome and replay. There is no X1 branch
 in L3 and no replacement service API.
+
+## L7b-2a-E1 F2-ERR-001 conformance
+
+**IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** E1-01–E1-10 implement the
+normative erratum identified above. Classification now uses the frozen REQUEST
+registry: EVENT-only IDs are unknown when submitted as REQUEST. An envelope-valid
+unknown unbound request returns exactly four bytes, UNSUPPORTED / TERMINAL and
+the current state, whether or not another session exists. Opaque payloads remain
+bounded by F2a's 132-byte maximum. This grants no discovery or execution authority
+and changes neither session, configuration, request cache nor lease.
+
+Bound unknown requests retain the existing session/sequence/duplicate precedence.
+An expected regular request consumes one ID and caches its complete immediate
+rejection. Retries replay the original header, error and controller-state byte,
+even after the state changes. Conflicting duplicates cannot replace that cache;
+exhaustion never wraps. Disabled simulator injection selectors no longer match
+unknown opcode zero accidentally.
+
+The reusable Host handles the exception only at its existing transaction boundary.
+It requires an outstanding unknown REQUEST, a parsed RESPONSE matching all three
+correlation fields, exactly four payload bytes, a defined nonzero result,
+TERMINAL stage and a valid controller state. It reports a `ProtocolError`, never
+success. Unbound probes do not consume a regular ID; bound errors retain the
+existing consumed/unconsumed admission distinction. `valid_message()`, known
+opcode lengths, rejection extensions, enums, wire version and V1–V13 are unchanged.
+No arbitrary-opcode public operation was added. A private friend seam in the unit
+test reaches the actual transaction implementation through the real framed Link.
+
+| Regression | Observable coverage |
+| --- | --- |
+| T01–T05 | No-session/active-session probes, EVENT-only IDs, 0/1/58/132-byte payloads, partial-unbound admission, unchanged authority and lease |
+| T06–T10 | Exact consumption/cache replay across completion, conflicting duplicates, stale/gapped IDs, exhaustion, session replacement and reboot |
+| T11–T12 | Actual Host transaction rejection; all defined errors/states; bad correlation, direction, length, positive/undefined result and stage; unsolicited reply filtering |
+| T13–T15 | Every known rejection layout and zero extension remains strict; corrupt CRC/COBS/version/header/reserved/direction traffic cannot admit commands or refresh leases |
+| T16 | Barrier-controlled blocked unknown receive, traffic and saturated queues; independent heartbeat and acknowledged priority STOP |
+| T17–T18 | Existing discovery/session/finite-run/recovery/STOP, R01/R02, daemon/client recording and controller-free exact replay tests retained |
+
+The Host still depends only on the private codec/transport. Controller behavior
+and injection remain test-only. No queues, workers, image copies or hot-path
+allocations were added. Link's deterministic receive-barrier instrumentation adds
+one fixed 64-bit counter for unknown IDs (8 bytes per fixture instance). All
+existing resource limits, borrowed transport lifetime, heartbeat retirement and
+callback admission rules remain unchanged. Software rejection/STOP is not
+physical output-state evidence. L7b-2b is PLANNED / BLOCKED by separate physical
+and controller-implementation qualification gates.
+
+### L7b-2a-E1 local validation — 2026-10-11
+
+Validation uses the same cached configurations and dependency/runtime setup as
+the accepted extraction. Complete builds and full suites, plus focused repetition,
+cover the unchanged L7a/F2 daemon paths, recording/replay, ABI/catalog, camera,
+L2–L6, protocol/storage goldens and source/binary boundaries.
+
+| Check | Result |
+| --- | --- |
+| Linux x86_64 Studio ON, complete build/full CTest | 129/129 PASS, 131.98 s |
+| Linux x86_64 Studio OFF, complete build/full CTest | 126/126 PASS, 118.52 s |
+| ASan/UBSan, complete build/full CTest | 126/126 PASS, 325.94 s; leak detection and fatal errors enabled |
+| Complete BUILD_TESTING=OFF / Studio OFF build | PASS; codec/Host libraries built, no simulation targets/plugin directory, 0 tests |
+| Controller, fixture and transport, 100 repetitions each | 300 executions PASS, 113.13 s |
+| All six F2 and both L7a tests, 10 repetitions each, Studio ON | 80 executions PASS, 85.58 s |
+| ASan/UBSan: all six F2 and both L7a tests, 10 repetitions each | 80 executions PASS, 185.91 s; leak detection and fatal errors enabled |
+| Boundaries, frozen ABI/catalog, changed-C++ formatting, whitespace and local documentation references/anchors | PASS |
+
+Reproduction:
+
+```bash
+cmake --preset linux-debug -DPython3_EXECUTABLE=/usr/bin/python3 \
+  -DOpenCV_DIR="$PWD/build/l2-deps/opencv"
+cmake --build --preset linux-debug --parallel 4
+cmake -S . -B build/l2 -DCMAKE_BUILD_TYPE=Debug -DMANTIS_BUILD_STUDIO=OFF \
+  -DPython3_EXECUTABLE=/usr/bin/python3
+cmake --build build/l2 --parallel 4
+cmake -S . -B build/l2-sanitized -DCMAKE_BUILD_TYPE=Debug \
+  -DMANTIS_BUILD_STUDIO=OFF -DMANTIS_SANITIZE=ON -DPython3_EXECUTABLE=/usr/bin/python3
+cmake --build build/l2-sanitized --parallel 4
+
+export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
+export OPENCV_OPENCL_RUNTIME=disabled
+ctest --preset linux-debug
+ctest --test-dir build/l2 --output-on-failure
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+  ctest --test-dir build/l2-sanitized --output-on-failure
+ctest --test-dir build/l2 -R '^x1-f2-(controller|fixture|transport)$' \
+  --repeat until-fail:100 --output-on-failure
+ctest --test-dir build/debug -R '^x1-(f2-|projected-)' \
+  --repeat until-fail:10 --output-on-failure
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+  ctest --test-dir build/l2-sanitized -R '^x1-(f2-|projected-)' \
+  --repeat until-fail:10 --output-on-failure
+```
+
+The non-test build and boundary/catalog/format checks use the commands in the
+L7b-2a validation section below. Only locally executable x86_64 configurations
+were run; native ARM64 and the new exact-SHA five-job CI matrix remain independent
+review gates. No test or assertion was disabled or weakened.
+
+On this compiler/ABI, Host remains 368 bytes and Link is 7,480 bytes (previously
+7,472); the added barrier counter is fixed instance storage, with no heap owner.
+A Debug sample on Ubuntu 25.10, GCC 15.2, AMD Ryzen AI 9 HX 370 measured
+324,899 V13 encode + standalone/streaming decode iterations/s, zero counted
+hot-loop heap allocations, a 216-byte parser and 161-byte collector. A Studio-ON
+controller sample measured GET_STATUS p50/p99/max 7.454/8.085/11.121 µs, priority
+STOP with blocked RUN acknowledgement 16.781 µs, and 100 complete manual-clock
+lifetimes in 0.019534 s. Reply/event capacities remain 8/8 with separate
+STOP/heartbeat slots. F2 has no image buffers or image copies. These single-run
+software samples were taken during other local tests; they are not throughput
+thresholds, physical timing measurements or safety guarantees. Reproduce with
+`build/l2/bin/mantis-x1-f2-protocol-tests` and
+`build/debug/bin/mantis-x1-f2-controller-tests` using the environment above.
 
 ## L7b-2a private host/transport boundary
 
@@ -99,8 +223,8 @@ No image copy, extra frame queue or per-byte allocation is introduced.
 A real UART backend, physical policy, electrical qualification, device selection,
 USB HIL, hardware commissioning and physical output remain separate blocked gates.
 The existing [hardware readiness checklist](x1-projected-light-integration.md#physical-controller-readiness-facts)
-remains authoritative. L7b-2a is implemented/awaiting independent review, not
-acceptance of physical L7b-2 integration.
+remains authoritative. L7b-2a is FINAL ACCEPTED as a hardware-free extraction;
+this establishes no acceptance of physical L7b-2 integration.
 
 ### L7b-2a local validation — 2026-10-10
 
@@ -531,7 +655,8 @@ physical timing guarantee or a machine-specific throughput threshold. Admission
 barrier regressions require acknowledged STOP with a 100 ms caller budget while
 the callback remains blocked, with a 500 ms scheduler allowance on wall time.
 R01/R02 are included in the independently accepted L7b-1 SHA and five-job CI
-evidence recorded above. L7b-2a requires its own independent review/CI.
+evidence recorded above. L7b-2a acceptance and its independent CI are recorded above;
+L7b-2a-E1 requires separate independent review/CI.
 
 ## Physical gates still blocked
 
