@@ -1,0 +1,54 @@
+{
+  "base_sha": "d01c00b47fd5bf6d2b0e73e9121d296fb2f07383",
+  "hardware_evidence": false,
+  "screenshots": [
+    {
+      "file": "active-real-wire-1920x1080.png",
+      "source": "build/qt64/ui-m3c/wire/capture-active-real-wire.png",
+      "sha256": "f02593c1f329f14df0bda5991e7d03adcad0b3077d641bac5f3fcbf8c6a2cb9e",
+      "unaltered_qt_readback": true
+    },
+    {
+      "file": "stale-real-wire-1920x1080.png",
+      "source": "build/qt64/ui-m3c/wire/recording-disconnected-real-wire.png",
+      "sha256": "f95636fed6cd272bf31e0ce9f87ccd13ddd7c7e685270258158f99dfca3be60e",
+      "unaltered_qt_readback": true
+    },
+    {
+      "file": "classic-real-1920x1080.png",
+      "source": "build/qt64/ui-m3c/surfaces/classic-real-pixels.png",
+      "sha256": "ad31a03a209cdbd23ad6849da433bfe021745f91139ffdd725caf7b92d3b72f5",
+      "unaltered_qt_readback": true
+    },
+    {
+      "file": "compact-stale-cameras-1080x720.png",
+      "source": "build/qt64/ui-m3b/matrix/stale-1080x720-Cameras.png",
+      "sha256": "82416ebfb6393e28314793f6d1628713ec99c81928926bd9fb26ea1ba610c61e",
+      "unaltered_qt_readback": true
+    },
+    {
+      "file": "compact-idle-setup-1280x720.png",
+      "source": "build/qt64/ui-m3b/matrix/idle-1280x720-Setup.png",
+      "sha256": "af94d67df0c3e5e7d2b1a61e7570222a27c8f324ca2cbd4d2d98b3f981f8033e",
+      "unaltered_qt_readback": true
+    },
+    {
+      "file": "hybrid-demo-3440x1440.png",
+      "source": "build/qt64/ui-m3b/matrix/hybrid-demo-3440x1440.png",
+      "sha256": "5d8266b68825d58d196749efc9e01155cd52f74c97453f9b4d9bb95f3806f98a",
+      "unaltered_qt_readback": true
+    },
+    {
+      "file": "native-restored-live.png",
+      "source": "build/debug/ui-m3c/native/native-restored-live.png",
+      "sha256": "6b215f47885ec6ab8af44a9828e01b945e8dade9db2aed08977379a0b0809682",
+      "unaltered_qt_readback": true
+    },
+    {
+      "file": "calibration-real-1920x1080.png",
+      "source": "build/qt64/ui-m3c/surfaces/calibration-real-pixels.png",
+      "sha256": "753503108a374c373e7cbdaa9834519605e61319279e2652af50ff44481b724c",
+      "unaltered_qt_readback": true
+    }
+  ]
+}

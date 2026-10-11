@@ -6,6 +6,8 @@ ColumnLayout {
     id: root
     required property var controller
     required property var studio
+    readonly property alias leftHost: leftHost
+    readonly property alias rightHost: rightHost
     Layout.fillWidth: true; spacing: 14
     Label { text: "Record or select captures"; font.pixelSize: 24; font.bold: true }
     Label { Layout.fillWidth: true; wrapMode: Text.Wrap; opacity: 0.7; text: "Move the target across the field of view. Vary distance, scale and perspective, with diverse poses visible to both cameras. Use the previews to check visibility; target detection is evaluated when you build a Dataset." }
@@ -19,15 +21,14 @@ ColumnLayout {
         ColumnLayout {
             Layout.fillWidth: true; Layout.fillHeight: true
             Label { text: "LEFT · grayscale" }
-            MeasurementView { id: left; Layout.fillWidth: true; Layout.fillHeight: true }
+            Item { id: leftHost; objectName: "calibrationLeftHost"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true }
         }
         ColumnLayout {
             Layout.fillWidth: true; Layout.fillHeight: true
             Label { text: "RIGHT · grayscale" }
-            MeasurementView { id: right; Layout.fillWidth: true; Layout.fillHeight: true }
+            Item { id: rightHost; objectName: "calibrationRightHost"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true }
         }
     }
-    onVisibleChanged: if (visible) root.studio.attachPreview(left, right)
     Label { text: "Finalized RawCaptures · " + root.controller.state.rawIds.length + " selected"; font.bold: true }
     Repeater {
         model: root.controller.captures

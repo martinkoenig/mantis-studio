@@ -2,6 +2,7 @@
 #include "calibration_controller.hpp"
 #include "devices_model.hpp"
 #include "home_model.hpp"
+#include "live_views.hpp"
 #include "projects_model.hpp"
 #include "projects_scroll.hpp"
 #include "scan_model.hpp"
@@ -677,6 +678,7 @@ int main(int argc, char **argv) {
     QQuickStyle::setStyle("Basic");
     qInstallMessageHandler(messages);
     qmlRegisterType<ScanModel>("Mantis.Studio", 1, 0, "ScanModel");
+    qmlRegisterType<LiveViews>("Mantis.Studio", 1, 0, "LiveViews");
     qmlRegisterType<DevicesModel>("Mantis.Studio", 1, 0, "DevicesModel");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");

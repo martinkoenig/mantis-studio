@@ -1,4 +1,5 @@
 #include "scan_model.hpp"
+#include "capture_authority.hpp"
 #include <QSet>
 #include <algorithm>
 
@@ -66,6 +67,7 @@ QVariantList inventory(const QVariant &value, const QString &kind, bool confirme
             item["state"] = confirmed ? "Descriptor discovered · readiness unknown"
                                       : "Last-known descriptor · availability unknown";
             item["detail"] = display(row.value("plugin"));
+            item["captureEligible"] = studio_capture::uniqueDevice(input, id);
         } else if (kind == "artifacts") {
             item["type"] = type;
             item["name"] = type == "org.mantis.RawCapture" ? "RawCapture" : "PointCloud";
@@ -95,12 +97,14 @@ void ScanModel::setBridge(QObject *value) {
         disconnect(bridge_, nullptr, this, nullptr);
     bridge_ = value;
     project_identity_.clear();
+    selected_device_.clear();
     ++project_epoch_; // Detach/rebind is also a presentation source boundary.
     if (bridge_) {
         if (bridge_->metaObject()->indexOfSignal("changed()") >= 0)
             connect(bridge_, SIGNAL(changed()), this, SLOT(refresh()));
         connect(bridge_, &QObject::destroyed, this, [this] {
             project_identity_.clear();
+            selected_device_.clear();
             ++project_epoch_;
             refresh();
             emit bridgeChanged();
@@ -108,6 +112,21 @@ void ScanModel::setBridge(QObject *value) {
     }
     refresh();
     emit bridgeChanged();
+}
+void ScanModel::setSelectedDevice(QString id) {
+    bool presented = false;
+    for (const auto &v : data_.value("devices").toList()) {
+        const auto row = v.toMap();
+        if (row.value("id") == id && flag(row.value("captureEligible")))
+            presented = true;
+    }
+    if (!presented || !data_.value("confirmed").toBool() || !bridge_ ||
+        !studio_capture::uniqueDevice(list(bridge_->property("devices")), id))
+        id.clear();
+    if (selected_device_ == id)
+        return;
+    selected_device_ = std::move(id);
+    refresh();
 }
 void ScanModel::refresh() {
     const auto field = [this](const char *name) { return bridge_ ? bridge_->property(name) : QVariant{}; };
@@ -118,13 +137,23 @@ void ScanModel::refresh() {
     if (!identityValid)
         identity.clear();
     if (identity != project_identity_) {
+        selected_device_.clear();
         project_identity_ = identity;
         ++project_epoch_;
     }
     const auto capture = field("capturing");
-    const bool captureKnown = confirmed && capture.metaType() == QMetaType::fromType<bool>();
+    const bool captureKnown =
+        confirmed && flag(field("captureStateKnown")) && capture.metaType() == QMetaType::fromType<bool>();
     const bool active = captureKnown && capture.toBool();
     const bool lastActive = hasSnapshot && flag(field("lastKnownCapturing"));
+    const bool busy = flag(field("busy"));
+    const bool busyKnown = field("busy").metaType() == QMetaType::fromType<bool>();
+    if (!confirmed || !identityValid ||
+        !studio_capture::uniqueDevice(list(field("devices")), selected_device_))
+        selected_device_.clear();
+    const bool canStart =
+        captureKnown && identityValid && busyKnown && !busy && !active && !selected_device_.isEmpty();
+    const bool canStop = captureKnown && identityValid && busyKnown && !busy && active;
     QVariantMap next{
         {"source", "live"},
         {"hasSnapshot", hasSnapshot},
@@ -149,16 +178,43 @@ void ScanModel::refresh() {
         {"busy", flag(field("busy"))},
         {"runtimeError", display(field("error"), 512, {})},
         {"canOpenClassicAcquisition", true},
-        {"commandsAllowed", false},
+        {"commandsAllowed", captureKnown && identityValid && busyKnown && !busy},
+        {"selectedDevice", selected_device_},
+        {"canStartCapture", canStart},
+        {"canStopCapture", canStop},
+        {"captureControlReason",
+         !confirmed                   ? "Runtime unconfirmed · capture controls unavailable"
+         : !identityValid             ? "Project identity invalid · capture controls unavailable"
+         : !captureKnown              ? "Capture state ambiguous or unavailable · controls disabled"
+         : !busyKnown                 ? "Operation state unknown · capture controls unavailable"
+         : busy                       ? "Runtime operation pending · await confirmed result"
+         : active                     ? "Single active capture confirmed · Stop requests daemon finalization"
+         : selected_device_.isEmpty() ? "Choose a unique capture-capable descriptor · readiness unknown"
+                                      : "Start available · discovered descriptor, readiness unknown"},
         {"processingStatus", "Not reported"}, // No scan-specific processing contract.
         {"readiness", "Unknown · no readiness contract"},
-        {"previewStatus", confirmed && flag(field("dualPreview")) ? "Available in Classic Acquisition"
-                                                                  : "Not reported · Classic Acquisition"}};
+        {"previewCurrent", confirmed && flag(field("previewCurrent"))},
+        {"previewError", display(field("previewError"), 512, {})},
+        {"previewStatus", confirmed && flag(field("previewCurrent")) ? "Grayscale pair received"
+                          : hasSnapshot && flag(field("dualPreview"))
+                              ? "Last-known preview · current stream unknown"
+                              : "No grayscale preview pair available"}};
     for (const auto &kind : {"devices", "artifacts", "jobs"}) {
         const auto input = field(kind);
         next[kind] = hasSnapshot && identityValid ? inventory(input, kind, confirmed) : QVariantList{};
         next[QString(kind) + "Limited"] =
             list(input).size() > inspectLimit || next[kind].toList().size() == rowLimit;
+    }
+    bool selectionVisible = selected_device_.isEmpty();
+    for (const auto &v : next["devices"].toList())
+        if (v.toMap().value("id") == selected_device_)
+            selectionVisible = true;
+    if (!selectionVisible) {
+        selected_device_.clear();
+        next["selectedDevice"] = selected_device_;
+        next["canStartCapture"] = false;
+        if (captureKnown && !busy && !active)
+            next["captureControlReason"] = "Choose a unique capture-capable descriptor · readiness unknown";
     }
     QString latest;
     const auto artifacts = list(field("artifacts"));

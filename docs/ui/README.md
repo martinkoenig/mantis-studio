@@ -1,4 +1,4 @@
-# Mantis Studio UI (UI-M0 through UI-M3b)
+# Mantis Studio UI (UI-M0 through UI-M3c)
 
 UI-M0 establishes the Qt 6 / Qt Quick desktop shell, ten routes, a small design
 system and an explicit presentation data contract. UI-M1 adds the dedicated
@@ -12,9 +12,10 @@ bridge, with no Scan UI redesign. [Validation and reproduction](validation-m3a.m
 cover request counts, source authority, manual recovery and complete local suites.
 
 UI-M3b adds the [read-only Scan foundation](scan.md), with a bounded authoritative
-presentation model and responsive camera/viewport/setup/dock layout. Working
-capture, previews, rendering and replay remain in Classic Acquisition. M3c/d/e
-are deferred. See [UI-M3b verification and visual evidence](validation-m3b.md).
+presentation model and responsive camera/viewport/setup/dock layout. UI-M3c adds
+shared real camera/geometry surfaces and capability-authorized Start/Stop, preserving
+Classic Acquisition. Replay M3d and supported setup M3e remain deferred. See
+[UI-M3c verification](validation-m3c.md) and historical [UI-M3b evidence](validation-m3b.md).
 
 ## Visual intent
 
@@ -84,7 +85,7 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
 # Existing real workflow, with the usual runtime endpoint/token:
 ./build/debug/bin/mantis-studio --ui-mode=live --workspace=acquisition
 
-# Read-only Scan foundation, with an explicit link to Classic Acquisition:
+# Scan camera/geometry/capture workspace, with Classic compatibility:
 ./build/debug/bin/mantis-studio --ui-mode=live --workspace=scan
 ```
 
@@ -125,7 +126,7 @@ selection and page title. Tab traverses controls, Up/Down traverses navigation,
 and Space/Enter activate buttons. Hover, pressed, disabled and keyboard-focus
 states are explicit. Accessible names are set on navigation and shared controls.
 
-`scan` renders the dedicated Scan foundation in all three modes. Its prominent
+`scan` renders the dedicated Scan workspace in all three modes. Its prominent
 Open Classic Acquisition button navigates to `acquisition` in live/hybrid;
 mock is permanently non-actionable. `acquisition` remains the preserved working
 internal route and initial live landing page. Hybrid Scan has separate Live and
@@ -139,15 +140,18 @@ remains a supported internal route. The root `workspace`, context objects
 `studio`/`calibration`, `calibrationWorkspace`, all seven `calibrationStage0…6`,
 `pointCloudView`, `leftPreview` and `rightPreview` hooks are retained.
 
-Acquisition is instantiated once, so render attachments and view state survive
-navigation. On a confirmed change of raw runtime project identity, the bridge
+Acquisition and shell-owned LiveSurfaces are instantiated once; canonical render
+attachments and view state survive navigation through visual host changes. On a
+confirmed change of raw runtime project identity, the bridge
 clears old artifact/newest/replay selections and render/preview images; late preview
 completion from the previous project is rejected. Unconfirmed last-known data
 remains labelled stale. This frontend invalidation does not fix daemon replay isolation. It retains PointCloudView orbit/zoom, MeasurementView dual previews,
 capture/stop/replay/verify, artifact selection, recipe execution, PLY export,
 plugin recovery, jobs/cancellation and diagnostics. At small widths its original
 three-column layout scrolls horizontally rather than hiding working controls.
-Calibration logic and stage components are unchanged; the revision rail uses a constrained scroll width to keep text wrapped. Controller visibility is
+Calibration logic and stage workflows remain unchanged; its capture-stage hosts
+share the same canonical live preview pair. The revision rail uses a constrained
+scroll width to keep text wrapped. Controller visibility is
 true only for Devices/Calibration in live/hybrid; mock never starts its polling.
 
 ## Component and provider boundaries
@@ -190,7 +194,9 @@ true only for Devices/Calibration in live/hybrid; mock never starts its polling.
   another attempt in the same phase resolves or replaces them; snapshot diagnostics
   clear on successful reconnection. Untyped exceptions retain their message without
   a fabricated transport status.
-- `AcquisitionWorkspace.qml` is the compatibility workspace until UI-M3.
+- `LiveSurfaces.qml` / C++ `LiveViews` owns the canonical live renderer/previews. Scan
+  and Classic receive visual hosts only; see [ownership and authority](scan.md).
+- `AcquisitionWorkspace.qml` retains the complete compatibility workflow.
   Calibration continues using its existing client/controller seam.
 
 Use Layouts with fill/preferred/minimum sizes, wrapped/elided text, clipped lists
@@ -208,7 +214,7 @@ work from the master roadmap.
 | Route | Existing real functionality retained | Planned UI / milestone | Migration to live |
 | --- | --- | --- | --- |
 | `home` | UI-M1: truthful project/devices/jobs/artifacts/events, stale/error states and navigation | History, telemetry and tutorial browser remain unavailable | Read-only HomeModel consumes existing bridge notifications; no extra transport |
-| `scan` | UI-M3b: read-only runtime ScanModel, responsive foundation, explicit Classic Acquisition navigation | Camera/geometry integration M3c, replay M3d, supported setup M3e deferred | Existing acquisition/preview/render ownership stays in `acquisition`; no second engine or transport |
+| `scan` | UI-M3c: actual grayscale previews, geometry/orbit and guarded daemon Start/Stop; explicit Classic navigation | Replay M3d and supported setup M3e deferred | Shell-owned canonical live trio visually shared with Classic; existing bridge/worker only |
 | `process` | Recipe execution and jobs in acquisition | Recipes, lineage and stages · UI-M4 | Bind supported pipeline/job descriptors to a workspace model |
 | `inspect` | Geometry viewing in acquisition; no metrology tools | Selection/measurement evidence · UI-M5 | Feed versioned analysis artifacts, units and validity into visual components |
 | `reverse` | No CAD fitting workflow | Fitting/sections/CAD handoff · UI-M5 | Bind capability-backed derived artifacts; no UI-owned geometry computation |

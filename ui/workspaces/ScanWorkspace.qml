@@ -9,10 +9,16 @@ import "../scan"
 FocusScope {
     id: root
     required property var bridge
+    required property var surfaces
+    readonly property bool viewportActive: multiPane || compactPane === "Viewport"
+    readonly property bool camerasActive: multiPane || compactPane === "Cameras"
+    readonly property alias cloudHost: viewport.liveHost
+    readonly property alias leftHost: cameras.leftHost
+    readonly property alias rightHost: cameras.rightHost
     property string mode: "live"
     property string activeSource: mode === "mock" ? "mock" : "live"
     property string presentationTab: "Live Scanner"
-    property string displayStyle: "Coverage"
+    property string displayStyle: illustrative ? "Coverage" : "Geometry"
     property string compactPane: "Viewport"
     property string selectedRow: ""
     property var observedEpoch: 0
@@ -20,9 +26,13 @@ FocusScope {
     readonly property bool multiPane: width >= 1180
     readonly property alias liveModel: liveModel
     readonly property var presentation: illustrative ? demo.data : liveModel.data
+    readonly property bool captureSourceAllowed: mode !== "mock" && !illustrative
+    function chooseCaptureDevice(id) { if (captureSourceAllowed && presentation.confirmed && !presentation.busy) liveModel.selectedDevice = id }
+    function startCapture() { if (captureSourceAllowed && liveModel.data.canStartCapture) bridge.startCapture(liveModel.selectedDevice) }
+    function stopCapture() { if (captureSourceAllowed && liveModel.data.canStopCapture) bridge.stopCapture() }
     signal navigate(string route)
     function openClassic() { if (mode !== "mock") navigate("acquisition") }
-    function resetPresentation() { selectedRow = ""; presentationTab = "Live Scanner"; displayStyle = "Coverage" }
+    function resetPresentation() { selectedRow = ""; presentationTab = "Live Scanner"; displayStyle = illustrative ? "Coverage" : "Geometry" }
     function revealFocus() {
         const item = root.Window.window ? root.Window.window.activeFocusItem : null
         if (!root.visible || !item) return
@@ -67,7 +77,7 @@ FocusScope {
             StudioButton { objectName: "scanReplayTab"; text: "Replay Capture"; primary: root.presentationTab === text; onClicked: root.presentationTab = text; Accessible.description: "Presentation tab only; does not start replay" }
             ScanUnavailable { visible: root.multiPane; objectName: "scanProfile"; text: "Scan Profile · unavailable" }
             ScanUnavailable { visible: root.multiPane; objectName: "scanPipeline"; text: "Configure Pipeline" }
-            ScanUnavailable { visible: root.multiPane; objectName: "scanViewTools"; text: "View tools"; reason: "Orbit, zoom and geometry view tools remain in Classic Acquisition." }
+            ScanUnavailable { visible: root.multiPane; objectName: "scanViewTools"; text: "View tools"; reason: "Advanced view tools are unavailable. Geometry supports drag, wheel zoom and Reset view." }
             Item { Layout.fillWidth: true }
             StudioButton { id: classic; objectName: "scanOpenClassic"; text: "Open Classic Acquisition"; primary: true; enabled: root.mode !== "mock"; onClicked: root.openClassic(); Accessible.description: root.mode === "mock" ? "Mock has no hardware controls" : "Navigate to the existing capture, preview, replay and geometry workflow" }
         }
@@ -90,6 +100,11 @@ FocusScope {
             text: root.presentation.runtimeError; color: Theme.warning; font.pixelSize: 11
             Layout.fillWidth: true; maximumLineCount: 2; elide: Text.ElideRight
         }
+        ScanText {
+            objectName: "scanPreviewDiagnostic"; visible: !root.illustrative && root.presentation.previewError.length > 0
+            text: (root.presentation.confirmed ? "Preview: " : "Last-known preview diagnostic: ") + root.presentation.previewError
+            color: Theme.warning; font.pixelSize: 11; Layout.fillWidth: true; maximumLineCount: 2; elide: Text.ElideRight
+        }
         RowLayout {
             visible: !root.multiPane; Layout.fillWidth: true
             StudioButton { id: paneViewport; objectName: "scanPaneViewport"; text: "Viewport"; primary: root.compactPane === "Viewport"; onClicked: root.compactPane = "Viewport"; implicitHeight: 32 }
@@ -97,7 +112,7 @@ FocusScope {
                 model: ["Cameras", "Setup", "Sequence"]
                 StudioButton { required property string modelData; objectName: "scanPane" + modelData; text: modelData; primary: root.compactPane === modelData; onClicked: root.compactPane = modelData; implicitHeight: 32 }
             }
-            ScanText { text: "Read-only foundation"; Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; font.pixelSize: 11 }
+            ScanText { text: "Capture + geometry"; Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; font.pixelSize: 11 }
         }
         Item {
             id: panes
@@ -117,7 +132,7 @@ FocusScope {
                 width: root.multiPane ? 304 : parent.width
             }
             ScanViewport {
-                objectName: "scanViewport"; workspace: root
+                id: viewport; objectName: "scanViewport"; workspace: root
                 visible: root.multiPane || root.compactPane === "Viewport"
                 anchors.left: root.multiPane ? cameras.right : parent.left; anchors.right: root.multiPane ? setup.left : parent.right
                 anchors.top: parent.top; anchors.bottom: parent.bottom
@@ -131,7 +146,7 @@ FocusScope {
                 id: statuses
                 anchors.fill: parent; anchors.margins: 10
                 Repeater {
-                    model: [{name: "Capture", value: root.presentation.captureStatus}, {name: "Processing", value: root.presentation.processingStatus}, {name: "Preview", value: root.illustrative ? "Illustrative" : "Classic view"}, {name: "Tracking", value: "Unavailable"}, {name: "Points / distance", value: "Unavailable"}, {name: "CPU / GPU", value: "Not reported"}]
+                    model: [{name: "Capture", value: root.presentation.captureStatus}, {name: "Processing", value: root.presentation.processingStatus}, {name: "Preview", value: root.illustrative ? "Illustrative" : root.presentation.previewCurrent ? "Pair received" : "Unknown"}, {name: "Tracking", value: "Unavailable"}, {name: "Points / distance", value: "Unavailable"}, {name: "CPU / GPU", value: "Not reported"}]
                     Item {
                         required property var modelData
                         required property int index

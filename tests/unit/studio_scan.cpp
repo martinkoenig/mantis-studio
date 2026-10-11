@@ -2,6 +2,7 @@
 #include "calibration_controller.hpp"
 #include "devices_model.hpp"
 #include "home_model.hpp"
+#include "live_views.hpp"
 #include "projects_model.hpp"
 #include "projects_scroll.hpp"
 #include "scan_model.hpp"
@@ -9,6 +10,7 @@
 #include <QAccessible>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQmlApplicationEngine>
@@ -19,9 +21,13 @@
 #include <QSet>
 #include <QSignalSpy>
 #include <QTest>
+#include <QTimer>
 #include <QWheelEvent>
+#include <algorithm>
+#include <cstring>
 #include <functional>
 #include <iostream>
+#include <mantis/data_io.hpp>
 #include <stdexcept>
 
 namespace w = mantis::wire::v1;
@@ -35,14 +41,18 @@ class Observed : public StudioBridge {
     Q_OBJECT
   public:
     Observed() : StudioBridge(nullptr, false) {}
+    using StudioBridge::applyPreview;
     using StudioBridge::applyResult;
-    int commands{};
+    using StudioBridge::projectGeneration;
+    int commands{}, viewAttachments{}, previewAttachments{};
     QSet<QObject *> views, previews;
     Q_INVOKABLE void attachView(QObject *v) {
+        ++viewAttachments;
         views.insert(v);
         StudioBridge::attachView(v);
     }
     Q_INVOKABLE void attachPreview(QObject *l, QObject *r) {
+        ++previewAttachments;
         previews.insert(l);
         previews.insert(r);
         StudioBridge::attachPreview(l, r);
@@ -184,6 +194,120 @@ void jobAuthority(ScanModel &m, Observed &b, const std::function<void()> &presen
     b.applyResult(snapshot());
     verify();
 }
+mantis::data::Published fixtureCloud() {
+    using namespace mantis;
+    memory::BufferBuilder bytes(512 * 3 * sizeof(float));
+    auto writable = bytes.writable();
+    for (int i = 0; i < 512; ++i) {
+        const float xyz[]{float(i % 32 - 16) * 2, float(i / 32 - 8) * 2, float((i % 7) * 3)};
+        std::memcpy(writable.data() + i * sizeof(xyz), xyz, sizeof(xyz));
+    }
+    data::Packet packet;
+    packet.type = schema::points;
+    packet.attributes.push_back({{"org.mantis.position", schema::ScalarType::f32, {512, 3}, {12, 4}, "mm"},
+                                 std::move(bytes).publish()});
+    return data::publish(std::move(packet));
+}
+mantis::data::Published fixtureFrames() {
+    using namespace mantis;
+    data::Packet set;
+    set.type = schema::frameset;
+    for (const auto &role : {std::string("left"), std::string("right")}) {
+        const uint64_t width = role == "left" ? 96 : 48, height = role == "left" ? 48 : 96;
+        memory::BufferBuilder bytes(width * height);
+        auto writable = bytes.writable();
+        for (uint64_t y = 0; y < height; ++y)
+            for (uint64_t x = 0; x < width; ++x)
+                writable[y * width + x] = std::byte((x / 8 + y / 8) % 2 ? 220 : role == "left" ? 40 : 90);
+        data::Packet frame;
+        frame.type = schema::image;
+        frame.header.metadata = {{"role", role}, {"fourcc", "GREY"}};
+        frame.attributes.push_back(
+            {{"org.mantis.pixels", schema::ScalarType::u8, {height, width}, {width, 1}, "intensity"},
+             std::move(bytes).publish()});
+        set.frames.push_back(data::publish(std::move(frame)));
+    }
+    return data::publish(std::move(set));
+}
+PreviewResult fixturePreview(quint64 generation) {
+    QImage left(96, 48, QImage::Format_Grayscale8), right(48, 96, QImage::Format_Grayscale8);
+    left.fill(40);
+    right.fill(220);
+    return {std::move(left), std::move(right), {}, generation, {}};
+}
+void captureModelTests() {
+    ScanModel m;
+    Observed b;
+    m.setBridge(&b);
+    b.applyResult(snapshot("A", false));
+    check(!m.data()["canStartCapture"].toBool() && !m.data()["canStopCapture"].toBool(),
+          "Idle model guessed a device");
+    m.setSelectedDevice("stereo-parent");
+    check(m.data()["canStartCapture"].toBool(), "Unique capable device did not enable Start");
+    m.setSelectedDevice("unknown");
+    check(m.selectedDevice().isEmpty() && !m.data()["canStartCapture"].toBool(),
+          "Unknown selected identity admitted");
+    for (int variant = 0; variant < 6; ++variant) {
+        auto r = snapshot("A", false);
+        auto *d = r.snapshot->mutable_devices(0);
+        if (variant == 0)
+            *r.snapshot->add_devices() = *d;
+        if (variant == 1)
+            d->clear_capabilities();
+        if (variant == 2)
+            d->set_id(std::string(4097, 'x'));
+        if (variant == 3)
+            d->set_parent("other-parent");
+        if (variant == 4)
+            for (int i = 0; i < 65; ++i)
+                d->add_capabilities("unknown-capability");
+        if (variant == 5)
+            r.snapshot->clear_devices();
+        b.applyResult(r);
+        m.setSelectedDevice(variant == 2 ? QString(4097, 'x') : "stereo-parent");
+        check(m.selectedDevice().isEmpty() && !m.data()["canStartCapture"].toBool(),
+              "Invalid device acquired capture authority");
+    }
+    b.applyResult(snapshot("A", false));
+    m.setSelectedDevice("stereo-parent");
+    b.applyResult(snapshot("B", false));
+    check(m.selectedDevice().isEmpty(), "Project switch retained device selection");
+    m.setSelectedDevice("stereo-parent");
+    b.applyResult(snapshot("B"));
+    check(!m.data()["canStartCapture"].toBool() && m.data()["canStopCapture"].toBool(),
+          "Active capture gating failed");
+    auto ambiguous = snapshot("B");
+    *ambiguous.snapshot->add_captures() = ambiguous.snapshot->captures(0);
+    b.applyResult(ambiguous);
+    check(!b.captureStateKnown() && m.data()["captureStatus"] == "Unknown" &&
+              !m.data()["canStartCapture"].toBool() && !m.data()["canStopCapture"].toBool(),
+          "Ambiguous capture acquired Stop authority");
+    auto emptyId = snapshot("B");
+    emptyId.snapshot->mutable_captures(0)->clear_id();
+    b.applyResult(emptyId);
+    check(!m.data()["canStopCapture"].toBool(), "Empty active capture ID admitted");
+    b.applyResult(snapshot("B", false));
+    m.setSelectedDevice("stereo-parent");
+    b.applyResult({});
+    check(m.selectedDevice().isEmpty() && !m.data()["canStartCapture"].toBool() &&
+              !m.data()["canStopCapture"].toBool(),
+          "Disconnected selection/commands remained current");
+    m.setBridge(nullptr);
+    check(m.selectedDevice().isEmpty(), "Detached selection retained");
+    Probe malformed;
+    malformed.setProperty("connected", true);
+    malformed.setProperty("hasSnapshot", true);
+    malformed.setProperty("capturing", false);
+    malformed.setProperty("captureStateKnown", true);
+    malformed.setProperty("devices",
+                          QVariantList{QVariantMap{{"id", "bad"},
+                                                   {"capabilities", "org.mantis.camera.frameset-stream.v1"},
+                                                   {"captureSupported", true}}});
+    m.setBridge(&malformed);
+    m.setSelectedDevice("bad");
+    check(m.selectedDevice().isEmpty(), "Malformed capability/string or loose bool authorized Start");
+    check(b.commands == 0, "Local selection invoked runtime command");
+}
 void modelTests() {
     ScanModel m;
     Probe p;
@@ -197,12 +321,15 @@ void modelTests() {
     p.setProperty("connected", true);
     emit p.changed();
     check(m.data()["captureStatus"] == "Unknown", "Missing capture field fabricated idle");
+    p.setProperty("busy", false);
+    p.setProperty("captureStateKnown", true);
     p.setProperty("capturing", true);
     p.setProperty("lastKnownCapturing", true);
     p.setProperty("project", "A");
     emit p.changed();
-    check(m.data()["captureActive"].toBool() && !m.data()["commandsAllowed"].toBool(),
-          "Read-only capture authority failed");
+    check(m.data()["captureActive"].toBool() && m.data()["canStopCapture"].toBool() &&
+              !m.data()["canStartCapture"].toBool(),
+          "Confirmed capture authority failed");
     const auto epochA = m.data()["projectEpoch"].toULongLong();
     p.setProperty("project", "B");
     emit p.changed();
@@ -417,12 +544,16 @@ void matrix(QQuickWindow *w, Observed &b, const QString &out, bool dpi) {
         w->resize(size);
         for (const auto &state :
              dpi ? QStringList{"mock", "live", "hybrid-demo"}
-                 : QStringList{"mock", "waiting", "live", "stale", "hybrid-live", "hybrid-demo"}) {
+                 : QStringList{"mock", "waiting", "live", "idle", "stale", "hybrid-live", "hybrid-demo"}) {
             w->setProperty("uiMode", state == "mock"              ? "mock"
                                      : state.startsWith("hybrid") ? "hybrid"
                                                                   : "live");
             r->setProperty("bridge", QVariant::fromValue<QObject *>(state == "waiting" ? nullptr : &b));
-            b.applyResult(snapshot());
+            auto loaded = snapshot("/fixture/Scan-A.mantis", state != "idle");
+            loaded.cloud = fixtureCloud();
+            loaded.cloud_id = "fixture-cloud";
+            b.applyResult(loaded);
+            b.applyPreview(fixturePreview(b.projectGeneration()));
             if (state == "stale")
                 b.applyResult({});
             r->setProperty("activeSource", state == "mock" || state == "hybrid-demo" ? "mock" : "live");
@@ -557,7 +688,10 @@ void interactions(QQuickWindow *w, Observed &b, const QString &out) {
     w->setProperty("workspace", "scan");
     click(w, "scanOpenClassic");
     check(w->property("workspace") == "acquisition", "Mouse Classic route failed");
+    std::vector<qint64> routeMicros;
     for (int i = 0; i < 100; ++i) {
+        QElapsedTimer routeTimer;
+        routeTimer.start();
         w->setProperty("workspace", i % 2 ? "scan" : "acquisition");
         QCoreApplication::processEvents();
         check(model(w)->data()["captureActive"].toBool(), "Navigation changed capture evidence");
@@ -622,6 +756,227 @@ void jobPresentation(QQuickWindow *w, Observed &b, const QString &out) {
     check(model(w)->data()["jobs"].toList().empty(), "Waiting shell retained old jobs");
     r->setProperty("bridge", QVariant::fromValue<QObject *>(&b));
     check(b.commands == 0, "Job presentation issued a runtime command");
+}
+void surfaces(QQuickWindow *w, Observed &b, const QString &out) {
+    auto *owner = qobject_cast<LiveViews *>(item(w, "liveSurfaces"));
+    check(owner, "Canonical owner unavailable");
+    QPointer<QQuickItem> cloud = owner->cloud(), left = owner->left(), right = owner->right();
+    const auto verify = [&] {
+        check(cloud && left && right && owner->cloud() == cloud && owner->left() == left &&
+                  owner->right() == right,
+              "Canonical visual identities changed");
+        check(cloud->QObject::parent() == owner && left->QObject::parent() == owner &&
+                  right->QObject::parent() == owner,
+              "Visual host acquired lifetime ownership");
+        check(w->findChildren<mantis::render::PointCloudView *>().size() == 1 &&
+                  owner->findChildren<MeasurementView *>().size() == 2 &&
+                  w->findChildren<MeasurementView *>().size() == 2,
+              "Duplicate canonical renderer or previews");
+        for (auto *view : {cloud.data(), left.data(), right.data()})
+            check(QQmlEngine::objectOwnership(view) == QQmlEngine::CppOwnership && view->window() == w &&
+                      view->width() > 0 && view->height() > 0,
+                  "Canonical ownership/window/finite geometry contract failed");
+        check(b.viewAttachments == 1 && b.previewAttachments == 1,
+              "Route, layout or snapshot caused redundant attachment");
+    };
+    auto *r = item(w, "scanWorkspace");
+    w->setProperty("uiMode", "live");
+    w->resize(1920, 1080);
+    b.applyResult(snapshot());
+    settle();
+    verify();
+    auto loaded = snapshot();
+    loaded.cloud = fixtureCloud();
+    loaded.cloud_id = "fixture-cloud";
+    b.applyResult(loaded);
+    b.applyPreview(fixturePreview(b.projectGeneration()));
+    auto *cloudView = qobject_cast<mantis::render::PointCloudView *>(cloud.data());
+    auto *leftView = qobject_cast<MeasurementView *>(left.data());
+    auto *rightView = qobject_cast<MeasurementView *>(right.data());
+    const auto leftStorage = leftView->image().constBits(), rightStorage = rightView->image().constBits();
+    cloudView->setYaw(17);
+    cloudView->setPitch(23);
+    cloudView->setZoom(1.4);
+    const auto pixels = [&](bool geometry = true) {
+        settle();
+        const auto frame = w->grabWindow();
+        check(!frame.isNull(), "Real canonical frame unavailable");
+        for (auto *preview : {leftView, rightView}) {
+            check(preview->hasImage(), "Canonical grayscale pixels absent");
+            const auto p = preview->mapToScene(QPointF(preview->width() / 2, preview->height() / 2));
+            const auto color = frame.pixelColor(qRound(p.x() * w->devicePixelRatio()),
+                                                qRound(p.y() * w->devicePixelRatio()));
+            const int expected = preview == leftView ? 40 : 220;
+            check(std::abs(color.red() - expected) < 3 && color.red() == color.green() &&
+                      color.green() == color.blue(),
+                  "Expected grayscale pixels missing from actual Qt host region");
+            const bool wide = preview->width() / preview->height() >
+                              preview->imageSize().width() / double(preview->imageSize().height());
+            const auto edge = preview->mapToScene(wide ? QPointF(2, preview->height() / 2)
+                                                       : QPointF(preview->width() / 2, 2));
+            const auto background = frame.pixelColor(qRound(edge.x() * w->devicePixelRatio()),
+                                                     qRound(edge.y() * w->devicePixelRatio()));
+            check(background == QColor("#10151c"), "Non-square grayscale aspect preservation failed");
+        }
+        if (!geometry)
+            return;
+        const auto region = cloudView->mapRectToScene(cloudView->boundingRect());
+        int geometryPixels = 0;
+        for (int y = qRound(region.top() * w->devicePixelRatio()) + 40;
+             y < qRound(region.bottom() * w->devicePixelRatio()) - 20; ++y)
+            for (int x = qRound(region.left() * w->devicePixelRatio()) + 60;
+                 x < qRound(region.right() * w->devicePixelRatio()) - 60; ++x) {
+                const auto color = frame.pixelColor(x, y);
+                if (color.green() > 120 && color.green() > color.red() * 1.3 && color.blue() > 80)
+                    ++geometryPixels;
+            }
+        check(geometryPixels > 600, "Published geometry absent from actual Qt frame");
+    };
+    const auto cloudReferences = loaded.cloud.use_count();
+    check(cloudReferences == 2, "Published cloud must be shared only by fixture and canonical renderer");
+    {
+        QQuickWindow otherWindow;
+        QQuickItem foreignHost(otherWindow.contentItem());
+        const auto original = owner->cloudHost();
+        owner->setCloudHost(&foreignHost);
+        check(owner->cloudHost() == original && cloud->window() == w, "Cross-window hosting admitted");
+        qmlEngine(owner)->collectGarbage();
+        verify();
+    }
+    pixels();
+    capture(w, out, "scan-real-pixels");
+    w->setProperty("workspace", "acquisition");
+    settle();
+    pixels();
+    capture(w, out, "classic-real-pixels");
+    // Calibration's capture stage uses the same live pair and never steals bridge attachment.
+    auto *calibration = item(w, "calibrationWorkspace")->property("controller").value<QObject *>();
+    check(calibration, "Calibration controller missing");
+    calibration->setProperty("stage", 2);
+    w->setProperty("workspace", "calibration");
+    settle();
+    verify();
+    pixels(false);
+    check(left->parentItem() == item(w, "calibrationLeftHost") &&
+              right->parentItem() == item(w, "calibrationRightHost"),
+          "Calibration live pair not canonically hosted");
+    capture(w, out, "calibration-real-pixels");
+    for (int stage = 0; stage < 7; ++stage) {
+        calibration->setProperty("stage", stage);
+        QCoreApplication::processEvents();
+        verify();
+        check(left->parentItem() == (stage == 2 ? item(w, "calibrationLeftHost") : owner),
+              "Calibration stage left wrong live host");
+    }
+    w->setProperty("workspace", "scan");
+    std::vector<qint64> routeMicros;
+    for (int i = 0; i < 100; ++i) {
+        QElapsedTimer routeTimer;
+        routeTimer.start();
+        w->setProperty("workspace", i % 2 ? "scan" : "acquisition");
+        QCoreApplication::processEvents();
+        routeMicros.push_back(routeTimer.nsecsElapsed() / 1000);
+        check(loaded.cloud.use_count() == cloudReferences, "Navigation duplicated Published cloud ownership");
+        check(cloud->parentItem() == item(w, i % 2 ? "scanCloudHost" : "classicCloudHost"),
+              "Renderer remained in wrong route host");
+        check(left->parentItem() == item(w, i % 2 ? "scanLeftHost" : "classicLeftHost") &&
+                  right->parentItem() == item(w, i % 2 ? "scanRightHost" : "classicRightHost"),
+              "Preview remained in wrong route host");
+        verify();
+        check(cloudView->pointCount() == 512 && cloudView->yaw() == 17 && cloudView->pitch() == 23 &&
+                  cloudView->zoom() == 1.4 && leftView->image().constBits() == leftStorage &&
+                  rightView->image().constBits() == rightStorage,
+              "Route transition lost view state or duplicated pixel buffers");
+    }
+    w->setProperty("workspace", "scan");
+    for (int i = 0; i < 120; ++i) {
+        w->resize(i % 3 ? QSize(1080, 720) : QSize(1920, 1080));
+        r->setProperty("compactPane", QStringList{"Viewport", "Cameras", "Setup", "Sequence"}[i % 4]);
+        QCoreApplication::processEvents();
+        check(cloud->parentItem() ==
+                  (r->property("viewportActive").toBool() ? item(w, "scanCloudHost") : owner),
+              "Compact viewport incorrectly hosted");
+        check(left->parentItem() == (r->property("camerasActive").toBool() ? item(w, "scanLeftHost") : owner),
+              "Compact camera incorrectly hosted");
+        verify();
+    }
+    w->resize(1920, 1080);
+    w->setProperty("uiMode", "hybrid");
+    for (int i = 0; i < 40; ++i) {
+        r->setProperty("activeSource", "mock");
+        QCoreApplication::processEvents();
+        check(!cloud->isVisible() && !left->isVisible() && !right->isVisible() &&
+                  cloud->parentItem() == owner && left->parentItem() == owner,
+              "Hybrid demo leaked canonical live surfaces");
+        verify();
+        r->setProperty("activeSource", "live");
+        QCoreApplication::processEvents();
+        verify();
+    }
+    for (int i = 0; i < 500; ++i) {
+        b.applyResult(snapshot());
+        QCoreApplication::processEvents();
+        verify();
+    }
+    check(loaded.cloud.use_count() == cloudReferences && leftView->image().constBits() == leftStorage &&
+              rightView->image().constBits() == rightStorage,
+          "Steady snapshots duplicated canonical buffers");
+    std::sort(routeMicros.begin(), routeMicros.end());
+    std::cout << "Canonical buffers: cloud=" << loaded.cloud->attributes.front().buffer.size()
+              << " bytes, Published refs=" << cloudReferences
+              << "; grayscale=" << leftView->image().sizeInBytes() + rightView->image().sizeInBytes()
+              << " bytes; route GUI latency us p50=" << routeMicros[50] << " p95=" << routeMicros[95]
+              << " max=" << routeMicros.back() << '\n';
+    // One actual pointer/wheel path, then guarded reset, retaining the real renderer.
+    const auto center = cloudView->mapToScene(QPointF(cloudView->width() / 2, cloudView->height() / 2));
+    QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+    QTest::mouseMove(w, (center + QPointF(30, 20)).toPoint(), 10);
+    QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, (center + QPointF(30, 20)).toPoint());
+    check(cloudView->yaw() != 17 && cloudView->pitch() != 23, "Real mouse orbit did not update renderer");
+    QWheelEvent wheel(center, w->mapToGlobal(center.toPoint()), {}, QPoint(0, 120), Qt::NoButton,
+                      Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(w, &wheel);
+    check(cloudView->zoom() > 1.4, "Real wheel zoom did not update renderer");
+    click(w, "scanResetView", true);
+    check(cloudView->yaw() == -35 && cloudView->pitch() == 35 && cloudView->zoom() == 1,
+          "Reset did not update real renderer");
+    auto partial = fixturePreview(b.projectGeneration());
+    partial.right = {};
+    b.applyPreview(std::move(partial));
+    check(!b.previewCurrent() && leftView->image().constBits() == leftStorage && !b.previewError().isEmpty(),
+          "Missing frame became current or destroyed last-known buffer");
+    b.applyResult({});
+    settle();
+    check(!b.previewCurrent() && cloudView->pointCount() == 512 && leftView->hasImage(),
+          "Disconnect lost last-known display evidence");
+    capture(w, out, "stale-real-pixels");
+    const auto yaw = cloudView->yaw();
+    QMetaObject::invokeMethod(owner, "resetView");
+    check(cloudView->yaw() == yaw, "Disconnected direct reset bypassed interaction guard");
+    const auto oldGeneration = b.projectGeneration();
+    b.applyResult(snapshot("B"));
+    b.applyResult(snapshot());
+    b.applyPreview(fixturePreview(oldGeneration));
+    auto late = snapshot();
+    late.requestGeneration = oldGeneration;
+    late.cloud = fixtureCloud();
+    b.applyResult(late);
+    check(cloudView->pointCount() == 0 && !leftView->hasImage() && !rightView->hasImage() &&
+              !b.previewCurrent(),
+          "Old A preview/cloud crossed A/B/A project generation");
+    b.applyPreview(fixturePreview(b.projectGeneration()));
+    auto stopped = snapshot("/fixture/Scan-A.mantis", false);
+    b.applyResult(stopped);
+    auto oldSource = fixturePreview(b.projectGeneration());
+    oldSource.source = "existing-daemon-capture";
+    b.applyPreview(std::move(oldSource));
+    check(!b.previewCurrent(), "Late stopped-capture frame became current");
+    b.applyResult(snapshot());
+    b.applyPreview(fixturePreview(b.projectGeneration()));
+    check(b.previewCurrent() && leftView->hasImage(),
+          "Preview did not recover after rehosting/project reset");
+    check(b.commands == 0, "Visual hosting issued runtime command");
+    capture(w, out, "canonical-live");
 }
 void stress(QQuickWindow *w, Observed &b, const QString &out) {
     w->setProperty("uiMode", "live");
@@ -718,10 +1073,216 @@ void wire(QQuickWindow *w, StudioBridge &b, const QString &out) {
           "Wire A/B/A recovery missing");
     capture(w, out, "wire-recovery");
 }
+void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
+    mantis::client::Client client;
+    auto *r = item(w, "scanWorkspace");
+    auto *owner = qobject_cast<LiveViews *>(item(w, "liveSurfaces"));
+    auto *cloud = qobject_cast<mantis::render::PointCloudView *>(owner->cloud());
+    auto *left = qobject_cast<MeasurementView *>(owner->left());
+    auto *right = qobject_cast<MeasurementView *>(owner->right());
+    const auto await = [&](auto predicate, int deadline = 6000) {
+        check(QTest::qWaitFor(predicate, deadline), "Capture wire deadline");
+    };
+    const auto captureClick = [&](const QString &name, bool keyboard = false) {
+        await([&] { return item(w, name)->isEnabled() && item(w, name)->isVisible(); });
+        auto *button = item(w, name);
+        button->forceActiveFocus(Qt::TabFocusReason);
+        if (keyboard)
+            QTest::keyClick(w, Qt::Key_Space);
+        else
+            QTest::mouseClick(
+                w, Qt::LeftButton, Qt::NoModifier,
+                button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
+    };
+    const auto refresh = [&] {
+        await([&] { return !b.busy(); });
+        b.refresh();
+        await([&] { return !b.busy(); });
+    };
+    const auto control = [&](int mode) {
+        w::Request req;
+        req.mutable_events()->set_after(mode);
+        (void)client.call(req);
+        refresh();
+        settle();
+    };
+    const auto count = [&](const std::string &kind) {
+        w::Request req;
+        req.mutable_events()->set_after(90);
+        const auto result = client.call(req);
+        for (const auto &e : result.events())
+            if (e.kind() == kind)
+                return e.sequence();
+        return uint64_t{};
+    };
+    const auto choose = [&] {
+        check(QMetaObject::invokeMethod(r, "chooseCaptureDevice", Q_ARG(QVariant, QVariant("stereo-parent"))),
+              "Device selection method unavailable");
+        settle();
+    };
+    const auto intents = [&] {
+        QMetaObject::invokeMethod(r, "startCapture");
+        QMetaObject::invokeMethod(r, "stopCapture");
+        QMetaObject::invokeMethod(item(w, "scanStart"), "clicked");
+        QMetaObject::invokeMethod(item(w, "scanStop"), "clicked");
+    };
+    w->resize(1920, 1080);
+    await([&] { return b.connected() && !b.busy() && cloud->pointCount() == 512; });
+    check(!b.capturing() && b.captureStateKnown() && !item(w, "scanStart")->isEnabled(),
+          "Idle bridge guessed a selection");
+    for (const auto &bad : {QString{}, QString("unknown"), QString(4097, 'x')})
+        b.startCapture(bad);
+    b.stopCapture();
+    for (const auto &mode : {"mock", "hybrid"}) {
+        w->setProperty("uiMode", mode);
+        if (QString(mode) == "hybrid")
+            r->setProperty("activeSource", "mock");
+        choose();
+        intents();
+        check(!item(w, "scanStart")->isEnabled() && !item(w, "scanStop")->isEnabled() &&
+                  !owner->cloud()->isVisible(),
+              "Mock/demo authority or visual isolation failed");
+    }
+    r->setProperty("activeSource", "live");
+    control(20);
+    choose();
+    check(item(w, "scanStart")->isEnabled() && !item(w, "scanStop")->isEnabled(),
+          "Permitted Start unavailable");
+    captureClick("scanStart", true);
+    check(b.busy() && !b.capturing(), "Start was optimistic or completion lease lost");
+    for (int i = 0; i < 8; ++i) {
+        intents();
+        b.startCapture("stereo-parent");
+        b.stopCapture();
+    }
+    r->setProperty("activeSource", "mock");
+    for (int i = 0; i < 100; ++i) {
+        w->setProperty("workspace", i % 2 ? "scan" : "acquisition");
+        QCoreApplication::processEvents();
+    }
+    w->setProperty("workspace", "scan");
+    await([&] { return !b.busy() && b.capturing() && b.previewCurrent(); });
+    check(b.lastKnownCapturing() && !owner->cloud()->isVisible(),
+          "Capture did not survive pending source/route changes");
+    r->setProperty("activeSource", "live");
+    settle();
+    check(left->imageSize() == QSize(96, 48) && right->imageSize() == QSize(48, 96) &&
+              left->image().pixelColor(0, 0).red() == 40 && right->image().pixelColor(0, 0).red() == 90 &&
+              left->image().pixelColor(8, 0).red() == 220,
+          "Existing worker did not convert valid mapped grayscale pair");
+    capture(w, out, "capture-active-real-wire");
+    const auto beforeData = count("artifact_data"), before = count("preview");
+    QTest::qWait(1000);
+    const auto baseline = count("preview") - before;
+    for (int i = 0; i < 100; ++i) {
+        w->setProperty("workspace", i % 2 ? "scan" : "acquisition");
+        if (i % 5 == 0)
+            r->setProperty("activeSource", i % 10 ? "live" : "mock");
+        QCoreApplication::processEvents();
+    }
+    w->setProperty("workspace", "scan");
+    r->setProperty("activeSource", "live");
+    const auto after = count("preview");
+    QTest::qWait(1000);
+    const auto routed = count("preview") - after;
+    check(baseline >= 8 && baseline <= 20 && routed >= 8 && routed <= 20 &&
+              std::abs(int(baseline) - int(routed)) <= 5,
+          "Preview request budget changed after visual routing");
+    check(count("artifact_data") == beforeData && cloud->pointCount() == 512,
+          "Navigation loaded extra cloud or rewound geometry");
+    std::cout << "preview requests / 1000 ms: baseline=" << baseline << " routed=" << routed
+              << "; navigation artifact_data=0; one canonical renderer/two live previews\n";
+    captureClick("scanStop", true);
+    await([&] { return !b.busy() && !b.capturing() && b.captureStateKnown(); });
+    check(!item(w, "scanStop")->isEnabled(), "Stop did not follow confirmed daemon snapshot");
+    for (int mode : {12, 13, 14, 15, 16, 26, 27, 29}) {
+        control(mode);
+        choose();
+        intents();
+        b.startCapture("stereo-parent");
+        b.stopCapture();
+        check(!model(w)->data()["canStartCapture"].toBool() && !model(w)->data()["canStopCapture"].toBool(),
+              "Invalid descriptor enabled capture controls");
+    }
+    for (int mode : {11, 21, 22, 28}) {
+        control(mode);
+        intents();
+        b.startCapture("stereo-parent");
+        b.stopCapture();
+        check(!b.captureStateKnown() && model(w)->data()["captureStatus"] == "Unknown",
+              "Ambiguous capture was guessed");
+    }
+    control(17);
+    choose();
+    captureClick("scanStart");
+    await([&] { return !b.busy(); });
+    check(b.connected() && !b.capturing() && b.error().contains("wire.capture_start"),
+          "Rejected Start became active or lost typed error");
+    control(31);
+    captureClick("scanStop");
+    await([&] { return !b.busy(); });
+    check(b.capturing() && b.error().contains("wire.capture_stop"),
+          "Rejected Stop became idle or lost typed error");
+    await([&] { return b.previewCurrent(); });
+    control(25);
+    check(!b.connected() && b.lastKnownCapturing() && left->hasImage() && cloud->pointCount() == 512,
+          "Recording disconnect lost last-known buffers");
+    intents();
+    b.startCapture("stereo-parent");
+    b.stopCapture();
+    capture(w, out, "recording-disconnected-real-wire");
+    control(31);
+    await([&] { return b.capturing() && b.previewCurrent(); });
+    control(18);
+    choose();
+    captureClick("scanStart");
+    await([&] { return !b.busy(); });
+    check(!b.connected() && !item(w, "scanStart")->isEnabled() && b.error().contains("operation"),
+          "Socket closure advertised command success");
+    intents();
+    b.startCapture("stereo-parent");
+    b.stopCapture();
+    int heartbeats = 0;
+    QTimer heartbeat;
+    heartbeat.setInterval(10);
+    QObject::connect(&heartbeat, &QTimer::timeout, [&] { ++heartbeats; });
+    heartbeat.start();
+    control(19);
+    choose();
+    captureClick("scanStart");
+    check(b.busy() && !b.capturing(), "Timed-out Start was optimistic");
+    for (int i = 0; i < 8; ++i) {
+        intents();
+        b.startCapture("stereo-parent");
+        b.stopCapture();
+    }
+    r->setProperty("activeSource", "mock");
+    intents();
+    await([&] { return !b.busy(); }, 10000);
+    check(b.connected() && !b.capturing() && b.error().contains("operation") && !owner->cloud()->isVisible(),
+          "Timeout/source change lost conservative state");
+    heartbeat.stop();
+    check(heartbeats > 50, "Capture timeout blocked the GUI event loop");
+    std::cout << "GUI heartbeats during socket timeout: " << heartbeats << '\n';
+    r->setProperty("activeSource", "live");
+    control(23);
+    check(model(w)->selectedDevice().isEmpty() && cloud->pointCount() == 0 && !left->hasImage() &&
+              !right->hasImage(),
+          "Wire project replacement retained old source buffers");
+    control(10);
+    await([&] { return cloud->pointCount() == 512; });
+    check(count("capture_start") == 4 && count("capture_stop") == 2 && count("artifact_data") == 2,
+          "Mutation retried, unauthorized intent transmitted, or cloud loaded on route");
+    capture(w, out, "capture-recovered-idle-wire");
+}
 void native(QQuickWindow *w, Observed &b, const QString &out) {
     for (const auto &source : {"mock", "live", "hybrid"}) {
         w->setProperty("uiMode", source);
-        b.applyResult(snapshot());
+        auto loaded = snapshot();
+        loaded.cloud = fixtureCloud();
+        loaded.cloud_id = "fixture-cloud";
+        b.applyResult(loaded);
+        b.applyPreview(fixturePreview(b.projectGeneration()));
         w->resize(1536, 1024);
         check(QTest::qWaitForWindowExposed(w, 5000), "Native window not exposed");
         settle();
@@ -745,6 +1306,7 @@ int main(int argc, char **argv) {
     QQuickStyle::setStyle("Basic");
     qInstallMessageHandler(messages);
     qmlRegisterType<ScanModel>("Mantis.Studio", 1, 0, "ScanModel");
+    qmlRegisterType<LiveViews>("Mantis.Studio", 1, 0, "LiveViews");
     qmlRegisterType<DevicesModel>("Mantis.Studio", 1, 0, "DevicesModel");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");
@@ -755,12 +1317,16 @@ int main(int argc, char **argv) {
         const QString out = argc > 1 ? argv[1] : QDir::tempPath() + "/mantis-scan",
                       task = argc > 2 ? argv[2] : "qml";
         check(QDir().mkpath(out), "Evidence directory unavailable");
-        if (task == "model")
-            modelTests();
+        QPointer<QObject> finalOwner, finalCloud, finalLeft, finalRight;
+        if (task == "fixtures") {
+            mantis::data::write_packet((out + "/cloud.packet").toStdString(), *fixtureCloud());
+            mantis::data::write_packet((out + "/frames.packet").toStdString(), *fixtureFrames());
+        } else if (task == "model")
+            modelTests(), captureModelTests();
         else {
             Observed observed;
             std::unique_ptr<StudioBridge> publicBridge;
-            if (task == "wire")
+            if (task == "wire" || task == "capture-wire")
                 publicBridge = std::make_unique<StudioBridge>();
             StudioBridge *bridge = publicBridge ? publicBridge.get() : &observed;
             CalibrationController calibration(std::make_shared<PublicCalibrationClient>(
@@ -768,12 +1334,18 @@ int main(int argc, char **argv) {
             QQmlApplicationEngine engine;
             engine.rootContext()->setContextProperty("studio", bridge);
             engine.rootContext()->setContextProperty("calibration", &calibration);
-            engine.setInitialProperties({{"uiMode", task == "wire" ? "live" : "mock"},
-                                         {"workspace", task == "qml" ? "home" : "scan"}});
+            engine.setInitialProperties(
+                {{"uiMode", (task == "wire" || task == "capture-wire") ? "live" : "mock"},
+                 {"workspace", task == "qml" ? "home" : "scan"}});
             engine.load(QUrl("qrc:/ui/shell/Main.qml"));
             check(!engine.rootObjects().empty(), "Production Scan shell failed to load");
             auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().front());
             check(window, "Window unavailable");
+            auto *canonical = qobject_cast<LiveViews *>(item(window, "liveSurfaces"));
+            finalOwner = canonical;
+            finalCloud = canonical->cloud();
+            finalLeft = canonical->left();
+            finalRight = canonical->right();
             settle();
             if (task == "qml") {
                 // Other workspaces start with Scan eagerly instantiated but still
@@ -790,10 +1362,14 @@ int main(int argc, char **argv) {
             }
             if (task == "matrix" || task == "hidpi")
                 matrix(window, observed, out, task == "hidpi");
+            else if (task == "surfaces")
+                surfaces(window, observed, out);
             else if (task == "stress")
                 stress(window, observed, out);
             else if (task == "wire")
                 wire(window, *publicBridge, out);
+            else if (task == "capture-wire")
+                captureWire(window, *publicBridge, out);
             else if (task == "native")
                 native(window, observed, out);
             else {
@@ -802,6 +1378,8 @@ int main(int argc, char **argv) {
             }
             check(observed.commands == 0, "Scan invoked runtime mutation/data request");
         }
+        check(finalOwner.isNull() && finalCloud.isNull() && finalLeft.isNull() && finalRight.isNull(),
+              "Canonical objects survived final window/engine destruction");
         check(warnings.empty(), "Qt/QML warning in Scan tests");
         std::cout << "PASS: Scan " << (argc > 2 ? argv[2] : "qml") << '\n';
     } catch (const std::exception &e) {

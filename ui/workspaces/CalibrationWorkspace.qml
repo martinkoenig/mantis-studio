@@ -6,6 +6,9 @@ Item {
     id: root
     required property var controller
     required property var studio
+    readonly property alias leftHost: captures.leftHost
+    readonly property alias rightHost: captures.rightHost
+    readonly property bool camerasActive: controller.stage === 2 && studio.dualPreview
     objectName: "calibrationWorkspace"
     property color panelColor: "#18212a"
     property color borderColor: "#273441"
@@ -62,7 +65,7 @@ Item {
                             Label { text: "Current active binding is shown above. Activation requires a selected logical device."; Layout.fillWidth: true; wrapMode: Text.Wrap; opacity: 0.7 }
                         }
                         TargetStage { controller: root.controller; visible: root.controller.stage === 1 }
-                        CapturesStage { controller: root.controller; studio: root.studio; visible: root.controller.stage === 2 }
+                        CapturesStage { id: captures; controller: root.controller; studio: root.studio; visible: root.controller.stage === 2 }
                         DatasetStage { controller: root.controller; visible: root.controller.stage === 3 }
                         CamerasStage { controller: root.controller; visible: root.controller.stage === 4 }
                         RigStage { controller: root.controller; visible: root.controller.stage === 5 }

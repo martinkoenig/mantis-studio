@@ -27,6 +27,8 @@ class StudioBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString acquisitionText READ acquisitionText NOTIFY changed)
     Q_PROPERTY(bool dualPreview READ dualPreview NOTIFY changed)
+    Q_PROPERTY(bool previewCurrent READ previewCurrent NOTIFY changed)
+    Q_PROPERTY(QString previewError READ previewError NOTIFY changed)
     Q_PROPERTY(QVariantList devices READ devices NOTIFY changed)
     Q_PROPERTY(QVariantList artifacts READ artifacts NOTIFY changed)
     Q_PROPERTY(QVariantList jobs READ jobs NOTIFY changed)
@@ -38,6 +40,7 @@ class StudioBridge : public QObject {
     Q_PROPERTY(bool connected READ connected NOTIFY changed)
     Q_PROPERTY(bool hasSnapshot READ hasSnapshot NOTIFY changed)
     Q_PROPERTY(bool capturing READ capturing NOTIFY changed)
+    Q_PROPERTY(bool captureStateKnown READ captureStateKnown NOTIFY changed)
     Q_PROPERTY(bool lastKnownCapturing READ lastKnownCapturing NOTIFY changed)
     Q_PROPERTY(QString captureStatusText READ captureStatusText NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
@@ -48,14 +51,16 @@ class StudioBridge : public QObject {
     CloudRetry cloud_retry_;
     CloudRetry::Clock retry_clock_;
     QVariantList error_details_;
-    bool connected_{}, has_snapshot_{}, request_pending_{};
+    bool connected_{}, has_snapshot_{}, request_pending_{}, capture_state_valid_{};
+    int active_capture_count_{};
     const bool runtime_enabled_;
     mantis::client::Client client_;
     QFutureWatcher<StudioResult> watcher_;
     QTimer timer_, preview_timer_;
     QFutureWatcher<PreviewResult> preview_watcher_;
     QPointer<MeasurementView> left_, right_;
-    QString acquisition_text_, replay_;
+    QString acquisition_text_, replay_, preview_error_;
+    bool preview_current_{}, preview_pending_{};
     bool dual_preview_{}, preview_reported_{};
     quint64 project_generation_{};
 
@@ -118,12 +123,17 @@ class StudioBridge : public QObject {
         return connected_ && lastKnownCapturing();
     }
     bool lastKnownCapturing() const {
-        return !capture_.isEmpty();
+        return active_capture_count_ > 0;
+    }
+    bool captureStateKnown() const {
+        return connected_ && has_snapshot_ && capture_state_valid_ && project_.size() <= 65536;
     }
     QString captureStatusText() const {
         if (!connected_)
             return lastKnownCapturing() ? "Last known: capture active · current state unknown"
                                         : "Current capture state unknown";
+        if (!captureStateKnown())
+            return "Capture state ambiguous · controls unavailable";
         return capturing() ? "Streaming · raw recording" : "No active capture in latest snapshot";
     }
     bool busy() const {
@@ -135,6 +145,12 @@ class StudioBridge : public QObject {
     QString acquisitionText() const {
         return acquisition_text_;
     }
+    bool previewCurrent() const {
+        return connected_ && preview_current_;
+    }
+    QString previewError() const {
+        return preview_error_;
+    }
     bool dualPreview() const {
         return dual_preview_;
     }
@@ -142,6 +158,8 @@ class StudioBridge : public QObject {
     Q_INVOKABLE void replay(QString artifact, bool verify);
     Q_INVOKABLE void attachView(QObject *);
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE bool canStartCapture(QString device) const;
+    Q_INVOKABLE bool canStopCapture() const;
     Q_INVOKABLE void startCapture(QString device);
     Q_INVOKABLE void stopCapture();
     Q_INVOKABLE void runPipeline(QString recipe);

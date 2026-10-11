@@ -1,7 +1,9 @@
 #include "bridge.hpp"
 #include "calibration_controller.hpp"
+#include "capture_authority.hpp"
 #include "devices_model.hpp"
 #include "home_model.hpp"
+#include "live_views.hpp"
 #include "projects_model.hpp"
 #include "projects_scroll.hpp"
 #include "scan_model.hpp"
@@ -127,9 +129,15 @@ static void conversionRegression(QQmlEngine &engine) {
     }
 }
 class PresentationBridge : public StudioBridge {
+    Q_OBJECT
   public:
     PresentationBridge() : StudioBridge(nullptr, false) {}
     using StudioBridge::applyResult;
+    // Injected confirmed DTOs represent Live UI authority, while transport stays disabled.
+    // Actual mutating methods still use StudioBridge's independent runtime guard.
+    Q_INVOKABLE bool canStartCapture(QString id) const {
+        return captureStateKnown() && !busy() && !capturing() && studio_capture::uniqueDevice(devices(), id);
+    }
 };
 static void stateRegression(QQmlApplicationEngine &engine, QQuickWindow *window, StudioBridge &studio,
                             const QString &output) {
@@ -283,6 +291,10 @@ static void stateRegression(QQmlApplicationEngine &engine, QQuickWindow *window,
             "Reconnect retains stale banner");
     require(checkedItem(window->contentItem(), "startCapture_eligible")->isEnabled(),
             "Reconnect action unavailable");
+    require(!observed.StudioBridge::canStartCapture("eligible"),
+            "Disabled fixture acquired runtime authority");
+    observed.startCapture("eligible");
+    require(!observed.busy(), "Presentation eligibility enabled a disabled transport");
     {
         mantis::render::PointCloudView transient;
         observed.attachView(&transient);
@@ -428,6 +440,7 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Basic");
     qmlRegisterType<ScanModel>("Mantis.Studio", 1, 0, "ScanModel");
+    qmlRegisterType<LiveViews>("Mantis.Studio", 1, 0, "LiveViews");
     qmlRegisterType<DevicesModel>("Mantis.Studio", 1, 0, "DevicesModel");
     qmlRegisterType<HomeModel>("Mantis.Studio", 1, 0, "HomeModel");
     qmlRegisterType<ProjectsModel>("Mantis.Studio", 1, 0, "ProjectsModel");

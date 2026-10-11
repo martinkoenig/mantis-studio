@@ -1,6 +1,6 @@
-# Scan workspace — UI-M3b foundation
+# Scan workspace — UI-M3c camera, geometry and capture
 
-`--workspace=scan` renders the dedicated Scan foundation in mock, live and hybrid.
+`--workspace=scan` renders the dedicated Scan workspace in mock, live and hybrid.
 Live startup still defaults to `acquisition`. **Open Classic Acquisition** is an
 ordinary navigation action in live/hybrid; it never starts or stops capture.
 Mock cannot invoke this route through the new page. `--acceptance-export` continues
@@ -9,7 +9,7 @@ to force the unchanged Classic Acquisition workflow.
 ## Ownership and authority
 
 The shell eagerly instantiates one ScanWorkspace and one AcquisitionWorkspace.
-Scan contains bounded camera placeholders, a static grid/axes viewport, setup and
+Scan contains actual grayscale camera views and the existing geometry renderer in live mode, illustrative studies in mock, setup and
 notes, capture/processing status, and Sequence/Timeline/Markers panes. At narrow
 widths, visible Viewport/Cameras/Setup/Sequence controls select persistent panes.
 The center grows with workspace width; rails stay bounded and the setup rail
@@ -17,11 +17,25 @@ remains on the right edge. Settings and camera cards scroll independently. Notes
 remain visible outside the settings scroller. Escape returns compact focus to
 Viewport. The dock uses separate local tabs when three panels would be too narrow.
 
-Only Classic Acquisition owns the original PointCloudView and two MeasurementViews.
-Their identities and attachment targets persist across route changes. Its existing
-visibility handler may idempotently assign the same preview QPointers; Scan never
-calls attachView/attachPreview or introduces a view, frame copy or preview path.
-The existing bridge's 500 ms snapshot and 66 ms preview timers remain unchanged.
+The shell's persistent `LiveSurfaces` / C++ `LiveViews` creates and owns one
+PointCloudView and two live MeasurementViews. All three have CppOwnership and
+retain their QObject parent until final engine destruction. Dedicated Item slots
+in Scan and Classic receive only their visual `parentItem`, on the GUI thread
+within the same QQuickWindow. Explicit size connections track the active slot;
+inactive surfaces park invisibly at finite size under the owner. No Loader, image
+clone, mirrored texture or attachment per frame/snapshot is used. One bridge
+attachment pair is made at owner initialization, or on explicit bridge replacement.
+Calibration's capture stage also receives host slots for this same live pair. Its
+former two live view declarations and route-time bridge attachment are removed;
+calibration capture/controller behavior remains unchanged.
+
+Scan / Classic / Calibration / compact-pane and source changes preserve renderer identity,
+Published cloud, preview storage and orbit state. Mock and Hybrid-Demo park all
+live views and retain only illustrative assets. Waiting or detached Scan providers
+cannot host the global bridge's live views. The existing bridge retains one 500 ms
+snapshot timer and one 66 ms preview timer/worker. Its preview completion lease
+covers queued GUI delivery, so timer events cannot replace an unapplied result.
+
 The dormant Scan layout retains finite internal geometry before its first route
 activation. This avoids zero-size Qt layout/font fallback work while preserving
 all component identities and the existing application minimum size. Status cells
@@ -32,17 +46,18 @@ retry/loading and project/preview invalidation remain unchanged.
 
 | Presentation | Source | Authority |
 | --- | --- | --- |
-| Runtime connection/capture | Confirmed bridge snapshot | Read-only; capture active only while confirmed |
+| Runtime connection/capture | Confirmed bridge snapshot | Start/Stop intents only with exact capability, unique capture state and no operation in flight; daemon decides outcomes |
 | Device summary | Advertised capture-capable top-level descriptors | Descriptor discovered, hardware readiness unknown |
 | Artifacts/jobs/issues | Existing structured bridge properties | Passive bounded source-order rows; no replay/load/cancel |
 | Scan processing | No typed job-to-scan association or processing-state contract | Not reported; runtime-wide jobs never establish scan execution |
-| Live Scanner/Replay, display/setup/dock tabs | Local QML selection | Presentation only; no execution change |
+| Live Scanner/Replay, setup/dock tabs | Local QML selection | Presentation only; no replay execution change |
+| Geometry / left-right grayscale | Existing renderer and preview worker | Actual rendered points / pair received; no measured coverage, FPS or hardware readiness |
 | Classic Acquisition entry | Shell route | Navigation permission, separate from command permission |
 | Mock or hybrid Demo / Mock | Dedicated ScanDemo fixture | Illustrative, permanently non-actionable |
 | Tracking, RGB, markers, timing, rates, power/settings, notes | No supported source/API | Explicit unavailable/unknown; mutation controls disabled |
 
 No metric is inferred from acquisitionText, device names or capabilities. Point
-counts belong to Classic's renderer, not generic artifact metadata. There is no
+counts come only from the canonical renderer and are labelled rendered points, not capture throughput or generic artifact metadata. There is no
 waveform, artificial session numbering, CPU/GPU percentage or simulated readiness.
 Camera and housing studies reuse approved standalone Home assets, clearly labelled
 Illustrative; the reference screenshot itself is never rendered. Canonical axes
@@ -57,6 +72,9 @@ GUI-thread `changed()` after its complete DTO projection; snapshotReady alone is
 too early for those properties. Replacement disconnects the old source. Detach or
 destruction clears all retained source data and invalidates presentation identity.
 There are no commands, client, RPC, timer, thread, pixel/Published buffers or renderer.
+`selectedDevice` is local exact-ID selection, validated against the bounded
+presented inventory and the complete admitted descriptor set. It resets on source,
+project, disconnect and disappearance; selection never sends a command.
 
 | Data fields | Meaning |
 | --- | --- |
@@ -67,8 +85,9 @@ There are no commands, client, RPC, timer, thread, pixel/Published buffers or re
 | busy, runtimeError, issues | Existing bridge operation/error state; issues preserve phase/kind/integer code/component/message; unrelated success cannot erase bridge phase policy |
 | devices, artifacts, jobs, diagnostics | Bounded live/source-tagged read-only inventories, preserving source order |
 | selectedArtifact, latestPointCloud | Advertised finalized cloud status labels only; “last advertised” means source order, not timestamp/chronology; never loads a packet |
-| readiness, previewStatus | Readiness unknown; existing preview remains in Classic; connection does not imply sensor readiness |
-| canOpenClassicAcquisition, commandsAllowed | Navigation allowed for the live provider; command permissions permanently false; QML separately rejects mock navigation |
+| readiness, previewStatus, previewCurrent, previewError | Readiness unknown; complete existing grayscale pair received, stale/missing/failed pair explicit; no inferred rates |
+| canOpenClassicAcquisition, commandsAllowed | Navigation permission separate from conservative confirmed capture-control permission; QML rejects mock/demo commands |
+| selectedDevice, canStartCapture, canStopCapture, captureControlReason | Exact selected ID, strict capture/busy metadata and capability authority; no optimistic capture state |
 
 Inventories inspect at most 256 entries and emit at most 12 rows (issues 8,
 diagnostics 12). `devicesLimited`, `artifactsLimited`, `jobsLimited` conservatively
@@ -105,9 +124,37 @@ hybrid demo is visible; the demo itself has no transport or command authority.
 
 ## Migration boundaries
 
-M3c camera/geometry integration, M3d replay and M3e supported setup are deferred.
+M3d replay and M3e supported setup remain deferred.
 The reference's hardware controls are unavailable with accessible explanations.
 Notes are read-only and have no storage or local draft. No preferences/project
 writes are introduced. The backend project/replay isolation gate remains pending;
-this presentation model does not repair or bypass it. See [verification](validation-m3b.md)
+this presentation model does not repair or bypass it. See [M3c verification](validation-m3c.md) and the historical [M3b foundation verification](validation-m3b.md)
 and the [route table](README.md#routing-and-existing-workflows).
+
+## Capture and display contracts
+
+| Source / state | Start | Stop | Display |
+| --- | --- | --- | --- |
+| Mock / Hybrid-Demo | Disabled; programmatic Scan intents rejected | Disabled | Illustrative only; canonical live surfaces parked |
+| Live / Hybrid-Live, confirmed idle | Only selected unique top-level image/frameset-stream descriptor, exact ID ≤4096 | Disabled | Existing grayscale and recorded geometry |
+| Live / Hybrid-Live, one confirmed active capture | Disabled | Existing daemon capture ID | Existing grayscale and recorded geometry |
+| Waiting / disconnected / ambiguous capture / malformed authority | Disabled | Disabled | No evidence, or explicitly last-known retained evidence |
+| Operation pending, including queued completion | Disabled | Disabled | Retained evidence; no optimistic transition |
+
+Both Scan intent functions and Bridge Start/Stop enforce their respective authority.
+The bridge stays active in Hybrid-Demo for other compatibility workflows; the demo
+has no command authority. Descriptor uniqueness requires the complete inventory
+within 256 rows and strict QStringList capabilities within 64 entries. Multiple,
+duplicate, empty or oversized capture IDs disable controls. Rejection, socket loss
+and timeout retain structured diagnostics and never automatically retry a mutation.
+Navigating away neither stops nor restarts daemon capture.
+
+Preview pairs are delivered together through the existing worker. Failed/partial
+pairs retain last-known buffers with an explicit diagnostic. Disconnect and capture
+source changes invalidate freshness; old project generation or stopped-source
+completions are rejected. Project changes clear both images and renderer cloud.
+Only Geometry is actionable in live mode; orbit/wheel/reset use the existing real
+renderer. Coverage, Texture, Confidence and RGB are unavailable. Mock retains its
+clearly labelled presentation affordances. Units remain mm, +X right / +Y forward /
++Z up. Processing remains Not reported and global job states remain independently
+qualified as last-known on disconnect (M3B-F01).

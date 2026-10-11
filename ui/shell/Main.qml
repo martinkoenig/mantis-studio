@@ -47,6 +47,17 @@ ApplicationWindow {
     onUiModeChanged: updateCalibrationVisibility()
     Component.onCompleted: updateCalibrationVisibility()
 
+    LiveSurfaces {
+        id: surfaces
+        bridge: window.studioBridge
+        readonly property bool classicActive: window.legacyVisible && window.uiMode !== "mock"
+        readonly property bool scanActive: scan.visible && !scan.illustrative && window.uiMode !== "mock" && scan.liveModel.bridge === window.studioBridge && scan.presentation.identityValid
+        readonly property bool calibrationActive: calibrationPage.visible && window.uiMode !== "mock" && calibrationPage.camerasActive
+        cloudHost: classicActive ? acquisition.cloudHost : scanActive && scan.viewportActive ? scan.cloudHost : null
+        leftHost: classicActive ? acquisition.leftHost : scanActive && scan.camerasActive ? scan.leftHost : calibrationActive ? calibrationPage.leftHost : null
+        rightHost: classicActive ? acquisition.rightHost : scanActive && scan.camerasActive ? scan.rightHost : calibrationActive ? calibrationPage.rightHost : null
+        interactive: (classicActive || (scanActive && scan.viewportActive)) && window.studioBridge.connected
+    }
     RowLayout {
         anchors.fill: parent; spacing: 0
         Rectangle {
@@ -117,11 +128,14 @@ ApplicationWindow {
                 }
                 Label { visible: uiMode === "mock" && (window.legacyVisible || window.workspace === "calibration"); text: "Offline Mock preview · runtime controls disabled"; color: Theme.warning }
                 AcquisitionWorkspace {
+                    id: acquisition
+                    surfaces: surfaces
                     objectName: "acquisitionWorkspace"
                     Layout.fillWidth: true; Layout.fillHeight: true; visible: window.legacyVisible
                     studio: window.studioBridge; enabled: window.uiMode !== "mock"
                 }
                 CalibrationWorkspace {
+                    id: calibrationPage
                     Layout.fillWidth: true; Layout.fillHeight: true; visible: window.workspace === "calibration"
                     controller: calibration; studio: window.studioBridge; enabled: window.uiMode !== "mock"
                 }
@@ -151,6 +165,8 @@ ApplicationWindow {
                     onNavigate: function(route) { window.workspace = route }
                 }
                 ScanWorkspace {
+                    id: scan
+                    surfaces: surfaces
                     objectName: "scanWorkspace"
                     Layout.fillWidth: true; Layout.fillHeight: true
                     visible: window.workspace === "scan"

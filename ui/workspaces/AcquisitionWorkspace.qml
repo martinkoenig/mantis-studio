@@ -6,6 +6,10 @@ import Mantis.Render 1.0
 ScrollView {
     id: root
     required property var studio
+    required property var surfaces
+    readonly property alias cloudHost: classicCloudHost
+    readonly property alias leftHost: classicLeftHost
+    readonly property alias rightHost: classicRightHost
     clip: true
     ScrollBar.horizontal.policy: root.contentWidth > root.availableWidth ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
     ScrollBar.vertical.policy: root.contentHeight > root.availableHeight ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
@@ -17,7 +21,6 @@ ScrollView {
     Item {
         width: root.contentWidth; height: root.contentHeight
         RowLayout {
-            onVisibleChanged: if (visible) studio.attachPreview(leftPreview, rightPreview)
             anchors.fill: parent; spacing: 16
             ColumnLayout {
                 Layout.minimumWidth: 255; Layout.maximumWidth: 255; Layout.preferredWidth: 255; Layout.fillHeight: true; spacing: 16
@@ -45,15 +48,15 @@ ScrollView {
                                 Layout.fillWidth: true
                                 Label { text: modelData.name; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true; wrapMode: Text.Wrap }
                                 Label { text: studio.connected ? "Discovered · readiness unknown" : "Last-known descriptor · availability unknown"; color: studio.connected ? "#6fe0bc" : "#edc078"; font.pixelSize: 11; Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap }
-                                Action { text: "Start capture"; Layout.fillWidth: true; objectName: "startCapture_" + modelData.id; enabled: studio.connected && modelData.captureSupported && !studio.capturing && !studio.busy; onClicked: studio.startCapture(modelData.id) }
+                                Action { text: "Start capture"; Layout.fillWidth: true; objectName: "startCapture_" + modelData.id; enabled: studio.connected && studio.captureStateKnown && !studio.capturing && !studio.busy && studio.canStartCapture(modelData.id); onClicked: studio.startCapture(modelData.id) }
                             }
                         }
-                        Action { text: "Stop capture"; Layout.fillWidth: true; enabled: studio.connected && studio.capturing && !studio.busy; onClicked: studio.stopCapture() }
+                        Action { text: "Stop capture"; Layout.fillWidth: true; enabled: studio.connected && studio.captureStateKnown && studio.capturing && !studio.busy; onClicked: studio.stopCapture() }
                         Label { text: (studio.connected ? "" : "Last-known acquisition diagnostics\n") + studio.acquisitionText; visible: studio.acquisitionText.length > 0; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 11; color: "#a8bbcb" }
                         Rectangle { Layout.fillWidth: true; height: 1; color: "#2b3945" }
                         Caption { text: "PROCESSING RECIPE" }
                         ComboBox { id: recipe; Layout.fillWidth: true; model: ["example", "crash-test"] }
-                        Action { text: "Run pipeline"; Layout.fillWidth: true; enabled: studio.connected && studio.capturing && !studio.busy; onClicked: studio.runPipeline(recipe.currentText) }
+                        Action { text: "Run pipeline"; Layout.fillWidth: true; enabled: studio.connected && studio.captureStateKnown && studio.capturing && !studio.busy; onClicked: studio.runPipeline(recipe.currentText) }
                         Label { text: "Synthetic geometry · millimeters"; color: "#8a9caf"; font.pixelSize: 11 }
                     }
                 }
@@ -85,16 +88,15 @@ ScrollView {
                         anchors.fill: parent; anchors.margins: 12; spacing: 12
                         ColumnLayout {
                             Layout.fillWidth: true; Layout.fillHeight: true
-                            Caption { text: "LEFT · " + (studio.connected ? "NATIVE GRAYSCALE" : "LAST-KNOWN PREVIEW") }
-                            MeasurementView { id: leftPreview; objectName: "leftPreview"; Layout.fillWidth: true; Layout.fillHeight: true }
+                            Caption { text: "LEFT · " + (studio.previewCurrent ? "NATIVE GRAYSCALE" : "LAST-KNOWN PREVIEW") }
+                            Item { id: classicLeftHost; objectName: "classicLeftHost"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true; Layout.fillHeight: true
-                            Caption { text: "RIGHT · " + (studio.connected ? "NATIVE GRAYSCALE" : "LAST-KNOWN PREVIEW") }
-                            MeasurementView { id: rightPreview; objectName: "rightPreview"; Layout.fillWidth: true; Layout.fillHeight: true }
+                            Caption { text: "RIGHT · " + (studio.previewCurrent ? "NATIVE GRAYSCALE" : "LAST-KNOWN PREVIEW") }
+                            Item { id: classicRightHost; objectName: "classicRightHost"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true }
                         }
                     }
-                    Component.onCompleted: studio.attachPreview(leftPreview, rightPreview)
                 }
                 Panel {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true
@@ -104,21 +106,14 @@ ScrollView {
                             Layout.fillWidth: true; Layout.margins: 15
                             Caption { text: "GEOMETRY VIEW" }
                             Item { Layout.fillWidth: true }
-                            Label { text: cloud.pointCount.toLocaleString() + " points  ·  mm"; color: "#92adbd"; font.pixelSize: 12 }
+                            Label { text: root.surfaces.cloud.pointCount.toLocaleString() + " points  ·  mm"; color: "#92adbd"; font.pixelSize: 12 }
                         }
-                        PointCloudView {
-                            id: cloud; objectName: "pointCloudView"
-                            Layout.fillWidth: true; Layout.fillHeight: true
-                            Component.onCompleted: studio.attachView(cloud)
-                            MouseArea {
-                                anchors.fill: parent
-                                property real lastX; property real lastY
-                                onPressed: function(mouse) { lastX = mouse.x; lastY = mouse.y }
-                                onPositionChanged: function(mouse) { if (pressed) { cloud.yaw += (mouse.x-lastX)*0.5; cloud.pitch += (mouse.y-lastY)*0.5; lastX=mouse.x; lastY=mouse.y } }
-                                onWheel: function(wheel) { cloud.zoom *= wheel.angleDelta.y > 0 ? 1.1 : 0.9 }
-                            }
+                        Item {
+                            id: classicCloudHost; objectName: "classicCloudHost"
+                            Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                             Column {
-                                anchors.centerIn: parent; spacing: 12; visible: cloud.pointCount === 0
+                                z: 2
+                                anchors.centerIn: parent; spacing: 12; visible: root.surfaces.cloud.pointCount === 0
                                 Label { text: "Your geometry starts here"; font.pixelSize: 18; color: "#c9d8e5"; anchors.horizontalCenter: parent.horizontalCenter }
                                 Label { text: "Capture → example pipeline"; color: "#8a9caf"; anchors.horizontalCenter: parent.horizontalCenter }
                             }
@@ -127,7 +122,7 @@ ScrollView {
                             Layout.fillWidth: true; Layout.margins: 12
                             Label { text: "Drag to orbit   ·   Scroll to zoom"; color: "#7d94a8"; font.pixelSize: 11 }
                             Item { Layout.fillWidth: true }
-                            Button { text: "Reset view"; onClicked: { cloud.yaw=-35; cloud.pitch=35; cloud.zoom=1 } }
+                            Button { text: "Reset view"; onClicked: root.surfaces.resetView() }
                         }
                     }
                 }

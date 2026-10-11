@@ -6,6 +6,8 @@ import "../components"
 Rectangle {
     id: root
     required property var workspace
+    property Item leftHost: null
+    property Item rightHost: null
     color: Theme.panel; radius: Theme.radius; border.color: Theme.border
     ScrollView {
         id: scroll
@@ -19,10 +21,14 @@ Rectangle {
             width: parent.width; spacing: 10
             ScanText { text: "Camera Views"; color: Theme.text; font.bold: true; font.pixelSize: 13 }
             Repeater {
+                onItemAdded: function(index, item) { if (index === 0) root.leftHost = item.viewHost; if (index === 1) root.rightHost = item.viewHost }
                 model: ["Left Camera (L)", "Right Camera (R)", "RGB Camera (Texture)"]
                 delegate: Rectangle {
                     required property string modelData
                     required property int index
+                    readonly property alias viewHost: liveHost
+                    readonly property var actualView: index === 0 ? root.workspace.surfaces.leftView : index === 1 ? root.workspace.surfaces.rightView : null
+                    readonly property bool imageAvailable: actualView !== null && actualView.hasImage && root.workspace.presentation.hasSnapshot && root.workspace.liveModel.bridge === root.workspace.surfaces.bridge
                     width: parent.width; height: Math.min(218, Math.max(166, root.height / 3 - 24))
                     color: Theme.canvas; border.color: Theme.border; radius: 5; clip: true
                     ColumnLayout {
@@ -31,6 +37,7 @@ Rectangle {
                         Item {
                             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 70
                             Rectangle { anchors.fill: parent; color: Theme.previewBottom; radius: 4 }
+                            Item { id: liveHost; objectName: index === 0 ? "scanLeftHost" : index === 1 ? "scanRightHost" : "scanRgbHost"; anchors.fill: parent; visible: !root.workspace.illustrative && index < 2; clip: true }
                             Image {
                                 anchors.fill: parent; anchors.margins: 8
                                 visible: root.workspace.illustrative && index < 2
@@ -39,20 +46,21 @@ Rectangle {
                                 rotation: index === 0 ? -12 : 10
                             }
                             StudioIcon {
-                                visible: !root.workspace.illustrative || index === 2
+                                visible: index === 2 || (!root.workspace.illustrative && !imageAvailable)
                                 anchors.centerIn: parent; width: 32; height: 32; name: "scan"; color: Theme.muted
                             }
                             ScanText {
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                                objectName: "scanPreviewEvidence_" + index
                                 padding: 5; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter
-                                text: index === 2 ? "Not available · no RGB preview contract" : root.workspace.illustrative ? "Illustrative grayscale study" : "Preview in Classic Acquisition"
+                                text: index === 2 ? "Not available · no RGB preview contract" : root.workspace.illustrative ? "Illustrative grayscale study" : imageAvailable ? root.workspace.presentation.previewCurrent ? "Grayscale preview · current" : "Last-known grayscale · current stream unknown" : "No grayscale frame available"
                                 color: root.workspace.illustrative && index < 2 ? Theme.warning : Theme.secondary
                                 background: Rectangle { color: "#de080f12"; radius: 3 }
                             }
                         }
                         RowLayout {
                             Layout.fillWidth: true
-                            ScanText { text: index === 2 ? "Unavailable" : root.workspace.illustrative ? "Demo / Mock" : root.workspace.presentation.confirmed ? "Stream not shown here" : "Current stream unknown"; font.pixelSize: 10; Layout.fillWidth: true }
+                            ScanText { text: index === 2 ? "Unavailable" : root.workspace.illustrative ? "Demo / Mock" : root.workspace.presentation.previewCurrent && imageAvailable ? "Frame received · rate not reported" : "Current stream unknown"; font.pixelSize: 10; Layout.fillWidth: true }
                             StudioIcon { name: "scan"; width: 15; height: 15; color: Theme.muted }
                         }
                     }

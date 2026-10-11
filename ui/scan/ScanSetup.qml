@@ -7,6 +7,7 @@ Rectangle {
     id: root
     required property var workspace
     property string tab: "Parameters"
+    readonly property var selectedDescriptor: root.workspace.illustrative ? root.workspace.presentation.devices[0] : root.workspace.presentation.devices.find(function(row) { return row.id === root.workspace.presentation.selectedDevice })
     color: Theme.panel; radius: Theme.radius; border.color: Theme.border
     ScrollView {
         id: scroll
@@ -28,11 +29,12 @@ Rectangle {
                 Image { source: "../home/assets/scanner.png"; visible: root.workspace.illustrative; fillMode: Image.PreserveAspectFit; Layout.preferredWidth: 62; Layout.preferredHeight: 76 }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 5
-                    ScanText { text: root.workspace.presentation.devices.length ? root.workspace.presentation.devices[0].name : "No capture descriptor available"; Layout.fillWidth: true; color: Theme.text; font.bold: true; font.pixelSize: 14 }
-                    ScanText { text: root.workspace.presentation.devices.length ? root.workspace.presentation.devices[0].state : "Hardware connection unknown"; Layout.fillWidth: true; font.pixelSize: 11 }
+                    ScanText { text: root.selectedDescriptor ? root.selectedDescriptor.name : "Choose a capture descriptor"; Layout.fillWidth: true; color: Theme.text; font.bold: true; font.pixelSize: 14 }
+                    ScanText { text: root.selectedDescriptor ? root.selectedDescriptor.state : "No selected device · readiness unknown"; Layout.fillWidth: true; font.pixelSize: 11 }
                     ScanText { text: "Readiness: Unknown"; Layout.fillWidth: true; color: Theme.warning; font.pixelSize: 11 }
                 }
             }
+            ScanCapture { workspace: root.workspace; Layout.fillWidth: true }
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
             ScanText { text: "Scan Setup"; color: Theme.text; font.bold: true; font.pixelSize: 14 }
             RowLayout {
@@ -61,7 +63,6 @@ Rectangle {
                     }
                 }
                 ScanText { text: "Settings need supported runtime contracts. No hardware settings are changed here."; font.pixelSize: 11; Layout.fillWidth: true }
-                ScanUnavailable { objectName: "scanStart"; text: "Start Scan · unavailable"; reason: "Capture / Stop remain in Classic Acquisition. This foundation has no capture commands."; Layout.fillWidth: true }
             }
             ColumnLayout {
                 visible: root.tab !== "Parameters"; Layout.fillWidth: true; spacing: 12

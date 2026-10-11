@@ -150,10 +150,10 @@ if(MANTIS_BUILD_STUDIO)
  set_target_properties(mantis-studio-devices PROPERTIES AUTOMOC ON)
  target_include_directories(mantis-studio-devices PUBLIC apps/studio)
  target_link_libraries(mantis-studio-devices PUBLIC mantis-studio-calibration Qt6::Qml mantis-options)
- add_library(mantis-studio-scan STATIC apps/studio/scan_model.cpp apps/studio/scan_model.hpp)
+ add_library(mantis-studio-scan STATIC apps/studio/scan_model.cpp apps/studio/scan_model.hpp apps/studio/live_views.cpp apps/studio/live_views.hpp)
  set_target_properties(mantis-studio-scan PROPERTIES AUTOMOC ON)
  target_include_directories(mantis-studio-scan PUBLIC apps/studio)
- target_link_libraries(mantis-studio-scan PUBLIC Qt6::Qml mantis-options)
+ target_link_libraries(mantis-studio-scan PUBLIC mantis-render Qt6::Quick mantis-options)
  add_executable(mantis-studio apps/studio/main.cpp apps/studio/screenshot.hpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
  set_target_properties(mantis-studio PROPERTIES AUTOMOC ON)
  target_link_libraries(mantis-studio PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
@@ -171,6 +171,7 @@ if(MANTIS_BUILD_STUDIO)
   ui/design/Theme.qml
   ui/design/qmldir
   ui/components/DeviceSummary.qml
+  ui/components/LiveSurfaces.qml
   ui/components/NavigationItem.qml
   ui/components/Panel.qml
   ui/components/SourceBadge.qml
@@ -223,6 +224,7 @@ if(MANTIS_BUILD_STUDIO)
   ui/scan/ScanText.qml
   ui/scan/ScanUnavailable.qml
   ui/scan/ScanDemo.qml
+  ui/scan/ScanCapture.qml
   ui/scan/ScanCameras.qml
   ui/scan/ScanViewport.qml
   ui/scan/ScanSetup.qml
@@ -250,8 +252,13 @@ if(MANTIS_BUILD_STUDIO)
   set_target_properties(mantis-studio-scan-tests PROPERTIES AUTOMOC ON)
   target_link_libraries(mantis-studio-scan-tests PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
   qt_add_resources(mantis-studio-scan-tests studio-scan-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
-  foreach(task model qml matrix stress)
-   add_test(NAME studio-scan-${task} COMMAND mantis-studio-scan-tests ${CMAKE_BINARY_DIR}/ui-m3b/${task} ${task})
+  foreach(task model qml matrix stress surfaces)
+   if(task STREQUAL "surfaces")
+    set(scan_evidence ${CMAKE_BINARY_DIR}/ui-m3c/${task})
+   else()
+    set(scan_evidence ${CMAKE_BINARY_DIR}/ui-m3b/${task})
+   endif()
+   add_test(NAME studio-scan-${task} COMMAND mantis-studio-scan-tests ${scan_evidence} ${task})
    set_tests_properties(studio-scan-${task} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 180)
   endforeach()
   foreach(scale 1.5 2)
@@ -260,6 +267,8 @@ if(MANTIS_BUILD_STUDIO)
   endforeach()
   add_test(NAME studio-scan-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_scan.py ${CMAKE_BINARY_DIR})
   set_tests_properties(studio-scan-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 45)
+  add_test(NAME studio-scan-capture-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_scan.py ${CMAKE_BINARY_DIR} --capture)
+  set_tests_properties(studio-scan-capture-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 90)
   add_executable(mantis-studio-devices-tests tests/unit/studio_devices.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
   set_target_properties(mantis-studio-devices-tests PROPERTIES AUTOMOC ON)
   target_link_libraries(mantis-studio-devices-tests PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)

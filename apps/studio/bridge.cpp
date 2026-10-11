@@ -1,4 +1,6 @@
 #include "bridge.hpp"
+#include "capture_authority.hpp"
+#include <QSet>
 #include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
 #include <iostream>
@@ -25,8 +27,10 @@ StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled, CloudRetry::Clo
         request_pending_ = false;
         emit changed();
     });
-    connect(&preview_watcher_, &QFutureWatcher<PreviewResult>::finished, this,
-            [this] { applyPreview(preview_watcher_.result()); });
+    connect(&preview_watcher_, &QFutureWatcher<PreviewResult>::finished, this, [this] {
+        applyPreview(preview_watcher_.result());
+        preview_pending_ = false;
+    });
     preview_timer_.setInterval(66);
     connect(&preview_timer_, &QTimer::timeout, this, &StudioBridge::refreshPreview);
     if (runtime_enabled_)
@@ -39,9 +43,23 @@ StudioBridge::StudioBridge(QObject *parent, bool runtimeEnabled, CloudRetry::Clo
     }
 }
 void StudioBridge::applyPreview(PreviewResult result) {
-    if (!connected_ || result.projectGeneration != project_generation_)
+    if (!connected_ || result.projectGeneration != project_generation_ ||
+        (!result.source.isEmpty() && result.source != (capture_.isEmpty() ? replay_ : capture_)) ||
+        (active_capture_count_ > 0 && !capture_state_valid_))
         return; // Never deliver a late old-project preview after confirmed identity change.
+    if (result.left.isNull() || result.right.isNull() || !result.error.empty()) {
+        const auto error = result.error.empty() ? QString("No complete grayscale preview pair available")
+                                                : QString::fromStdString(result.error).left(512);
+        if (preview_current_ || preview_error_ != error) {
+            preview_current_ = false;
+            preview_error_ = error;
+            emit changed();
+        }
+        return; // Retain bounded last-known images; never present a partial pair as current.
+    }
     if (!result.left.isNull() && !result.right.isNull()) {
+        preview_current_ = true;
+        preview_error_.clear();
         dual_preview_ = true;
         if (left_)
             left_->setImage(std::move(result.left));
@@ -62,6 +80,8 @@ void StudioBridge::applyResult(const StudioResult &result) {
     // A snapshot confirms usable runtime access. Failure codes alone cannot do so:
     // the client uses the same Failure type for server, socket and mapped-file errors.
     connected_ = result.snapshot.has_value();
+    if (!connected_)
+        preview_current_ = false;
     error_details_.removeIf([&](const auto &value) {
         const auto phase = value.toMap().value("phase").toString();
         return phase == "snapshot" || (phase == "operation" && result.operationAttempted) ||
@@ -98,6 +118,8 @@ void StudioBridge::applyResult(const StudioResult &result) {
         replay_.clear();
         capture_.clear();
         dual_preview_ = false;
+        preview_current_ = false;
+        preview_error_.clear();
         preview_reported_ = false;
         if (view_)
             view_->setCloud({});
@@ -117,7 +139,11 @@ void StudioBridge::applyResult(const StudioResult &result) {
     jobs_.clear();
     plugins_.clear();
     diagnostics_.clear();
+    const auto previousCapture = capture_;
     capture_.clear();
+    active_capture_count_ = 0;
+    capture_state_valid_ = snapshot.captures_size() <= studio_capture::descriptorLimit;
+    QSet<QString> captureIds;
     acquisition_text_.clear();
     project_identity_ = snapshot.project_path();
     project_ = QString::fromStdString(project_identity_);
@@ -136,8 +162,20 @@ void StudioBridge::applyResult(const StudioResult &result) {
                                          capabilities.contains("org.mantis.camera.frameset-stream.v1")}});
         }
     for (auto &c : snapshot.captures()) {
-        if (c.active())
-            capture_ = s(c.id());
+        const auto captureId = s(c.id());
+        if (captureId.isEmpty() || captureId.size() > studio_capture::identityLimit ||
+            captureIds.contains(captureId))
+            capture_state_valid_ = false;
+        if (captureIds.size() < studio_capture::descriptorLimit &&
+            captureId.size() <= studio_capture::identityLimit)
+            captureIds.insert(captureId);
+        if (c.active()) {
+            ++active_capture_count_;
+            const auto id = s(c.id());
+            if (id.isEmpty() || id.size() > studio_capture::identityLimit)
+                capture_state_valid_ = false;
+            capture_ = id;
+        }
         if (c.diagnostics().contains("left.identity")) {
             auto value = [&](const std::string &key) {
                 auto it = c.diagnostics().find(key);
@@ -181,6 +219,12 @@ void StudioBridge::applyResult(const StudioResult &result) {
                 acquisition_text_ = acquisition_text_.arg(text);
         }
     }
+    if (active_capture_count_ > 1)
+        capture_state_valid_ = false;
+    if (!capture_state_valid_)
+        capture_.clear();
+    if (!capture_state_valid_ || capture_ != previousCapture)
+        preview_current_ = false;
     for (auto &a : snapshot.artifacts())
         artifacts_.push_back(QVariantMap{{"id", s(a.id())},
                                          {"type", s(a.type())},
@@ -344,21 +388,23 @@ StudioResult StudioBridge::collectResult(const mantis::client::Client &client,
 void StudioBridge::refresh() {
     execute();
 }
+bool StudioBridge::canStartCapture(QString id) const {
+    return runtime_enabled_ && captureStateKnown() && !request_pending_ && active_capture_count_ == 0 &&
+           studio_capture::uniqueDevice(devices_, id);
+}
+bool StudioBridge::canStopCapture() const {
+    return runtime_enabled_ && captureStateKnown() && !request_pending_ && active_capture_count_ == 1 &&
+           !capture_.isEmpty();
+}
 void StudioBridge::startCapture(QString id) {
-    if (!connected_)
-        return;
-    const auto found = std::find_if(devices_.cbegin(), devices_.cend(), [&](const auto &device) {
-        const auto descriptor = device.toMap();
-        return descriptor.value("id") == id && descriptor.value("captureSupported").toBool();
-    });
-    if (found == devices_.cend())
+    if (!canStartCapture(id))
         return;
     execute([id](const auto &client) { (void)client.start_capture({id.toStdString()}); });
 }
 void StudioBridge::stopCapture() {
-    if (!connected_)
+    if (!canStopCapture())
         return;
-    auto id = capture_;
+    const auto id = capture_;
     execute([id](const auto &client) { client.stop_capture(id.toStdString()); });
 }
 void StudioBridge::runPipeline(QString recipe) {
@@ -418,16 +464,18 @@ void StudioBridge::attachPreview(QObject *left, QObject *right) {
     right_ = qobject_cast<MeasurementView *>(right);
 }
 void StudioBridge::refreshPreview() {
-    if (preview_watcher_.isRunning() || !connected_)
+    if (preview_pending_ || !connected_ || (active_capture_count_ > 0 && !capture_state_valid_))
         return;
     auto id = capture_.isEmpty() ? replay_ : capture_;
     if (id.isEmpty())
         return;
     auto client = client_;
     const auto generation = project_generation_;
+    preview_pending_ = true; // Includes queued GUI application, just like the control completion lease.
     preview_watcher_.setFuture(QtConcurrent::run([client, id, generation] {
         PreviewResult result;
         result.projectGeneration = generation;
+        result.source = id;
         try {
             auto packet = client.preview(id.toStdString());
             if (!packet || packet->frames.size() != 2)
