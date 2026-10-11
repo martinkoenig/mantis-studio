@@ -11,6 +11,11 @@
 using namespace mantis;
 using namespace std::chrono_literals;
 namespace d = mantis::data;
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+constexpr unsigned cleanup_budget = 100; // A fresh ACK must cross two workers and the PTY.
+#else
+constexpr unsigned cleanup_budget = 0;
+#endif
 #define CHECK(...)                                                                                           \
     do {                                                                                                     \
         if (!(__VA_ARGS__))                                                                                  \
@@ -104,7 +109,7 @@ void publication_admission(const plugins::Loaded &fixture, const device::Project
         CHECK(api->diagnostics(raw, 100, diagnostic, &metrics) == 0);
         CHECK(metrics["run_admissions"] == 1 && metrics["stop_requests"] == 2 &&
               metrics["first_reason"] == MANTIS_ACQUISITION_REASON_DEVICE_FAILURE);
-        CHECK(api->stop(raw, 0) == 0);
+        CHECK(api->stop(raw, cleanup_budget) == 0);
         CHECK(set_hook(raw, nullptr, nullptr) == 0);
         CHECK(api->prepare(raw, view.get(), 100, accepted, nullptr) == 0);
         CHECK(api->start(raw, "fresh-run", "fresh-generation", 100) == 0);
@@ -121,7 +126,7 @@ void publication_admission(const plugins::Loaded &fixture, const device::Project
         CHECK(api->next(raw, 100, fresh, &fresh_callbacks) == 0 && fresh_callbacks == 1);
         CHECK(gate.callbacks == (admitted ? 1u : 0u)); // No old work reaches the fresh execution.
         CHECK(api->abort(raw, MANTIS_ACQUISITION_REASON_USER_CANCEL, 100, aborted, &outcome) == 0);
-        CHECK(api->stop(raw, 0) == 0 && api->destroy(raw, 0) == 0);
+        CHECK(api->stop(raw, cleanup_budget) == 0 && api->destroy(raw, cleanup_budget) == 0);
         CHECK(camera->open(plugins::host_api(), graph.parent.value.c_str(), &camera_instance) == 0);
         camera->destroy(camera_instance);
     }
@@ -140,6 +145,19 @@ int main(int argc, char **argv) {
         setenv("MANTIS_X1_F2_SIMULATION", "true", 1);
         CHECK(!fixture->api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
         setenv("MANTIS_X1_F2_SIMULATION", "1", 1);
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+        unsetenv("MANTIS_X1_F2_PTY_FIXTURE");
+        CHECK(!fixture->api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
+        setenv("MANTIS_X1_F2_PTY_FIXTURE", "true", 1);
+        CHECK(!fixture->api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
+        setenv("MANTIS_X1_F2_PTY_FIXTURE", "1", 1);
+        unsetenv("MANTIS_X1_PROFILE");
+        CHECK(!fixture->api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
+        setenv("MANTIS_X1_PROFILE", argv[3], 1);
+        unsetenv("MANTIS_X1_F2_CONFIG");
+        CHECK(!fixture->api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
+        setenv("MANTIS_X1_F2_CONFIG", argv[4], 1);
+#endif
         CHECK(!physical.api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
         unsetenv("MANTIS_X1_FAKE");
         CHECK(!fixture->api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
@@ -221,6 +239,13 @@ int main(int argc, char **argv) {
             metrics = nlohmann::json::parse(take(executor->diagnostics(100)));
             CHECK(metrics["run_admissions"] == (on ? 1 : 0));
             CHECK(metrics["image_copies"] == 0);
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+            CHECK(metrics["implementation"] == "org.mantis.x1.f2.pty.simulation-only");
+            CHECK(metrics["pty_run_requests"] == (on ? 1 : 0));
+            CHECK(metrics["pty_requests"].get<unsigned>() >= 10);
+            CHECK(metrics["pty_rx_bytes"].get<unsigned>() > 0 && metrics["pty_tx_bytes"].get<unsigned>() > 0);
+            CHECK(metrics["rx_malformed"] == 0);
+#endif
             auto off = take(executor->abort(d::AcquisitionReason::user_stop, 100));
             CHECK(off.off_requested.get() && *off.off_requested.get());
             CHECK(off.emitters.size() == 1 && !off.emitters[0].observed.get());
@@ -294,8 +319,8 @@ int main(int argc, char **argv) {
         CHECK(pending_callback.get() == 0);
         CHECK(api->next(raw, 0, callback, &gate) == MANTIS_PL_NOT_READY);
         // L3 may have no run budget left after abort: all background work is retired already.
-        CHECK(api->stop(raw, 0) == 0);
-        CHECK(api->destroy(raw, 0) == 0);
+        CHECK(api->stop(raw, cleanup_budget) == 0);
+        CHECK(api->destroy(raw, cleanup_budget) == 0);
         // Physical device/path selectors are outside the complete configuration schema.
         auto config = nlohmann::json::parse(std::ifstream(argv[4]));
         config["serial_device"] = "/dev/ttyUSB0";

@@ -244,4 +244,12 @@ Link::Metrics Link::metrics() const {
             controller_.stop_requests, std::max(endpoint_.high_water, receiver_.high_water),
             replies_.high_water,       events_.high_water};
 }
+Deadline Link::activity_deadline() const {
+    std::lock_guard lock(mutex_);
+    if (manual_)
+        return Deadline::max();
+    auto due = std::min({controller_.next_deadline(), delayed_ ? delayed_at_ : UINT64_MAX,
+                         delayed_event_ ? delayed_event_at_ : UINT64_MAX});
+    return due == UINT64_MAX ? Deadline::max() : epoch_ + std::chrono::microseconds(due);
+}
 } // namespace x1::f2::simulation

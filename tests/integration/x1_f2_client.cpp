@@ -46,11 +46,49 @@ void verify(const std::filesystem::path &project, const std::string &mode) {
         CHECK(header.program.steps.size() == 1 && header.program.participants.cameras.empty());
         if (mode == "recorder") {
             CHECK(a.state == artifact::ArtifactState::recoverable && !store.run_outcome(a.id));
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+            // Explicit offline recovery after removing this test's empty storage obstruction.
+            std::filesystem::remove(project / "objects" / a.id.value / "0.segment.part");
+            CHECK(store.recover(a.id).state == artifact::ArtifactState::finalized);
+            CHECK(!store.run_outcome(a.id)); // Recovery cannot fabricate a daemon success.
+            std::vector<std::string> prefix;
+            store.replay_bundles(a.id, [&](d::AcquisitionBundle b) {
+                std::ostringstream bytes;
+                d::write_bundle(bytes, b);
+                prefix.push_back(bytes.str());
+            });
+            size_t i{};
+            store.replay_bundles(a.id, [&](d::AcquisitionBundle b) {
+                std::ostringstream bytes;
+                d::write_bundle(bytes, b);
+                CHECK(bytes.str() == prefix.at(i++));
+            });
+            CHECK(i == prefix.size());
+#endif
             continue;
         }
-        CHECK(a.state == artifact::ArtifactState::finalized);
+        CHECK(a.state == artifact::ArtifactState::finalized ||
+              (mode == "shutdown" && a.state == artifact::ArtifactState::recoverable));
         auto outcome = store.run_outcome(a.id);
         CHECK(outcome && outcome->run == header.run && outcome->generation == header.generation);
+        if (mode == "disconnect" || mode == "stop-ack") {
+            CHECK(outcome->abort_outcome && !outcome->abort_outcome->off_requested.get());
+            CHECK(outcome->abort_outcome->error.code != 0 && outcome->stop_error);
+            if (mode == "disconnect")
+                CHECK(outcome->initiating_error);
+        }
+        if (mode == "shutdown") {
+            CHECK(outcome->reason == d::AcquisitionReason::user_stop);
+            CHECK(outcome->abort_outcome && outcome->abort_outcome->off_requested.get() &&
+                  *outcome->abort_outcome->off_requested.get());
+        }
+        if (mode == "shutdown" && a.state == artifact::ArtifactState::recoverable) {
+            std::ostringstream before, after;
+            d::write_run_outcome(before, {0, *outcome});
+            CHECK(store.recover(a.id).state == artifact::ArtifactState::finalized);
+            d::write_run_outcome(after, {0, *store.run_outcome(a.id)});
+            CHECK(before.str() == after.str());
+        }
         auto summary = store.bundle_summary(a.id);
         std::vector<std::string> encoded;
         store.replay_bundles(a.id, [&](d::AcquisitionBundle b) {
@@ -61,6 +99,11 @@ void verify(const std::filesystem::path &project, const std::string &mode) {
                   b.evidence.program.hash == header.program.identity.hash &&
                   b.evidence.program.content.presence() == header.program.identity.content.presence());
             CHECK(b.evidence.participants.cameras.empty() && b.evidence.emitters.size() == 1);
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+            CHECK(b.evidence.implementations.size() == 1);
+            CHECK(b.evidence.implementations[0].implementation.value ==
+                  "org.mantis.x1.f2.pty.simulation-only");
+#endif
             for (auto &e : b.evidence.emitters)
                 CHECK(!e.observed.get() && !e.acknowledged.get() && e.exposure_effective.empty());
             std::ostringstream bytes;
@@ -79,9 +122,11 @@ void verify(const std::filesystem::path &project, const std::string &mode) {
         d::write_run_outcome(before, {summary.records, *outcome});
         d::write_run_outcome(after, {summary.records, *store.run_outcome(a.id)});
         CHECK(before.str() == after.str());
-        if (mode == "normal" || mode == "off" || mode == "lost-ack" || mode == "lost-event")
+        if (mode == "normal" || mode == "off" || mode == "lost-ack" || mode == "lost-event" ||
+            mode == "corrupt-run" || mode == "fragmented")
             CHECK(outcome->disposition == d::RecordedRunDisposition::completed && summary.records == 2);
-        if (mode == "prepare" || mode == "configure" || mode == "arm")
+        if (mode == "prepare" || mode == "configure" || mode == "arm" || mode == "congestion" ||
+            mode == "partial-run" || mode == "queued-claim" || mode == "disconnect")
             CHECK(outcome->disposition == d::RecordedRunDisposition::failed && summary.records == 0);
         if (mode == "cleanup") {
             CHECK(outcome->disposition == d::RecordedRunDisposition::failed);
@@ -167,6 +212,12 @@ int main(int argc, char **argv) {
             rejects([&] { client.cancel_projected(capture.id(), capture.run_id(), "stale-generation"); },
                     Status::invalid_argument);
         }
+        if (mode == "shutdown") {
+            w::Request shutdown;
+            shutdown.mutable_shutdown();
+            client.call(shutdown); // Server shuts down while blocked next/PTY work remains.
+            return 0;
+        }
         if (mode == "recorder")
             std::filesystem::create_directory(project / "objects" / capture.raw_artifact_id() /
                                               "0.segment.part");
@@ -180,10 +231,12 @@ int main(int argc, char **argv) {
         if (mode == "stop")
             client.stop_projected(capture.id(), capture.run_id(), capture.generation_id());
         auto result = finish(client, capture.id(), mode == "recorder");
-        if ((mode == "normal" || mode == "off" || mode == "lost-ack" || mode == "lost-event") &&
+        if ((mode == "normal" || mode == "off" || mode == "lost-ack" || mode == "lost-event" ||
+             mode == "corrupt-run" || mode == "fragmented") &&
             result.state() != w::PROJECTED_COMPLETED)
             std::cerr << "F2 mode=" << mode << " outcome=" << result.DebugString() << "\n";
-        if (mode == "normal" || mode == "off" || mode == "lost-ack" || mode == "lost-event") {
+        if (mode == "normal" || mode == "off" || mode == "lost-ack" || mode == "lost-event" ||
+            mode == "corrupt-run" || mode == "fragmented") {
             CHECK(result.state() == w::PROJECTED_COMPLETED && result.reason() == w::PROJECTED_REASON_NONE &&
                   result.committed_bundles() == 2);
             auto replay = client.replay(result.raw_artifact_id(), false, true);
@@ -198,13 +251,18 @@ int main(int argc, char **argv) {
             CHECK(result.reason() == w::PROJECTED_USER_STOP);
         else {
             CHECK(result.state() == w::PROJECTED_FAILED);
-            if (mode == "prepare" || mode == "configure" || mode == "arm")
+            if (mode == "prepare" || mode == "configure" || mode == "arm" || mode == "congestion" ||
+                mode == "partial-run" || mode == "queued-claim" || mode == "disconnect")
                 CHECK(result.committed_bundles() == 0);
             if (mode == "timeout")
                 CHECK(result.reason() == w::PROJECTED_TIMEOUT);
         }
-        if (mode != "stop-ack" && mode != "prepare" && mode != "cleanup")
+        if (mode != "stop-ack" && mode != "prepare" && mode != "cleanup" && mode != "disconnect")
             CHECK(result.abort_outcome().off_requested().value());
+        if (mode == "disconnect" || mode == "stop-ack") {
+            CHECK(!result.abort_outcome().off_requested().value());
+            CHECK(result.abort_outcome().executor_error().code() != 0);
+        }
         CHECK(!client.projected_captures().empty());
         auto camera = client.start_capture({selected.parent_id()});
         client.stop_capture(camera);

@@ -1,8 +1,11 @@
-// Dedicated TEST/BENCH DSO. No linux.cpp, UART, GPIO, or physical backend exists.
+// Dedicated TEST/BENCH DSO. No linux.cpp, GPIO or physical controller backend.
 #define MANTIS_X1_PROJECTED_FIXTURE 1
 #include "../../../plugins/first-party/devices/x1/acquisition.hpp"
 #include "../x1-projected/views.hpp"
 #include "link.hpp"
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+#include "../x1-f2-pty/backend.hpp"
+#endif
 #include "publication-test-hook.hpp"
 #include <fstream>
 #include <set>
@@ -14,9 +17,23 @@ namespace sim = x1::f2::simulation;
 using namespace x1_fixture_views;
 using namespace std::chrono_literals;
 using Clock = std::chrono::steady_clock;
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+using FixtureLink = sim::pty::Backend;
+constexpr const char *implementation_id = "org.mantis.x1.f2.pty.simulation-only";
+constexpr const char *implementation_build = "L7b-2b-3a PTY/FdTransport synthetic ESP8266; rig revision 1";
+#else
+using FixtureLink = sim::Link;
+constexpr const char *implementation_id = "org.mantis.x1.f2.simulation-only";
+constexpr const char *implementation_build = "L7b-1 framed F2 synthetic ESP8266; rig revision 1";
+#endif
 constexpr uint32_t call_limit = 1000;
 constexpr uint64_t byte_limit = 1024 * 1024, command_limit = 32;
 bool enabled() {
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+    auto pty = std::getenv("MANTIS_X1_F2_PTY_FIXTURE");
+    if (!pty || std::string_view(pty) != "1")
+        return false;
+#endif
     auto opt = std::getenv("MANTIS_X1_F2_SIMULATION"), fake = std::getenv("MANTIS_X1_FAKE");
     return opt && std::string_view(opt) == "1" && fake && *fake && std::getenv("MANTIS_X1_PROFILE") &&
            std::getenv("MANTIS_X1_F2_CONFIG");
@@ -196,7 +213,7 @@ struct Instance {
     std::unique_ptr<camera::Device> camera;
     Graph graph;
     sim::BenchConfig config;
-    sim::Link link;
+    FixtureLink link;
     f2::Host host;
     f2::Snapshot snapshot;
     Reference reference;
@@ -244,7 +261,12 @@ struct Instance {
                 if (!release || !*release)
                     throw std::invalid_argument("Explicit fixture release file required");
                 release_file = release;
-            } else if (!v.empty() && v != "prepare")
+            }
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+            else if (link.fault(v)) {
+            }
+#endif
+            else if (!v.empty() && v != "prepare")
                 throw std::invalid_argument("Unknown F2 fixture fault");
             diagnostic = std::string(v);
         }
@@ -329,7 +351,7 @@ int enumerate(uint32_t t, MantisProjectedGraphEmitV1 emit, void *ctx) {
     if (!enabled())
         return MANTIS_PL_OK;
     configuration();
-    sim::Link link;
+    FixtureLink link;
     f2::Host host(link, sim::host_selection());
     host.discover(Clock::now() + std::chrono::milliseconds(t));
     auto config = camera::configuration();
@@ -521,10 +543,10 @@ struct Publication {
         emitter.observed = absent<MantisEvidenceStateObservationV1>();
         e.emitters = &emitter;
         e.emitters_count = 1;
-        implementation.implementation = "org.mantis.x1.f2.simulation-only";
+        implementation.implementation = implementation_id;
         implementation.version = view<MantisVersionV1>();
         implementation.version.major = 1;
-        implementation.build = "L7b-1 framed F2 synthetic ESP8266; rig revision 1";
+        implementation.build = implementation_build;
         implementation.configuration = absent<MantisEvidenceContentReferenceV1>();
         e.implementations = &implementation;
         e.implementations_count = 1;
@@ -784,6 +806,28 @@ int diagnostics(void *ptr, uint32_t t, MantisTextEmitV1 emit, void *ctx) {
     j["collector_high_water"] = m.collector;
     j["reply_high_water"] = m.reply_high_water;
     j["event_high_water"] = m.event_high_water;
+#ifdef MANTIS_X1_F2_PTY_FIXTURE
+    auto b = s.link.byte_metrics();
+    auto transport = s.link.transport_metrics();
+    j["implementation"] = implementation_id;
+    j["pty_requests"] = b.requests;
+    j["pty_responses"] = b.responses;
+    j["pty_events"] = b.events;
+    j["pty_run_requests"] = b.run_requests;
+    j["identical_run_retries"] = b.identical_run_retries;
+    j["pty_stop_acks"] = b.stop_acks;
+    j["peer_stop_processing_ns"] = b.stop_roundtrip_ns;
+    j["peer_pending_high"] = b.pending_high;
+    j["peer_failed"] = b.peer_failed;
+    j["peer_error"] = b.error.data();
+    j["peer_polls"] = b.polls;
+    j["pty_rx_bytes"] = transport.rx_bytes;
+    j["pty_tx_bytes"] = transport.tx_bytes;
+    j["tx_high"] = transport.tx_high;
+    j["tx_cancelled"] = transport.cancelled;
+    j["rx_malformed"] = transport.malformed;
+    j["transport_errno"] = transport.failure_errno;
+#endif
     j["image_copies"] = 0;
     j["physical_evidence"] = "unavailable";
     auto text = j.dump();

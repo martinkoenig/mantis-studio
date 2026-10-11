@@ -321,8 +321,7 @@ test seam. Native ARM64 remains a remote acceptance gate.
 
 ## Independent physical gates
 
-L7b-2b-2 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY
-GATES. The [existing hardware readiness facts](x1-projected-light-integration.md#physical-controller-readiness-facts)
+L7b-2b-2 is FINAL ACCEPTED. L7b-2b-3b is BLOCKED by F1b / F5 / hardware authorization. The [existing hardware readiness facts](x1-projected-light-integration.md#physical-controller-readiness-facts)
 remain authoritative and unchanged. No physical UART/USB/GPIO, Q6A pinmux, ESP8266
 access/flashing, laser output, current/power control, hardware trigger, commissioning
 or deployment is performed or enabled. PTY STOP is a software request; local write
@@ -330,4 +329,6 @@ or ACK is not measured electrical/optical OFF. A disconnected UART does not esta
 physical inhibition. Controller runtime acceptance, independent watchdog/interlock
 qualification and physical timing/output evidence remain separate gates.
 
-[L7b-2b-2 Q6A readiness and serial policy](x1-q6a-uart-readiness.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.
+[L7b-2b-2 Q6A readiness and serial policy](x1-q6a-uart-readiness.md) is FINAL ACCEPTED at `9b6f0cc72f44134009302abe09175b7158b27f38`: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.
+
+[L7b-2b-3a PTY daemon integration](x1-f2-pty-daemon-integration.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.

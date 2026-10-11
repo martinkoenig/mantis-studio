@@ -7,9 +7,9 @@ v0.4 planning/development branch: `feature/v0.4-laser-acquisition`
 
 This document is the canonical high-level release roadmap for the Mantis Studio / Mantis X1 scanning path. Detailed architecture, implementation contracts, ADRs and validation evidence remain authoritative for their respective releases.
 
-The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has FINAL ACCEPTED L0 architecture, L1 canonical semantics, L2 contracts and L3 sequencer and L4 evidence/storage; L5 is FINAL ACCEPTED; L6 is FINAL ACCEPTED; L7a is FINAL ACCEPTED; L7b-1 is FINAL ACCEPTED; L7b-2a is FINAL ACCEPTED; L7b-2b-1 FINAL ACCEPTED; L7b-2b-2 awaits independent review; L7b-2b-3, L7c, L7d and L8 remain planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
+The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has FINAL ACCEPTED L0 architecture, L1 canonical semantics, L2 contracts and L3 sequencer and L4 evidence/storage; L5 is FINAL ACCEPTED; L6 is FINAL ACCEPTED; L7a is FINAL ACCEPTED; L7b-1 is FINAL ACCEPTED; L7b-2a is FINAL ACCEPTED; L7b-2b-1 FINAL ACCEPTED; L7b-2b-2 FINAL ACCEPTED; L7b-2b-3a awaits independent review; L7b-2b-3b blocked; L7c, L7d and L8 remain planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
 
-[L7b-2b-2 Q6A readiness and serial policy](docs/hardware/x1-q6a-uart-readiness.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.
+[L7b-2b-2 Q6A readiness and serial policy](docs/hardware/x1-q6a-uart-readiness.md) is FINAL ACCEPTED at `9b6f0cc72f44134009302abe09175b7158b27f38`: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.
 
 ## Release sequence
 
@@ -41,7 +41,7 @@ Canonical detail:
 
 ## v0.4 — Laser Acquisition Foundation
 
-**L0 FINAL ACCEPTED; L1 FINAL ACCEPTED; L2 FINAL ACCEPTED; L3 FINAL ACCEPTED; L4 FINAL ACCEPTED; L5 FINAL ACCEPTED; L6 FINAL ACCEPTED; L7a FINAL ACCEPTED; L7b-1 FINAL ACCEPTED; L7b-2a FINAL ACCEPTED; L7b-2b-1 FINAL ACCEPTED; L7b-2b-2 awaits independent review; L7b-2b-3, L7c, L7d and L8 planned.** See the
+**L0 FINAL ACCEPTED; L1 FINAL ACCEPTED; L2 FINAL ACCEPTED; L3 FINAL ACCEPTED; L4 FINAL ACCEPTED; L5 FINAL ACCEPTED; L6 FINAL ACCEPTED; L7a FINAL ACCEPTED; L7b-1 FINAL ACCEPTED; L7b-2a FINAL ACCEPTED; L7b-2b-1 FINAL ACCEPTED; L7b-2b-2 FINAL ACCEPTED; L7b-2b-3a awaits independent review; L7b-2b-3b blocked; L7c, L7d and L8 planned.** See the
 [v0.4 architecture baseline and package map](docs/architecture/v0.4-laser-acquisition.md).
 
 L7a provides the [hardware-free X1 projected fixture and controller-readiness boundary](docs/hardware/x1-projected-light-integration.md). Physical enablement remains blocked.
@@ -61,8 +61,10 @@ MERGED via PR #10. The accepted firmware main baseline is
 [L7b-2b-1](docs/hardware/x1-f2-posix-transport.md) is FINAL ACCEPTED at
 `6489c6eec05ac61f685f71df5805cc825a912b2d`:
 Linux FD transport, exercised only through PTYs in uninstalled tests.
-L7b-2b-2 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY GATES. Firmware acceptance and
+L7b-2b-2 is FINAL ACCEPTED; L7b-2b-3a is IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b-3b is BLOCKED by F1b / F5 / hardware authorization. Firmware acceptance and
 Xtensa compilation do not qualify deployment, electrical/optical behavior or safety.
+[L7b-2b-3a PTY daemon integration](docs/hardware/x1-f2-pty-daemon-integration.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.
+
 The newer independently inspected firmware main `ec1dff2ae94f08dd309b65511dafe49eb5e9b525`
 includes an inactive F4b-2 UART adapter. This package reads its F1b/interface
 requirements only; no firmware runtime or hardware activation is authorized.

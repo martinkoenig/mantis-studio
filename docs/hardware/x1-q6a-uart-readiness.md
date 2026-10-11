@@ -1,10 +1,10 @@
 # Q6A UART readiness and PTY serial policy — L7b-2b-2
 
-**IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** Predecessor L7b-2b-1 is
+**FINAL ACCEPTED** at `9b6f0cc72f44134009302abe09175b7158b27f38` (all five required CI jobs SUCCESS). Predecessor L7b-2b-1 is
 FINAL ACCEPTED at `6489c6eec05ac61f685f71df5805cc825a912b2d`, with all five
 required CI jobs successful. Its [transport validation and asynchronous authority
 fencing](x1-f2-posix-transport.md) remain unchanged.
-L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL QUALIFICATION.
+L7b-2b-3b is BLOCKED by F1b / F5 / hardware authorization.
 
 The firmware documents were read through the GitHub read-only API at
 `ec1dff2ae94f08dd309b65511dafe49eb5e9b525`. This includes the inactive
@@ -246,3 +246,5 @@ and separately reviewed inert-link authorization remain F1b handoff gaps.
 No electrical/optical qualification, physical UART, GPIO, MCU reset/flash,
 laser operation, independently verified inhibit, trigger or physical OFF was
 implemented or tested. Physical controller integration remains blocked.
+
+[L7b-2b-3a PTY daemon integration](x1-f2-pty-daemon-integration.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.

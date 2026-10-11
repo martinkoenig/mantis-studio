@@ -61,6 +61,9 @@ class Link final : public Transport {
         size_t collector{}, reply_high_water{}, event_high_water{};
     };
     Metrics metrics() const;
+    // Test peer scheduler: next finite controller/delayed-wire deadline, or
+    // infinity when idle. No controller execution or host policy is delegated.
+    Deadline activity_deadline() const;
     void interrupt() noexcept override;
 };
 } // namespace x1::f2::simulation
