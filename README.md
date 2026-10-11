@@ -16,7 +16,7 @@ are implemented; M8 physical acceptance remains pending. This
 `feature/v0.4-laser-acquisition` branch adds the
 [v0.4 L0 architecture baseline](docs/architecture/v0.4-laser-acquisition.md);
 L0–L6 are FINAL ACCEPTED. L7a [X1 projected fixture integration](docs/hardware/x1-projected-light-integration.md) is FINAL ACCEPTED.
-L7b-1 is FINAL ACCEPTED; L7b-2a is FINAL ACCEPTED; L7b-2b, L7c, L7d and L8 remain planned; physical laser enablement is blocked. E1 is FINAL ACCEPTED; [E2 wire interoperability](docs/hardware/x1-f2-interoperability.md) awaits independent review. See the [L7b-1 simulation record](docs/hardware/x1-f2-simulation.md). The Virtual Scanner workflow
+L7b-1 is FINAL ACCEPTED; L7b-2a is FINAL ACCEPTED; L7b-2b-1 awaits independent review; L7b-2b-2/-3, L7c, L7d and L8 remain planned; physical laser enablement is blocked. E1 is FINAL ACCEPTED; [E2 wire interoperability](docs/hardware/x1-f2-interoperability.md) is FINAL ACCEPTED; the [Linux FD foundation](docs/hardware/x1-f2-posix-transport.md) awaits independent review and is exercised only by PTY tests. See the [L7b-1 simulation record](docs/hardware/x1-f2-simulation.md). The Virtual Scanner workflow
 remains available. See [milestone coverage](docs/architecture/milestone.md) and
 the [release roadmap](ROADMAP.md) for status and evidence boundaries.
 

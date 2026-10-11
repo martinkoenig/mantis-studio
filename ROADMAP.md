@@ -7,7 +7,7 @@ v0.4 planning/development branch: `feature/v0.4-laser-acquisition`
 
 This document is the canonical high-level release roadmap for the Mantis Studio / Mantis X1 scanning path. Detailed architecture, implementation contracts, ADRs and validation evidence remain authoritative for their respective releases.
 
-The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has FINAL ACCEPTED L0 architecture, L1 canonical semantics, L2 contracts and L3 sequencer and L4 evidence/storage; L5 is FINAL ACCEPTED; L6 is FINAL ACCEPTED; L7a is FINAL ACCEPTED; L7b-1 is FINAL ACCEPTED; L7b-2a is FINAL ACCEPTED; L7b-2b, L7c, L7d and L8 remain planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
+The roadmap intentionally distinguishes between **implemented/accepted**, **current**, and **planned** work. v0.4 has FINAL ACCEPTED L0 architecture, L1 canonical semantics, L2 contracts and L3 sequencer and L4 evidence/storage; L5 is FINAL ACCEPTED; L6 is FINAL ACCEPTED; L7a is FINAL ACCEPTED; L7b-1 is FINAL ACCEPTED; L7b-2a is FINAL ACCEPTED; L7b-2b-1 awaits independent review; L7b-2b-2/-3, L7c, L7d and L8 remain planned. Versions after v0.4 remain planning boundaries whose detailed contracts may be refined before implementation starts.
 
 ## Release sequence
 
@@ -39,7 +39,7 @@ Canonical detail:
 
 ## v0.4 — Laser Acquisition Foundation
 
-**L0 FINAL ACCEPTED; L1 FINAL ACCEPTED; L2 FINAL ACCEPTED; L3 FINAL ACCEPTED; L4 FINAL ACCEPTED; L5 FINAL ACCEPTED; L6 FINAL ACCEPTED; L7a FINAL ACCEPTED; L7b-1 FINAL ACCEPTED; L7b-2a FINAL ACCEPTED; L7b-2b, L7c, L7d and L8 planned.** See the
+**L0 FINAL ACCEPTED; L1 FINAL ACCEPTED; L2 FINAL ACCEPTED; L3 FINAL ACCEPTED; L4 FINAL ACCEPTED; L5 FINAL ACCEPTED; L6 FINAL ACCEPTED; L7a FINAL ACCEPTED; L7b-1 FINAL ACCEPTED; L7b-2a FINAL ACCEPTED; L7b-2b-1 awaits independent review; L7b-2b-2/-3, L7c, L7d and L8 planned.** See the
 [v0.4 architecture baseline and package map](docs/architecture/v0.4-laser-acquisition.md).
 
 L7a provides the [hardware-free X1 projected fixture and controller-readiness boundary](docs/hardware/x1-projected-light-integration.md). Physical enablement remains blocked.
@@ -50,13 +50,15 @@ is FINAL ACCEPTED at `f23a5fd47935010efc7e88ffbebe5ba484df5ec2`
 ([five-job CI SUCCESS](https://github.com/martinkoenig/mantis-studio/actions/runs/38089039961)).
 
 L7b-2a-E1 is FINAL ACCEPTED at `229c508c47738f5759e67cb7667563845e07a292`.
-[L7b-2a-E2](docs/hardware/x1-f2-interoperability.md) is IMPLEMENTED / AWAITING
-INDEPENDENT REVIEW: real firmware F3/F4a wire interoperability and self-contained
+[L7b-2a-E2](docs/hardware/x1-f2-interoperability.md) is FINAL ACCEPTED at
+`fd18decf6b509254fe104fa7b280cf02765f2296`: real firmware F3/F4a wire interoperability and self-contained
 firmware captures. F4a is FINAL ACCEPTED at
 `963f583addd2b89da9a0f6548d428dad208689f8` / PR #9 MERGED; F4b-0 is FINAL ACCEPTED /
 MERGED via PR #10. The accepted firmware main baseline is
 `92197ce99da9b6b86a3a6139c4bdf2ab696ec3d8`; F2-ERR-001 remains ACCEPTED / NORMATIVE.
-L7b-2b is PLANNED, with physical authorization BLOCKED. Firmware acceptance and
+[L7b-2b-1](docs/hardware/x1-f2-posix-transport.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW:
+Linux FD transport, exercised only through PTYs in uninstalled tests.
+L7b-2b-2 is PLANNED / NOT STARTED; L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY GATES. Firmware acceptance and
 Xtensa compilation do not qualify deployment, electrical/optical behavior or safety.
 
 The purpose of v0.4 is to make projected-light acquisition a first-class, deterministic part of the same Mantis runtime instead of introducing a separate scanner-specific side path.

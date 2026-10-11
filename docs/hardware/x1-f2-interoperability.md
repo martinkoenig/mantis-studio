@@ -1,6 +1,6 @@
 # X1 F2 cross-repository wire interoperability — L7b-2a-E2
 
-**IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** Studio E1 is FINAL ACCEPTED at
+**FINAL ACCEPTED** at Studio `fd18decf6b509254fe104fa7b280cf02765f2296`. Studio E1 is FINAL ACCEPTED at
 `229c508c47738f5759e67cb7667563845e07a292`. Historical L7b-1, L7b-2a and E1
 acceptance evidence remains in the [simulation record](x1-f2-simulation.md).
 
@@ -207,7 +207,10 @@ git diff --check
 
 ## Physical gates
 
-L7b-2b is PLANNED; physical authorization remains BLOCKED. The existing
+[L7b-2b-1](x1-f2-posix-transport.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW,
+exercising a separate Linux FD transport only in PTY tests. L7b-2b-2 is PLANNED /
+NOT STARTED; L7b-2b-3 is PLANNED / BLOCKED BY PHYSICAL SAFETY GATES.
+Physical authorization remains BLOCKED. The existing
 [hardware readiness checklist](x1-projected-light-integration.md#physical-controller-readiness-facts)
 remains authoritative. No physical UART, GPIO, USB HIL, ESP8266 access/flashing,
 emitter/laser control, optical/electrical measurement or independently verified

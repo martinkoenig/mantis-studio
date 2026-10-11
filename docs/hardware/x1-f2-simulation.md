@@ -41,8 +41,11 @@ The subsequently accepted firmware main is
 `963f583addd2b89da9a0f6548d428dad208689f8` / PR #9 MERGED; F4b-0 FINAL ACCEPTED /
 MERGED via PR #10. The [E2 interoperability record](x1-f2-interoperability.md)
 uses those real portable implementations only in an opt-in conformance executable.
-E2 is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. No firmware source is modified
+E2 is FINAL ACCEPTED at Studio `fd18decf6b509254fe104fa7b280cf02765f2296`. No firmware source is modified
 or vendored, and normal production/CI builds remain independent of firmware access.
+The [L7b-2b-1 Linux FD foundation](x1-f2-posix-transport.md) is separate and
+IMPLEMENTED / AWAITING INDEPENDENT REVIEW, compiled only for PTY tests.
+This simulation retains its original in-memory byte transport and activation guard.
 
 `plugins/first-party/devices/x1/f2/codec.{hpp,cpp}` is a private standard-C++ codec,
 independent of Qt, Protobuf, SQLite, OpenCV and OS UART APIs. It defines explicit
