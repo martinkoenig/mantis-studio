@@ -284,3 +284,17 @@ Changed:
 - `src/device-runtime/include/mantis/replay.hpp`
 - `src/device-runtime/replay.cpp`
 - `tests/integration/calibration_dataset.cpp`
+
+## L8a-1a durability fault and process-crash qualification
+
+**IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** The
+[phase-specific validation record](rawcapture-v3-durability-qualification.md) adds
+`projected-storage-durability`, `projected-storage-daemon` and
+`projected-storage-boundaries`. It directly covers RA-04.06/RA-04.07/RA-05.04:
+actual short file prefixes, selected fsync/rename/SQLite commit failures, thirteen
+interprocess-barrier SIGKILL windows and exact cancellation/retry/refusal semantics.
+The actual PTY daemon distinguishes immutable execution success from failed
+recording finalization and replays offline after explicit recovery. Product
+behavior and all frozen bytes remain unchanged; no power-loss or physical
+qualification is inferred. L8a-0 is independently FINAL ACCEPTED at
+`e180803d7d1b94cf818461fa492e88fbab1a0b9a`; L8a as a whole is NOT ACCEPTED.

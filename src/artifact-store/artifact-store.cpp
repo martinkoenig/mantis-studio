@@ -1,4 +1,5 @@
 #include "bundle_state.hpp"
+#include "persistence-test.hpp"
 #include "segments.hpp"
 #include <fstream>
 #include <iomanip>
@@ -125,7 +126,7 @@ struct Store::Impl {
         ObservationReservation(const ObservationReservation &) = delete;
     };
     struct Writer {
-        std::ofstream output;
+        CaptureOutput output;
         std::filesystem::path part;
         uint64_t index{}, limit{segments::max_segment_bytes}, records{};
         std::optional<uint64_t> last_sequence;
@@ -134,20 +135,29 @@ struct Store::Impl {
     };
     std::map<Id, std::unique_ptr<Writer>> writers;
     void seal(const Id &id, Writer &writer) {
-        if (!writer.output.is_open()) return;
+        if (!writer.output.is_open())
+            return;
         writer.output.flush();
-        if (!writer.output) fail(Status::io, "RawCapture segment flush failed");
+        if (!writer.output)
+            fail(Status::io, "RawCapture segment flush failed");
         writer.output.close();
         if (writer.bundles && !writer.output)
             fail(Status::io, "Projected segment close failed");
+        MANTIS_STORAGE_POINT("segment-sync-before", root, id.value);
         platform::durable_file(writer.part);
-        auto file = writer.part; file.replace_extension();
+        MANTIS_STORAGE_POINT("segment-synced", root, id.value);
+        auto file = writer.part;
+        file.replace_extension();
         auto hash = file_hash(writer.part);
         auto bytes = std::filesystem::file_size(writer.part);
+        MANTIS_STORAGE_POINT("segment-rename-before", root, id.value);
         std::filesystem::rename(writer.part, file);
+        MANTIS_STORAGE_POINT("segment-published", root, id.value);
         platform::durable_directory(file.parent_path());
-        commit_chunk(id.value, writer.index, std::filesystem::relative(file, root).generic_string(), hash.hex, bytes);
-        ++writer.index; writer.records = 0;
+        commit_chunk(id.value, writer.index, std::filesystem::relative(file, root).generic_string(), hash.hex,
+                     bytes);
+        ++writer.index;
+        writer.records = 0;
     }
     void append_raw(const Id &id, const data::Packet &packet) {
         if (packet.type != schema::frameset) fail(Status::incompatible, "RawCapture v2 requires FrameSet");
@@ -288,7 +298,10 @@ struct Store::Impl {
     }
     void recover_segments(const Id &id, const CancellationToken &token) {
         ArtifactDescriptor a;
-        { std::lock_guard guard(mutex); a = get(id); }
+        {
+            std::lock_guard guard(mutex);
+            a = get(id);
+        }
         const bool projected = a.type.schema_version == 3;
         std::optional<BundleState> bundles;
         std::optional<data::ProjectedCaptureOutcome> outcome;
@@ -347,11 +360,15 @@ struct Store::Impl {
             {
                 std::lock_guard guard(mutex);
                 Statement indexed(db, "SELECT path,hash FROM chunks WHERE artifact=? AND idx=?");
-                indexed.text(1, id.value); indexed.integer(2, i);
-                if (!indexed.row()) fail(Status::corrupt, "Missing indexed segment");
-                path = root / indexed.text(0); expected = indexed.text(1);
+                indexed.text(1, id.value);
+                indexed.integer(2, i);
+                if (!indexed.row())
+                    fail(Status::corrupt, "Missing indexed segment");
+                path = root / indexed.text(0);
+                expected = indexed.text(1);
             }
-            if (file_hash(path).hex != expected) fail(Status::corrupt, "Indexed segment integrity mismatch");
+            if (file_hash(path).hex != expected)
+                fail(Status::corrupt, "Indexed segment integrity mismatch");
             if (projected) {
                 auto scan = segments::scan(path, 3, token);
                 if (scan.incomplete || !scan.corruption.empty() || scan.records.empty())
@@ -366,14 +383,20 @@ struct Store::Impl {
         for (;;) {
             token.check();
             auto file = directory / (std::to_string(index) + ".segment");
-            auto part = file; part += ".part";
+            auto part = file;
+            part += ".part";
             bool partial = false;
             if (!std::filesystem::exists(file)) {
-                if (!std::filesystem::exists(part)) break;
-                partial = true; file = part;
-            } else if (std::filesystem::exists(part)) fail(Status::corrupt, "Conflicting segment and provisional tail");
+                if (!std::filesystem::exists(part))
+                    break;
+                partial = true;
+                file = part;
+            } else if (std::filesystem::exists(part))
+                fail(Status::corrupt, "Conflicting segment and provisional tail");
             auto scanned = segments::scan(file, projected ? 3 : 2, token);
-            if (!scanned.corruption.empty()) fail(Status::corrupt, scanned.corruption + "; verified prefix remains on disk");
+            MANTIS_STORAGE_POINT("recovery-scanned", root, id.value);
+            if (!scanned.corruption.empty())
+                fail(Status::corrupt, scanned.corruption + "; verified prefix remains on disk");
             if (projected)
                 for (size_t n = 0; n < scanned.records.size(); ++n) {
                     token.check();
@@ -383,7 +406,8 @@ struct Store::Impl {
                 !std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment.part")) &&
                 outcome->bundle_count != bundles->count)
                 fail(Status::corrupt, "Bundle prefix differs from final daemon outcome");
-            if (scanned.incomplete && !partial) fail(Status::corrupt, "Closed segment is incomplete");
+            if (scanned.incomplete && !partial)
+                fail(Status::corrupt, "Closed segment is incomplete");
             if (partial) {
                 if (std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment")) ||
                     std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment.part")))
@@ -393,17 +417,21 @@ struct Store::Impl {
                     platform::durable_file(file);
                     break;
                 }
-                if (scanned.incomplete) std::filesystem::resize_file(file, scanned.complete_bytes);
+                if (scanned.incomplete)
+                    std::filesystem::resize_file(file, scanned.complete_bytes);
                 platform::durable_file(file);
-                auto closed = file; closed.replace_extension();
-                std::filesystem::rename(file, closed); file = closed;
+                auto closed = file;
+                closed.replace_extension();
+                std::filesystem::rename(file, closed);
+                file = closed;
                 platform::durable_directory(directory);
             }
             auto hash = file_hash(file).hex;
             auto bytes = std::filesystem::file_size(file);
             {
                 std::lock_guard guard(mutex);
-                commit_chunk(id.value, index, std::filesystem::relative(file, root).generic_string(), hash, bytes);
+                commit_chunk(id.value, index, std::filesystem::relative(file, root).generic_string(), hash,
+                             bytes);
             }
             ++index;
         }
@@ -411,7 +439,8 @@ struct Store::Impl {
             auto name = entry.path().filename().string();
             if (name.ends_with(".segment") || name.ends_with(".segment.part")) {
                 auto number = std::stoull(name);
-                if (number > index) fail(Status::corrupt, "Missing segment / index mismatch");
+                if (number > index)
+                    fail(Status::corrupt, "Missing segment / index mismatch");
             }
         }
         if (outcome) {
@@ -562,7 +591,9 @@ struct Store::Impl {
         update.text(2, id);
         update.text(3, id);
         update.row();
+        MANTIS_STORAGE_COMMIT("chunk-commit-before", root, id, db);
         txn.commit();
+        MANTIS_STORAGE_POINT("chunk-committed", root, id);
     }
     void replay_journal() {
         for (auto &item : std::filesystem::directory_iterator(root / "journal")) {
@@ -651,9 +682,10 @@ ArtifactId Store::begin_projected_capture(data::ProjectedCaptureHeader header, P
     row.text(5, provenance_json(provenance));
     row.row();
     try {
+        MANTIS_STORAGE_POINT("artifact-row", impl_->root, id.value);
         auto part = directory / "run.header.part";
         {
-            std::ofstream out(part, std::ios::binary);
+            CaptureOutput out(part, std::ios::binary);
             data::write_capture_header(out, header);
             out.flush();
             if (!out)
@@ -662,9 +694,14 @@ ArtifactId Store::begin_projected_capture(data::ProjectedCaptureHeader header, P
             if (!out)
                 fail(Status::io, "Capture header close failed");
         }
+        MANTIS_STORAGE_POINT("header-written", impl_->root, id.value);
+        MANTIS_STORAGE_POINT("header-sync-before", impl_->root, id.value);
         platform::durable_file(part);
+        MANTIS_STORAGE_POINT("header-synced", impl_->root, id.value);
         std::filesystem::rename(part, directory / "run.header");
+        MANTIS_STORAGE_POINT("header-published", impl_->root, id.value);
         platform::durable_directory(directory);
+        MANTIS_STORAGE_POINT("header-durable", impl_->root, id.value);
         auto writer = std::make_unique<Impl::Writer>();
         writer->bundles = std::make_unique<BundleState>(std::move(header));
         if (auto i = provenance.parameters.find("segment_max_bytes"); i != provenance.parameters.end()) {
@@ -714,6 +751,7 @@ void Store::append_bundle(const Id &id, const data::AcquisitionBundle &bundle) {
             platform::durable_directory(w.part.parent_path());
         }
         segments::append(w.output, bundle);
+        MANTIS_STORAGE_POINT("record-written", impl_->root, id.value);
         ++w.records;
         if (static_cast<uint64_t>(w.output.tellp()) >= w.limit || w.records >= 100000)
             impl_->seal(id, w);
@@ -751,7 +789,7 @@ void Store::record_run_outcome(const Id &id, const data::ProjectedCaptureOutcome
         const auto part = directory / "run.outcome.part";
         if (std::filesystem::exists(part))
             fail(Status::busy, "Provisional daemon outcome requires explicit recovery");
-        std::ofstream out(part, std::ios::binary);
+        CaptureOutput out(part, std::ios::binary);
         data::write_run_outcome(out, record);
         out.flush();
         if (!out)
@@ -759,9 +797,15 @@ void Store::record_run_outcome(const Id &id, const data::ProjectedCaptureOutcome
         out.close();
         if (!out)
             fail(Status::io, "Daemon outcome close failed");
+        MANTIS_STORAGE_POINT("outcome-written", impl_->root, id.value);
+        MANTIS_STORAGE_POINT("outcome-sync-before", impl_->root, id.value);
         platform::durable_file(part);
+        MANTIS_STORAGE_POINT("outcome-synced", impl_->root, id.value);
+        MANTIS_STORAGE_POINT("outcome-rename-before", impl_->root, id.value);
         std::filesystem::rename(part, directory / "run.outcome");
+        MANTIS_STORAGE_POINT("outcome-published", impl_->root, id.value);
         platform::durable_directory(directory);
+        MANTIS_STORAGE_POINT("outcome-durable", impl_->root, id.value);
         w.outcome_published = true;
     } catch (...) {
         impl_->writers.erase(id);
@@ -1088,7 +1132,8 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
     std::unique_lock guard(impl->mutex);
     impl->observation_idle(id);
     auto a = impl->get(id);
-    if (a.state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized artifacts are immutable");
+    if (a.state == ArtifactState::finalized)
+        fail(Status::invalid_argument, "Finalized artifacts are immutable");
     if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version != 1 && a.type.schema_version != 2 &&
         a.type.schema_version != 3)
         fail(Status::incompatible, "Unknown RawCapture schema");
@@ -1145,7 +1190,8 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
                 for (size_t n = 0; n < scanned.records.size(); ++n) {
                     token.check();
                     auto packet = segments::packet(scanned, n);
-                    if (packet->type != schema::frameset || (sequence && packet->header.sequence.value != *sequence + 1))
+                    if (packet->type != schema::frameset ||
+                        (sequence && packet->header.sequence.value != *sequence + 1))
                         fail(Status::corrupt, "Invalid RawCapture FrameSet order");
                     sequence = packet->header.sequence.value;
                 }
@@ -1160,7 +1206,8 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
                 }
             }
             for (unsigned char byte : file_hash(file).hex) {
-                aggregate ^= byte; aggregate *= 1099511628211ULL;
+                aggregate ^= byte;
+                aggregate *= 1099511628211ULL;
             }
         }
         if (projected) {
@@ -1177,18 +1224,24 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
         Hash hash{"fnv1a64", digest.str()};
         token.check();
         guard.lock();
+        MANTIS_STORAGE_COMMIT("finalize-commit-before", impl->root, id.value, impl->db);
         Statement update(impl->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
-        update.text(1, hash.hex); update.text(2, id.value); update.row();
+        update.text(1, hash.hex);
+        update.text(2, id.value);
+        update.row();
+        MANTIS_STORAGE_POINT("finalize-committed", impl->root, id.value);
         return impl->get(id);
     } catch (...) {
         // Preserve legacy pre-verification failure behavior; schema 3 releases failed writers.
         if (!entered_verification && !(a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3))
             throw;
-        if (!guard.owns_lock()) guard.lock();
+        if (!guard.owns_lock())
+            guard.lock();
         if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3)
             impl->writers.erase(id);
         Statement update(impl->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
-        update.text(1, id.value); update.row();
+        update.text(1, id.value);
+        update.row();
         throw;
     }
 }

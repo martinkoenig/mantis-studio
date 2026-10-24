@@ -486,3 +486,7 @@ if(BUILD_TESTING)
   set_tests_properties(${name} PROPERTIES TIMEOUT 60)
  endforeach()
 endif()
+
+if(BUILD_TESTING)
+ add_subdirectory(tests/storage)
+endif()
