@@ -1,7 +1,7 @@
 # X1 F2 v1 hardware-free integration — L7b-1 / L7b-2a
 
 **L7b-1 FINAL ACCEPTED. L7b-2a FINAL ACCEPTED.** L0–L6 and L7a are FINAL ACCEPTED;
-L7a baseline is `90d4b15850560c2f0037796770fb42e6d53e2d33`. L7b-2b-1 and L7b-2b-2 are FINAL ACCEPTED; L7b-2b-3a awaits independent review.
+L7a baseline is `90d4b15850560c2f0037796770fb42e6d53e2d33`. L7b-2b-1 and L7b-2b-2 are FINAL ACCEPTED; L7b-2b-3a FINAL ACCEPTED.
 L7b-2b-3b remains blocked; L7c, L7d and L8 remain separate planned gates. This record establishes software behavior,
 not physical controller readiness or acceptance of L7 as a whole.
 
@@ -684,4 +684,4 @@ and optical timing method remain hardware blockers. F2's accepted software bytes
 resolve protocol design only. Later integration requires explicit authorization and
 independent review; it must not enable real emitters using synthetic provisioning.
 
-[L7b-2b-3a PTY daemon integration](x1-f2-pty-daemon-integration.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.
+[L7b-2b-3a PTY daemon integration](x1-f2-pty-daemon-integration.md) is FINAL ACCEPTED at `35f4b9845c79d448c7e7295ed129d063fc1b5327` (five required CI jobs SUCCESS). It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.

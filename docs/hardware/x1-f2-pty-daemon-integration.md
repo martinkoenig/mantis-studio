@@ -1,6 +1,7 @@
 # F2 PTY daemon integration — L7b-2b-3a
 
-**IMPLEMENTED / AWAITING INDEPENDENT REVIEW.** L7b-2b-1 is FINAL ACCEPTED
+**FINAL ACCEPTED** at `35f4b9845c79d448c7e7295ed129d063fc1b5327`; all five required jobs SUCCESS in
+[run 38162764432](https://github.com/martinkoenig/mantis-studio/actions/runs/38162764432). L7b-2b-1 is FINAL ACCEPTED
 at `6489c6eec05ac61f685f71df5805cc825a912b2d`. L7b-2b-2 is FINAL ACCEPTED
 at `9b6f0cc72f44134009302abe09175b7158b27f38`, with all five required CI jobs
 SUCCESS. L7b-2b-3b remains **BLOCKED — F1b / F5 / hardware authorization**.
@@ -252,4 +253,5 @@ L7a, acquisition/pairing/pacing, L3–L6, calibration, storage/replay, protocol
 compatibility, ABI and catalog regressions. No assertion or required test was
 removed or disabled. Native ARM64 execution was unavailable locally and remains
 part of the independent five-job remote CI gate. Local success is implementation
-evidence; this package still awaits independent review and exact-SHA remote CI.
+evidence; subsequent independent acceptance and exact-SHA five-job CI success
+for `35f4b9845c79d448c7e7295ed129d063fc1b5327` are recorded at the top of this document.

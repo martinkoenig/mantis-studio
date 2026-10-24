@@ -247,4 +247,4 @@ No electrical/optical qualification, physical UART, GPIO, MCU reset/flash,
 laser operation, independently verified inhibit, trigger or physical OFF was
 implemented or tested. Physical controller integration remains blocked.
 
-[L7b-2b-3a PTY daemon integration](x1-f2-pty-daemon-integration.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.
+[L7b-2b-3a PTY daemon integration](x1-f2-pty-daemon-integration.md) is FINAL ACCEPTED at `35f4b9845c79d448c7e7295ed129d063fc1b5327` (five required CI jobs SUCCESS). It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.

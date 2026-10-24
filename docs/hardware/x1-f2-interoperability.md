@@ -209,7 +209,7 @@ git diff --check
 
 [L7b-2b-1](x1-f2-posix-transport.md) is FINAL ACCEPTED at
 `6489c6eec05ac61f685f71df5805cc825a912b2d`,
-exercising a separate Linux FD transport only in PTY tests. L7b-2b-2 is FINAL ACCEPTED; L7b-2b-3a is IMPLEMENTED / AWAITING INDEPENDENT REVIEW; L7b-2b-3b is BLOCKED by F1b / F5 / hardware authorization.
+exercising a separate Linux FD transport only in PTY tests. L7b-2b-2 is FINAL ACCEPTED; L7b-2b-3a is FINAL ACCEPTED; L7b-2b-3b is BLOCKED by F1b / F5 / hardware authorization.
 Physical authorization remains BLOCKED. The existing
 [hardware readiness checklist](x1-projected-light-integration.md#physical-controller-readiness-facts)
 remains authoritative. No physical UART, GPIO, USB HIL, ESP8266 access/flashing,
@@ -219,4 +219,4 @@ deployment and physical qualification are separate milestones.
 
 [L7b-2b-2 Q6A readiness and serial policy](x1-q6a-uart-readiness.md) is FINAL ACCEPTED at `9b6f0cc72f44134009302abe09175b7158b27f38`: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.
 
-[L7b-2b-3a PTY daemon integration](x1-f2-pty-daemon-integration.md) is IMPLEMENTED / AWAITING INDEPENDENT REVIEW. It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.
+[L7b-2b-3a PTY daemon integration](x1-f2-pty-daemon-integration.md) is FINAL ACCEPTED at `35f4b9845c79d448c7e7295ed129d063fc1b5327` (five required CI jobs SUCCESS). It reuses the accepted fixture, Host, FD transport and serial settings in a separate Linux test-only plugin. L7b-2b-3b remains BLOCKED by F1b / F5 / hardware authorization.
