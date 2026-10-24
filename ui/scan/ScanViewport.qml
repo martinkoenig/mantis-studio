@@ -76,7 +76,7 @@ Rectangle {
         RowLayout {
             visible: !root.workspace.illustrative; Layout.fillWidth: true
             ScanText { text: "Drag to orbit · Scroll to zoom"; font.pixelSize: 11; Layout.fillWidth: true }
-            StudioButton { objectName: "scanResetView"; text: "Reset view"; implicitHeight: 28; enabled: root.workspace.surfaces.interactive; onClicked: root.workspace.surfaces.resetView(); Accessible.description: enabled ? "Reset geometry orbit and zoom" : "Unavailable while geometry is inactive or runtime unconfirmed" }
+            StudioButton { objectName: "scanResetView"; text: "Reset view"; implicitHeight: 28; enabled: root.workspace.visible && root.workspace.surfaces.interactive; onClicked: root.workspace.surfaces.resetView(); Accessible.description: enabled ? "Reset local geometry orbit and zoom; available offline" : "Unavailable while the live geometry surface is inactive" }
         }
         ScanText { objectName: "scanDisplayAvailability"; text: root.workspace.illustrative ? root.workspace.displayStyle + " · illustrative presentation only" : "Geometry · rendered point count, no measured coverage"; font.pixelSize: 11; Layout.fillWidth: true }
         ScanText {

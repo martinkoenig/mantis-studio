@@ -154,7 +154,13 @@ pairs retain last-known buffers with an explicit diagnostic. Disconnect and capt
 source changes invalidate freshness; old project generation or stopped-source
 completions are rejected. Project changes clear both images and renderer cloud.
 Only Geometry is actionable in live mode; orbit/wheel/reset use the existing real
-renderer. Coverage, Texture, Confidence and RGB are unavailable. Mock retains its
+renderer. These are local view operations: an active Live/Hybrid-Live Scan viewport
+or Classic surface remains interactive after disconnect, including retained
+last-known geometry. Reset describes this offline behavior accessibly. Hidden,
+parked, Mock/Demo and inactive compact surfaces cannot manipulate the canonical
+view. Camera movement changes no freshness, project identity or hardware authority;
+disconnected device selection and Start/Stop remain prohibited (M3C-F01).
+Coverage, Texture, Confidence and RGB are unavailable. Mock retains its
 clearly labelled presentation affordances. Units remain mm, +X right / +Y forward /
 +Z up. Processing remains Not reported and global job states remain independently
 qualified as last-known on disconnect (M3B-F01).

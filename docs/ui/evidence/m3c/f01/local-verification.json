@@ -1,0 +1,377 @@
+{
+  "correction": "M3C-F01",
+  "base_sha": "f5fefe759f1cfb892604e6e3147656058f7ef2ec",
+  "branch": "feature/ui-m3-scan",
+  "recorded_utc": "2026-10-24T10:03:15.569733+00:00",
+  "hardware_evidence": false,
+  "focused": {
+    "status": "PASS",
+    "tests": 2,
+    "elapsed_seconds": 15.6,
+    "log": "build/ui-m3c-f01-verification/focused-tests.log",
+    "log_sha256": "3cd492d4db38a1bc0f888ecb857eb48f7983c6b04da5bf3566fdb3789ccc0196",
+    "phase": "initial focused run before capture-wire input synchronization"
+  },
+  "full_suite_total": 327,
+  "full_suites": [
+    {
+      "configuration": "qt64",
+      "environment": "Ubuntu 24.04 / GCC 13.3 / Qt 6.4.2 / Studio ON",
+      "sanitizers": [],
+      "build_command": "docker exec mantis-ui-m0-qt64 cmake --build /work/build/qt64 --parallel 3",
+      "build_status": "PASS",
+      "build_log": "build/ui-m3c-f01-verification/qt64-build.log",
+      "build_log_sha256": "3a70741922758589bc37241732b16d2bcda868242c05aa0642b8dfde7b6eb6cc",
+      "test_command": "docker exec mantis-ui-m0-qt64 ctest --test-dir /work/build/qt64 --output-on-failure",
+      "status": "PASS",
+      "tests": 81,
+      "elapsed_seconds": 443.16,
+      "log": "build/ui-m3c-f01-verification/qt64-tests.log",
+      "log_sha256": "976965157e751c0d4337c0821914c2b80d96547697417736032dd942aa71812f"
+    },
+    {
+      "configuration": "qt64-headless",
+      "environment": "Ubuntu 24.04 / GCC 13.3 / Studio OFF",
+      "sanitizers": [],
+      "build_command": "docker exec mantis-ui-m0-qt64 cmake --build /work/build/qt64-headless --parallel 3",
+      "build_status": "PASS",
+      "build_log": "build/ui-m3c-f01-verification/headless-build.log",
+      "build_log_sha256": "8c35b1682f73592d30612d7b0fabdb384fcfff35cb5a076cb48b85b1368aa794",
+      "test_command": "docker exec mantis-ui-m0-qt64 ctest --test-dir /work/build/qt64-headless --output-on-failure",
+      "status": "PASS",
+      "tests": 42,
+      "elapsed_seconds": 109.81,
+      "log": "build/ui-m3c-f01-verification/headless-tests.log",
+      "log_sha256": "9a44c46ce09cfab6a75d179bbee9bc5b72066b90d1e56e4aafd53bf63c787360"
+    },
+    {
+      "configuration": "qt64-headless-sanitizers",
+      "environment": "Ubuntu 24.04 / GCC 13.3 / Studio OFF",
+      "sanitizers": [
+        "ASan",
+        "UBSan",
+        "LSan"
+      ],
+      "build_command": "docker exec mantis-ui-m0-qt64 cmake --build /work/build/qt64-headless-sanitizers --parallel 3",
+      "build_status": "PASS",
+      "build_log": "build/ui-m3c-f01-verification/headless-sanitizers-build.log",
+      "build_log_sha256": "8c35b1682f73592d30612d7b0fabdb384fcfff35cb5a076cb48b85b1368aa794",
+      "test_command": "docker exec mantis-ui-m0-qt64 ctest --test-dir /work/build/qt64-headless-sanitizers --output-on-failure",
+      "status": "PASS",
+      "tests": 42,
+      "elapsed_seconds": 241.7,
+      "log": "build/ui-m3c-f01-verification/headless-sanitizers-tests.log",
+      "log_sha256": "7b26569bf42113d17db5b7ed3ad333c1342db9aa84877ef318d506f59cefdeb5"
+    },
+    {
+      "configuration": "debug",
+      "environment": "Linux host / GCC 15.2 / Qt 6.9.2 / Studio ON",
+      "sanitizers": [],
+      "build_command": "cmake --build build/debug --parallel 3",
+      "build_status": "PASS",
+      "build_log": "build/ui-m3c-f01-verification/host-build.log",
+      "build_log_sha256": "3a70741922758589bc37241732b16d2bcda868242c05aa0642b8dfde7b6eb6cc",
+      "test_command": "ctest --test-dir build/debug --output-on-failure",
+      "status": "PASS",
+      "tests": 81,
+      "elapsed_seconds": 435.96,
+      "log": "build/ui-m3c-f01-verification/host-tests.log",
+      "log_sha256": "249b38abf99e4788feedaae20d2b02b6fb722155f75b14a2b180609b5f6e630a"
+    },
+    {
+      "configuration": "qt69-sanitizers",
+      "environment": "Linux host / GCC 15.2 / Qt 6.9.2 / Studio ON",
+      "sanitizers": [
+        "ASan",
+        "UBSan",
+        "LSan"
+      ],
+      "build_command": "cmake --build build/qt69-sanitizers --parallel 3",
+      "build_status": "PASS",
+      "build_log": "build/ui-m3c-f01-verification/host-sanitizers-build.log",
+      "build_log_sha256": "3a70741922758589bc37241732b16d2bcda868242c05aa0642b8dfde7b6eb6cc",
+      "test_command": "ctest --test-dir build/qt69-sanitizers --output-on-failure",
+      "status": "PASS",
+      "tests": 81,
+      "elapsed_seconds": 725.06,
+      "log": "build/ui-m3c-f01-verification/host-sanitizers-tests.log",
+      "log_sha256": "cee0e2174884c731fe8356e3dc65a342ac15e62528b4a9199869cad945d8cd5e"
+    }
+  ],
+  "repeat_execution_total": 72,
+  "repeat_suites": [
+    {
+      "configuration": "qt64",
+      "executions": 30,
+      "command": "docker exec mantis-ui-m0-qt64 ctest --test-dir /work/build/qt64 -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize|studio-projects-scroll|studio-devices-qml|studio-devices-stress|studio-scan-qml|studio-scan-stress|studio-scan-surfaces|studio-ui-m0-qml)$' --repeat until-fail:3 --output-on-failure",
+      "status": "PASS",
+      "tests": 10,
+      "elapsed_seconds": 323.18,
+      "log": "build/ui-m3c-f01-verification/qt64-repeat.log",
+      "log_sha256": "2a26279ae5a020dfbdb2fd61d0627d7e989ea4eec3d804e04b990b57f48ea292"
+    },
+    {
+      "configuration": "debug",
+      "executions": 30,
+      "command": "ctest --test-dir build/debug -R '^(studio-home-qml|studio-projects-qml|studio-projects-resize|studio-projects-scroll|studio-devices-qml|studio-devices-stress|studio-scan-qml|studio-scan-stress|studio-scan-surfaces|studio-ui-m0-qml)$' --repeat until-fail:3 --output-on-failure",
+      "status": "PASS",
+      "tests": 10,
+      "elapsed_seconds": 325.58,
+      "log": "build/ui-m3c-f01-verification/host-repeat.log",
+      "log_sha256": "2f2e1f74bfd7bed449f60ffda516310ae57637778001b404f1b6a9c079717fd3"
+    },
+    {
+      "configuration": "qt69-sanitizers",
+      "executions": 12,
+      "command": "ctest --test-dir build/qt69-sanitizers -R '^(studio-scan-qml|studio-scan-stress|studio-scan-surfaces|studio-scan-capture-wire)$' --repeat until-fail:3 --output-on-failure",
+      "status": "PASS",
+      "tests": 4,
+      "elapsed_seconds": 119.01,
+      "log": "build/ui-m3c-f01-verification/host-sanitizers-repeat.log",
+      "log_sha256": "cb7b3067e54668c45c57a7c95a5e5493f3a95ba4db836065988c24c696823eda"
+    }
+  ],
+  "host_environment": {
+    "OPENCV_OPENCL_RUNTIME": "disabled",
+    "LD_LIBRARY_PATH": "$PWD/build/deps/root/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  },
+  "sanitizer_environment": {
+    "ASAN_OPTIONS": "detect_leaks=1",
+    "UBSAN_OPTIONS": "halt_on_error=1",
+    "new_suppressions": false
+  },
+  "wire_regression": [
+    {
+      "configuration": "qt64",
+      "request_receipt_phase": "final full suite",
+      "offline_extra_requests": {
+        "capture_start": 0,
+        "capture_stop": 0,
+        "artifact_data": 0,
+        "preview": 0
+      },
+      "existing_snapshot_polling_continues": true,
+      "offline_routes": [
+        "Live Classic",
+        "Live Scan",
+        "Hybrid-Live Classic",
+        "Hybrid-Live Scan"
+      ],
+      "hardware_direct_calls_and_ui_signals_blocked": true,
+      "device_selection_blocked": true,
+      "reconnect_extra_artifact_data": 0,
+      "requests": {
+        "snapshot": 43,
+        "artifact_data": 2,
+        "events": 39,
+        "capture_start": 4,
+        "preview": 54,
+        "preview_release": 54,
+        "capture_stop": 2
+      },
+      "operations": [
+        {
+          "mode": 20,
+          "command": "capture_start"
+        },
+        {
+          "mode": 20,
+          "command": "capture_stop"
+        },
+        {
+          "mode": 17,
+          "command": "capture_start"
+        },
+        {
+          "mode": 31,
+          "command": "capture_stop"
+        },
+        {
+          "mode": 18,
+          "command": "capture_start"
+        },
+        {
+          "mode": 19,
+          "command": "capture_start"
+        }
+      ],
+      "route_gui_latency_us": {
+        "p50": 557,
+        "p95": 6330,
+        "max": 11041
+      }
+    },
+    {
+      "configuration": "debug",
+      "request_receipt_phase": "final full suite",
+      "offline_extra_requests": {
+        "capture_start": 0,
+        "capture_stop": 0,
+        "artifact_data": 0,
+        "preview": 0
+      },
+      "existing_snapshot_polling_continues": true,
+      "offline_routes": [
+        "Live Classic",
+        "Live Scan",
+        "Hybrid-Live Classic",
+        "Hybrid-Live Scan"
+      ],
+      "hardware_direct_calls_and_ui_signals_blocked": true,
+      "device_selection_blocked": true,
+      "reconnect_extra_artifact_data": 0,
+      "requests": {
+        "snapshot": 43,
+        "artifact_data": 2,
+        "events": 39,
+        "capture_start": 4,
+        "preview": 54,
+        "preview_release": 54,
+        "capture_stop": 2
+      },
+      "operations": [
+        {
+          "mode": 20,
+          "command": "capture_start"
+        },
+        {
+          "mode": 20,
+          "command": "capture_stop"
+        },
+        {
+          "mode": 17,
+          "command": "capture_start"
+        },
+        {
+          "mode": 31,
+          "command": "capture_stop"
+        },
+        {
+          "mode": 18,
+          "command": "capture_start"
+        },
+        {
+          "mode": 19,
+          "command": "capture_start"
+        }
+      ],
+      "route_gui_latency_us": {
+        "p50": 258,
+        "p95": 7465,
+        "max": 14770
+      }
+    },
+    {
+      "configuration": "qt69-sanitizers",
+      "request_receipt_phase": "final focused repeat",
+      "offline_extra_requests": {
+        "capture_start": 0,
+        "capture_stop": 0,
+        "artifact_data": 0,
+        "preview": 0
+      },
+      "existing_snapshot_polling_continues": true,
+      "offline_routes": [
+        "Live Classic",
+        "Live Scan",
+        "Hybrid-Live Classic",
+        "Hybrid-Live Scan"
+      ],
+      "hardware_direct_calls_and_ui_signals_blocked": true,
+      "device_selection_blocked": true,
+      "reconnect_extra_artifact_data": 0,
+      "requests": {
+        "snapshot": 48,
+        "artifact_data": 2,
+        "events": 39,
+        "capture_start": 4,
+        "preview": 85,
+        "preview_release": 85,
+        "capture_stop": 2
+      },
+      "operations": [
+        {
+          "mode": 20,
+          "command": "capture_start"
+        },
+        {
+          "mode": 20,
+          "command": "capture_stop"
+        },
+        {
+          "mode": 17,
+          "command": "capture_start"
+        },
+        {
+          "mode": 31,
+          "command": "capture_stop"
+        },
+        {
+          "mode": 18,
+          "command": "capture_start"
+        },
+        {
+          "mode": 19,
+          "command": "capture_start"
+        }
+      ],
+      "route_gui_latency_us": {
+        "p50": 11009,
+        "p95": 16170,
+        "max": 28778
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "offline-classic.png",
+      "source": "build/qt64/ui-m3c/wire/offline-live-acquisition-real-wire.png",
+      "sha256": "f6ad6fff269c84546896f91135bfe250e96de19e72961315f031319a7962d612",
+      "unaltered_qt_readback": true
+    },
+    {
+      "file": "offline-scan.png",
+      "source": "build/qt64/ui-m3c/wire/offline-hybrid-scan-real-wire.png",
+      "sha256": "ef89bfe37641faed3963d8d6649ff82b27dea5ce32a12be1f57b1d399b689e8f",
+      "unaltered_qt_readback": true
+    }
+  ],
+  "unchanged_runtime_input_sha256": {
+    "apps/studio/bridge.cpp": "2ef9750c6912652002bc504171146dea61d9ef31db65308f740f6fcda042c1d4",
+    "apps/studio/bridge.hpp": "779a9beb2c543043b830d3b97bc6bded5f825e69f2550377ce606df482aba68a",
+    "apps/studio/live_views.cpp": "ac528b487763073cf6ad42f49c7adff992c01a957787c935a54c5ba114513eda",
+    "apps/studio/live_views.hpp": "80424285bb2ceabdbcda53923fdbcf8cf0dd9af39891cd354a15c27e9aa001af",
+    "apps/studio/preview.hpp": "601e1b95e66310d176ee0fa266bdc87b464964ef4beb10b6a8a35b01e596d0f0",
+    "apps/studio/scan_model.cpp": "f8fc3036b79af836854adc294ccc621c82202ce7dfeb87022c76b8fa8d55e59c",
+    "apps/studio/scan_model.hpp": "760c81a22c6b03c951e49d5456e5292e0c08f12cdc18ce59ba254821add1bd59"
+  },
+  "verification_input_sha256": {
+    "docs/ui/scan.md": "47cd6803e185e1218fe497cbb93691b22b8f31872322475cbfb94139c05ee878",
+    "docs/ui/validation-m3c.md": "e6ea2b887b1ad6e75afba1bbe0cb7655079882ffdd623e10702ae59ab0d13438",
+    "tests/unit/studio_scan.cpp": "84d3901c089718bde21cfee1de57ff69510a24dd1b2ce11f1d2d9239edc79d07",
+    "ui/scan/ScanViewport.qml": "b7a7a1a2b59732b76c5709f305b1d9db7e59bdff1a180eb1faa9bd69ed03c30d",
+    "ui/shell/Main.qml": "ab336d0b0bd7c039b674ac969e385c17d4a536c573ff43452f095b2778f258ea",
+    "ui/workspaces/AcquisitionWorkspace.qml": "cca3c2e59ea2567529c1b7a68637c56390a5035ed6c8d922d5a2424752e5d303"
+  },
+  "preserved_preexisting_untracked_files": 14,
+  "limitations": [
+    "Local x86_64 Linux software fixtures only; no physical scanner evidence",
+    "Remote exact-SHA CI including ARM64 remains independent acceptance gate",
+    "Known backend project/replay isolation P1 unchanged; no M3d/M3e work"
+  ],
+  "focused_qt69_capture_wire_repeat": {
+    "status": "PASS",
+    "tests": 1,
+    "elapsed_seconds": 40.04,
+    "log": "build/ui-m3c-f01-verification/host-wire-repeat.log",
+    "log_sha256": "e5cedc0ca6ed5c1f62c164b5e91a80a957504d643413df97106b0f956584cb1c",
+    "executions": 3
+  },
+  "native": {
+    "status": "PASS",
+    "frames": 9,
+    "command": "QT_QPA_PLATFORM=wayland QT_QUICK_BACKEND=software build/debug/bin/mantis-studio-scan-tests build/debug/ui-m3c/f01-native native",
+    "log": "build/ui-m3c-f01-verification/native.log",
+    "log_sha256": "6e29e1cd9c5ada38244736cab7ef121ba61d9e8e1d94009769df16dc28a68849"
+  }
+}

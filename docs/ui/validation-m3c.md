@@ -3,6 +3,8 @@
 Branch: `feature/ui-m3-scan`. Accepted starting revision:
 `d01c00b47fd5bf6d2b0e73e9121d296fb2f07383`. This record describes implementation
 self-verification; independent review and exact-SHA remote CI remain acceptance gates.
+The original M3c results below belong to reviewed commit
+`f5fefe759f1cfb892604e6e3147656058f7ef2ec`; correction evidence is appended separately.
 
 ## Ownership and compatibility
 
@@ -180,3 +182,52 @@ x86_64 Linux only. Windows/macOS, ARM64 and physical scanner behavior are not lo
 verified. The known backend project/replay isolation P1 remains unresolved and
 New/Open stay gated. No M3d replay/timeline/marker or M3e setup/profile/notes mutation
 was implemented; unsupported RGB/coverage/confidence/texture remain explicit.
+
+## M3C-F01: disconnected local geometry inspection
+
+Correction base: `f5fefe759f1cfb892604e6e3147656058f7ef2ec`, same feature branch.
+The shell's local interaction permission now follows the active authorized visual
+host, independent of runtime connectivity. Both Reset controls describe local
+offline behavior and are disabled when their workspace/surface is inactive.
+Canonical ownership, rendering, preview paths, buffers and Bridge hardware guards
+are unchanged. Last-known evidence remains stale after camera movement.
+
+The production surface test now drives actual drag/wheel/keyboard Reset in connected
+Classic and Scan, then disconnected Live/Hybrid-Live on both routes. It checks
+accessibility text, stale confirmation/epoch, source/route/compact-pane isolation,
+camera preservation on return, reconnection and deterministic A→B→A invalidation
+with late-result rejection. The authenticated capture-wire test repeats offline
+gestures, direct Bridge and UI command attempts, and device selection. It verifies
+zero additional capture_start, capture_stop, artifact_data or preview requests;
+existing snapshot polling continues. Reconnection restores capture guards without
+reloading the cloud. Existing identity, calibration, preview/resource, route stress
+and wire regressions remain enabled; Qt/QML warnings remain test failures.
+
+An initial Qt 6.9 full run exposed a fixture input race: periodic snapshot busy
+state could cancel a key click before any Start request was sent. Capture input
+now waits for a real periodic snapshot completion and checks focus, then sends
+one intent. Original post-click state and exact request-count assertions remain.
+Three consecutive focused wire runs passed before final Studio verification.
+
+Actual offline Classic and Scan readbacks and the correction's local verification
+receipt are retained in [evidence/m3c/f01/README.md](evidence/m3c/f01/README.md).
+
+### Correction local verification
+
+All five final configurations passed (327 tests); no sanitizer suppressions were added.
+
+| Configuration | Full suite | Elapsed |
+| --- | --- | --- |
+| build/qt64 | PASS 81/81 | 443.16 s |
+| build/qt64-headless | PASS 42/42 | 109.81 s |
+| build/qt64-headless-sanitizers | PASS 42/42 | 241.70 s |
+| build/debug | PASS 81/81 | 435.96 s |
+| build/qt69-sanitizers | PASS 81/81 | 725.06 s |
+
+The existing ten-test CI route gate passed three repetitions under both Qt 6.4
+and Qt 6.9 (60 executions). The four focused Scan QML/stress/surfaces/capture-wire
+tests passed three repetitions under Studio ASan/UBSan/LSan (12 executions).
+Three additional Qt 6.9 capture-wire runs verified the synchronized input fixture.
+Native Wayland normal/maximized/restored passed all nine readbacks.
+
+Commands use the configurations and environment above: `cmake --build build/<config> --parallel 3`, then `ctest --test-dir build/<config> --output-on-failure`. Repeats add `-R <pattern> --repeat until-fail:3`; exact patterns, container prefixes, timings, log digests, wire counts and source/image checksums are in the correction receipt. Logs are retained under `build/ui-m3c-f01-verification/`.

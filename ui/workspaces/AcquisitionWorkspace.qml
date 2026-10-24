@@ -51,7 +51,7 @@ ScrollView {
                                 Action { text: "Start capture"; Layout.fillWidth: true; objectName: "startCapture_" + modelData.id; enabled: studio.connected && studio.captureStateKnown && !studio.capturing && !studio.busy && studio.canStartCapture(modelData.id); onClicked: studio.startCapture(modelData.id) }
                             }
                         }
-                        Action { text: "Stop capture"; Layout.fillWidth: true; enabled: studio.connected && studio.captureStateKnown && studio.capturing && !studio.busy; onClicked: studio.stopCapture() }
+                        Action { objectName: "classicStopCapture"; text: "Stop capture"; Layout.fillWidth: true; enabled: studio.connected && studio.captureStateKnown && studio.capturing && !studio.busy; onClicked: studio.stopCapture() }
                         Label { text: (studio.connected ? "" : "Last-known acquisition diagnostics\n") + studio.acquisitionText; visible: studio.acquisitionText.length > 0; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 11; color: "#a8bbcb" }
                         Rectangle { Layout.fillWidth: true; height: 1; color: "#2b3945" }
                         Caption { text: "PROCESSING RECIPE" }
@@ -122,7 +122,7 @@ ScrollView {
                             Layout.fillWidth: true; Layout.margins: 12
                             Label { text: "Drag to orbit   ·   Scroll to zoom"; color: "#7d94a8"; font.pixelSize: 11 }
                             Item { Layout.fillWidth: true }
-                            Button { text: "Reset view"; onClicked: root.surfaces.resetView() }
+                            Button { objectName: "classicResetView"; text: "Reset view"; enabled: root.visible && root.surfaces.interactive; onClicked: root.surfaces.resetView(); Accessible.description: enabled ? "Reset local geometry orbit and zoom; available offline" : "Unavailable while the live geometry surface is inactive" }
                         }
                     }
                 }

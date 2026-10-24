@@ -757,6 +757,35 @@ void jobPresentation(QQuickWindow *w, Observed &b, const QString &out) {
     r->setProperty("bridge", QVariant::fromValue<QObject *>(&b));
     check(b.commands == 0, "Job presentation issued a runtime command");
 }
+void orbitZoomReset(QQuickWindow *w, mantis::render::PointCloudView *cloud, const QString &reset) {
+    settle(); // Complete layout/focus changes before mapping the active visual host.
+    check(cloud->isVisible() && cloud->pointCount() == 512 &&
+              item(w, "geometryInteraction")->property("enabled").toBool(),
+          "Loaded local geometry interaction unavailable");
+    cloud->setYaw(17);
+    cloud->setPitch(23);
+    cloud->setZoom(1.4);
+    const auto center = cloud->mapToScene(QPointF(cloud->width() / 2, cloud->height() / 2));
+    QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+    QTest::mouseMove(w, (center + QPointF(30, 20)).toPoint(), 10);
+    QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, (center + QPointF(30, 20)).toPoint());
+    check(cloud->yaw() != 17 && cloud->pitch() != 23,
+          QString("Real mouse orbit did not update renderer in %1 / %2 at %3,%4 (%5x%6)")
+              .arg(w->property("workspace").toString(), w->property("uiMode").toString())
+              .arg(center.x())
+              .arg(center.y())
+              .arg(cloud->width())
+              .arg(cloud->height())
+              .toUtf8()
+              .constData());
+    QWheelEvent wheel(center, w->mapToGlobal(center.toPoint()), {}, QPoint(0, 120), Qt::NoButton,
+                      Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(w, &wheel);
+    check(cloud->zoom() > 1.4, "Real wheel zoom did not update renderer");
+    click(w, reset, true);
+    check(cloud->yaw() == -35 && cloud->pitch() == 35 && cloud->zoom() == 1,
+          "Reset did not update real renderer");
+}
 void surfaces(QQuickWindow *w, Observed &b, const QString &out) {
     auto *owner = qobject_cast<LiveViews *>(item(w, "liveSurfaces"));
     check(owner, "Canonical owner unavailable");
@@ -927,32 +956,108 @@ void surfaces(QQuickWindow *w, Observed &b, const QString &out) {
               << "; grayscale=" << leftView->image().sizeInBytes() + rightView->image().sizeInBytes()
               << " bytes; route GUI latency us p50=" << routeMicros[50] << " p95=" << routeMicros[95]
               << " max=" << routeMicros.back() << '\n';
-    // One actual pointer/wheel path, then guarded reset, retaining the real renderer.
-    const auto center = cloudView->mapToScene(QPointF(cloudView->width() / 2, cloudView->height() / 2));
-    QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, center.toPoint());
-    QTest::mouseMove(w, (center + QPointF(30, 20)).toPoint(), 10);
-    QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, (center + QPointF(30, 20)).toPoint());
-    check(cloudView->yaw() != 17 && cloudView->pitch() != 23, "Real mouse orbit did not update renderer");
-    QWheelEvent wheel(center, w->mapToGlobal(center.toPoint()), {}, QPoint(0, 120), Qt::NoButton,
-                      Qt::NoModifier, Qt::NoScrollPhase, false);
-    QCoreApplication::sendEvent(w, &wheel);
-    check(cloudView->zoom() > 1.4, "Real wheel zoom did not update renderer");
-    click(w, "scanResetView", true);
-    check(cloudView->yaw() == -35 && cloudView->pitch() == 35 && cloudView->zoom() == 1,
-          "Reset did not update real renderer");
+    orbitZoomReset(w, cloudView, "scanResetView");
+    w->setProperty("workspace", "acquisition");
+    settle();
+    orbitZoomReset(w, cloudView, "classicResetView");
     auto partial = fixturePreview(b.projectGeneration());
     partial.right = {};
     b.applyPreview(std::move(partial));
     check(!b.previewCurrent() && leftView->image().constBits() == leftStorage && !b.previewError().isEmpty(),
           "Missing frame became current or destroyed last-known buffer");
-    b.applyResult({});
+    StudioResult failure;
+    failure.issues.push_back(
+        {"snapshot", "Offline", mantis::Error{mantis::Status::io, "Offline", "wire.fixture"}});
+    b.applyResult(failure);
     settle();
     check(!b.previewCurrent() && cloudView->pointCount() == 512 && leftView->hasImage(),
           "Disconnect lost last-known display evidence");
+    const auto epoch = model(w)->data()["projectEpoch"];
+    for (const auto &mode : {"live", "hybrid"}) {
+        w->setProperty("uiMode", mode);
+        for (const auto &route : {"acquisition", "scan"}) {
+            w->setProperty("workspace", route);
+            settle();
+            orbitZoomReset(w, cloudView, QString(route) == "scan" ? "scanResetView" : "classicResetView");
+            check(!b.connected() && !model(w)->data()["confirmed"].toBool() &&
+                      model(w)->data()["projectEpoch"] == epoch,
+                  "Local inspection refreshed stale state or changed project generation");
+            auto *reset = item(w, QString(route) == "scan" ? "scanResetView" : "classicResetView");
+            auto *accessible = QAccessible::queryAccessibleInterface(reset);
+            check(accessible && accessible->text(QAccessible::Description).contains("local") &&
+                      accessible->text(QAccessible::Description).contains("offline"),
+                  "Offline reset accessibility description is misleading");
+            check(item(w, "acquisitionFreshness")->property("text").toString().contains("last-known") &&
+                      model(w)->data()["freshness"].toString().contains("Last-known"),
+                  "Local inspection lost last-known qualifiers");
+            verify();
+            capture(w, out, QString("offline-%1-%2").arg(mode, route));
+        }
+    }
+    const auto noInteraction = [&] {
+        settle();
+        check(!owner->property("interactive").toBool() && !cloud->isVisible() &&
+                  cloud->parentItem() == owner &&
+                  !item(w, "geometryInteraction")->property("enabled").toBool() &&
+                  !item(w, "scanResetView")->isEnabled() && !item(w, "classicResetView")->isEnabled(),
+              QString("Inactive geometry guard in %1 / %2 / %3: interactive=%4 visible=%5 parked=%6 mouse=%7 "
+                      "scanReset=%8 classicReset=%9")
+                  .arg(w->property("workspace").toString(), w->property("uiMode").toString(),
+                       r->property("activeSource").toString())
+                  .arg(owner->property("interactive").toBool())
+                  .arg(cloud->isVisible())
+                  .arg(cloud->parentItem() == owner)
+                  .arg(item(w, "geometryInteraction")->property("enabled").toBool())
+                  .arg(item(w, "scanResetView")->isEnabled())
+                  .arg(item(w, "classicResetView")->isEnabled())
+                  .toUtf8()
+                  .constData());
+        const auto yaw = cloudView->yaw(), pitch = cloudView->pitch(), zoom = cloudView->zoom();
+        QMetaObject::invokeMethod(owner, "resetView");
+        const QPoint center(950, 420);
+        QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, center);
+        QTest::mouseMove(w, center + QPoint(30, 20), 10);
+        QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, center + QPoint(30, 20));
+        QWheelEvent wheel(center, w->mapToGlobal(center), {}, QPoint(0, 120), Qt::NoButton, Qt::NoModifier,
+                          Qt::NoScrollPhase, false);
+        QCoreApplication::sendEvent(w, &wheel);
+        check(cloudView->yaw() == yaw && cloudView->pitch() == pitch && cloudView->zoom() == zoom,
+              "Hidden/illustrative input changed canonical camera properties");
+        verify();
+    };
+    cloudView->setYaw(41);
+    cloudView->setPitch(29);
+    cloudView->setZoom(1.6);
+    r->setProperty("activeSource", "mock");
+    noInteraction(); // Hybrid-Demo.
+    r->setProperty("activeSource", "live");
+    w->setProperty("uiMode", "mock");
+    noInteraction();
+    w->setProperty("workspace", "acquisition");
+    noInteraction(); // Pure Mock cannot activate Classic's live surface.
+    w->setProperty("uiMode", "live");
+    for (const auto &route : {"home", "devices"}) {
+        w->setProperty("workspace", route);
+        noInteraction();
+    }
+    w->setProperty("workspace", "scan");
+    w->resize(1080, 720);
+    r->setProperty("compactPane", "Cameras");
+    noInteraction();
+    r->setProperty("compactPane", "Viewport");
+    settle();
+    check(cloudView->yaw() == 41 && cloudView->pitch() == 29 && cloudView->zoom() == 1.6 &&
+              owner->cloud() == cloud && owner->property("interactive").toBool() &&
+              !item(w, "classicResetView")->isEnabled(),
+          "Returning to Scan lost canonical camera state or enabled inactive Classic reset");
+    orbitZoomReset(w, cloudView, "scanResetView");
     capture(w, out, "stale-real-pixels");
-    const auto yaw = cloudView->yaw();
-    QMetaObject::invokeMethod(owner, "resetView");
-    check(cloudView->yaw() == yaw, "Disconnected direct reset bypassed interaction guard");
+    w->resize(1920, 1080);
+    b.applyResult(snapshot());
+    settle();
+    check(cloudView->pointCount() == 512 && owner->cloud() == cloud && model(w)->data()["confirmed"].toBool(),
+          "Reconnect discarded retained local geometry");
+    orbitZoomReset(w, cloudView, "scanResetView");
     const auto oldGeneration = b.projectGeneration();
     b.applyResult(snapshot("B"));
     b.applyResult(snapshot());
@@ -1084,9 +1189,17 @@ void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
         check(QTest::qWaitFor(predicate, deadline), "Capture wire deadline");
     };
     const auto captureClick = [&](const QString &name, bool keyboard = false) {
-        await([&] { return item(w, name)->isEnabled() && item(w, name)->isVisible(); });
+        // Begin input just after an actual periodic snapshot completes. Otherwise its
+        // busy lease can correctly disable/cancel a button between key press/release.
+        // Send one intent only; preserve the authoritative post-click assertions.
+        QSignalSpy confirmations(&b, &StudioBridge::snapshotReady);
+        await([&] {
+            return !confirmations.empty() && !b.busy() && item(w, name)->isEnabled() &&
+                   item(w, name)->isVisible();
+        });
         auto *button = item(w, name);
         button->forceActiveFocus(Qt::TabFocusReason);
+        check(w->activeFocusItem() == button, "Capture control did not acquire input focus");
         if (keyboard)
             QTest::keyClick(w, Qt::Key_Space);
         else
@@ -1227,12 +1340,47 @@ void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
     control(25);
     check(!b.connected() && b.lastKnownCapturing() && left->hasImage() && cloud->pointCount() == 512,
           "Recording disconnect lost last-known buffers");
-    intents();
-    b.startCapture("stereo-parent");
-    b.stopCapture();
+    const auto offlineStarts = count("capture_start"), offlineStops = count("capture_stop"),
+               offlineData = count("artifact_data"), offlinePreviews = count("preview");
+    const auto offlineEpoch = model(w)->data()["projectEpoch"];
+    const auto offlineLeft = left->image().constBits(), offlineRight = right->image().constBits();
+    for (const auto &mode : {"live", "hybrid"}) {
+        w->setProperty("uiMode", mode);
+        for (const auto &route : {"acquisition", "scan"}) {
+            w->setProperty("workspace", route);
+            orbitZoomReset(w, cloud, QString(route) == "scan" ? "scanResetView" : "classicResetView");
+            choose();
+            intents();
+            b.startCapture("stereo-parent");
+            b.stopCapture();
+            // Disabled Classic controls also remain harmless if their signals are invoked directly.
+            QMetaObject::invokeMethod(item(w, "startCapture_stereo-parent"), "clicked");
+            QMetaObject::invokeMethod(item(w, "classicStopCapture"), "clicked");
+            check(!b.connected() && !b.canStartCapture("stereo-parent") && !b.canStopCapture() &&
+                      !model(w)->data()["confirmed"].toBool() && model(w)->selectedDevice().isEmpty() &&
+                      model(w)->data()["projectEpoch"] == offlineEpoch &&
+                      !item(w, "scanStart")->isEnabled() && !item(w, "scanStop")->isEnabled() &&
+                      !item(w, "scanCaptureDevice")->isEnabled() &&
+                      !item(w, "startCapture_stereo-parent")->isEnabled() &&
+                      !item(w, "classicStopCapture")->isEnabled() && cloud->pointCount() == 512 &&
+                      left->image().constBits() == offlineLeft && right->image().constBits() == offlineRight,
+                  "Offline inspection changed buffers, freshness, selection or hardware authority");
+            capture(w, out, QString("offline-%1-%2-real-wire").arg(mode, route));
+        }
+    }
+    check(count("capture_start") == offlineStarts && count("capture_stop") == offlineStops &&
+              count("artifact_data") == offlineData && count("preview") == offlinePreviews,
+          "Offline local gestures or prohibited hardware intents issued wire commands/data/preview");
+    std::cout << "Offline local inspection: Live/Hybrid Scan/Classic orbit, wheel and Reset; "
+                 "extra capture_start=0 capture_stop=0 artifact_data=0 preview=0 "
+                 "(existing snapshot polling continues)\n";
     capture(w, out, "recording-disconnected-real-wire");
     control(31);
     await([&] { return b.capturing() && b.previewCurrent(); });
+    check(b.canStopCapture() && !b.canStartCapture("stereo-parent") && item(w, "scanStop")->isEnabled() &&
+              cloud->pointCount() == 512 && count("artifact_data") == offlineData,
+          "Reconnect changed capture guards or reloaded cloud for local inspection");
+    orbitZoomReset(w, cloud, "scanResetView");
     control(18);
     choose();
     captureClick("scanStart");

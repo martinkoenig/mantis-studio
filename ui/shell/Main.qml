@@ -56,7 +56,7 @@ ApplicationWindow {
         cloudHost: classicActive ? acquisition.cloudHost : scanActive && scan.viewportActive ? scan.cloudHost : null
         leftHost: classicActive ? acquisition.leftHost : scanActive && scan.camerasActive ? scan.leftHost : calibrationActive ? calibrationPage.leftHost : null
         rightHost: classicActive ? acquisition.rightHost : scanActive && scan.camerasActive ? scan.rightHost : calibrationActive ? calibrationPage.rightHost : null
-        interactive: (classicActive || (scanActive && scan.viewportActive)) && window.studioBridge.connected
+        interactive: classicActive || (scanActive && scan.viewportActive)
     }
     RowLayout {
         anchors.fill: parent; spacing: 0
