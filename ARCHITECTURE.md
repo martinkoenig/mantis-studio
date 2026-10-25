@@ -8,7 +8,10 @@ Release baselines: [v0.3 geometric calibration](docs/architecture/v0.3-geometric
 and [v0.4 laser acquisition L0](docs/architecture/v0.4-laser-acquisition.md).
 See [README.md](README.md) for current implementation status.
 
-CUT-0B consolidates the pinned Core and UI histories on a dedicated integration
-candidate. It changes no architecture authority or public contract. See the
-[integration qualification record](docs/architecture/cut-0b-integration-qualification.md)
-for source revisions, compatibility evidence and pending independent acceptance.
+CUT-0B consolidated the pinned Core and UI histories without changing architecture
+authority or public contracts. Its exact-SHA software integration was independently
+accepted at `e0a8652f2854a58aa611daa11c5c52051b303497` after five green CI jobs.
+CUT-0C promotes that commit to the `develop` shared development line; `main` remains
+unchanged. See [CUT-0B qualification](docs/architecture/cut-0b-integration-qualification.md)
+and the [CUT-0C integration/review policy](docs/architecture/cut-0c-development-baseline.md).
+Source-package and hardware acceptance gates remain separate.

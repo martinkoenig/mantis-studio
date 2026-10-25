@@ -1,9 +1,9 @@
 # Mantis Studio Roadmap
 
 Status: living product/engineering roadmap
-Current repository candidate: `integration/cut-0b` (qualification / independent review pending)
+Current shared development line: `develop` (CUT-0C; based on CUT-0B accepted commit `e0a8652f2854a58aa611daa11c5c52051b303497`)
 
-Source development histories: `feature/v0.3-geometric-calibration`, `feature/v0.4-laser-acquisition` and `feature/ui-m3-scan`. `main` remains unchanged; consolidation does not independently accept pending packages or physical gates.
+Source development histories: `feature/v0.3-geometric-calibration`, `feature/v0.4-laser-acquisition` and `feature/ui-m3-scan` remain preserved. `main` remains unchanged; CUT-0B integration acceptance does not independently accept pending packages or physical gates.
 
 This document is the canonical high-level release roadmap for the Mantis Studio / Mantis X1 scanning path. Detailed architecture, implementation contracts, ADRs and validation evidence remain authoritative for their respective releases.
 
@@ -11,15 +11,20 @@ The roadmap intentionally distinguishes between **implemented/accepted**, **curr
 
 [L7b-2b-2 Q6A readiness and serial policy](docs/hardware/x1-q6a-uart-readiness.md) is FINAL ACCEPTED at `9b6f0cc72f44134009302abe09175b7158b27f38`: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.
 
-## CUT-0B repository integration candidate
+## CUT-0C shared development baseline
 
-`integration/cut-0b` includes pinned main `ec045dd`, Core `24c4d87` and UI `62428b0`
-histories. [Integration qualification](docs/architecture/cut-0b-integration-qualification.md)
-is separate from source-package acceptance. L8a-1a and the latest UI revision
-retain their independent review gates; passing integration tests does not promote
-them. No `develop` branch or Orchestrator pilot is created by this package.
-Unpublished Virtual Scanner work, untracked UI review files and the non-normative
-`docs/parallel-development-study` branch are excluded and preserved.
+`develop` was branched directly from the independently accepted CUT-0B commit
+`e0a8652f2854a58aa611daa11c5c52051b303497`. Its exact-revision GitHub Actions
+[run 40189227138](https://github.com/martinkoenig/mantis-studio/actions/runs/40189227138)
+passed all five required jobs (x86_64/ARM64 Studio ON/OFF and ASan/UBSan).
+The historical [CUT-0B integration qualification](docs/architecture/cut-0b-integration-qualification.md)
+and [CUT-0C branching/review policy](docs/architecture/cut-0c-development-baseline.md)
+distinguish integration acceptance from independent source-package or physical acceptance.
+L8a-1a and the latest UI revision retain their independent review gates; no source
+package is retroactively accepted. `main`, prior feature branches and unpublished
+Virtual Scanner/UI work remain untouched. The separate non-normative
+`docs/parallel-development-study` branch is neither merged nor adopted as an ADR.
+No Orchestrator worker or HIL device is activated by CUT-0C.
 
 ## Release sequence
 

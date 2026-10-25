@@ -8,9 +8,9 @@
 
 Mantis Studio is a C++23/Qt 6 application and runtime for hardware acquisition, calibration, reproducible data processing and 3D visualization. It is designed around a device-owning daemon, extensible plugins and independent desktop, CLI and SDK clients. Linux/ARM64 acquisition on the Radxa Q6A is a first-class development target.
 
-> **Development status:** This is an engineering project, **not a finished or accuracy-certified 3D scanner**. `integration/cut-0b` consolidates the v0.4 Core and UI-M3 development histories on the accepted v0.2 `main` foundation. Integration qualification and independent acceptance remain separate gates. v0.3 M0–M7 calibration is implemented; M8 physical acceptance remains pending. v0.4 software acceptance is package-specific; physical projected-light operation remains blocked.
+> **Development status:** This is an engineering project, **not a finished or accuracy-certified 3D scanner**. [`develop`](https://github.com/martinkoenig/mantis-studio/tree/develop) is the CUT-0C shared development line based on the independently accepted CUT-0B Core/UI integration (`e0a8652f`). `main` remains the previous public baseline. v0.3 M0–M7 calibration is implemented; M8 physical acceptance remains pending. v0.4 software acceptance is package-specific; physical projected-light operation remains blocked.
 
-The [release roadmap](ROADMAP.md) and [v0.4 package map](docs/architecture/v0.4-laser-acquisition.md) distinguish accepted software, implemented work awaiting review, and planned or hardware-pending work. L8a-1a remains **IMPLEMENTED / AWAITING INDEPENDENT REVIEW**. UI-M3c and its latest correction retain their independent exact-revision review gate; consolidation is not acceptance.
+The [release roadmap](ROADMAP.md), [CUT-0C development and review policy](docs/architecture/cut-0c-development-baseline.md) and [v0.4 package map](docs/architecture/v0.4-laser-acquisition.md) distinguish accepted software, implemented work awaiting review, and planned or hardware-pending work. L8a-1a remains **IMPLEMENTED / AWAITING INDEPENDENT REVIEW**. UI-M3c and its latest correction retain their independent exact-revision review gate; consolidation is not acceptance.
 
 ## Mantis Studio — UI preview
 

@@ -17,14 +17,16 @@ shared real camera/geometry surfaces and capability-authorized Start/Stop, prese
 Classic Acquisition. Replay M3d and supported setup M3e remain deferred. See
 [UI-M3c verification](validation-m3c.md) and historical [UI-M3b evidence](validation-m3b.md).
 
-## CUT-0B integration candidate
+## Consolidated development baseline (CUT-0C)
 
-This checkout combines UI source `62428b07daa0cbffc7cf779bc78617be9300d812` with
-Core `24c4d87939b538877695fce0c16d3c04dd4c3920`, preserving Classic Acquisition,
-client-only Studio dependencies and the existing shared surfaces. The
-[integration record](../architecture/cut-0b-integration-qualification.md) separates
-source maturity from pending combined independent acceptance. Historical UI
-self-verification reports are retained unchanged.
+The `develop` line preserves UI source `62428b07daa0cbffc7cf779bc78617be9300d812`
+and Core source `24c4d87939b538877695fce0c16d3c04dd4c3920` through the
+independently accepted CUT-0B merge (`e0a8652f`). Classic Acquisition, client-only
+Studio dependencies and shared surfaces remain intact. The
+[integration qualification](../architecture/cut-0b-integration-qualification.md)
+and [CUT-0C development policy](../architecture/cut-0c-development-baseline.md)
+separate accepted *integration* from the UI source branch's outstanding independent
+acceptance. Historical UI self-verification reports are retained unchanged.
 
 Camera controls consume the camera CaptureService snapshot; projected runs have
 a separate public service. A discovered camera capability authorizes a Start
