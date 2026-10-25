@@ -1,11 +1,16 @@
+#include "projected_sessions.hpp"
 #include <fstream>
 #include <mantis/artifact_store.hpp>
-#include <mantis/device_runtime.hpp>
-#include <mantis/replay.hpp>
+#include <mantis/calibration_artifacts.hpp>
+#include <mantis/calibration_dataset_builder.hpp>
+#include <mantis/calibration_solver_opencv.hpp>
+#include <mantis/capture_calibration.hpp>
 #include <mantis/data_io.hpp>
-#include <nlohmann/json.hpp>
+#include <mantis/device_runtime.hpp>
 #include <mantis/pipeline_runtime.hpp>
+#include <mantis/replay.hpp>
 #include <mantis/services.hpp>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <sstream>
 namespace mantis::services {
@@ -38,9 +43,12 @@ struct Runtime::Impl {
     std::unique_ptr<plugins::Registry> registry;
     std::unique_ptr<device::Runtime> devices;
     std::unique_ptr<jobs::Manager> jobs;
+    std::unique_ptr<ProjectedSessions> projected;
+    std::function<std::chrono::steady_clock::time_point()> preview_now;
     struct Capture {
         Id raw;
         std::unique_ptr<device::Session> session;
+        std::shared_ptr<CaptureCalibrationBinding> binding;
         Id finalization_job;
     };
     std::map<Id, Capture> captures;
@@ -64,6 +72,7 @@ struct Runtime::Impl {
         return [this](const LogRecord &r) { event(r.level, r.component, r.message); };
     }
     explicit Impl(const Configuration &c) {
+        preview_now = c.preview_clock ? c.preview_clock : [] { return std::chrono::steady_clock::now(); };
         recipes = c.recipes;
         store = std::make_shared<artifact::Store>(c.project);
         auto preview_directory = store->root() / "cache" / "previews";
@@ -77,9 +86,14 @@ struct Runtime::Impl {
         registry->discover(c.plugins, c.approved_in_process);
         devices = std::make_unique<device::Runtime>(*registry);
         jobs = std::make_unique<jobs::Manager>(logger());
+        projected = std::make_unique<ProjectedSessions>(
+            *registry, *jobs, store, [this](std::string k, std::string component, std::string m) {
+                event(std::move(k), std::move(component), std::move(m));
+            });
         event("runtime.ready", "runtime", "Project opened: " + store->root().string());
     }
     ~Impl() {
+        projected.reset();
         for (auto &[id, c] : captures) {
             c.session->stop();
             try {
@@ -91,6 +105,18 @@ struct Runtime::Impl {
             }
         }
         jobs.reset();
+        try {
+            for (const auto &a : store->list())
+                if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3 &&
+                    (a.state == artifact::ArtifactState::open ||
+                     a.state == artifact::ArtifactState::finalizing)) {
+                    store->abandon(a.id);
+                    event("projected.recording_failed", "projected",
+                          "Shutdown preserved recoverable artifact " + a.id.value);
+                }
+        } catch (const std::exception &e) {
+            event("error", "projected-storage", e.what());
+        }
     }
     CaptureInfo info(const Id &id, const Capture &c) const {
         auto m = c.session->metrics();
@@ -119,9 +145,11 @@ struct Runtime::Impl {
 };
 Runtime::Runtime(Configuration c) : impl_(std::make_unique<Impl>(c)) {}
 Runtime::~Runtime() = default;
+std::shared_ptr<artifact::Store> Runtime::project_store() const { return impl_->store; }
 std::vector<device::Descriptor> Runtime::devices() const {
     bool active = false;
     for (auto &[id, capture] : impl_->captures) active |= capture.session->active();
+    active |= impl_->projected->active();
     if (!active) {
         // Refresh only after all adapters have stopped; historical Sessions release
         // their stream pointers while retaining descriptors/metrics/first frames.
@@ -153,6 +181,13 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
             fail(Status::incompatible, "Device lacks image stream capability");
         streams.push_back(&stream);
     }
+    std::vector<device::Descriptor> requested_resources;
+    for (auto *stream : streams) {
+        requested_resources.push_back(stream->descriptor());
+        for (const auto &child : stream->components())
+            requested_resources.push_back(child);
+    }
+    impl_->projected->check_camera(requested_resources);
     if (streams.size() > 1 && std::any_of(streams.begin(), streams.end(), [](auto *s) { return s->source_paced(); }))
         fail(Status::invalid_argument, "Capture a composite parent as one stream; independent cameras do not establish FrameSets");
     bool composite = std::find(streams.front()->descriptor().capabilities.begin(), streams.front()->descriptor().capabilities.end(), device::frameset_stream) != streams.front()->descriptor().capabilities.end();
@@ -183,14 +218,60 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
             components.push_back({{"id", child.id.value}, {"name", child.name}, {"capabilities", child.capabilities}, {"metadata", child.metadata}});
         provenance.parameters["components"] = components.dump();
     }
+    std::optional<artifact::ActiveCalibration> active;
+    if (ids.size() == 1)
+        active = impl_->store->active_calibration(ids.front());
+    if (active) {
+        if (!composite)
+            fail(Status::incompatible,
+                 "Project RigCalibration binding requires composite FrameSet acquisition", "capture");
+        auto rig = calibration::artifacts::load_rig_calibration(*impl_->store, active->artifact.id);
+        if (!rig)
+            throw Failure(rig.error());
+        if (impl_->store->get(active->artifact.id).hash != active->artifact.hash)
+            fail(Status::corrupt, "Active RigCalibration hash mismatch", "capture");
+        std::vector<calibration::artifacts::CameraComponent> components;
+        for (const auto &child : streams.front()->components()) {
+            if (!device::image_participant(child)) continue;
+            auto component = discovered_calibration_component(child);
+            if (!component)
+                throw Failure(component.error());
+            components.push_back(std::move(*component));
+        }
+        if (components.empty())
+            fail(Status::incompatible, "Active RigCalibration requires discovered measurement components",
+                 "capture");
+        auto compatible = calibration::artifacts::validate_rig_device(*rig, ids.front(), components);
+        if (!compatible)
+            throw Failure(compatible.error());
+        provenance.calibration = active->reference;
+        provenance.inputs.push_back(active->artifact.id);
+        provenance.parameters["active_calibration_id"] = active->reference.id.value;
+        provenance.parameters["active_calibration_schema_version"] =
+            std::to_string(active->reference.schema_version);
+        provenance.parameters["active_calibration_revision"] = std::to_string(active->reference.revision);
+        provenance.parameters["active_rig_artifact_id"] = active->artifact.id.value;
+        provenance.parameters["active_rig_artifact_hash_algorithm"] = active->artifact.hash.algorithm;
+        provenance.parameters["active_rig_artifact_hash"] = active->artifact.hash.hex;
+    }
     auto raw = impl_->store->begin({"org.mantis.RawCapture", composite ? 2u : 1u}, provenance);
     auto store = impl_->store;
+    auto binding = std::make_shared<CaptureCalibrationBinding>(store, raw, active);
     std::unique_ptr<device::Session> session;
-    try { session = std::make_unique<device::Session>(
-        device::CaptureDescriptor{id, ids, {}}, std::move(streams),
-        [store, raw](data::Published p) { store->append(raw, *p); }, impl_->logger());
-    } catch (...) { store->abandon(raw); throw; }
-    auto [it, inserted] = impl_->captures.emplace(id, Impl::Capture{raw, std::move(session), {}});
+    try {
+        session = std::make_unique<device::Session>(
+            device::CaptureDescriptor{id, ids, active ? active->reference : calibration::Reference{}},
+            std::move(streams),
+            [store, raw, binding](data::Published p) {
+                auto bound = binding->stamp(std::move(p));
+                store->append(raw, *bound);
+            },
+            impl_->logger());
+    } catch (...) {
+        store->abandon(raw);
+        throw;
+    }
+    auto [it, inserted] = impl_->captures.emplace(id, Impl::Capture{raw, std::move(session), binding, {}});
     (void)inserted;
     impl_->event("capture.started", "capture", id.value);
     return impl_->info(id, it->second);
@@ -224,7 +305,7 @@ std::vector<CaptureInfo> Runtime::captures() const {
     return out;
 }
 PreviewReference Runtime::preview(const Id &id) {
-    auto now = std::chrono::steady_clock::now();
+    auto now = impl_->preview_now();
     for (auto it = impl_->previews.begin(); it != impl_->previews.end();) {
         if (it->second.expires <= now) {
             std::error_code ec; std::filesystem::remove(it->second.path, ec);
@@ -233,7 +314,10 @@ PreviewReference Runtime::preview(const Id &id) {
     }
     if (impl_->previews.size() >= 8) fail(Status::busy, "Preview lease capacity reached; release references or wait 60 seconds");
     data::Published packet;
-    if (auto live = impl_->captures.find(id); live != impl_->captures.end()) packet = live->second.session->preview();
+    if (auto live = impl_->captures.find(id); live != impl_->captures.end()) {
+        packet = live->second.session->preview();
+        if(packet) packet=live->second.binding->stamp(std::move(packet));
+    }
     else if (auto replay = impl_->replays.find(id); replay != impl_->replays.end()) {
         auto latest = replay->second->preview.try_pop(); if (latest) packet = *latest;
     } else fail(Status::not_found, "Capture/replay source not found");
@@ -250,12 +334,90 @@ void Runtime::release_preview(const Id &id) {
     auto it = impl_->previews.find(id);
     if (it == impl_->previews.end()) return;
     std::error_code ec; std::filesystem::remove(it->second.path, ec);
-    if (!ec) impl_->previews.erase(it); else it->second.expires = std::chrono::steady_clock::now();
+    if (!ec)
+        impl_->previews.erase(it);
+    else
+        it->second.expires = impl_->preview_now();
+}
+namespace {
+std::vector<device::Descriptor> camera_resources(device::Runtime &devices,
+                                                 const std::vector<CaptureInfo> &captures) {
+    std::vector<device::Descriptor> result;
+    for (const auto &capture : captures)
+        if (capture.active)
+            for (const auto &id : capture.devices) {
+                auto &stream = devices.find(id);
+                result.push_back(stream.descriptor());
+                for (const auto &child : stream.components())
+                    result.push_back(child);
+            }
+    return result;
+}
+} // namespace
+std::vector<ProjectedDeviceInfo> Runtime::projected_devices() const { return impl_->projected->devices(); }
+device::ProjectedValidation Runtime::validate_projected(const ProjectedCaptureRequest &q) {
+    impl_->projected->set_camera_resources(camera_resources(*impl_->devices, captures()));
+    return impl_->projected->validate(q);
+}
+ProjectedCaptureInfo Runtime::start_projected(const ProjectedCaptureRequest &q, const std::string &request) {
+    for (auto &[id, c] : impl_->captures)
+        if (!c.session->active())
+            c.session->stop();
+    if (!impl_->projected->active() &&
+        std::none_of(impl_->captures.begin(), impl_->captures.end(),
+                     [](const auto &entry) { return entry.second.session->active(); }))
+        impl_->devices->refresh(*impl_->registry);
+    impl_->projected->set_camera_resources(camera_resources(*impl_->devices, captures()));
+    return impl_->projected->start(q, request);
+}
+ProjectedCaptureInfo Runtime::projected_status(const Id &id) const { return impl_->projected->status(id); }
+std::vector<ProjectedCaptureInfo> Runtime::projected_captures() const { return impl_->projected->list(); }
+ProjectedCaptureInfo Runtime::stop_projected(const ProjectedStopRequest &q) {
+    return impl_->projected->stop(q);
+}
+PreviewReference Runtime::projected_bundle(const Id &id) {
+    const auto now = impl_->preview_now();
+    for (auto it = impl_->previews.begin(); it != impl_->previews.end();) {
+        if (it->second.expires <= now) {
+            std::error_code ec;
+            std::filesystem::remove(it->second.path, ec);
+            if (!ec)
+                it = impl_->previews.erase(it);
+            else
+                ++it;
+        } else
+            ++it;
+    }
+    if (impl_->previews.size() >= 8)
+        fail(Status::busy, "Preview lease capacity reached");
+    auto bundle = impl_->projected->latest(id);
+    if (!bundle)
+        fail(Status::busy, "No projected bundle has been published");
+    auto lease = Id::random();
+    auto directory = impl_->store->root() / "cache" / "previews";
+    std::filesystem::create_directories(directory);
+    auto path = directory / (lease.value + ".bundle");
+    try {
+        std::ofstream out(path, std::ios::binary);
+        out.exceptions(std::ios::badbit | std::ios::failbit);
+        data::write_bundle(out, *bundle);
+        out.close();
+    } catch (...) {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        throw;
+    }
+    impl_->previews.emplace(lease, Impl::Lease{path, now + std::chrono::seconds(60)});
+    return {lease, path};
 }
 Id Runtime::replay_capture(const Id &id, bool real_time, bool verify) {
     auto a = impl_->store->get(id);
     if (a.state != artifact::ArtifactState::finalized || a.type.name != "org.mantis.RawCapture")
         fail(Status::incompatible, "Replay requires a finalized RawCapture");
+    if (a.type.schema_version == 3)
+        return impl_->projected->replay(id, real_time, verify);
+    if (a.type.schema_version != 1 && a.type.schema_version != 2)
+        fail(Status::incompatible, "Unknown RawCapture replay schema");
     if (impl_->replays.size() >= 64) fail(Status::busy, "Replay history capacity reached");
     auto preview = std::make_shared<Impl::Replay>();
     auto store = impl_->store;
@@ -316,7 +478,7 @@ Id Runtime::run_pipeline(const Id &capture, const std::string &recipe, const Id 
         auto it = impl_->captures.find(capture);
         if (it == impl_->captures.end())
             fail(Status::not_found, "Capture not found");
-        input = it->second.session->first();
+        input = it->second.binding->stamp(it->second.session->first());
         raw = it->second.raw;
     }
     auto config = pipeline::load_recipe(impl_->recipes / (recipe + ".json"),
@@ -356,6 +518,8 @@ Id Runtime::run_pipeline(const Id &capture, const std::string &recipe, const Id 
         });
 }
 std::string Runtime::open_project(const std::filesystem::path &path, bool create) {
+    if (impl_->projected->active())
+        fail(Status::busy, "Stop projected runs before switching projects");
     if (impl_->jobs->busy())
         fail(Status::busy, "Jobs must finish before switching projects");
     for (auto &[id, c] : impl_->captures)
@@ -366,10 +530,18 @@ std::string Runtime::open_project(const std::filesystem::path &path, bool create
     if (std::filesystem::absolute(path).lexically_normal() == impl_->store->root().lexically_normal())
         return project();
     auto next = std::make_shared<artifact::Store>(path);
+    impl_->projected.reset();
     impl_->captures.clear();
     impl_->store = std::move(next);
-    impl_->diagnostic_file.close();
-    impl_->diagnostic_file.open(impl_->store->root() / "diagnostics.log", std::ios::app);
+    impl_->projected = std::make_unique<ProjectedSessions>(
+        *impl_->registry, *impl_->jobs, impl_->store, [this](std::string k, std::string c, std::string m) {
+            impl_->event(std::move(k), std::move(c), std::move(m));
+        });
+    {
+        std::lock_guard lock(impl_->event_mutex);
+        impl_->diagnostic_file.close();
+        impl_->diagnostic_file.open(impl_->store->root() / "diagnostics.log", std::ios::app);
+    }
     impl_->event("project.opened", "project", project());
     return project();
 }
@@ -383,7 +555,7 @@ std::filesystem::path Runtime::data_reference(const Id &id) const {
     auto artifact = impl_->store->get(id);
     if (artifact.state != artifact::ArtifactState::finalized)
         fail(Status::busy, "Only finalized artifacts can be visualized");
-    if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version == 2)
+    if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version >= 2)
         fail(Status::unsupported, "Segmented RawCapture uses the replay source API, not a standalone packet reference");
     return impl_->store->object_path(id);
 }
@@ -425,6 +597,7 @@ Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
 }
 artifact::ArtifactDescriptor Runtime::recover_artifact(const Id &id) {
     auto result = impl_->store->recover(id);
+    impl_->projected->artifact_update(id)(result);
     impl_->event("artifact.recovered", "artifact", id.value);
     return result;
 }
@@ -432,13 +605,17 @@ Id Runtime::recover_artifact_job(const Id &id) {
     auto store = impl_->store;
     if (store->get(id).state != artifact::ArtifactState::recoverable)
         fail(Status::invalid_argument, "Artifact is not recoverable");
-    return impl_->jobs->submit("Recover RawCapture", [this, store, id](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
-        context.update(0.1, "Validating capture records and recovering complete tail");
-        auto result = store->recover(id, context.cancellation);
-        impl_->event("artifact.recovered", "artifact", id.value);
-        context.update(1, "Recovered RawCapture");
-        return artifact::ArtifactReference{id, result.hash};
-    });
+    auto update = impl_->projected->artifact_update(id);
+    return impl_->jobs->submit(
+        "Recover RawCapture",
+        [this, store, id, update](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+            context.update(0.1, "Validating capture records and recovering complete tail");
+            auto result = store->recover(id, context.cancellation);
+            update(result);
+            impl_->event("artifact.recovered", "artifact", id.value);
+            context.update(1, "Recovered RawCapture");
+            return artifact::ArtifactReference{id, result.hash};
+        });
 }
 std::vector<jobs::Snapshot> Runtime::jobs() const {
     return impl_->jobs->list();
@@ -454,6 +631,13 @@ std::vector<PluginInfo> Runtime::plugins() const {
     return out;
 }
 void Runtime::enable_plugin(const std::string &id, bool enabled) {
+    for (const auto &[capture_id, c] : impl_->captures)
+        if (c.session->active())
+            for (const auto &resource : c.session->descriptor().devices)
+                if (impl_->devices->find(resource).descriptor().plugin_id == id)
+                    fail(Status::busy, "Plugin owns active camera resources");
+    if (impl_->projected->active(id))
+        fail(Status::busy, "Plugin owns active projected resources");
     if (impl_->jobs->busy())
         fail(Status::busy, "Plugin lifecycle change requires idle job executor");
     impl_->registry->set_enabled(id, enabled);
@@ -466,5 +650,245 @@ std::vector<Event> Runtime::events(uint64_t after) const {
         if (e.sequence > after)
             out.push_back(e);
     return out;
+}
+namespace {
+namespace ca = calibration::artifacts;
+template <class T> T calibration_checked(Result<T> value) {
+    if (!value) throw Failure(value.error());
+    return std::move(*value);
+}
+void calibration_checked(Result<void> value) {
+    if (!value) throw Failure(value.error());
+}
+void calibration_text(std::string_view value, std::string_view field, bool required = true) {
+    if ((required && value.empty()) || value.size() > calibration_string_limit ||
+        value.find('\0') != std::string_view::npos)
+        fail(Status::invalid_argument, std::string(field) + " must be nonempty when required, at most 4096 bytes and contain no NUL", "calibration");
+}
+std::optional<Id> calibration_series(const artifact::Store &store, const std::string &id,
+                                      const artifact::ArtifactType &kind) {
+    calibration_text(id, "series_id", false);
+    if (id.empty()) return {};
+    // Registry resolution, never document/provenance/filename inference. Reservation stays in M5.
+    auto revision = store.calibration_revision({id}, 1);
+    if (revision.kind != kind.name || revision.reference.schema_version != kind.schema_version)
+        fail(Status::incompatible, "Calibration series has another artifact kind/schema", "calibration");
+    return Id{id};
+}
+artifact::ArtifactReference calibration_input(const artifact::Store &store, const Id &id,
+                                               const artifact::ArtifactType &kind) {
+    calibration_text(id.value, "artifact_id");
+    const auto a = store.get(id);
+    if (a.type.name != kind.name || a.type.schema_version != kind.schema_version ||
+        a.state != artifact::ArtifactState::finalized)
+        fail(Status::incompatible, "Calibration input must be finalized " + kind.name + " schema " +
+                                      std::to_string(kind.schema_version), "calibration");
+    if (a.hash.algorithm.empty() || a.hash.hex.empty())
+        fail(Status::corrupt, "Finalized calibration input lacks hash", "calibration");
+    return {id, a.hash};
+}
+bool calibration_kind(std::string_view name) {
+    return name == ca::target_type.name || name == ca::dataset_type.name ||
+           name == ca::camera_type.name || name == ca::rig_type.name;
+}
+CalibrationEntry calibration_entry(const artifact::Store &store, const Id &id) {
+    auto a = store.get(id);
+    if (!calibration_kind(a.type.name)) fail(Status::incompatible, "Artifact is not a calibration", "calibration");
+    return {std::move(a), store.artifact_revision(id).reference};
+}
+TargetSpecification target_specification(const calibration::CalibrationTarget &t) {
+    return {t.grid, t.pattern, t.measurement};
+}
+MonoStageInfo stage_info(const calibration::MonoStageEvidence &s) {
+    return {s.views.size(), s.residuals, s.coverage, s.opencv_solver_rms_px};
+}
+StereoStageInfo stage_info(const calibration::StereoStageEvidence &s) {
+    return {s.pairs.size(), s.residuals, s.opencv_solver_rms_px};
+}
+SolverInfo solver_info(const ca::SolverImplementation &i) {
+    return {i.opencv_version, i.mantis_version, i.mantis_build};
+}
+ca::SolverImplementation solver_implementation() {
+    return {std::string(calibration::solver_opencv_version()), application_version, std::string(build_version)};
+}
+CalibrationInfo inspect_calibration(const artifact::Store &store, const Id &id) {
+    calibration_text(id.value, "artifact_id");
+    auto entry = calibration_entry(store, id);
+    calibration_input(store, id, {entry.artifact.type.name, 1});
+    if (entry.artifact.type.name == ca::target_type.name) {
+        auto t = calibration_checked(ca::load_calibration_target(store, id));
+        return {std::move(entry), TargetInfo{target_specification(t.target)}};
+    }
+    if (entry.artifact.type.name == ca::dataset_type.name) {
+        auto d = calibration_checked(ca::load_calibration_dataset(store, id));
+        auto summary = calibration_checked(calibration::summarize_dataset(d.dataset));
+        DatasetInfo out{d.target_reference, d.dataset.raw_capture_ids, d.dataset.config, {}, d.dataset.records.size()};
+        for (const auto &camera : d.dataset.cameras) {
+            const auto &counts = summary.cameras.at(camera.role);
+            out.cameras.push_back({camera, counts.analyzed, counts.detected, counts.no_target, counts.selected});
+        }
+        return {std::move(entry), std::move(out)};
+    }
+    if (entry.artifact.type.name == ca::camera_type.name) {
+        auto c = calibration_checked(ca::load_camera_calibration(store, id));
+        const auto &s = c.solution;
+        return {std::move(entry), CameraInfo{c.dataset_reference, c.target_reference, s.camera, s.config,
+                    s.training_model, s.final_model, stage_info(s.training_fit), stage_info(s.heldout_validation),
+                    stage_info(s.final_fit), solver_info(c.implementation)}};
+    }
+    auto r = calibration_checked(ca::load_rig_calibration(store, id));
+    const auto &s = r.solution;
+    return {std::move(entry), RigInfo{r.dataset_reference, r.target_reference, r.left_camera_reference,
+                r.right_camera_reference, s.left_camera, s.right_camera, s.config, s.left_final_intrinsics,
+                s.right_final_intrinsics, s.final_model, s.rig, stage_info(s.training_fit),
+                stage_info(s.heldout_validation), stage_info(s.final_fit), solver_info(r.implementation)}};
+}
+} // namespace
+CalibrationInfo Runtime::create_calibration_target(const TargetCreate &request) {
+    auto store = impl_->store;
+    const auto &spec = request.target;
+    if (const auto *c = std::get_if<calibration::CharucoDefinition>(&spec.pattern))
+        calibration_text(c->dictionary, "dictionary");
+    if (const auto &p = spec.measurement.provenance) {
+        if (p->instrument) calibration_text(*p->instrument, "instrument", false);
+        if (p->note) calibration_text(*p->note, "note", false);
+    }
+    auto series = calibration_series(*store, request.series_id, ca::target_type);
+    // Unassigned identity by construction; M1 validation and M5 allocation are authoritative.
+    auto created = calibration_checked(ca::create_calibration_target(*store,
+        {{}, spec.grid, spec.pattern, spec.measurement}, series));
+    impl_->event("calibration.target.created", "calibration", created.descriptor.id.value);
+    return {{created.descriptor, created.value.revision}, TargetInfo{target_specification(created.value.target)}};
+}
+Id Runtime::build_calibration_dataset(const DatasetBuild &request) {
+    auto store = impl_->store;
+    if (request.raw_capture_artifact_ids.size() > calibration_source_limit ||
+        request.camera_roles.size() > calibration_role_limit)
+        fail(Status::invalid_argument, "Calibration request exceeds 1024 sources or 64 roles", "calibration");
+    for (const auto &role : request.camera_roles) calibration_text(role, "camera_role");
+    for (const auto &id : request.raw_capture_artifact_ids) calibration_text(id.value, "raw_capture_artifact_id");
+    auto series = calibration_series(*store, request.series_id, ca::dataset_type);
+    auto target_ref = calibration_input(*store, request.target_artifact_id, ca::target_type);
+    auto target = calibration_checked(ca::load_calibration_target(*store, target_ref.id));
+    auto ids = calibration_checked(calibration::canonical_raw_capture_ids(request.raw_capture_artifact_ids));
+    auto config = calibration_checked(calibration::canonical_analysis_config(
+        {1, request.camera_roles, 1, request.max_selected_per_camera}));
+    for (const auto &id : ids) calibration_input(*store, id, {"org.mantis.RawCapture", 2});
+    return impl_->jobs->submit("Build CalibrationDataset",
+        [this, store, target = std::move(target.target), target_ref, ids = std::move(ids),
+         config = std::move(config), series](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+            context.update(0.1, "Analyzing finalized RawCaptures");
+            auto dataset = calibration_checked(calibration::build_calibration_dataset(
+                store, ids, target, config, context.cancellation));
+            context.cancellation.check();
+            context.update(0.9, "Persisting CalibrationDataset");
+            context.cancellation.check();
+            auto created = calibration_checked(ca::create_calibration_dataset(*store, dataset, target_ref, series));
+            impl_->event("calibration.dataset.created", "calibration", created.descriptor.id.value);
+            return created.reference();
+        });
+}
+Id Runtime::solve_camera_calibration(const CameraSolve &request) {
+    auto store = impl_->store;
+    calibration_text(request.camera_role, "camera_role");
+    auto series = calibration_series(*store, request.series_id, ca::camera_type);
+    calibration::MonoSolveConfig config{1, 1, 1, request.heldout_per_camera};
+    calibration_checked(calibration::validate_mono_solve_config(config));
+    auto dataset_ref = calibration_input(*store, request.dataset_artifact_id, ca::dataset_type);
+    auto dataset = calibration_checked(ca::load_calibration_dataset(*store, dataset_ref.id));
+    auto camera = std::find_if(dataset.dataset.cameras.begin(), dataset.dataset.cameras.end(),
+                              [&](const auto &c) { return c.role == request.camera_role; });
+    if (camera == dataset.dataset.cameras.end())
+        fail(Status::invalid_argument, "Camera role does not occur in dataset", "calibration");
+    auto target_ref = dataset.target_reference;
+    return impl_->jobs->submit("Solve CameraCalibration: " + request.camera_role,
+        [this, store, dataset = std::move(dataset.dataset), dataset_ref, target_ref,
+         role = request.camera_role, config, series](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+            context.cancellation.check();
+            context.update(0.1, "Solving one camera (OpenCV call is non-preemptive)");
+            auto result = calibration::solve_camera_intrinsics(dataset, role, config);
+            context.cancellation.check();
+            auto solution = calibration_checked(std::move(result));
+            context.update(0.9, "Persisting CameraCalibration");
+            context.cancellation.check();
+            auto created = calibration_checked(ca::create_camera_calibration(*store, solution,
+                dataset_ref, target_ref, solver_implementation(), series));
+            impl_->event("calibration.camera.created", "calibration", created.descriptor.id.value);
+            return created.reference();
+        });
+}
+Id Runtime::solve_rig_calibration(const RigSolve &request) {
+    auto store = impl_->store;
+    calibration_text(request.rig_frame.id.value, "rig_frame_id");
+    calibration_text(request.rig_frame.name, "rig_frame_name");
+    auto series = calibration_series(*store, request.series_id, ca::rig_type);
+    auto dataset_ref = calibration_input(*store, request.dataset_artifact_id, ca::dataset_type);
+    auto left_ref = calibration_input(*store, request.left_camera_artifact_id, ca::camera_type);
+    auto right_ref = calibration_input(*store, request.right_camera_artifact_id, ca::camera_type);
+    if (left_ref.id == right_ref.id)
+        fail(Status::invalid_argument, "LEFT and RIGHT must be distinct CameraCalibration artifacts", "calibration");
+    auto dataset = calibration_checked(ca::load_calibration_dataset(*store, dataset_ref.id));
+    auto left = calibration_checked(ca::load_camera_calibration(*store, left_ref.id));
+    auto right = calibration_checked(ca::load_camera_calibration(*store, right_ref.id));
+    auto target_ref = dataset.target_reference;
+    auto same = [](const auto &a, const auto &b) { return a.id == b.id && a.hash == b.hash; };
+    if (!same(left.dataset_reference, dataset_ref) || !same(right.dataset_reference, dataset_ref) ||
+        !same(left.target_reference, target_ref) || !same(right.target_reference, target_ref))
+        fail(Status::incompatible, "Rig cameras must belong to the exact supplied dataset and target", "calibration");
+    calibration::StereoSolveConfig config{1, 1, 1, left.solution.camera.role, right.solution.camera.role,
+                                           request.heldout_pairs, request.rig_frame};
+    calibration_checked(calibration::validate_stereo_solve_config(config));
+    // Reuse M4's correspondence/config eligibility policy, including Checkerboard incompatibility.
+    calibration_checked(calibration::partition_stereo_samples(dataset.dataset, config));
+    return impl_->jobs->submit("Solve RigCalibration",
+        [this, store, dataset = std::move(dataset.dataset), left = std::move(left.solution),
+         right = std::move(right.solution), dataset_ref, target_ref, left_ref, right_ref,
+         config, series](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+            context.cancellation.check();
+            context.update(0.1, "Solving rig (OpenCV call is non-preemptive)");
+            auto result = calibration::solve_stereo_rig(dataset, left, right, config);
+            context.cancellation.check();
+            auto solution = calibration_checked(std::move(result));
+            context.update(0.9, "Persisting RigCalibration");
+            context.cancellation.check();
+            auto created = calibration_checked(ca::create_rig_calibration(*store, solution, dataset_ref,
+                target_ref, left_ref, right_ref, solver_implementation(), series));
+            impl_->event("calibration.rig.created", "calibration", created.descriptor.id.value);
+            return created.reference();
+        });
+}
+std::vector<CalibrationEntry> Runtime::calibrations() const {
+    std::vector<CalibrationEntry> out;
+    for (const auto &a : impl_->store->list())
+        if (calibration_kind(a.type.name))
+            out.push_back({a, impl_->store->artifact_revision(a.id).reference});
+    std::sort(out.begin(), out.end(), [](const auto &a, const auto &b) {
+        return std::tuple{a.artifact.type.name, a.reference.id, a.reference.revision, a.artifact.id} <
+               std::tuple{b.artifact.type.name, b.reference.id, b.reference.revision, b.artifact.id};
+    });
+    return out;
+}
+CalibrationInfo Runtime::calibration_info(const Id &id) const { return inspect_calibration(*impl_->store, id); }
+std::optional<ActiveCalibrationInfo> Runtime::active_calibration(const Id &id) const {
+    calibration_text(id.value, "logical_device_id");
+    if (auto active = impl_->store->active_calibration(id))
+        return ActiveCalibrationInfo{id, active->reference, active->artifact};
+    return {};
+}
+void Runtime::activate_calibration(const Id &device_id, const Id &rig_id) {
+    calibration_text(device_id.value, "logical_device_id");
+    calibration_input(*impl_->store, rig_id, ca::rig_type);
+    std::vector<ca::CameraComponent> components;
+    const auto current = devices();
+    auto found = std::find_if(current.begin(), current.end(), [&](const auto &d) { return d.id == device_id; });
+    if (found != current.end())
+        components = calibration_checked(discovered_activation_components(*found, current));
+    calibration_checked(ca::activate_rig_calibration(*impl_->store, device_id, rig_id, components));
+    impl_->event("calibration.activated", "calibration", device_id.value + " " + rig_id.value);
+}
+void Runtime::clear_calibration(const Id &id) {
+    calibration_text(id.value, "logical_device_id");
+    impl_->store->clear_active_calibration(id);
+    impl_->event("calibration.cleared", "calibration", id.value);
 }
 } // namespace mantis::services

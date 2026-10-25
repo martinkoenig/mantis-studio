@@ -283,7 +283,8 @@ void durable_directory(const std::filesystem::path &path) {
 #endif
 }
 int run_process(const std::filesystem::path &exe, const std::vector<std::string> &args,
-                const CancellationToken &cancel, std::chrono::seconds timeout) {
+                const CancellationToken &cancel, std::chrono::seconds timeout,
+                const CancellationToken *owner_cancel) {
     auto deadline = std::chrono::steady_clock::now() + timeout;
 #ifdef _WIN32
     auto quote = [](const std::string &s) {
@@ -312,12 +313,15 @@ int run_process(const std::filesystem::path &exe, const std::vector<std::string>
         io("Cannot start plugin host");
     CloseHandle(proc.hThread);
     while (WaitForSingleObject(proc.hProcess, 10) == WAIT_TIMEOUT) {
-        if (cancel.cancelled() || std::chrono::steady_clock::now() > deadline) {
+        if (cancel.cancelled() || (owner_cancel && owner_cancel->cancelled()) ||
+            std::chrono::steady_clock::now() > deadline) {
             TerminateProcess(proc.hProcess, 1);
             WaitForSingleObject(proc.hProcess, INFINITE);
             CloseHandle(proc.hProcess);
             if (cancel.cancelled())
                 cancel.check();
+            if (owner_cancel)
+                owner_cancel->check();
             io("Plugin host timed out");
         }
     }
@@ -343,12 +347,15 @@ int run_process(const std::filesystem::path &exe, const std::vector<std::string>
             break;
         if (r < 0 && errno != EINTR)
             io("Cannot reap plugin host");
-        if (cancel.cancelled() || std::chrono::steady_clock::now() > deadline) {
+        if (cancel.cancelled() || (owner_cancel && owner_cancel->cancelled()) ||
+            std::chrono::steady_clock::now() > deadline) {
             kill(pid, SIGKILL);
             while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
             }
             if (cancel.cancelled())
                 cancel.check();
+            if (owner_cancel)
+                owner_cancel->check();
             io("Plugin host timed out");
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(5));

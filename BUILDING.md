@@ -167,9 +167,10 @@ criteria and process-kill procedure. Real 4 ms starts passed (including the new
 harness smoke: 123/123 FrameSets, +1.686 ms, native offset +7), but a later full
 cold disabled-link start failed the 4 ms criterion after both software suites
 and discovery passed. Therefore 4 ms is not robust for arbitrary free-running
-phase. The candidate reference now uses **5 ms software correspondence** and
-explicitly counted, bounded steady-state re-alignment; a real Q6A run of this
-new policy remains pending. Neither timestamp tolerance measures optical skew.
+phase. The accepted reference uses **5 ms software correspondence** and
+explicitly counted, bounded steady-state re-alignment; the final real Q6A full
+harness passed at `fad4df6439e88c7ba4f265c532343c3317e93da4`. Neither timestamp
+tolerance measures optical skew.
 Sustained NVMe recording and real crash recovery remain pending.
 
 The reference profile is version 2: explicit sensor/bus/entity routes, 1280×720
@@ -211,8 +212,16 @@ No build/runtime dependency changed.
 The real 5 ms Q6A full run at `4ec71d9` passed both 17-suite software builds and
 disabled-link discovery, but a conservative observed-period guard blocked
 `capture.start()` before correspondence could be validated. That guard is now
-removed; real execution of the 5 ms pairing policy remains pending. Re-run
-`./scripts/validate-x1-q6a.sh --full` on the Q6A. Pairing failures retain candidate
-distances and period diagnostics in `pairing.json`; a startup failure without a
+removed; the final real 5 ms full-harness run at `fad4df6439e88c7ba4f265c532343c3317e93da4`
+passed Debug/Release 17/17, disabled-link discovery, 123/123 FrameSets, zero raw
+loss/saturation, finalization and deterministic replay. Pairing failures retain
+candidate distances and period diagnostics in `pairing.json`; a startup failure without a
 capture handle also preserves a JSON `capture.diagnostics` event in the retained
 project's `diagnostics.log`. Sustained-storage acceptance remains pending.
+
+## M8a geometric calibration characterization
+
+Use `./scripts/validate-x1-calibration.sh --prepare` and follow the
+[real Q6A operator procedure](docs/hardware/x1-geometric-calibration-validation.md).
+M8a tooling/CI PASS is software validation only. M8 hardware acceptance remains
+pending; real characterization and evidence-based threshold review are required.

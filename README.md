@@ -8,7 +8,9 @@
 
 Mantis Studio is a C++23/Qt 6 application and runtime for hardware acquisition, calibration, reproducible data processing and 3D visualization. It is designed around a device-owning daemon, extensible plugins and independent desktop, CLI and SDK clients. Linux/ARM64 acquisition on the Radxa Q6A is a first-class development target.
 
-> **Development status:** This is an engineering project, **not a finished or accuracy-certified 3D scanner**. `main` contains the accepted **v0.2 acquisition foundation**. Geometric calibration, projected-light acquisition and the redesigned desktop interface are under active development on separate feature branches. The UI screenshots below show that newer UI branch, **not the UI built from `main`**.
+> **Development status:** This is an engineering project, **not a finished or accuracy-certified 3D scanner**. `integration/cut-0b` consolidates the v0.4 Core and UI-M3 development histories on the accepted v0.2 `main` foundation. Integration qualification and independent acceptance remain separate gates. v0.3 M0–M7 calibration is implemented; M8 physical acceptance remains pending. v0.4 software acceptance is package-specific; physical projected-light operation remains blocked.
+
+The [release roadmap](ROADMAP.md) and [v0.4 package map](docs/architecture/v0.4-laser-acquisition.md) distinguish accepted software, implemented work awaiting review, and planned or hardware-pending work. L8a-1a remains **IMPLEMENTED / AWAITING INDEPENDENT REVIEW**. UI-M3c and its latest correction retain their independent exact-revision review gate; consolidation is not acceptance.
 
 ## Mantis Studio — UI preview
 
@@ -40,25 +42,25 @@ All four images are **actual Qt window captures**, not conceptual UI renders, fr
 | **Acquisition** | Linux media/V4L2 dual-camera integration for OV9281 sensors on the X1/Q6A, explicit device profiles, bounded frame correspondence and traceable FrameSets. |
 | **Data integrity** | Immutable typed artifacts, bounded queues with separate lossless recording and latest-only preview policies, recoverable segmented recording and deterministic replay/verification. |
 | **Processing & extensibility** | Versioned pipeline recipes, plugin interfaces, asynchronous jobs and cancellable operations; scanner-specific hardware stays behind runtime contracts. |
-| **UI & visualization** | Dark Qt Quick workspace with device/project inspection, stereo previews and point-cloud visualization. New UI features are staged on a dedicated branch. |
+| **UI & visualization** | Dark Qt Quick workspace with device/project inspection, stereo previews and point-cloud visualization. Home, Projects, Devices, Scan and Classic Acquisition share the public client boundary; unsupported controls remain unavailable. |
 | **Verification** | Automated native Linux x86_64/ARM64 CI, process and protocol tests, deterministic hardware-free fixtures and separately documented physical-hardware acceptance. |
 
 The guiding principle is to **separate acquisition, processing, presentation and hardware control**. A desktop client closing must not implicitly terminate an active daemon capture. Runtime failures and incomplete evidence should be reported rather than converted into misleading UI success states.
 
 ## Development tracks
 
-These tracks are intentionally developed in parallel. Their presence in a feature branch does **not** mean they have been integrated into `main` or physically validated.
+These source histories are consolidated on this candidate branch; `main` remains unchanged. Integration does **not** imply independent package acceptance or physical validation.
 
 | Track | Current boundary | Source |
 | --- | --- | --- |
 | **v0.2 — acquisition foundation** | Accepted and merged into `main`: Q6A dual-camera capture, bounded recording and deterministic replay, including documented real-hardware validation. | [`main`](https://github.com/martinkoenig/mantis-studio/tree/main) |
 | **v0.3 — geometric calibration** | Geometric calibration foundations and Studio workflow; physical acceptance remains a separate gate. | [Calibration branch](https://github.com/martinkoenig/mantis-studio/tree/feature/v0.3-geometric-calibration) |
-| **v0.4 — projected-light acquisition** | Laser-control semantics, safe-state and timing/evidence infrastructure under development. Physical laser operation and full reconstruction are not implied. | [Laser-acquisition branch](https://github.com/martinkoenig/mantis-studio/tree/feature/v0.4-laser-acquisition) |
-| **Desktop UI** | Home, Projects, Devices and Scan workspace development, including mock/live source separation and tested integration boundaries. | [UI branch](https://github.com/martinkoenig/mantis-studio/tree/feature/ui-m3-scan) |
+| **v0.4 — projected-light acquisition** | Package-qualified projected-light semantics, evidence, recording/replay and hardware-free F2/PTY infrastructure. L8a remains unaccepted; physical enablement is blocked. | [Laser-acquisition branch](https://github.com/martinkoenig/mantis-studio/tree/feature/v0.4-laser-acquisition) |
+| **Desktop UI** | Home, Projects, Devices, Scan and Classic Acquisition implementation with explicit mock/live authority and shared camera/geometry surfaces; integrated qualification is pending. | [UI branch](https://github.com/martinkoenig/mantis-studio/tree/feature/ui-m3-scan) |
 
 **Not yet delivered as a complete scanner workflow:** production laser-line extraction, metric laser triangulation, moving-scan registration/fusion, meshing and independently verified dimensional accuracy. See the [active roadmap](https://github.com/martinkoenig/mantis-studio/blob/feature/v0.4-laser-acquisition/ROADMAP.md) for planned milestones, accepted packages and outstanding hardware validation.
 
-## Build and run the `main` foundation
+## Build and run the integration candidate
 
 See [BUILDING.md](BUILDING.md) for dependencies, platforms and build instructions. After building into `build/debug`, start the daemon and Studio **with the same endpoint and token**:
 
@@ -80,9 +82,9 @@ PYTHONPATH=build/debug/python /usr/bin/python3 examples/python/workflow.py pytho
 
 Closing the desktop window does **not** stop `mantisd` or an active capture. Stop capture before issuing `mantis-cli shutdown`. Export paths must be new and outside the `.mantis` project directory.
 
-### Real X1 acquisition (`main`)
+### X1 camera-only acquisition foundation
 
-The v0.2 plugin uses explicit LEFT/RIGHT roles and a versioned Q6A profile. It supports packed Y10P/RAW10 and optional RAW8 capture with recoverable RawCapture v2 segments, bounded FrameSet recording, latest-only preview and replay verification. The accepted Q6A reference profile uses **1280×720 Y10P** with a requested **120 FPS** target; requested rate, measured rate and physical exposure synchronization are distinct claims.
+The v0.2 plugin uses explicit LEFT/RIGHT roles and a versioned Q6A profile. It supports packed Y10P/RAW10 and optional RAW8 capture with recoverable RawCapture v2 segments, bounded FrameSet recording, latest-only preview and replay verification. The accepted Q6A reference profile uses **1280×720 Y10P**, Y10_1X10 upstream and VBLANK=196, with a requested **120 FPS** target; requested rate, measured rate and physical exposure synchronization are distinct claims. Native scoped acquisition performs one image copy; independent camera counters do not establish exposure association. The accepted 5 ms software correspondence policy is specified in [ADR-026](docs/adr/026-bounded-software-observation-pairing.md).
 
 ```bash
 # Configure the profile in the daemon environment BEFORE starting mantisd.
@@ -98,11 +100,16 @@ export MANTIS_X1_PROFILE="$PWD/profiles/x1-q6a.json"
 
 Review the real camera/bus/entity assignments in the profile before use. Without an explicit profile there is no assumed physical camera role. `MANTIS_X1_FAKE=normal` is **test-only**; its fixture data is never hardware acceptance evidence. The accepted Q6A harness validated a 5 ms software correspondence policy and deterministic replay; hardware synchronization, optical exposure skew, sustained external-storage throughput and some crash-recovery scenarios require separate evidence. See the [real acquisition validation procedure](docs/hardware/x1-q6a-acquisition-validation.md) and [v0.2 review](docs/architecture/v0.2-acquisition-review.md).
 
+The existing Virtual Scanner remains available for the frame-zero recipe/point-cloud/export demonstration. It records all acquired frames; full-capture reconstruction is a later milestone. Unpublished Virtual Scanner changes in another worktree are not part of this candidate.
+
 ## Technical documentation
 
 - [Architecture specification](MANTIS_STUDIO_ARCHITECTURE.md) and [implementation map](docs/architecture/implementation.md)
 - [Plugin development](docs/plugin-development/README.md) and [C++ / Python client SDK](docs/client-sdk/README.md)
 - [Protocol / local data plane](docs/protocol/README.md) and [storage / recovery](docs/architecture/storage.md)
+- [Release roadmap](ROADMAP.md), [v0.3 calibration](docs/architecture/v0.3-geometric-calibration.md) and [v0.4 package map](docs/architecture/v0.4-laser-acquisition.md)
+- [Reliability and evidence standard](docs/architecture/reliability-performance-and-validation.md)
+- [Free / Pro boundary](docs/product/editions.md) and [commercial-module architecture](docs/architecture/commercial-modules-and-licensing.md)
 - [Architecture Decision Records](docs/adr/README.md)
 - [Milestone coverage](docs/architecture/milestone.md) and [validation evidence](docs/architecture/validation.md)
 - [Contributing](CONTRIBUTING.md), [security](SECURITY.md) and [Apache-2.0 license](LICENSE)

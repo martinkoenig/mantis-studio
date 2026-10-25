@@ -1,5 +1,6 @@
 #pragma once
 #include <mantis/data.hpp>
+#include <mantis/projected_light.hpp>
 #include <mantis/protocol.hpp>
 namespace mantis::client {
 struct Endpoint {
@@ -14,6 +15,34 @@ class Client {
     explicit Client(Endpoint endpoint = Endpoint::environment()) : endpoint_(std::move(endpoint)) {}
     wire::v1::Response call(wire::v1::Request) const;
     wire::v1::Response snapshot() const;
+    std::vector<wire::v1::ProjectedDevice> projected_devices() const;
+    wire::v1::ProjectedValidation validate_projected(const wire::v1::ProjectedCaptureRequest &) const;
+    wire::v1::ProjectedCapture start_projected(const wire::v1::ProjectedCaptureRequest &,
+                                               const std::string &request_id = {}) const;
+    wire::v1::ProjectedCapture projected_status(const std::string &) const;
+    std::vector<wire::v1::ProjectedCapture> projected_captures() const;
+    wire::v1::ProjectedCapture stop_projected(const std::string &capture, const std::string &run,
+                                              const std::string &generation) const;
+    wire::v1::ProjectedCapture cancel_projected(const std::string &capture, const std::string &run,
+                                                const std::string &generation) const;
+    wire::v1::DataReference projected_bundle_reference(const std::string &) const;
+    std::optional<data::AcquisitionBundle> projected_bundle(const std::string &) const;
+    // Control-only calibration API. Jobs never wait implicitly.
+    wire::v1::CalibrationEntry create_calibration_target(const wire::v1::CalibrationTargetSpecification &,
+                                                         const std::string &series_id = {}) const;
+    std::string build_calibration_dataset(const std::string &target, const std::vector<std::string> &raw_captures,
+                                         const std::vector<std::string> &roles, uint32_t max_samples,
+                                         const std::string &series_id = {}) const;
+    std::string solve_camera_calibration(const std::string &dataset, const std::string &role, uint32_t heldout,
+                                         const std::string &series_id = {}) const;
+    std::string solve_rig_calibration(const std::string &dataset, const std::string &left, const std::string &right,
+                                      uint32_t heldout, const std::string &rig_frame_id, const std::string &rig_frame_name,
+                                      const std::string &series_id = {}) const;
+    std::vector<wire::v1::CalibrationEntry> calibrations() const;
+    wire::v1::CalibrationInfo calibration_info(const std::string &) const;
+    std::optional<wire::v1::ActiveCalibrationBinding> active_calibration(const std::string &device) const;
+    void activate_calibration(const std::string &device, const std::string &rig) const;
+    void clear_calibration(const std::string &device) const;
     std::vector<wire::v1::Device> devices() const;
     std::string start_capture(const std::vector<std::string> &) const;
     wire::v1::Capture capture_status(const std::string &) const;

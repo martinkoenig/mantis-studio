@@ -1,13 +1,17 @@
+#include "bundle_state.hpp"
+#include "persistence-test.hpp"
+#include "segments.hpp"
 #include <fstream>
 #include <iomanip>
-#include <sstream>
-#include "segments.hpp"
+#include <limits>
 #include <mantis/artifact_store.hpp>
 #include <mantis/data_io.hpp>
 #include <mantis/platform.hpp>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <sqlite3.h>
+#include <sstream>
 namespace mantis::artifact {
 namespace {
 using Json = nlohmann::json;
@@ -75,6 +79,7 @@ std::string provenance_json(const Provenance &p) {
                 {"inputs", ids},
                 {"parameters", p.parameters},
                 {"calibration_id", p.calibration.id.value},
+                {"calibration_schema_version", p.calibration.schema_version},
                 {"calibration_revision", p.calibration.revision}}
         .dump();
 }
@@ -87,6 +92,7 @@ Provenance provenance_parse(const std::string &s) {
         p.inputs.push_back({id});
     p.parameters = j.at("parameters").get<data::Metadata>();
     p.calibration.id = {j.at("calibration_id")};
+    p.calibration.schema_version = j.value("calibration_schema_version", uint32_t{1});
     p.calibration.revision = j.at("calibration_revision");
     return p;
 }
@@ -100,26 +106,58 @@ struct Store::Impl {
     std::unique_ptr<platform::FileLock> lock;
     sqlite3 *db{};
     mutable std::recursive_mutex mutex;
+    Store::ObservationWriteCheckpoint observation_checkpoint;
+    std::set<Id> observation_operations;
+    void observation_idle(const Id &id) const {
+        if (observation_operations.contains(id))
+            fail(Status::busy, "Observation artifact operation in progress");
+    }
+    struct ObservationReservation {
+        Impl &impl;
+        Id id;
+        ObservationReservation(Impl &owner, const Id &value) : impl(owner), id(value) {
+            impl.observation_idle(id);
+            impl.observation_operations.insert(id);
+        }
+        ~ObservationReservation() {
+            std::lock_guard guard(impl.mutex);
+            impl.observation_operations.erase(id);
+        }
+        ObservationReservation(const ObservationReservation &) = delete;
+    };
     struct Writer {
-        std::ofstream output;
+        CaptureOutput output;
         std::filesystem::path part;
         uint64_t index{}, limit{segments::max_segment_bytes}, records{};
         std::optional<uint64_t> last_sequence;
+        std::unique_ptr<BundleState> bundles;
+        bool outcome_published{};
     };
     std::map<Id, std::unique_ptr<Writer>> writers;
     void seal(const Id &id, Writer &writer) {
-        if (!writer.output.is_open()) return;
+        if (!writer.output.is_open())
+            return;
         writer.output.flush();
-        if (!writer.output) fail(Status::io, "RawCapture segment flush failed");
+        if (!writer.output)
+            fail(Status::io, "RawCapture segment flush failed");
         writer.output.close();
+        if (writer.bundles && !writer.output)
+            fail(Status::io, "Projected segment close failed");
+        MANTIS_STORAGE_POINT("segment-sync-before", root, id.value);
         platform::durable_file(writer.part);
-        auto file = writer.part; file.replace_extension();
+        MANTIS_STORAGE_POINT("segment-synced", root, id.value);
+        auto file = writer.part;
+        file.replace_extension();
         auto hash = file_hash(writer.part);
         auto bytes = std::filesystem::file_size(writer.part);
+        MANTIS_STORAGE_POINT("segment-rename-before", root, id.value);
         std::filesystem::rename(writer.part, file);
+        MANTIS_STORAGE_POINT("segment-published", root, id.value);
         platform::durable_directory(file.parent_path());
-        commit_chunk(id.value, writer.index, std::filesystem::relative(file, root).generic_string(), hash.hex, bytes);
-        ++writer.index; writer.records = 0;
+        commit_chunk(id.value, writer.index, std::filesystem::relative(file, root).generic_string(), hash.hex,
+                     bytes);
+        ++writer.index;
+        writer.records = 0;
     }
     void append_raw(const Id &id, const data::Packet &packet) {
         if (packet.type != schema::frameset) fail(Status::incompatible, "RawCapture v2 requires FrameSet");
@@ -168,9 +206,152 @@ struct Store::Impl {
         writer.last_sequence = packet.header.sequence.value; ++writer.records;
         if (static_cast<uint64_t>(writer.output.tellp()) >= writer.limit || writer.records >= 100000) seal(id, writer);
     }
+    void verify_projected_identity(const ArtifactDescriptor &a) const {
+        if (a.state != ArtifactState::finalized || a.type.name != "org.mantis.RawCapture" ||
+            a.type.schema_version != 3)
+            return;
+        const auto directory = root / "objects" / a.id.value;
+        const auto header = directory / "run.header", outcome = directory / "run.outcome";
+        if (!std::filesystem::exists(header) ||
+            std::filesystem::file_size(header) > data::max_semantic_payload ||
+            (std::filesystem::exists(outcome) &&
+             std::filesystem::file_size(outcome) > data::max_run_outcome_bytes))
+            fail(Status::corrupt, "Invalid finalized projected sidecar membership/size");
+        uint64_t aggregate = 14695981039346656037ull;
+        auto combine = [&](const std::string &hash) {
+            for (unsigned char byte : hash)
+                aggregate = (aggregate ^ byte) * 1099511628211ull;
+        };
+        combine(file_hash(header).hex);
+        // Reconstruct identity with indexed hashes; object_path checks actual segment bytes on access.
+        Statement chunks(db, "SELECT idx,hash FROM chunks WHERE artifact=? ORDER BY idx");
+        chunks.text(1, a.id.value);
+        uint64_t index{};
+        while (chunks.row()) {
+            if (chunks.integer(0) != index || index >= a.chunks)
+                fail(Status::corrupt, "Finalized projected chunk index mismatch");
+            combine(chunks.text(1));
+            ++index;
+        }
+        if (index != a.chunks)
+            fail(Status::corrupt, "Finalized projected chunk count mismatch");
+        if (std::filesystem::exists(outcome))
+            combine(file_hash(outcome).hex);
+        std::ostringstream hex;
+        hex << std::hex << std::setfill('0') << std::setw(16) << aggregate;
+        if (a.hash.algorithm != "fnv1a64" || a.hash.hex != hex.str())
+            fail(Status::corrupt, "Finalized projected aggregate identity mismatch");
+    }
+    data::ProjectedCaptureHeader read_header(const Id &id) const {
+        std::lock_guard guard(mutex);
+        auto a = get(id);
+        if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3)
+            fail(Status::incompatible, "Capture header requires RawCapture 3");
+        verify_projected_identity(a);
+        auto path = root / "objects" / id.value / "run.header";
+        if (std::filesystem::file_size(path) > data::max_semantic_payload)
+            fail(Status::corrupt, "Capture header exceeds bound");
+        auto m = platform::map_read(path);
+        auto storage = std::make_shared<memory::Storage>();
+        storage->owner = m.owner;
+        storage->host = m.data;
+        storage->size = m.size;
+        storage->alignment = 1;
+        storage->domain = memory::MemoryDomain::shared_memory;
+        return data::read_capture_header({storage, 0, m.size});
+    }
+    std::optional<data::ProjectedCaptureOutcome> read_outcome(const Id &id, bool provisional = false) const {
+        std::lock_guard guard(mutex);
+        const auto header = read_header(id);
+        auto path = root / "objects" / id.value / "run.outcome";
+        auto part = path;
+        part += ".part";
+        if (std::filesystem::exists(path) && std::filesystem::exists(part))
+            fail(Status::corrupt, "Conflicting published/provisional daemon outcomes");
+        bool partial = false;
+        if (!std::filesystem::exists(path)) {
+            if (!provisional || !std::filesystem::exists(part))
+                return {};
+            path = part;
+            partial = true;
+        }
+        const auto size = std::filesystem::file_size(path);
+        if (size > data::max_run_outcome_bytes)
+            fail(Status::corrupt, "Run outcome exceeds bound");
+        if (!size) {
+            if (partial)
+                return {};
+            fail(Status::corrupt, "Empty published daemon outcome");
+        }
+        const auto m = platform::map_read(path);
+        auto storage = std::make_shared<memory::Storage>();
+        storage->owner = m.owner;
+        storage->host = m.data;
+        storage->size = m.size;
+        storage->alignment = 1;
+        auto record = data::read_run_outcome({storage, 0, m.size}, partial);
+        if (record && (record->outcome.run != header.run || record->outcome.generation != header.generation ||
+                       record->bundle_count > header.program.bounds.max_events ||
+                       record->bundle_count > header.config.max_correlation_entries))
+            fail(Status::corrupt, "Daemon outcome binding differs from persisted run");
+        return record;
+    }
     void recover_segments(const Id &id, const CancellationToken &token) {
         ArtifactDescriptor a;
-        { std::lock_guard guard(mutex); a = get(id); }
+        {
+            std::lock_guard guard(mutex);
+            a = get(id);
+        }
+        const bool projected = a.type.schema_version == 3;
+        std::optional<BundleState> bundles;
+        std::optional<data::ProjectedCaptureOutcome> outcome;
+        if (projected)
+            bundles.emplace(read_header(id));
+        if (projected)
+            outcome = read_outcome(id, true); // complete corruption is rejected before tail mutation
+        auto accept = [&](const data::AcquisitionBundle &b) {
+            if (outcome && bundles->count >= outcome->bundle_count)
+                fail(Status::corrupt, "Bundle data follows final daemon outcome prefix");
+            bundles->accept(b);
+        };
+        const auto directory = root / "objects" / id.value;
+        if (projected) {
+            std::set<uint64_t> closed, parts;
+            for (const auto &entry : std::filesystem::directory_iterator(directory)) {
+                token.check();
+                auto name = entry.path().filename().string();
+                if (!name.ends_with(".segment") && !name.ends_with(".segment.part"))
+                    continue;
+                auto dot = name.find('.');
+                auto prefix = name.substr(0, dot);
+                uint64_t n{};
+                try {
+                    n = std::stoull(prefix);
+                } catch (...) {
+                    fail(Status::corrupt, "Invalid segment filename");
+                }
+                if (prefix != std::to_string(n) ||
+                    (name != std::to_string(n) + ".segment" && name != std::to_string(n) + ".segment.part"))
+                    fail(Status::corrupt, "Ambiguous segment filename");
+                if (name.ends_with(".part"))
+                    parts.insert(n);
+                else
+                    closed.insert(n);
+                if (parts.size() > 1 ||
+                    closed.size() > std::min<uint64_t>(bundles->header.program.bounds.max_events,
+                                                       bundles->header.config.max_correlation_entries))
+                    fail(Status::corrupt, "Segment inventory exceeds recorded run bound");
+            }
+            uint64_t expected{};
+            for (auto n : closed) {
+                if (n != expected++)
+                    fail(Status::corrupt, "Segment gap");
+            }
+            if (parts.size() > 1 || (!parts.empty() && *parts.begin() != expected))
+                fail(Status::corrupt, "Conflicting/gapped active segment");
+            if (expected < a.chunks)
+                fail(Status::corrupt, "Missing indexed segment");
+        }
         // Indexed immutable segments must match; never overwrite an integrity failure.
         for (uint64_t i = 0; i < a.chunks; ++i) {
             token.check();
@@ -179,26 +360,54 @@ struct Store::Impl {
             {
                 std::lock_guard guard(mutex);
                 Statement indexed(db, "SELECT path,hash FROM chunks WHERE artifact=? AND idx=?");
-                indexed.text(1, id.value); indexed.integer(2, i);
-                if (!indexed.row()) fail(Status::corrupt, "Missing indexed segment");
-                path = root / indexed.text(0); expected = indexed.text(1);
+                indexed.text(1, id.value);
+                indexed.integer(2, i);
+                if (!indexed.row())
+                    fail(Status::corrupt, "Missing indexed segment");
+                path = root / indexed.text(0);
+                expected = indexed.text(1);
             }
-            if (file_hash(path).hex != expected) fail(Status::corrupt, "Indexed segment integrity mismatch");
+            if (file_hash(path).hex != expected)
+                fail(Status::corrupt, "Indexed segment integrity mismatch");
+            if (projected) {
+                auto scan = segments::scan(path, 3, token);
+                if (scan.incomplete || !scan.corruption.empty() || scan.records.empty())
+                    fail(Status::corrupt, "Invalid indexed segment");
+                for (size_t n = 0; n < scan.records.size(); ++n) {
+                    token.check();
+                    accept(segments::bundle(scan, n));
+                }
+            }
         }
-        const auto directory = root / "objects" / id.value;
         uint64_t index = a.chunks;
         for (;;) {
             token.check();
             auto file = directory / (std::to_string(index) + ".segment");
-            auto part = file; part += ".part";
+            auto part = file;
+            part += ".part";
             bool partial = false;
             if (!std::filesystem::exists(file)) {
-                if (!std::filesystem::exists(part)) break;
-                partial = true; file = part;
-            } else if (std::filesystem::exists(part)) fail(Status::corrupt, "Conflicting segment and provisional tail");
-            auto scanned = segments::scan(file);
-            if (!scanned.corruption.empty()) fail(Status::corrupt, scanned.corruption + "; verified prefix remains on disk");
-            if (scanned.incomplete && !partial) fail(Status::corrupt, "Closed segment is incomplete");
+                if (!std::filesystem::exists(part))
+                    break;
+                partial = true;
+                file = part;
+            } else if (std::filesystem::exists(part))
+                fail(Status::corrupt, "Conflicting segment and provisional tail");
+            auto scanned = segments::scan(file, projected ? 3 : 2, token);
+            MANTIS_STORAGE_POINT("recovery-scanned", root, id.value);
+            if (!scanned.corruption.empty())
+                fail(Status::corrupt, scanned.corruption + "; verified prefix remains on disk");
+            if (projected)
+                for (size_t n = 0; n < scanned.records.size(); ++n) {
+                    token.check();
+                    accept(segments::bundle(scanned, n));
+                }
+            if (outcome && !std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment")) &&
+                !std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment.part")) &&
+                outcome->bundle_count != bundles->count)
+                fail(Status::corrupt, "Bundle prefix differs from final daemon outcome");
+            if (scanned.incomplete && !partial)
+                fail(Status::corrupt, "Closed segment is incomplete");
             if (partial) {
                 if (std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment")) ||
                     std::filesystem::exists(directory / (std::to_string(index + 1) + ".segment.part")))
@@ -208,17 +417,21 @@ struct Store::Impl {
                     platform::durable_file(file);
                     break;
                 }
-                if (scanned.incomplete) std::filesystem::resize_file(file, scanned.complete_bytes);
+                if (scanned.incomplete)
+                    std::filesystem::resize_file(file, scanned.complete_bytes);
                 platform::durable_file(file);
-                auto closed = file; closed.replace_extension();
-                std::filesystem::rename(file, closed); file = closed;
+                auto closed = file;
+                closed.replace_extension();
+                std::filesystem::rename(file, closed);
+                file = closed;
                 platform::durable_directory(directory);
             }
             auto hash = file_hash(file).hex;
             auto bytes = std::filesystem::file_size(file);
             {
                 std::lock_guard guard(mutex);
-                commit_chunk(id.value, index, std::filesystem::relative(file, root).generic_string(), hash, bytes);
+                commit_chunk(id.value, index, std::filesystem::relative(file, root).generic_string(), hash,
+                             bytes);
             }
             ++index;
         }
@@ -226,11 +439,24 @@ struct Store::Impl {
             auto name = entry.path().filename().string();
             if (name.ends_with(".segment") || name.ends_with(".segment.part")) {
                 auto number = std::stoull(name);
-                if (number > index) fail(Status::corrupt, "Missing segment / index mismatch");
+                if (number > index)
+                    fail(Status::corrupt, "Missing segment / index mismatch");
+            }
+        }
+        if (outcome) {
+            if (outcome->bundle_count != bundles->count)
+                fail(Status::corrupt, "Bundle prefix differs from final daemon outcome");
+            const auto part = directory / "run.outcome.part";
+            if (std::filesystem::exists(part)) {
+                token.check();
+                platform::durable_file(part);
+                std::filesystem::rename(part, directory / "run.outcome");
+                platform::durable_directory(directory);
             }
         }
     }
-    explicit Impl(std::filesystem::path path) : root(std::filesystem::absolute(path)) {
+    explicit Impl(std::filesystem::path path, Store::ObservationWriteCheckpoint checkpoint)
+        : root(std::filesystem::absolute(path)), observation_checkpoint(std::move(checkpoint)) {
         std::filesystem::create_directories(root);
         lock = std::make_unique<platform::FileLock>(root / "runtime.lock");
         for (const auto *dir : {"objects", "capture", "cache", "journal"})
@@ -261,16 +487,41 @@ struct Store::Impl {
             {
                 Statement schema_version(db, "PRAGMA user_version");
                 schema_version.row();
-                if (schema_version.integer(0) > 1)
+                if (schema_version.integer(0) > 2)
                     fail(Status::incompatible, "Unsupported project metadata schema");
             }
             exec(db, "PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA foreign_keys=ON;");
-            exec(db, "CREATE TABLE IF NOT EXISTS artifacts(id TEXT PRIMARY KEY,type TEXT NOT NULL,version "
-                     "INTEGER NOT NULL,state INTEGER NOT NULL,provenance TEXT NOT NULL,hash TEXT NOT NULL "
-                     "DEFAULT '',bytes INTEGER NOT NULL DEFAULT 0,chunks INTEGER NOT NULL DEFAULT 0);CREATE "
-                     "TABLE IF NOT EXISTS chunks(artifact TEXT NOT NULL REFERENCES artifacts(id),idx INTEGER "
-                     "NOT NULL,path TEXT NOT NULL,hash TEXT NOT NULL,bytes INTEGER NOT NULL,PRIMARY "
-                     "KEY(artifact,idx));PRAGMA user_version=1;");
+            uint64_t metadata_version{};
+            {
+                Statement version(db, "PRAGMA user_version");
+                version.row();
+                metadata_version = version.integer(0);
+            }
+            if (metadata_version < 2) {
+                Transaction migration(db);
+                if (metadata_version == 0)
+                    exec(db,
+                         "CREATE TABLE artifacts(id TEXT PRIMARY KEY,type TEXT NOT NULL,version INTEGER NOT NULL,"
+                         "state INTEGER NOT NULL,provenance TEXT NOT NULL,hash TEXT NOT NULL DEFAULT '',"
+                         "bytes INTEGER NOT NULL DEFAULT 0,chunks INTEGER NOT NULL DEFAULT 0);"
+                         "CREATE TABLE chunks(artifact TEXT NOT NULL REFERENCES artifacts(id),idx INTEGER NOT NULL,"
+                         "path TEXT NOT NULL,hash TEXT NOT NULL,bytes INTEGER NOT NULL,PRIMARY KEY(artifact,idx));");
+                exec(db,
+                     "CREATE TABLE calibration_revisions("
+                     "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),"
+                     "artifact_id TEXT NOT NULL UNIQUE REFERENCES artifacts(id),kind TEXT NOT NULL,"
+                     "PRIMARY KEY(calibration_id,revision),UNIQUE(calibration_id,revision,artifact_id));"
+                     "CREATE TABLE active_calibrations(logical_device_id TEXT PRIMARY KEY NOT NULL,"
+                     "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL,artifact_id TEXT NOT NULL,"
+                     "FOREIGN KEY(calibration_id,revision,artifact_id) "
+                     "REFERENCES calibration_revisions(calibration_id,revision,artifact_id));"
+                     "CREATE TRIGGER calibration_revision_immutable_update BEFORE UPDATE ON calibration_revisions "
+                     "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
+                     "CREATE TRIGGER calibration_revision_immutable_delete BEFORE DELETE ON calibration_revisions "
+                     "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
+                     "PRAGMA user_version=2;");
+                migration.commit();
+            }
             replay_journal();
             exec(db, "UPDATE artifacts SET state=3 WHERE state IN (0,1)");
         } catch (...) {
@@ -289,13 +540,39 @@ struct Store::Impl {
         s.text(1, id.value);
         if (!s.row())
             fail(Status::not_found, "Artifact not found");
-        return {{s.text(0)},
-                {s.text(1), static_cast<uint32_t>(s.integer(2))},
-                static_cast<ArtifactState>(s.integer(3)),
-                provenance_parse(s.text(4)),
-                {"fnv1a64", s.text(5)},
-                s.integer(6),
-                s.integer(7)};
+        ArtifactDescriptor result{{s.text(0)},
+                                  {s.text(1), static_cast<uint32_t>(s.integer(2))},
+                                  static_cast<ArtifactState>(s.integer(3)),
+                                  provenance_parse(s.text(4)),
+                                  {"fnv1a64", s.text(5)},
+                                  s.integer(6),
+                                  s.integer(7)};
+        if (result.type.name == "org.mantis.RawCapture" && result.type.schema_version == 3) {
+            auto header = root / "objects" / id.value / "run.header";
+            if (std::filesystem::exists(header))
+                result.bytes += std::filesystem::file_size(header);
+            const auto outcome = header.parent_path() / "run.outcome";
+            if (std::filesystem::exists(outcome))
+                result.bytes += std::filesystem::file_size(outcome);
+        }
+        return result;
+    }
+    std::filesystem::path object_path(const Id &id, uint64_t chunk) const {
+        std::unique_lock guard(mutex);
+        Statement s(db, "SELECT path,hash FROM chunks WHERE artifact=? AND idx=?");
+        s.text(1, id.value);
+        s.integer(2, chunk);
+        if (!s.row())
+            fail(Status::not_found, "Artifact chunk not found");
+        auto path = root / s.text(0);
+        auto expected_hash = s.text(1);
+        // Finalize the statement before releasing SQLite connection ownership.
+        sqlite3_finalize(s.s);
+        s.s = nullptr;
+        guard.unlock();
+        if (file_hash(path).hex != expected_hash)
+            fail(Status::corrupt, "Object integrity check failed");
+        return path;
     }
     void commit_chunk(const std::string &id, uint64_t index, const std::string &path, const std::string &hash,
                       uint64_t bytes) {
@@ -314,7 +591,9 @@ struct Store::Impl {
         update.text(2, id);
         update.text(3, id);
         update.row();
+        MANTIS_STORAGE_COMMIT("chunk-commit-before", root, id, db);
         txn.commit();
+        MANTIS_STORAGE_POINT("chunk-committed", root, id);
     }
     void replay_journal() {
         for (auto &item : std::filesystem::directory_iterator(root / "journal")) {
@@ -331,7 +610,8 @@ struct Store::Impl {
                 }
                 auto rel = j.at("path").get<std::string>();
                 auto expected =
-                    "objects/" + id + "/" + std::to_string(j.at("index").get<uint64_t>()) + ".packet";
+                    "objects/" + id + "/" + std::to_string(j.at("index").get<uint64_t>()) +
+                    (artifact.type.name == "org.mantis.LaserObservation" ? ".observation" : ".packet");
                 if (rel != expected)
                     fail(Status::corrupt, "Invalid journal path");
                 auto file = root / rel;
@@ -343,7 +623,13 @@ struct Store::Impl {
                     platform::durable_directory(file.parent_path());
                 }
                 if (std::filesystem::exists(file) && file_hash(file).hex == j.at("hash").get<std::string>()) {
-                    (void)data::read_packet(file);
+                    if (artifact.type.name == "org.mantis.LaserObservation") {
+                        if (artifact.type.schema_version != 1 || j.at("index") != 0 ||
+                            j.at("bytes").get<uint64_t>() != std::filesystem::file_size(file))
+                            fail(Status::corrupt, "Invalid observation artifact journal");
+                        (void)data::read_laser_observation(file);
+                    } else
+                        (void)data::read_packet(file);
                     commit_chunk(id, j.at("index"), rel, j.at("hash"), j.at("bytes"));
                 } else if (std::filesystem::exists(part))
                     std::filesystem::remove(part);
@@ -356,13 +642,18 @@ struct Store::Impl {
         }
     }
 };
-Store::Store(std::filesystem::path root) : impl_(std::make_unique<Impl>(std::move(root))) {}
+Store::Store(std::filesystem::path root, ObservationWriteCheckpoint checkpoint)
+    : impl_(std::make_shared<Impl>(std::move(root), std::move(checkpoint))) {}
 Store::~Store() = default;
 const std::filesystem::path &Store::root() const {
     return impl_->root;
 }
 ArtifactId Store::begin(ArtifactType type, Provenance provenance) {
     std::lock_guard guard(impl_->mutex);
+    if (type.name == "org.mantis.RawCapture" && type.schema_version != 1 && type.schema_version != 2)
+        fail(Status::incompatible, "Use begin_projected_capture for schema 3; unknown schemas unsupported");
+    if (type.name == "org.mantis.LaserObservation" && type.schema_version != 1)
+        fail(Status::incompatible, "Unsupported observation artifact schema");
     Id id = Id::random();
     std::filesystem::create_directory(impl_->root / "objects" / id.value);
     platform::durable_directory(impl_->root / "objects");
@@ -375,14 +666,333 @@ ArtifactId Store::begin(ArtifactType type, Provenance provenance) {
     s.row();
     return id;
 }
+ArtifactId Store::begin_projected_capture(data::ProjectedCaptureHeader header, Provenance provenance) {
+    data::validate_capture_header(header);
+    std::lock_guard guard(impl_->mutex);
+    // Allocate the storage row explicitly; an interrupted initialization is recoverable.
+    Id id = Id::random();
+    auto directory = impl_->root / "objects" / id.value;
+    std::filesystem::create_directory(directory);
+    platform::durable_directory(directory.parent_path());
+    Statement row(impl_->db, "INSERT INTO artifacts(id,type,version,state,provenance) VALUES(?,?,?,?,?)");
+    row.text(1, id.value);
+    row.text(2, "org.mantis.RawCapture");
+    row.integer(3, 3);
+    row.integer(4, 0);
+    row.text(5, provenance_json(provenance));
+    row.row();
+    try {
+        MANTIS_STORAGE_POINT("artifact-row", impl_->root, id.value);
+        auto part = directory / "run.header.part";
+        {
+            CaptureOutput out(part, std::ios::binary);
+            data::write_capture_header(out, header);
+            out.flush();
+            if (!out)
+                fail(Status::io, "Capture header flush failed");
+            out.close();
+            if (!out)
+                fail(Status::io, "Capture header close failed");
+        }
+        MANTIS_STORAGE_POINT("header-written", impl_->root, id.value);
+        MANTIS_STORAGE_POINT("header-sync-before", impl_->root, id.value);
+        platform::durable_file(part);
+        MANTIS_STORAGE_POINT("header-synced", impl_->root, id.value);
+        std::filesystem::rename(part, directory / "run.header");
+        MANTIS_STORAGE_POINT("header-published", impl_->root, id.value);
+        platform::durable_directory(directory);
+        MANTIS_STORAGE_POINT("header-durable", impl_->root, id.value);
+        auto writer = std::make_unique<Impl::Writer>();
+        writer->bundles = std::make_unique<BundleState>(std::move(header));
+        if (auto i = provenance.parameters.find("segment_max_bytes"); i != provenance.parameters.end()) {
+            writer->limit = std::stoull(i->second);
+            if (writer->limit < 4096 || writer->limit > segments::max_segment_bytes)
+                fail(Status::invalid_argument, "Segment size must be 4 KiB..64 MiB");
+        }
+        impl_->writers.emplace(id, std::move(writer));
+        return id;
+    } catch (...) {
+        Statement failed(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+        failed.text(1, id.value);
+        failed.row();
+        throw;
+    }
+}
+data::ProjectedCaptureHeader Store::capture_header(const Id &id) const {
+    std::lock_guard guard(impl_->mutex);
+    return impl_->read_header(id);
+}
+void Store::append_bundle(const Id &id, const data::AcquisitionBundle &bundle) {
+    std::lock_guard guard(impl_->mutex);
+    auto it = impl_->writers.find(id);
+    if (it == impl_->writers.end() || !it->second->bundles) {
+        auto a = impl_->get(id);
+        if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3)
+            fail(Status::incompatible, "Bundle append requires RawCapture 3");
+        if (a.state != ArtifactState::open)
+            fail(Status::invalid_argument, "Only OPEN captures accept bundles");
+        fail(Status::invalid_argument, "Missing live projected writer; recover explicitly");
+    }
+    // Writer lifetime follows OPEN: abandon/finalization/failure remove it.
+    // No SQLite access or transaction is performed for each live bundle.
+    auto &w = *it->second;
+    if (w.outcome_published)
+        fail(Status::invalid_argument, "Bundles cannot follow the final daemon outcome");
+    // All semantic rejection happens before filesystem writes and does not poison the writer.
+    w.bundles->accept(bundle);
+    try {
+        if (!w.output.is_open()) {
+            w.part = impl_->root / "objects" / id.value / (std::to_string(w.index) + ".segment.part");
+            if (std::filesystem::exists(w.part))
+                fail(Status::busy, "Existing provisional segment requires recovery");
+            w.output.open(w.part, std::ios::binary);
+            if (!w.output)
+                fail(Status::io, "Cannot create projected segment");
+            platform::durable_directory(w.part.parent_path());
+        }
+        segments::append(w.output, bundle);
+        MANTIS_STORAGE_POINT("record-written", impl_->root, id.value);
+        ++w.records;
+        if (static_cast<uint64_t>(w.output.tellp()) >= w.limit || w.records >= 100000)
+            impl_->seal(id, w);
+    } catch (...) {
+        impl_->writers.erase(id);
+        Statement failed(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+        failed.text(1, id.value);
+        failed.row();
+        throw;
+    }
+}
+void Store::record_run_outcome(const Id &id, const data::ProjectedCaptureOutcome &record) {
+    const auto &outcome = record.outcome;
+    data::validate_run_outcome(outcome);
+    std::lock_guard guard(impl_->mutex);
+    auto a = impl_->get(id);
+    if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3)
+        fail(Status::incompatible, "Daemon outcome requires RawCapture 3");
+    if (a.state != ArtifactState::open)
+        fail(Status::invalid_argument, "Only OPEN captures accept a daemon outcome");
+    auto it = impl_->writers.find(id);
+    if (it == impl_->writers.end() || !it->second->bundles)
+        fail(Status::invalid_argument, "Missing live projected writer; recover explicitly");
+    auto &w = *it->second;
+    auto directory = impl_->root / "objects" / id.value;
+    if (w.outcome_published || std::filesystem::exists(directory / "run.outcome"))
+        fail(Status::invalid_argument, "Final daemon outcome is immutable and unique");
+    if (outcome.run != w.bundles->header.run || outcome.generation != w.bundles->header.generation)
+        fail(Status::invalid_argument, "Final daemon outcome belongs to another run/generation");
+    if (record.bundle_count != w.bundles->count)
+        fail(Status::invalid_argument, "Authoritative L3 publication count differs from recorded prefix");
+    try {
+        // Publish all preceding evidence durably before the outcome commits its prefix.
+        impl_->seal(id, w);
+        const auto part = directory / "run.outcome.part";
+        if (std::filesystem::exists(part))
+            fail(Status::busy, "Provisional daemon outcome requires explicit recovery");
+        CaptureOutput out(part, std::ios::binary);
+        data::write_run_outcome(out, record);
+        out.flush();
+        if (!out)
+            fail(Status::io, "Daemon outcome flush failed");
+        out.close();
+        if (!out)
+            fail(Status::io, "Daemon outcome close failed");
+        MANTIS_STORAGE_POINT("outcome-written", impl_->root, id.value);
+        MANTIS_STORAGE_POINT("outcome-sync-before", impl_->root, id.value);
+        platform::durable_file(part);
+        MANTIS_STORAGE_POINT("outcome-synced", impl_->root, id.value);
+        MANTIS_STORAGE_POINT("outcome-rename-before", impl_->root, id.value);
+        std::filesystem::rename(part, directory / "run.outcome");
+        MANTIS_STORAGE_POINT("outcome-published", impl_->root, id.value);
+        platform::durable_directory(directory);
+        MANTIS_STORAGE_POINT("outcome-durable", impl_->root, id.value);
+        w.outcome_published = true;
+    } catch (...) {
+        impl_->writers.erase(id);
+        Statement failed(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+        failed.text(1, id.value);
+        failed.row();
+        throw;
+    }
+}
+std::optional<data::ProjectedRunOutcome> Store::run_outcome(const Id &id) const {
+    auto record = impl_->read_outcome(id);
+    if (record)
+        return std::move(record->outcome);
+    return {};
+}
+CalibrationRevision Store::begin_calibration(ArtifactType type, Provenance provenance,
+                                             std::optional<Id> series) {
+    std::lock_guard guard(impl_->mutex);
+    if (type.schema_version != 1 ||
+        (type.name != "org.mantis.CalibrationTarget" && type.name != "org.mantis.CalibrationDataset" &&
+         type.name != "org.mantis.CameraCalibration" && type.name != "org.mantis.RigCalibration"))
+        fail(Status::incompatible, "Unsupported calibration artifact type/schema", "store");
+    Transaction transaction(impl_->db);
+    Id logical = series.value_or(Id::random());
+    uint64_t revision = 1;
+    if (series) {
+        Statement previous(impl_->db, "SELECT revision,kind FROM calibration_revisions WHERE "
+                                      "calibration_id=? ORDER BY revision DESC LIMIT 1");
+        previous.text(1, logical.value);
+        if (!previous.row())
+            fail(Status::not_found, "Calibration series not found", "store");
+        if (previous.text(1) != type.name)
+            fail(Status::incompatible, "Calibration revision series must remain type-stable", "store");
+        if (previous.integer(0) >= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+            fail(Status::invalid_argument, "Calibration revision exhausted", "store");
+        revision = previous.integer(0) + 1;
+    }
+    provenance.calibration = {logical, type.schema_version, revision};
+    auto artifact_id = begin(type, std::move(provenance));
+    Statement add(
+        impl_->db,
+        "INSERT INTO calibration_revisions(calibration_id,revision,artifact_id,kind) VALUES(?,?,?,?)");
+    add.text(1, logical.value);
+    add.integer(2, revision);
+    add.text(3, artifact_id.value);
+    add.text(4, type.name);
+    add.row();
+    transaction.commit();
+    return {{logical, type.schema_version, revision}, artifact_id, type.name};
+}
+CalibrationRevision Store::calibration_revision(const Id &id, uint64_t revision) const {
+    std::lock_guard guard(impl_->mutex);
+    if (!revision || revision > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+        fail(Status::invalid_argument, "Invalid calibration revision", "store");
+    Statement find(
+        impl_->db,
+        "SELECT artifact_id,kind FROM calibration_revisions WHERE calibration_id=? AND revision=?");
+    find.text(1, id.value);
+    find.integer(2, revision);
+    if (!find.row())
+        fail(Status::not_found, "Calibration revision not found", "store");
+    auto artifact = impl_->get({find.text(0)});
+    if (artifact.type.name != find.text(1))
+        fail(Status::corrupt, "Calibration registry kind mismatch", "store");
+    return {{id, artifact.type.schema_version, revision}, artifact.id, find.text(1)};
+}
+CalibrationRevision Store::artifact_revision(const ArtifactId &id) const {
+    std::lock_guard guard(impl_->mutex);
+    Statement find(impl_->db,
+                   "SELECT calibration_id,revision FROM calibration_revisions WHERE artifact_id=?");
+    find.text(1, id.value);
+    if (!find.row())
+        fail(Status::not_found, "Artifact has no calibration revision", "store");
+    return calibration_revision({find.text(0)}, find.integer(1));
+}
+std::optional<ActiveCalibration> Store::active_calibration(const Id &device) const {
+    std::lock_guard guard(impl_->mutex);
+    if (device.value.empty())
+        fail(Status::invalid_argument, "Logical device identity is required", "store");
+    Statement find(
+        impl_->db,
+        "SELECT calibration_id,revision,artifact_id FROM active_calibrations WHERE logical_device_id=?");
+    find.text(1, device.value);
+    if (!find.row())
+        return {};
+    auto revision = calibration_revision({find.text(0)}, find.integer(1));
+    auto artifact = impl_->get({find.text(2)});
+    if (revision.artifact_id != artifact.id || artifact.state != ArtifactState::finalized ||
+        artifact.type.name != "org.mantis.RigCalibration" || artifact.type.schema_version != 1 ||
+        artifact.hash.hex.empty())
+        fail(Status::corrupt, "Invalid active calibration mapping", "store");
+    return ActiveCalibration{revision.reference, {artifact.id, artifact.hash}};
+}
+void Store::activate_calibration(const Id &device, const ArtifactId &id) {
+    std::lock_guard guard(impl_->mutex);
+    if (device.value.empty())
+        fail(Status::invalid_argument, "Logical device identity is required", "store");
+    auto artifact = impl_->get(id);
+    if (artifact.state != ArtifactState::finalized || artifact.type.name != "org.mantis.RigCalibration" ||
+        artifact.type.schema_version != 1 || artifact.hash.hex.empty())
+        fail(Status::incompatible, "Activation requires finalized RigCalibration schema 1", "store");
+    auto revision = artifact_revision(id);
+    Transaction transaction(impl_->db);
+    Statement update(
+        impl_->db,
+        "INSERT INTO active_calibrations(logical_device_id,calibration_id,revision,artifact_id) "
+        "VALUES(?,?,?,?) ON CONFLICT(logical_device_id) DO UPDATE SET calibration_id=excluded.calibration_id,"
+        "revision=excluded.revision,artifact_id=excluded.artifact_id");
+    update.text(1, device.value);
+    update.text(2, revision.reference.id.value);
+    update.integer(3, revision.reference.revision);
+    update.text(4, id.value);
+    update.row();
+    transaction.commit();
+}
+void Store::clear_active_calibration(const Id &device) {
+    std::lock_guard guard(impl_->mutex);
+    if (device.value.empty())
+        fail(Status::invalid_argument, "Logical device identity is required", "store");
+    Transaction transaction(impl_->db);
+    Statement erase(impl_->db, "DELETE FROM active_calibrations WHERE logical_device_id=?");
+    erase.text(1, device.value);
+    erase.row();
+    transaction.commit();
+}
+void Store::initialize_provenance(const ArtifactId &id, Provenance provenance) {
+    std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
+    auto artifact = impl_->get(id);
+    if (artifact.state != ArtifactState::open || artifact.chunks || impl_->writers.contains(id))
+        fail(Status::invalid_argument, "Provenance initialization requires an empty OPEN artifact", "store");
+    Statement update(impl_->db, "UPDATE artifacts SET provenance=? WHERE id=?");
+    update.text(1, provenance_json(provenance));
+    update.text(2, id.value);
+    update.row();
+}
+void Store::initialize_projected_source_provenance(const ArtifactId &id, data::Metadata fields) {
+    std::lock_guard guard(impl_->mutex);
+    auto a = impl_->get(id);
+    auto writer = impl_->writers.find(id);
+    if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3 ||
+        a.state != ArtifactState::open || writer == impl_->writers.end() || !writer->second->bundles ||
+        writer->second->outcome_published)
+        fail(Status::invalid_argument, "Source provenance requires a live OPEN projected capture", "store");
+    if (fields.empty() || fields.size() > 2048)
+        fail(Status::invalid_argument, "Invalid bounded projected source provenance", "store");
+    const auto existing = static_cast<size_t>(
+        std::count_if(a.provenance.parameters.begin(), a.provenance.parameters.end(),
+                      [](const auto &entry) { return entry.first.starts_with("source_"); }));
+    if (existing > 2048 - fields.size())
+        fail(Status::invalid_argument, "Projected source provenance capacity exceeded", "store");
+    for (const auto &[key, value] : fields) {
+        const bool source = key.starts_with("source_device_calibration_") ||
+                            key.starts_with("source_initial_rig_calibration_") ||
+                            key.starts_with("source_established_rig_calibration_") ||
+                            key.starts_with("source_frameset_rig_calibration_") ||
+                            key.starts_with("source_camera_");
+        if (!source || key.size() > data::max_semantic_id || value.size() > data::max_semantic_string ||
+            a.provenance.parameters.contains(key))
+            fail(Status::invalid_argument, "Source calibration provenance is bounded and write-once",
+                 "store");
+    }
+    a.provenance.parameters.merge(fields);
+    Statement update(impl_->db, "UPDATE artifacts SET provenance=? WHERE id=?");
+    update.text(1, provenance_json(a.provenance));
+    update.text(2, id.value);
+    update.row();
+}
 void Store::append(const Id &id, const data::Packet &packet) {
     std::lock_guard guard(impl_->mutex);
-    if (impl_->writers.contains(id)) { impl_->append_raw(id, packet); return; }
+    impl_->observation_idle(id);
+    if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
+        if (writer->second->bundles)
+            fail(Status::incompatible, "Packet append does not support RawCapture 3");
+        impl_->append_raw(id, packet);
+        return;
+    }
     auto a = impl_->get(id);
+    if (a.type.name == "org.mantis.LaserObservation")
+        fail(Status::incompatible, "Use append_laser_observation, never flat packet append");
+    if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version != 1 && a.type.schema_version != 2)
+        fail(Status::incompatible, "Packet append does not support bundle/unknown RawCapture schemas");
     if (a.state != ArtifactState::open)
         fail(Status::invalid_argument, "Only OPEN artifacts accept chunks");
     if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) {
-        impl_->append_raw(id, packet); return;
+        impl_->append_raw(id, packet);
+        return;
     }
     auto index = a.chunks;
     auto rel = "objects/" + id.value + "/" + std::to_string(index) + ".packet";
@@ -413,26 +1023,166 @@ void Store::append(const Id &id, const data::Packet &packet) {
     std::filesystem::remove(journal);
     platform::durable_directory(journal.parent_path());
 }
-ArtifactDescriptor Store::finalize(const Id &id, const CancellationToken &token) {
-    std::unique_lock guard(impl_->mutex);
-    auto a = impl_->get(id);
-    if (a.state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized artifacts are immutable");
-    if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
-        impl_->seal(id, *writer->second); impl_->writers.erase(writer); a = impl_->get(id);
+ArtifactId Store::begin_laser_observation(Provenance provenance) {
+    return begin({"org.mantis.LaserObservation", 1}, std::move(provenance));
+}
+void Store::append_laser_observation(const Id &id, const data::LaserObservation &observation) {
+    auto impl = impl_; // Operation owns SQLite/file-lock lifetime independently of Store teardown.
+    auto valid = data::validate(observation);
+    if (!valid)
+        throw Failure(valid.error());
+    std::unique_lock guard(impl->mutex);
+    impl->observation_idle(id);
+    auto a = impl->get(id);
+    if (a.type.name != "org.mantis.LaserObservation" || a.type.schema_version != 1)
+        fail(Status::incompatible, "Typed observation append requires observation artifact schema 1");
+    if (a.state != ArtifactState::open || a.chunks != 0)
+        fail(Status::invalid_argument, "Observation artifact accepts exactly one OPEN immutable value");
+    Impl::ObservationReservation reservation(*impl, id);
+    // Context is authoritative. Persist its exact input IDs as ordinary artifact lineage too.
+    auto lineage = a.provenance;
+    if (lineage.producer.empty()) {
+        lineage.producer = observation.context.producer.implementation.value;
+        lineage.version = observation.context.producer.version;
     }
-    if (!a.chunks) fail(Status::invalid_argument, "Cannot finalize an artifact with no committed chunks");
-    {
-        Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
+    std::vector<data::ContentReference> refs = observation.context.exact_inputs;
+    if (observation.context.raw_input.get())
+        refs.push_back(*observation.context.raw_input.get());
+    for (const auto *cal :
+         {&observation.context.source.camera_calibration, &observation.context.source.rig_calibration,
+          &observation.context.source.original_calibration})
+        if (cal->get() && cal->get()->content.get())
+            refs.push_back(*cal->get()->content.get());
+    for (const auto &ref : refs) {
+        Statement lookup(impl->db, "SELECT state,type,version,hash FROM artifacts WHERE id=?");
+        lookup.text(1, ref.id.value);
+        if (lookup.row()) {
+            if (lookup.integer(0) != 2 || lookup.text(1) != ref.type.name ||
+                lookup.integer(2) != ref.type.version || !ref.hash.get() ||
+                *ref.hash.get() != Hash{"fnv1a64", lookup.text(3)})
+                fail(Status::incompatible, "Observation persisted input identity/hash mismatch");
+        }
+        if (std::find(lineage.inputs.begin(), lineage.inputs.end(), ref.id) == lineage.inputs.end())
+            lineage.inputs.push_back(ref.id);
     }
-    guard.unlock();
-    // Immutable sealed files can be checked without holding the metadata mutex:
-    // multi-gigabyte verification must not block daemon snapshots/commands.
+    auto rel = "objects/" + id.value + "/0.observation";
+    auto file = impl->root / rel;
+    auto part = file;
+    part += ".part";
+    auto journal = impl->root / "journal" / (id.value + "_0.json");
+    auto journal_part = journal;
+    journal_part += ".part";
     try {
+        Statement provenance(impl->db, "UPDATE artifacts SET provenance=? WHERE id=?");
+        provenance.text(1, provenance_json(lineage));
+        provenance.text(2, id.value);
+        provenance.row();
+        sqlite3_finalize(provenance.s);
+        provenance.s = nullptr;
+        guard.unlock();
+        if (impl->observation_checkpoint)
+            impl->observation_checkpoint(id, ObservationWriteStage::before_encode);
+        data::write_laser_observation(part, observation);
+        platform::durable_file(part);
+        // Verify complete typed value before making the journal a durable publication promise.
+        (void)data::read_laser_observation(part);
+        auto hash = file_hash(part);
+        auto bytes = std::filesystem::file_size(part);
+        {
+            std::ofstream out(journal_part);
+            out << Json{{"id", id.value}, {"index", 0}, {"path", rel}, {"hash", hash.hex}, {"bytes", bytes}}
+                       .dump();
+            out.flush();
+            if (!out)
+                fail(Status::io, "Observation journal write failed");
+        }
+        platform::durable_file(journal_part);
+        std::filesystem::rename(journal_part, journal);
+        platform::durable_directory(journal.parent_path());
+        if (impl->observation_checkpoint)
+            impl->observation_checkpoint(id, ObservationWriteStage::journal_published);
+        std::filesystem::rename(part, file);
+        platform::durable_directory(file.parent_path());
+        guard.lock();
+        impl->commit_chunk(id.value, 0, rel, hash.hex, bytes);
+        guard.unlock();
+        std::filesystem::remove(journal);
+        platform::durable_directory(journal.parent_path());
+    } catch (...) {
+        if (!guard.owns_lock())
+            guard.lock();
+        Statement state(impl->db, "UPDATE artifacts SET state=3 WHERE id=?");
+        state.text(1, id.value);
+        state.row();
+        throw;
+    }
+}
+data::LaserObservation Store::laser_observation(const Id &id) const {
+    const auto a = get(id);
+    if (a.type.name != "org.mantis.LaserObservation" || a.type.schema_version != 1 ||
+        a.state != ArtifactState::finalized || a.chunks != 1)
+        fail(Status::incompatible, "Expected finalized observation artifact schema 1");
+    return data::read_laser_observation(object_path(id, 0));
+}
+ArtifactDescriptor Store::finalize(const Id &id, const CancellationToken &token) {
+    return finalize_impl(id, token, false);
+}
+ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &token, bool recovery) {
+    auto impl = impl_;
+    std::unique_lock guard(impl->mutex);
+    impl->observation_idle(id);
+    auto a = impl->get(id);
+    if (a.state == ArtifactState::finalized)
+        fail(Status::invalid_argument, "Finalized artifacts are immutable");
+    if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version != 1 && a.type.schema_version != 2 &&
+        a.type.schema_version != 3)
+        fail(Status::incompatible, "Unknown RawCapture schema");
+    std::unique_ptr<Impl::ObservationReservation> reservation;
+    if (a.type.name == "org.mantis.LaserObservation")
+        reservation = std::make_unique<Impl::ObservationReservation>(*impl, id);
+    const bool projected = a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3;
+    if (a.type.name == "org.mantis.LaserObservation" && (a.type.schema_version != 1 || a.chunks != 1))
+        fail(Status::incompatible, "Observation artifacts require exactly one schema-1 observation");
+    // A missing cleanup outcome is an ordinary sequencing error, not a storage failure.
+    // Reject before sealing/removing a healthy live writer or changing OPEN.
+    if (projected && !recovery && !std::filesystem::exists(impl->root / "objects" / id.value / "run.outcome"))
+        fail(Status::invalid_argument, "Normal finalization requires final daemon outcome");
+    bool entered_verification = false;
+    try {
+        if (auto writer = impl->writers.find(id); writer != impl->writers.end()) {
+            impl->seal(id, *writer->second);
+            impl->writers.erase(writer);
+            a = impl->get(id);
+        }
+        if (!a.chunks && !projected)
+            fail(Status::invalid_argument, "Cannot finalize an artifact with no committed chunks");
+        {
+            Statement update(impl->db, "UPDATE artifacts SET state=1 WHERE id=?");
+            update.text(1, id.value);
+            update.row();
+        }
+        entered_verification = true;
+        guard.unlock();
+        // Immutable sealed files can be checked without holding the metadata mutex:
+        // multi-gigabyte verification must not block daemon snapshots/commands.
         uint64_t aggregate = 14695981039346656037ULL;
+        std::optional<BundleState> bundles;
+        std::optional<data::ProjectedCaptureOutcome> outcome;
+        if (projected) {
+            bundles.emplace(capture_header(id));
+            outcome = impl->read_outcome(id);
+            auto hash = file_hash(impl->root / "objects" / id.value / "run.header");
+            for (unsigned char byte : hash.hex) {
+                aggregate ^= byte;
+                aggregate *= 1099511628211ull;
+            }
+        }
         std::optional<uint64_t> sequence;
         for (uint64_t i = 0; i < a.chunks; ++i) {
             token.check();
-            auto file = object_path(id, i);
+            auto file = impl->object_path(id, i);
+            if (a.type.name == "org.mantis.LaserObservation")
+                (void)data::read_laser_observation(file);
             if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) {
                 auto scanned = segments::scan(file);
                 if (scanned.incomplete || !scanned.corruption.empty() || scanned.records.empty())
@@ -440,33 +1190,65 @@ ArtifactDescriptor Store::finalize(const Id &id, const CancellationToken &token)
                 for (size_t n = 0; n < scanned.records.size(); ++n) {
                     token.check();
                     auto packet = segments::packet(scanned, n);
-                    if (packet->type != schema::frameset || (sequence && packet->header.sequence.value != *sequence + 1))
+                    if (packet->type != schema::frameset ||
+                        (sequence && packet->header.sequence.value != *sequence + 1))
                         fail(Status::corrupt, "Invalid RawCapture FrameSet order");
                     sequence = packet->header.sequence.value;
                 }
             }
-            for (unsigned char byte : file_hash(file).hex) {
-                aggregate ^= byte; aggregate *= 1099511628211ULL;
+            if (bundles) {
+                auto scan = segments::scan(file, 3, token);
+                if (scan.incomplete || !scan.corruption.empty() || scan.records.empty())
+                    fail(Status::corrupt, "Cannot finalize invalid bundle segment");
+                for (size_t n = 0; n < scan.records.size(); ++n) {
+                    token.check();
+                    bundles->accept(segments::bundle(scan, n));
+                }
             }
+            for (unsigned char byte : file_hash(file).hex) {
+                aggregate ^= byte;
+                aggregate *= 1099511628211ULL;
+            }
+        }
+        if (projected) {
+            if ((!outcome && !recovery) || (outcome && outcome->bundle_count != bundles->count))
+                fail(Status::corrupt, "Final daemon outcome/prefix mismatch");
+            if (outcome)
+                for (unsigned char byte : file_hash(impl->root / "objects" / id.value / "run.outcome").hex) {
+                    aggregate ^= byte;
+                    aggregate *= 1099511628211ull;
+                }
         }
         std::ostringstream digest;
         digest << std::hex << std::setfill('0') << std::setw(16) << aggregate;
         Hash hash{"fnv1a64", digest.str()};
         token.check();
         guard.lock();
-        Statement update(impl_->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
-        update.text(1, hash.hex); update.text(2, id.value); update.row();
-        return impl_->get(id);
+        MANTIS_STORAGE_COMMIT("finalize-commit-before", impl->root, id.value, impl->db);
+        Statement update(impl->db, "UPDATE artifacts SET state=2,hash=? WHERE id=?");
+        update.text(1, hash.hex);
+        update.text(2, id.value);
+        update.row();
+        MANTIS_STORAGE_POINT("finalize-committed", impl->root, id.value);
+        return impl->get(id);
     } catch (...) {
-        if (!guard.owns_lock()) guard.lock();
-        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
-        update.text(1, id.value); update.row();
+        // Preserve legacy pre-verification failure behavior; schema 3 releases failed writers.
+        if (!entered_verification && !(a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3))
+            throw;
+        if (!guard.owns_lock())
+            guard.lock();
+        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3)
+            impl->writers.erase(id);
+        Statement update(impl->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
+        update.text(1, id.value);
+        update.row();
         throw;
     }
 }
 ArtifactDescriptor Store::get(const Id &id) const {
     std::lock_guard guard(impl_->mutex);
     auto result = impl_->get(id);
+    impl_->verify_projected_identity(result);
     if (auto writer = impl_->writers.find(id); writer != impl_->writers.end() && writer->second->output.is_open()) {
         auto position = writer->second->output.tellp();
         if (position >= 0) result.bytes += static_cast<uint64_t>(position);
@@ -482,23 +1264,15 @@ std::vector<ArtifactDescriptor> Store::list() const {
     return out;
 }
 std::filesystem::path Store::object_path(const Id &id, uint64_t chunk) const {
-    std::unique_lock guard(impl_->mutex);
-    Statement s(impl_->db, "SELECT path,hash FROM chunks WHERE artifact=? AND idx=?");
-    s.text(1, id.value);
-    s.integer(2, chunk);
-    if (!s.row())
-        fail(Status::not_found, "Artifact chunk not found");
-    auto path = impl_->root / s.text(0);
-    auto expected_hash = s.text(1);
-    // Finalize the statement before releasing SQLite connection ownership.
-    sqlite3_finalize(s.s); s.s = nullptr;
-    guard.unlock();
-    if (file_hash(path).hex != expected_hash)
-        fail(Status::corrupt, "Object integrity check failed");
-    return path;
+    return impl_->object_path(id, chunk);
 }
 data::Published Store::packet(const Id &id, uint64_t chunk) const {
     auto artifact = get(id);
+    if (artifact.type.name == "org.mantis.LaserObservation")
+        fail(Status::incompatible, "Observation artifacts require typed observation API");
+    if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version != 1 &&
+        artifact.type.schema_version != 2)
+        fail(Status::incompatible, "Packet API requires RawCapture schema 1/2");
     if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version == 2) {
         for (uint64_t i = 0; i < artifact.chunks; ++i) {
             auto scanned = segments::scan(object_path(id, i));
@@ -512,31 +1286,73 @@ data::Published Store::packet(const Id &id, uint64_t chunk) const {
 }
 ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) {
     std::unique_lock guard(impl_->mutex);
+    impl_->observation_idle(id);
     const auto a = impl_->get(id);
     if (a.state != ArtifactState::recoverable) fail(Status::invalid_argument, "Artifact is not recoverable");
+    if (a.type.name == "org.mantis.LaserObservation") {
+        guard.unlock();
+        return finalize_impl(id, token, true);
+    }
     {
         Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
     }
     guard.unlock();
     try {
-        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 2) impl_->recover_segments(id, token);
-        return finalize(id, token);
+        if (a.type.name == "org.mantis.RawCapture") {
+            if (a.type.schema_version == 2 || a.type.schema_version == 3)
+                impl_->recover_segments(id, token);
+            else if (a.type.schema_version != 1)
+                fail(Status::incompatible, "Unknown RawCapture schema");
+        }
+        auto finalized = finalize_impl(id, token, true);
+        if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3) {
+            const auto part = impl_->root / "objects" / id.value / "run.outcome.part";
+            // A structurally incomplete provisional outcome was deliberately excluded from identity.
+            // Remove it only after that decision is durably committed; complete corruption never gets here.
+            if (std::filesystem::exists(part)) {
+                std::filesystem::remove(part);
+                platform::durable_directory(part.parent_path());
+            }
+        }
+        return finalized;
     } catch (...) {
         guard.lock();
-        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?"); update.text(1, id.value); update.row();
+        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
+        update.text(1, id.value);
+        update.row();
         throw;
     }
 }
 void Store::prepare_finalize(const Id &id) {
     std::lock_guard guard(impl_->mutex);
-    if (impl_->get(id).state != ArtifactState::open) fail(Status::invalid_argument, "Only OPEN captures can begin finalization");
-    if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
-        impl_->seal(id, *writer->second); impl_->writers.erase(writer);
+    impl_->observation_idle(id);
+    const auto a = impl_->get(id);
+    if (a.state != ArtifactState::open)
+        fail(Status::invalid_argument, "Only OPEN captures can begin finalization");
+    const bool projected = a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3;
+    if (projected && !std::filesystem::exists(impl_->root / "objects" / id.value / "run.outcome"))
+        fail(Status::invalid_argument, "Prepare-finalize requires final daemon outcome");
+    try {
+        if (projected)
+            (void)impl_->read_outcome(id);
+        if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
+            impl_->seal(id, *writer->second);
+            impl_->writers.erase(writer);
+        }
+    } catch (...) {
+        if (projected) {
+            impl_->writers.erase(id);
+            Statement failed(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+            failed.text(1, id.value);
+            failed.row();
+        }
+        throw;
     }
     Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
 }
 void Store::abandon(const Id &id) {
     std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
     if (impl_->get(id).state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized captures are immutable");
     impl_->writers.erase(id);
     Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?"); update.text(1, id.value); update.row();
@@ -545,6 +1361,8 @@ void Store::replay(const Id &id, const std::function<void(data::Published)> &emi
     auto a = get(id);
     if (a.state != ArtifactState::finalized || a.type.name != "org.mantis.RawCapture")
         fail(Status::incompatible, "Replay requires finalized RawCapture");
+    if (a.type.schema_version != 1 && a.type.schema_version != 2)
+        fail(Status::incompatible, "Packet replay requires RawCapture schema 1/2");
     std::optional<uint64_t> sequence;
     for (uint64_t i = 0; i < a.chunks; ++i) {
         token.check();
@@ -590,5 +1408,82 @@ data::Published CaptureReader::next() {
         if (r.scan->incomplete || !r.scan->corruption.empty()) fail(Status::corrupt, "Replay segment integrity failure");
     }
     return segments::packet(*r.scan, r.record++);
+}
+struct BundleCaptureReader::Impl {
+    std::shared_ptr<const Store> store;
+    ArtifactDescriptor artifact;
+    BundleState state;
+    std::optional<data::ProjectedCaptureOutcome> outcome;
+    std::optional<data::ProjectedRunOutcome> final;
+    uint64_t segment{};
+    size_t record{};
+    std::optional<segments::Scan> scan;
+    Impl(std::shared_ptr<const Store> s, Id id)
+        : store(std::move(s)), artifact(store->get(id)), state(store->capture_header(id)) {
+        if (artifact.state != ArtifactState::finalized || artifact.type.name != "org.mantis.RawCapture" ||
+            artifact.type.schema_version != 3)
+            fail(Status::incompatible, "BundleCaptureReader requires finalized RawCapture 3");
+        outcome = store->impl_->read_outcome(id);
+        if (outcome)
+            final = outcome->outcome;
+    }
+};
+BundleCaptureReader::BundleCaptureReader(std::shared_ptr<const Store> s, Id id)
+    : impl_(std::make_unique<Impl>(std::move(s), std::move(id))) {}
+BundleCaptureReader::~BundleCaptureReader() = default;
+const data::ProjectedCaptureHeader &BundleCaptureReader::header() const { return impl_->state.header; }
+const std::optional<data::ProjectedRunOutcome> &BundleCaptureReader::final_outcome() const {
+    return impl_->final;
+}
+std::optional<data::AcquisitionBundle> BundleCaptureReader::next(const CancellationToken &token) {
+    auto &r = *impl_;
+    token.check();
+    while (!r.scan || r.record == r.scan->records.size()) {
+        r.scan.reset(); // release previous mapping/index before opening the next segment
+        if (r.segment == r.artifact.chunks) {
+            if (r.outcome && r.state.count != r.outcome->bundle_count)
+                fail(Status::corrupt, "Replay prefix differs from final daemon outcome");
+            return {};
+        }
+        auto scan = segments::scan(r.store->object_path(r.artifact.id, r.segment), 3, token);
+        if (scan.incomplete || !scan.corruption.empty() || scan.records.empty())
+            fail(Status::corrupt, "Bundle replay segment integrity failure");
+        r.scan = std::move(scan);
+        r.record = 0;
+        ++r.segment;
+    }
+    auto b = segments::bundle(*r.scan, r.record);
+    if (r.outcome && r.state.count == r.outcome->bundle_count)
+        fail(Status::corrupt, "Bundle data follows final daemon outcome");
+    r.state.accept(b);
+    ++r.record;
+    return b;
+}
+void Store::replay_bundles(const Id &id, const std::function<void(data::AcquisitionBundle)> &emit,
+                           const CancellationToken &token) const {
+    // Reader is scoped within this synchronous call; callers retain Store for the call.
+    BundleCaptureReader r(std::shared_ptr<const Store>(this, [](const Store *) {}), id);
+    while (auto b = r.next(token))
+        emit(std::move(*b));
+}
+data::AcquisitionBundle Store::bundle(const Id &id, uint64_t record) const {
+    BundleCaptureReader r(std::shared_ptr<const Store>(this, [](const Store *) {}), id);
+    while (auto b = r.next()) {
+        if (record-- == 0)
+            return std::move(*b);
+    }
+    fail(Status::not_found, "Bundle record not found");
+}
+Store::BundleSummary Store::bundle_summary(const Id &id, const CancellationToken &token) const {
+    BundleSummary summary;
+    summary.final_outcome = run_outcome(id);
+    replay_bundles(
+        id,
+        [&](data::AcquisitionBundle b) {
+            ++summary.records;
+            summary.last_executor_disposition = b.evidence.disposition;
+        },
+        token);
+    return summary;
 }
 } // namespace mantis::artifact

@@ -26,7 +26,16 @@ struct Scenario {
 };
 int main(int argc, char **argv) {
     try {
-        CHECK(argc == 2);
+        CHECK(argc == 2 || argc == 5);
+        // CTest runs each independent scenario with the original finite deadline.
+        // The aggregate invocation remains available for repeat/load investigation.
+        unsigned selected{};
+        auto select = [&](const char *format, const char *name, const char *mode) {
+            if (argc == 5 && (std::string_view(argv[2]) != format ||
+                std::string_view(argv[3]) != name || std::string_view(argv[4]) != mode)) return false;
+            ++selected;
+            return true;
+        };
         auto root = std::filesystem::temp_directory_path() / Id::random().value;
         std::filesystem::create_directory(root);
         struct Cleanup { std::filesystem::path path; ~Cleanup() { std::filesystem::remove_all(path); } } cleanup{root};
@@ -50,6 +59,7 @@ int main(int argc, char **argv) {
             Scenario{"startup-left", true, false, 0, 0, 0, "pairing limit", "pairing_failures"},
             Scenario{"unequal-origins", true, false, 0, 0, 0, "counters disagree", "pairing_failures"}
         }) {
+            if (!select(format, scenario.name, scenario.hardware ? "hardware" : "software")) continue;
             std::cout << format << ' ' << scenario.name << " hardware=" << scenario.hardware << std::endl;
             nlohmann::json profile{{"format_version", 1}, {"measurement_cameras", {
                 {"left", {{"sensor_identity", "ov9281 18-0060"}}}, {"right", {{"sensor_identity", "ov9281 20-0060"}}}}},
@@ -170,6 +180,7 @@ int main(int argc, char **argv) {
         for (const char *format : {"GREY", "Y10P"}) for (const char *name : {
             "phase-4000", "phase-half", "phase-4300", "phase-drift-left", "phase-drift-right",
             "phase-drift-gap", "phase-limit", "phase-jitter-left", "phase-jitter-right"}) {
+            if (!select(format, name, "recorder")) continue;
             const std::string_view scenario = name;
             const bool valid = scenario != "phase-drift-gap" && scenario != "phase-limit";
             nlohmann::json profile{{"format_version", 1}, {"measurement_cameras", {
@@ -318,6 +329,7 @@ int main(int argc, char **argv) {
             setenv("MANTIS_X1_PROFILE", (root / "profile.json").c_str(), 1);
             std::cout << format << ' ' << name << " counted exclusions, zero recorder loss and exact replay passed\n";
         }
+        CHECK(selected == (argc == 2 ? 56u : 1u));
         unsetenv("MANTIS_X1_PROFILE"); unsetenv("MANTIS_X1_FAKE");
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }

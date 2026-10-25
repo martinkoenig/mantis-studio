@@ -22,7 +22,24 @@ The checksummed packet encoding is versioned (`MANTIS01`), little endian, length
 
 Tests cover interrupted capture, a corrupt trailing partial chunk, store locking, immutable artifacts, and daemon kill/restart. They do not constitute power-loss certification on every filesystem or device. Windows directory durability and removable media require their own validation. FNV-1a-64 detects accidental content changes and is not tamper protection.
 
-Project format and metadata schema are version 1. Newer versions are rejected. The initial schema creation is the only migration currently required; future upgrades must be sequential and transactional, with fixtures before they are accepted. Large immutable objects must not be rewritten just to update metadata indexes.
+Project manifest/container format remains version 1. SQLite metadata uses
+`PRAGMA user_version=2`. Opening schema 1 performs a sequential `BEGIN IMMEDIATE`
+migration: create `calibration_revisions`, `active_calibrations` and immutable revision
+triggers, set user_version=2, then COMMIT. Failure rolls back; metadata versions >2
+are incompatible. New projects create schema 2 directly. Existing artifact/chunk rows,
+IDs, provenance, hashes, manifest bytes and immutable object files are preserved.
+Normal provisional-artifact recovery remains unchanged.
+
+`calibration_revisions` maps a positive logical calibration ID/revision to one immutable
+artifact ID and kind. `active_calibrations` maps an exact project-local logical device
+ID to one registered RigCalibration revision/artifact. Reservations and activation
+replacement are serialized Store transactions. See the exact SQL and dependency graph
+in [calibration-artifacts](calibration-artifacts.md).
+
+New provenance JSON includes `calibration_schema_version` alongside calibration_id and
+calibration_revision. Historical rows without the field decode with legacy schema 1;
+they are not rewritten. Calibration document bytes live in one generic packet chunk,
+not SQLite blobs.
 
 ## RawCapture schema 2 (v0.2)
 
@@ -97,7 +114,8 @@ metadata inside RawCapture schema 2. Logical dimensions, byte row stride, sample
 bit depth and packing remain explicit. Original V4L2 bytes, including padding,
 are recorded and replayed without unpacking or color conversion. Record/segment
 checksums and replay digest cover these exact bytes. Old RAW8/schema-1 captures
-continue through their original reader; no project schema migration is required.
+continue through their original reader. Packed-image support itself requires no
+metadata migration; M5 independently adds the transactional metadata-v2 upgrade.
 
 
 ## Software-paired observations (schema unchanged)
@@ -109,5 +127,6 @@ startup exclusion counts and pending/lookahead diagnostics. Replay returns these
 exact associations and bytes; storage and downstream algorithms never re-pair
 camera observations. Startup exclusions and shutdown lookahead were never
 published and are explicitly counted outside the LOSSLESS recorder guarantee.
-This adds metadata keys only: RawCapture schema 2 and project schema 1 are unchanged,
+This pairing metadata adds keys only: RawCapture schema 2 is unchanged. M5 separately
+migrates project metadata to schema 2 without changing these packet/object semantics,
 and old captures do not acquire invented pairing metadata during replay.

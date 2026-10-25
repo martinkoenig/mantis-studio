@@ -2,13 +2,16 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Mantis.Render 1.0
+import "../workspaces"
 
 ApplicationWindow {
     id: window
+    property string workspace: "acquisition"
+    property var studioBridge: studio
     visible: true
     width: 1420; height: 900
     minimumWidth: 1080; minimumHeight: 720
-    title: "Mantis Studio · Acquisition Foundation"
+    title: "Mantis Studio"
     color: "#10151c"
     palette.window: "#10151c"
     palette.windowText: "#e4edf5"
@@ -25,6 +28,8 @@ ApplicationWindow {
     component Panel: Rectangle { color: "#18212a"; radius: 9; border.color: "#273441" }
     component Action: Button { implicitHeight: 38 }
 
+    onWorkspaceChanged: calibration.visible = workspace !== "acquisition"
+
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 20; spacing: 16
         RowLayout {
@@ -32,12 +37,25 @@ ApplicationWindow {
             Label { text: "MANTIS"; font.pixelSize: 25; font.bold: true; font.letterSpacing: 4; color: "#6fe0bc" }
             Rectangle { width: 1; height: 25; color: "#34404c" }
             Label { text: "Studio"; font.pixelSize: 20 }
-            Caption { text: "ACQUISITION FOUNDATION  0.2"; Layout.leftMargin: 10 }
+            Button { text: "Scan / Acquisition"; highlighted: window.workspace === "acquisition"; onClicked: window.workspace = "acquisition" }
+            Button { text: "Devices / System"; highlighted: window.workspace === "devices"; onClicked: window.workspace = "devices" }
+            Button { text: "Calibration"; visible: window.workspace === "calibration"; highlighted: true }
             Item { Layout.fillWidth: true }
             Rectangle { width: 8; height: 8; radius: 4; color: studio.connected ? "#6fe0bc" : "#eaad6b" }
             Label { text: studio.connected ? "Runtime connected" : "Runtime unavailable"; color: "#a8bbcb" }
         }
+        DevicesWorkspace {
+            Layout.fillWidth: true; Layout.fillHeight: true; visible: window.workspace === "devices"
+            controller: calibration
+            onCalibrate: function(deviceId) { calibration.selectDevice(deviceId); calibration.stage = 0; window.workspace = "calibration" }
+        }
+        CalibrationWorkspace {
+            Layout.fillWidth: true; Layout.fillHeight: true; visible: window.workspace === "calibration"
+            controller: calibration; studio: window.studioBridge
+        }
         RowLayout {
+            visible: window.workspace === "acquisition"
+            onVisibleChanged: if (visible) studio.attachPreview(leftPreview, rightPreview)
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 16
             ColumnLayout {
                 Layout.minimumWidth: 255; Layout.maximumWidth: 255; Layout.preferredWidth: 255; Layout.fillHeight: true; spacing: 16

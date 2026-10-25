@@ -31,8 +31,22 @@ endfunction()
 foreach(module base memory schema data time spatial calibration device-api pipeline-api artifact-api)
     mantis_assert_dependency_boundary(mantis-${module} "^Qt[0-9]::|^SQLite::|^mantis-(services|client|protocol|.*-runtime)$")
 endforeach()
-foreach(frontend mantis-cli mantis-client mantis-studio)
+mantis_assert_dependency_boundary(mantis-calibration "^opencv_|^nlohmann_json::|^protobuf::|^mantis-(data|artifact-store|calibration-opencv|calibration-dataset|calibration-solver-opencv|calibration-artifacts)$")
+mantis_assert_dependency_boundary(mantis-calibration-solver-opencv "^opencv_(aruco|objdetect)$|^mantis-(data|artifact-store|calibration-opencv|calibration-dataset)$|^Qt[0-9]::|^SQLite::|^protobuf::|^nlohmann_json::")
+foreach(frontend mantis-cli mantis-client mantis-studio mantis-studio-calibration)
     if(TARGET ${frontend})
-        mantis_assert_dependency_boundary(${frontend} "^mantis-(services|service-adapter|device-runtime|pipeline-runtime|plugin-runtime|artifact-store|jobs)$")
+        mantis_assert_dependency_boundary(${frontend} "^mantis-(services|service-adapter|device-runtime|pipeline-runtime|plugin-runtime|artifact-store|jobs|calibration-artifacts|calibration-dataset|calibration-opencv|calibration-solver-opencv)$|^SQLite::|^opencv_|^OpenCV::")
     endif()
 endforeach()
+
+mantis_assert_dependency_boundary(mantis-calibration-artifacts "^opencv_|^Qt[0-9]::|^protobuf::|^mantis-(services|client|protocol|calibration-opencv|calibration-dataset|calibration-solver-opencv)$")
+
+# Canonical acquisition semantics must never acquire upward API/runtime dependencies.
+mantis_assert_dependency_boundary(mantis-data "^mantis-(device-api|artifact-api|plugin-runtime|services|protocol)$|^protobuf::|^Qt[0-9]::")
+
+mantis_assert_dependency_boundary(mantis-device-api "^mantis-(sdk-.*|plugin-runtime|device-runtime|services|protocol)$")
+mantis_assert_dependency_boundary(mantis-sdk-c "^mantis-(data|device-api|.*-runtime|services|protocol)$|^Qt[0-9]::|^protobuf::")
+mantis_assert_dependency_boundary(mantis-sdk-cpp "^mantis-(data|device-api|.*-runtime|services|protocol)$|^Qt[0-9]::|^protobuf::")
+
+# Daemon acquisition supervision is Qt-free and stays below service/protocol DTOs.
+mantis_assert_dependency_boundary(mantis-device-runtime "^Qt[0-9]::|^protobuf::|^mantis-(services|client|protocol)$")

@@ -1,3 +1,7 @@
+> Historical v0.1 delivery requirements. Current implementation status is in
+> [README.md](README.md) and [milestone coverage](docs/architecture/milestone.md);
+> these requirements do not replace the frozen Architecture v1 or later ADRs.
+
 Implement the initial **Mantis Studio Architecture Skeleton v0.1**.
 
 This is an architecture-validation milestone.

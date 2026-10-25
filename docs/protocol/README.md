@@ -1,5 +1,12 @@
 # Control protocol v1 and data plane
 
+> **Separate future hardware protocol:** scanners or microcontrollers that cannot
+> run `mantisd` use the planned
+> [Mantis Device Bridge Protocol](device-bridge.md), governed by
+> [ADR-039](../adr/039-constrained-and-external-scanners-use-a-host-side-device-bridge.md).
+> That hardware-facing bridge is intentionally distinct from the client/service
+> protocol documented on this page.
+
 [`protocol/protobuf/mantis.proto`](../../protocol/protobuf/mantis.proto) is the source of truth for generated wire messages. The schema is transport independent. Commands cover device discovery, capture start/stop, pipelines, project create/open, artifacts/data references/recovery/export, jobs/cancellation, plugin state and diagnostics/events.
 
 ## Local framing
@@ -49,3 +56,31 @@ tag 22 retains synchronous v0.1 recovery semantics. SDK/CLI helpers handle these
 waits. Interrupted/failed validation remains recoverable, never silently valid.
 
 See [ADR-023](../adr/023-acquisition-preview-leases-and-storage-jobs.md).
+
+## v0.3 calibration operations (M6)
+
+Presence-capable target fields require Protobuf/protoc 3.15 or newer.
+Protocol v1 adds Request tags 32–40 and Response fields 13–15, preserving all old
+numbers. Calibration target/pattern/measurement requests and compact inspection
+are typed; provenance message presence distinguishes absence from present empty.
+Dataset/camera/rig commands return normal daemon Job IDs in `result_id`, with one
+artifact in `Job.result_artifact`. Current active query uses optional binding
+presence and describes future capture only; historical recorded references remain
+authoritative. No observations, pixel buffers or residual vectors enter responses.
+The 4 MiB frame limit remains; oversized responses produce a structured busy error.
+See [Calibration API](../architecture/calibration-api.md) for all DTOs, numeric
+ordering, tags, input bounds, examples and cancellation/activation semantics.
+
+## v0.4 projected-light operations (L5)
+
+Request tags 41–47 add explicit projected discovery, pure validation, start,
+status/list, generation-fenced stop/cancel and latest bundle reference. Response
+fields 16–18 add compact graph/validation/capture DTOs. Protocol root/version,
+legacy camera semantics and Request 10–40 / Response 1–15 stay frozen. Typed
+inline programs are bounded to 512 KiB; finalized RawCapture-3 headers are the
+other exact program source. Start IDs are retryable; the daemon owns hardware,
+recording and cleanup. Full evidence/pixels remain in leased MANTIS03 format-3
+files, sharing the eight-lease/60-second preview budget. Existing replay dispatches
+schema 3 to BundleReplay jobs, including two-pass verification. See the
+[projected control contract](../architecture/projected-light-control-api.md) for
+exact tags/enums, durability ordering, failures, SDK/CLI and loopback-only limits.

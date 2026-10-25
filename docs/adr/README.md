@@ -1,5 +1,70 @@
 # Architecture Decision Records
 
+- [ADR-043: Projected-light recording uses opt-in RawCapture schema 3 and evidence-preserving replay](043-versioned-projected-light-recording-and-replay.md)
+- [ADR-042: Projected-light device and processing contracts use additive queried interfaces](042-additive-projected-light-plugin-contract.md)
+- [ADR-041: Laser observations and acquisition evidence are typed semantic boundaries](041-laser-observations-and-acquisition-evidence.md)
+- [ADR-040: Projected-light programs and safe-state ownership](040-projected-light-programs-and-safe-state-ownership.md)
+
+ADRs 040–043 freeze the [v0.4 L0 architecture baseline](../architecture/v0.4-laser-acquisition.md).
+L1–L8 implementation and physical laser acceptance remain planned. v0.4 supplies
+acquisition semantics and LaserObservation infrastructure; production extraction,
+subpixel localization and laser geometry/triangulation remain v0.5. ADR-031 retains
+its final Q6A/host deployment partition.
+
+- [ADR-039: Constrained and external scanners use a host-side device bridge](039-constrained-and-external-scanners-use-a-host-side-device-bridge.md)
+
+ADR-039 defines how microcontroller-class, vendor-controlled and otherwise external
+scanners join Mantis without running `mantisd` on the device itself. It introduces
+the future transport-neutral Device Bridge Protocol and keeps bridged hardware on
+the same capability/data model as native scanners. See
+[device integration and bridge architecture](../architecture/device-integration-and-bridge.md)
+and the [bridge protocol contract](../protocol/device-bridge.md).
+
+- [ADR-038: Extensible sensor observations are first-class typed data with generic Studio fallback](038-extensible-sensor-observations-and-generic-studio-fallback.md)
+
+ADR-038 defines the extension contract for community-built scanners with unusual
+or previously unknown sensors. Generic typed measurements must remain recordable,
+replayable and useful in Studio without requiring sensor-specific core/UI code.
+See the [extensible sensor platform](../architecture/extensible-sensor-platform.md)
+and [custom sensor guide](../plugin-development/custom-sensors.md).
+
+- [ADR-037: Real hardware calibration acceptance is evidence driven](037-real-hardware-calibration-acceptance-is-evidence-driven.md)
+
+- [ADR-036: Studio calibration workspace uses the public calibration API](036-studio-calibration-workspace-uses-public-calibration-api.md)
+
+- [ADR-035: Calibration control API and job orchestration](035-calibration-control-api-and-job-orchestration.md)
+
+- [ADR-034: Open-core Pro modules and signed entitlement licensing](034-open-core-pro-modules-and-licensing.md)
+
+ADR-034 defines the product/architecture boundary between the open Mantis platform
+and future separately distributed Mantis Studio Pro modules. See the
+[edition policy](../product/editions.md) and
+[commercial module/licensing architecture](../architecture/commercial-modules-and-licensing.md).
+
+- [ADR-033: Reliability, data integrity and measured performance are release-gating requirements](033-reliability-performance-release-gates.md)
+- [ADR-032: Distributed execution is many-to-many and scanner runtimes retain capture authority](032-distributed-runtime-and-worker-pools.md)
+- [ADR-031: X1 remote operation publishes measurement observations at the scanner boundary](031-x1-remote-observation-boundary.md)
+
+ADRs 031–033 are accepted cross-milestone requirements for the future X1
+processing partition, distributed worker pools and engineering/release quality.
+They define contracts and acceptance expectations; they do **not** claim remote
+transport, worker scheduling, laser extraction, reconstruction or HA are already
+implemented. See the [X1 processing partition](../hardware/x1-processing-partition.md),
+[distributed runtime](../architecture/distributed-runtime.md) and
+[reliability/performance standard](../architecture/reliability-performance-and-validation.md).
+
+
+- [ADR-030: Calibration artifacts, revisioning and active binding](030-calibration-artifacts-revisioning-and-active-binding.md)
+
+- [ADR-029: Calibration solve, validation and stereo policy](029-calibration-solve-validation-and-stereo-policy.md)
+
+- [ADR-028: Target observations and deterministic calibration datasets](028-target-observations-and-deterministic-calibration-datasets.md)
+- [ADR-027: Calibration target geometry and physical scale](027-calibration-target-geometry-and-physical-scale.md)
+
+ADRs 027–030 define additive v0.3 target geometry, observations/datasets,
+calibration solve/validation, immutable artifacts and active binding policy. See the
+[v0.3 architectural baseline](../architecture/v0.3-geometric-calibration.md).
+
 - [ADR-026: Bounded software observation pairing](026-bounded-software-observation-pairing.md)
 
 - [ADR-025: Packed monochrome byte layout](025-packed-monochrome-image-byte-layout.md)

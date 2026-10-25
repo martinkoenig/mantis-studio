@@ -77,7 +77,50 @@ frozen v0.1 C header is loaded by the current host. See the Linux
 [X1 example](../../plugins/first-party/devices/mantis-x1.cpp) and
 [ADR-021](../adr/021-enumerated-acquisition-and-frameset-contract.md).
 
-MantisProcessorV1 retains its v0.1 single-packet attribute contract. FrameSet-aware
-native processing plugins will need a future queried processing interface; no
-scanner algorithm is added here. The v0.2 source and C++ semantic pipeline carry
+MantisProcessorV1 retains its v0.1 single-packet attribute contract. FrameSet-aware native processors use the optional frozen ProcessorV2 interface
+implemented in L6; no production scanner algorithm is added here. The v0.2 source and C++ semantic pipeline carry
 the complete FrameSet unchanged through acquisition/replay.
+
+
+## Future custom/exotic sensor path
+
+The accepted future architecture for community scanners with unusual sensors is
+documented in [Integrating custom and exotic sensors](custom-sensors.md) and
+[ADR-038](../adr/038-extensible-sensor-observations-and-generic-studio-fallback.md).
+
+The goal is that a plugin can declare and publish a generic scalar/vector/event
+measurement and receive persistence, replay and baseline Studio presentation
+without sensor-specific Studio code. The measurement-source API described there is
+not implemented in v0.3; do not infer current ABI support from the design examples.
+
+
+## Future bridged/external device path
+
+A physical scanner does not have to run `mantisd` or even Linux. Microcontroller
+devices and vendor-controlled scanners may use a host-side bridged integration.
+The accepted future architecture is documented in
+[Device integration and bridge architecture](../architecture/device-integration-and-bridge.md),
+[ADR-039](../adr/039-constrained-and-external-scanners-use-a-host-side-device-bridge.md)
+and the [Device Bridge Protocol](../protocol/device-bridge.md).
+
+The planned generic bridge adapter maps capability/stream descriptors into the
+normal Device API so Studio/core code does not acquire ESP32, Arduino or
+vendor-model branches. Arduino/ESP libraries are future convenience bindings over
+that one protocol, not alternative Mantis data models.
+
+
+## v0.4 full semantic processing
+
+The frozen `org.mantis.processor.v2` queried interface accepts full borrowed
+semantic packet views, finite describe/process deadlines and exactly one full
+validated emit on success. Retain/transfer buffers explicitly; contain exceptions
+at the SDK boundary. V1 remains optional and unchanged. Registry selects V1 and
+V2 explicitly and preserves manifest isolation; unapproved V2 plugins run through
+`mantis-plugin-host process-semantic` with bounded typed local data-plane files.
+Output headers and evidence belong to the producer and are never overwritten.
+
+See [the implementation and ownership contract](../architecture/laser-observation-processing.md)
+and [MLOBS001/local semantic transport](../architecture/laser-observation-format.md).
+The C-only adversarial fixture and deterministic synthetic DSO under
+`tests/contract/processor-v2` exercise the frozen interface without hardware. They
+are test targets, not production extraction plugins or real optical evidence.

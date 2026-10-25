@@ -1,4 +1,5 @@
 #include "bridge.hpp"
+#include "calibration_controller.hpp"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -13,8 +14,11 @@ int main(int argc, char **argv) {
     qmlRegisterType<mantis::render::PointCloudView>("Mantis.Render", 1, 0, "PointCloudView");
     qmlRegisterType<MeasurementView>("Mantis.Render", 1, 0, "MeasurementView");
     StudioBridge bridge;
+    CalibrationController calibration;
+    QObject::connect(&bridge, &StudioBridge::snapshotReady, &calibration, &CalibrationController::observeSnapshot);
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("studio", &bridge);
+    engine.rootContext()->setContextProperty("calibration", &calibration);
     engine.load(QUrl("qrc:/ui/shell/Main.qml"));
     if (engine.rootObjects().isEmpty())
         return 1;

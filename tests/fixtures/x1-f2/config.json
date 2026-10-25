@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "backend": "SimulationOnly",
+  "controller_id": 2187722753,
+  "board_revision": 1,
+  "channel_uid": 9396197676850085889,
+  "channel_index": 0,
+  "emitter_suffix": "/simulation-f2/L1",
+  "controller_suffix": "/simulation-f2/esp8266",
+  "rig_revision": 1,
+  "current_ua": 10000,
+  "period_us": 10000,
+  "high_us": 1000,
+  "pulse_count": 20,
+  "max_current_ua": 50000,
+  "max_pulses": 1000,
+  "max_run_ms": 2000,
+  "max_continuous_on_us": 5000
+}

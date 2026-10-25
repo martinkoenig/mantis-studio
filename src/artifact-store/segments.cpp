@@ -52,11 +52,43 @@ void append(std::ostream &out, const data::Packet &p) {
     out.flush(); // OS visibility for process-kill recovery; durability is segment-batched.
     if (!out) fail(Status::io, "RawCapture sequential write failed (disk full?)", "raw-writer");
 }
-Scan scan(const std::filesystem::path &path) {
+void append(std::ostream &out, const data::AcquisitionBundle &b) {
+    Probe probe;
+    std::ostream counter(&probe);
+    data::write_bundle(counter, b);
+    if (!probe.bytes || probe.bytes > 128 * 1024 * 1024)
+        fail(Status::invalid_argument, "Capture record too large");
+    out.write("MRAWREC3", 8);
+    number(out, probe.bytes);
+    number(out, probe.checksum);
+    number(out, ~probe.bytes);
+    data::write_bundle(out, b);
+    number(out, probe.bytes ^ 0x4d414e5449533033ull);
+    out.flush();
+    if (!out)
+        fail(Status::io, "RawCapture bundle write failed", "raw-writer");
+}
+data::AcquisitionBundle bundle(const Scan &scan, size_t index) {
+    const auto &r = scan.records.at(index);
+    return data::read_bundle(scan.mapping.slice(r.offset, r.bytes));
+}
+Scan scan(const std::filesystem::path &path, uint32_t schema, const CancellationToken &token) {
+    if (schema != 2 && schema != 3)
+        fail(Status::incompatible, "Unsupported record schema");
+    const auto magic = schema == 2 ? "MRAWREC2" : "MRAWREC3";
+    const uint64_t footer = schema == 2 ? 0x4d414e5449533032ull : 0x4d414e5449533033ull;
     Scan result;
-    if (!std::filesystem::file_size(path)) { result.incomplete = true; return result; }
+    token.check();
+    const auto bytes_on_disk = std::filesystem::file_size(path);
+    if (!bytes_on_disk) {
+        result.incomplete = true;
+        return result;
+    }
+    const uint64_t segment_bound = max_segment_bytes + 128 * 1024 * 1024 + (schema == 3 ? 40 : 0);
+    if (bytes_on_disk > segment_bound)
+        fail(Status::corrupt, "RawCapture segment exceeds bound");
     auto map = platform::map_read(path);
-    if (map.size > max_segment_bytes + 128 * 1024 * 1024)
+    if (map.size > segment_bound)
         fail(Status::corrupt, "RawCapture segment exceeds bound");
     auto storage = std::make_shared<memory::Storage>(); storage->owner = map.owner;
     storage->host = map.data; storage->size = map.size; storage->alignment = 1;
@@ -65,17 +97,30 @@ Scan scan(const std::filesystem::path &path) {
     std::span<const std::byte> bytes{map.data, map.size};
     size_t pos{};
     while (pos < bytes.size()) {
+        token.check();
         if (bytes.size() - pos < 32) { result.incomplete = true; break; }
-        if (std::memcmp(bytes.data() + pos, "MRAWREC2", 8)) { result.corruption = "Invalid RawCapture record magic"; break; }
+        if (std::memcmp(bytes.data() + pos, magic, 8)) {
+            result.corruption = "Invalid RawCapture record magic";
+            break;
+        }
         auto size = number(bytes, pos + 8), expected_hash = number(bytes, pos + 16);
         if (!size || size > 128 * 1024 * 1024 || number(bytes, pos + 24) != ~size) { result.corruption = "Invalid RawCapture record length"; break; }
         if (size + 40 > bytes.size() - pos) { result.incomplete = true; break; }
         auto payload = bytes.subspan(pos + 32, static_cast<size_t>(size));
-        if (hash(payload) != expected_hash || number(bytes, pos + 32 + static_cast<size_t>(size)) != (size ^ 0x4d414e5449533032ull)) {
+        if (hash(payload) != expected_hash ||
+            number(bytes, pos + 32 + static_cast<size_t>(size)) != (size ^ footer)) {
             result.corruption = "RawCapture record integrity mismatch"; break;
         }
-        try { (void)data::read_packet(result.mapping.slice(pos + 32, static_cast<size_t>(size))); }
-        catch (const std::exception &e) { result.corruption = e.what(); break; }
+        try {
+            auto payload_view = result.mapping.slice(pos + 32, static_cast<size_t>(size));
+            if (schema == 2)
+                (void)data::read_packet(payload_view);
+            else
+                (void)data::read_bundle(payload_view);
+        } catch (const std::exception &e) {
+            result.corruption = e.what();
+            break;
+        }
         result.records.push_back({pos + 32, static_cast<size_t>(size)});
         if (result.records.size() > 100000) { result.corruption = "Too many records in segment"; break; }
         pos += static_cast<size_t>(size) + 40; result.complete_bytes = pos;

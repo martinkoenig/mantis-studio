@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <mantis/client.hpp>
 #include <mantis/data_io.hpp>
+#include <mantis/projected_light_io.hpp>
 #include <thread>
 namespace mantis::client {
 Endpoint Endpoint::environment() {
@@ -19,7 +20,8 @@ wire::v1::Response Client::call(wire::v1::Request request) const {
     if (endpoint_.token.empty())
         fail(Status::invalid_argument, "Set MANTIS_TOKEN to the daemon's local access token");
     request.set_protocol_version(protocol::version);
-    request.set_request_id(Id::random().value);
+    if (request.request_id().empty())
+        request.set_request_id(Id::random().value);
     request.set_token(endpoint_.token);
     auto socket = platform::Socket::connect(endpoint_.port);
     protocol::send(socket, request);
@@ -135,5 +137,139 @@ data::Published Client::data(const std::string &artifact) const {
     if (reply.data().transport() != "local-mapped-file" || reply.data().format_version() != 1)
         fail(Status::unsupported, "Unsupported data-plane transport");
     return data::read_packet(reply.data().locator());
+}
+wire::v1::CalibrationEntry Client::create_calibration_target(const wire::v1::CalibrationTargetSpecification &target,
+                                                            const std::string &series) const {
+    wire::v1::Request r; *r.mutable_calibration_target_create()->mutable_target() = target;
+    r.mutable_calibration_target_create()->set_series_id(series);
+    return call(r).calibration_info().entry();
+}
+std::string Client::build_calibration_dataset(const std::string &target, const std::vector<std::string> &raw,
+                                             const std::vector<std::string> &roles, uint32_t max_samples,
+                                             const std::string &series) const {
+    wire::v1::Request r; auto *d = r.mutable_calibration_dataset_build(); d->set_target_artifact_id(target);
+    for (const auto &id : raw) d->add_raw_capture_artifact_ids(id);
+    for (const auto &role : roles) d->add_camera_roles(role);
+    d->set_max_selected_per_camera(max_samples); d->set_series_id(series); return call(r).result_id();
+}
+std::string Client::solve_camera_calibration(const std::string &dataset, const std::string &role, uint32_t heldout,
+                                             const std::string &series) const {
+    wire::v1::Request r; auto *c = r.mutable_calibration_camera_solve(); c->set_dataset_artifact_id(dataset);
+    c->set_camera_role(role); c->set_heldout_per_camera(heldout); c->set_series_id(series); return call(r).result_id();
+}
+std::string Client::solve_rig_calibration(const std::string &dataset, const std::string &left, const std::string &right,
+                                         uint32_t heldout, const std::string &frame_id, const std::string &frame_name,
+                                         const std::string &series) const {
+    wire::v1::Request r; auto *c = r.mutable_calibration_rig_solve(); c->set_dataset_artifact_id(dataset);
+    c->set_left_camera_artifact_id(left); c->set_right_camera_artifact_id(right); c->set_heldout_pairs(heldout);
+    c->set_rig_frame_id(frame_id); c->set_rig_frame_name(frame_name); c->set_series_id(series); return call(r).result_id();
+}
+std::vector<wire::v1::CalibrationEntry> Client::calibrations() const {
+    wire::v1::Request r; r.mutable_calibrations_list(); auto out = call(r);
+    return {out.calibrations().begin(), out.calibrations().end()};
+}
+wire::v1::CalibrationInfo Client::calibration_info(const std::string &id) const {
+    wire::v1::Request r; r.mutable_calibration_info()->set_id(id); return call(r).calibration_info();
+}
+std::optional<wire::v1::ActiveCalibrationBinding> Client::active_calibration(const std::string &device) const {
+    wire::v1::Request r; r.mutable_calibration_active()->set_id(device); auto out = call(r);
+    if (out.active_calibration().has_binding()) return out.active_calibration().binding();
+    return {};
+}
+void Client::activate_calibration(const std::string &device, const std::string &rig) const {
+    wire::v1::Request r; r.mutable_calibration_activate()->set_logical_device_id(device);
+    r.mutable_calibration_activate()->set_rig_artifact_id(rig); (void)call(r);
+}
+void Client::clear_calibration(const std::string &device) const {
+    wire::v1::Request r; r.mutable_calibration_clear()->set_id(device); (void)call(r);
+}
+std::vector<wire::v1::ProjectedDevice> Client::projected_devices() const {
+    wire::v1::Request q;
+    q.mutable_projected_devices_list();
+    auto r = call(q);
+    return {r.projected_devices().begin(), r.projected_devices().end()};
+}
+wire::v1::ProjectedValidation Client::validate_projected(const wire::v1::ProjectedCaptureRequest &v) const {
+    wire::v1::Request q;
+    *q.mutable_projected_validate() = v;
+    return call(q).projected_validation();
+}
+wire::v1::ProjectedCapture Client::start_projected(const wire::v1::ProjectedCaptureRequest &v,
+                                                   const std::string &id) const {
+    wire::v1::Request q;
+    *q.mutable_projected_start() = v;
+    q.set_request_id(id);
+    return call(q).projected_captures(0);
+}
+wire::v1::ProjectedCapture Client::projected_status(const std::string &id) const {
+    wire::v1::Request q;
+    q.mutable_projected_status()->set_id(id);
+    return call(q).projected_captures(0);
+}
+std::vector<wire::v1::ProjectedCapture> Client::projected_captures() const {
+    wire::v1::Request q;
+    q.mutable_projected_captures_list();
+    auto r = call(q);
+    return {r.projected_captures().begin(), r.projected_captures().end()};
+}
+wire::v1::ProjectedCapture Client::stop_projected(const std::string &id, const std::string &run,
+                                                  const std::string &generation) const {
+    wire::v1::Request q;
+    auto *s = q.mutable_projected_stop();
+    s->set_capture_id(id);
+    s->set_expected_run_id(run);
+    s->set_expected_generation_id(generation);
+    s->set_mode(wire::v1::PROJECTED_NORMAL_STOP);
+    return call(q).projected_captures(0);
+}
+wire::v1::ProjectedCapture Client::cancel_projected(const std::string &id, const std::string &run,
+                                                    const std::string &generation) const {
+    wire::v1::Request q;
+    auto *s = q.mutable_projected_stop();
+    s->set_capture_id(id);
+    s->set_expected_run_id(run);
+    s->set_expected_generation_id(generation);
+    s->set_mode(wire::v1::PROJECTED_CANCEL);
+    return call(q).projected_captures(0);
+}
+wire::v1::DataReference Client::projected_bundle_reference(const std::string &id) const {
+    wire::v1::Request q;
+    q.mutable_projected_bundle()->set_id(id);
+    return call(q).data();
+}
+std::optional<data::AcquisitionBundle> Client::projected_bundle(const std::string &id) const {
+    wire::v1::DataReference ref;
+    try {
+        ref = projected_bundle_reference(id);
+    } catch (const Failure &e) {
+        if (e.error.code == Status::busy)
+            return {};
+        throw;
+    }
+    auto release = [&] {
+        wire::v1::Request q;
+        q.mutable_preview_release()->set_id(ref.lease_id());
+        (void)call(q);
+    };
+    try {
+        if (ref.transport() != "local-mapped-file" || ref.format_version() != 3 || ref.lease_id().empty())
+            fail(Status::incompatible, "Unsupported projected bundle reference");
+        auto mapping = platform::map_read(ref.locator());
+        auto backing = std::make_shared<memory::Storage>();
+        backing->owner = mapping.owner;
+        backing->host = mapping.data;
+        backing->size = mapping.size;
+        backing->alignment = 1;
+        backing->backend = "local-mapped-file";
+        auto bundle = data::read_bundle({backing, 0, mapping.size});
+        release();
+        return bundle;
+    } catch (...) {
+        try {
+            release();
+        } catch (...) {
+        }
+        throw;
+    }
 }
 } // namespace mantis::client

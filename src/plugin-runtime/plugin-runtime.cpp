@@ -1,7 +1,9 @@
+#include "buffer_handle.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <mantis/data_io.hpp>
+#include <mantis/laser_observation_io.hpp>
 #include <mantis/plugin_runtime.hpp>
 #include <nlohmann/json.hpp>
 struct MantisBuffer {
@@ -14,6 +16,9 @@ struct MantisBuffer {
     explicit MantisBuffer(mantis::memory::Buffer b) : published(std::move(b)) {}
 };
 namespace mantis::plugins {
+MantisBuffer *detail::wrap_buffer(memory::Buffer buffer) {
+    return new MantisBuffer(std::move(buffer));
+}
 namespace {
 MantisBuffer *allocate(uint64_t size, uint64_t alignment) noexcept {
     try {
@@ -70,7 +75,7 @@ struct PacketView {
     explicit PacketView(const data::Packet &p) {
         try {
             for (const auto &a : p.attributes) {
-                auto *b = new MantisBuffer(a.buffer);
+                auto *b = detail::wrap_buffer(a.buffer);
                 buffers.push_back(b);
                 MantisAttributeV1 attr{};
                 attr.struct_size = sizeof(attr);
@@ -320,21 +325,41 @@ class Stream final : public device::ImageStream {
 const MantisHostV1 *host_api() {
     return &host;
 }
-Loaded::Loaded(const std::filesystem::path &path) : library_(path) {
-    auto entry = reinterpret_cast<MantisPluginEntryV1>(library_.symbol("mantis_plugin_entry"));
-    api_ = entry(1);
-    if (!api_ || api_->struct_size < sizeof(MantisPluginV1) || api_->abi_version != 1 || !api_->id ||
-        !api_->version || !api_->initialize || !api_->shutdown || !api_->query_interface)
-        fail(Status::incompatible, "Plugin ABI incompatible");
-    if (api_->initialize(&host)) {
-        api_ = nullptr;
-        fail(Status::plugin_failed, "Plugin initialization failed");
+// One initialize/shutdown lifetime per canonical DSO, shared by all Loaded
+// wrappers and the projected-light instance pins. Root shutdown cannot race an
+// instance held by another wrapper of the same library.
+struct Loaded::SharedLibrary {
+    platform::Library library;
+    const MantisPluginV1 *api{};
+    explicit SharedLibrary(const std::filesystem::path &path) : library(path) {
+        auto entry = reinterpret_cast<MantisPluginEntryV1>(library.symbol("mantis_plugin_entry"));
+        api = entry(1);
+        if (!api || api->struct_size < sizeof(MantisPluginV1) || api->abi_version != 1 || !api->id ||
+            !api->version || !api->initialize || !api->shutdown || !api->query_interface)
+            fail(Status::incompatible, "Plugin ABI incompatible");
+        if (api->initialize(&host)) {
+            api = nullptr;
+            fail(Status::plugin_failed, "Plugin initialization failed");
+        }
     }
+    ~SharedLibrary() {
+        if (api)
+            api->shutdown();
+    }
+};
+Loaded::Loaded(const std::filesystem::path &path) : path_(std::filesystem::weakly_canonical(path)) {
+    static std::mutex mutex;
+    static std::map<std::filesystem::path, std::weak_ptr<SharedLibrary>> libraries;
+    std::lock_guard lock(mutex);
+    auto &cached = libraries[path_];
+    library_ = cached.lock();
+    if (!library_) {
+        library_ = std::make_shared<SharedLibrary>(path_);
+        cached = library_;
+    }
+    api_ = library_->api;
 }
-Loaded::~Loaded() {
-    if (api_)
-        api_->shutdown();
-}
+Loaded::~Loaded() = default;
 data::Published process(const Loaded &p, const data::Packet &input) {
     auto api = p.query<MantisProcessorV1>(MANTIS_PROCESSOR_V1);
     if (!api->process)
@@ -374,8 +399,28 @@ pipeline::NodeDescriptor describe_node(const Loaded &p) {
     out.resources.backends = {d.backend};
     return out;
 }
+struct Registry::SemanticContext {
+    std::mutex mutex;
+    std::filesystem::path host, scratch;
+    CancellationToken shutdown;
+    SemanticContext(std::filesystem::path h, std::filesystem::path s)
+        : host(std::move(h)), scratch(std::move(s)) {}
+};
+void Registry::isolation_failure(const std::shared_ptr<SemanticContext> &context,
+                                 const std::shared_ptr<Entry> &entry, const Error &error) {
+    if (error.code == Status::cancelled)
+        return;
+    std::lock_guard lock(context->mutex);
+    entry->state = "failed";
+    entry->diagnostic = error.message;
+}
+Registry::~Registry() {
+    std::lock_guard lock(mutex_);
+    semantic_->shutdown.cancel(); // cancel isolated calls without touching caller-owned tokens
+}
 Registry::Registry(std::filesystem::path host, std::filesystem::path scratch, LogSink logger)
-    : host_(std::move(host)), scratch_(std::move(scratch)), logger_(std::move(logger)) {
+    : semantic_(std::make_shared<SemanticContext>(host, scratch)), mutex_(semantic_->mutex),
+      host_(std::move(host)), scratch_(std::move(scratch)), logger_(std::move(logger)) {
     std::filesystem::create_directories(scratch_);
 }
 std::shared_ptr<Registry::Entry> Registry::entry(const std::string &id) const {
@@ -415,8 +460,14 @@ void Registry::discover(const std::filesystem::path &directory, const std::vecto
                 if (e->manifest.id != e->loaded->api()->id ||
                     e->manifest.version != e->loaded->api()->version)
                     fail(Status::incompatible, "Manifest/binary identity mismatch");
-                if (e->manifest.kind == "processor")
-                    e->node = describe_node(*e->loaded);
+                if (e->manifest.kind == "processor") {
+                    if (e->loaded->api()->query_interface(MANTIS_PROCESSOR_V1))
+                        e->node = describe_node(*e->loaded);
+                    if (e->loaded->api()->query_interface(MANTIS_PROCESSOR_V2))
+                        e->semantic_node = describe_semantic_node(*e->loaded);
+                    if (e->node.id.empty() && !e->semantic_node)
+                        fail(Status::incompatible, "No supported processor interface");
+                }
             } else {
                 e->manifest.execution = "isolated";
                 auto probe = scratch_ / (Id::random().value + ".json");
@@ -434,13 +485,27 @@ void Registry::discover(const std::filesystem::path &directory, const std::vecto
                     fail(Status::unsupported, "Isolated device stream transport is reserved; v0.1 supports "
                                               "isolated processors/exporters");
                 if (e->manifest.kind == "processor") {
-                    e->node.id = info.at("node");
-                    e->node.plugin_id = e->manifest.id;
-                    e->node.algorithm_id = e->node.id;
-                    e->node.deterministic = info.at("deterministic");
-                    e->node.resources.backends = {info.at("backend")};
-                    e->node.inputs = {{"input", {info.at("input"), info.at("input_schema")}}};
-                    e->node.outputs = {{"output", {info.at("output"), info.at("output_schema")}}};
+                    auto descriptor = [&](const nlohmann::json &node_info) {
+                        pipeline::NodeDescriptor d;
+                        d.id = node_info.at("node");
+                        d.plugin_id = e->manifest.id;
+                        d.algorithm_id = d.id;
+                        d.deterministic = node_info.at("deterministic");
+                        d.resources.backends = {node_info.at("backend")};
+                        d.inputs = {{"input", {node_info.at("input"), node_info.at("input_schema")}}};
+                        d.outputs = {{"output", {node_info.at("output"), node_info.at("output_schema")}}};
+                        if (node_info.contains("algorithm_version")) {
+                            auto v = node_info.at("algorithm_version");
+                            d.version = {v.at(0), v.at(1), v.at(2)};
+                        }
+                        return d;
+                    };
+                    if (info.contains("node"))
+                        e->node = descriptor(info);
+                    if (info.contains("semantic_node"))
+                        e->semantic_node = descriptor(info.at("semantic_node"));
+                    if (e->node.id.empty() && !e->semantic_node)
+                        fail(Status::incompatible, "No supported processor interface");
                 }
             }
         } catch (const std::exception &ex) {
@@ -512,11 +577,7 @@ void Registry::isolated(const std::shared_ptr<Entry> &e, const std::string &oper
     } catch (const Failure &ex) {
         if (ex.error.code == Status::cancelled)
             throw;
-        {
-            std::lock_guard lock(mutex_);
-            e->state = "failed";
-            e->diagnostic = ex.what();
-        }
+        isolation_failure(semantic_, e, ex.error);
         if (logger_)
             logger_({"error", "plugin", e->manifest.id + ": " + ex.what()});
         throw;
@@ -537,8 +598,8 @@ pipeline::Node Registry::node(const std::string &id) {
     auto e = entry(id);
     {
         std::lock_guard lock(mutex_);
-        if (e->state != "registered" || e->manifest.kind != "processor")
-            fail(Status::plugin_failed, "Processor unavailable: " + id);
+        if (e->state != "registered" || e->manifest.kind != "processor" || e->node.id.empty())
+            fail(Status::plugin_failed, "ProcessorV1 unavailable: " + id);
     }
     return {e->node, [this, e] {
                 return std::make_unique<FunctionNode>(
@@ -601,5 +662,113 @@ void Registry::set_enabled(const std::string &id, bool enabled) {
         fail(Status::busy, "Device plugin lifecycle belongs to active device runtime");
     e->state = enabled ? "registered" : "disabled";
     e->diagnostic.clear();
+}
+namespace {
+class SemanticFunctionNode final : public pipeline::SemanticNodeInstance {
+    std::function<Result<data::SemanticPublished>(std::span<const data::SemanticPublished>,
+                                                  const CancellationToken &)>
+        f;
+
+  public:
+    explicit SemanticFunctionNode(decltype(f) callback) : f(std::move(callback)) {}
+    Result<data::SemanticPublished> process(std::span<const data::SemanticPublished> inputs,
+                                            const CancellationToken &token) override {
+        return f(inputs, token);
+    }
+};
+} // namespace
+pipeline::SemanticNode Registry::semantic_node(const std::string &id, uint32_t ms) {
+    if (!ms || ms > 60000)
+        fail(Status::invalid_argument, "ProcessorV2 timeout must be finite");
+    auto e = entry(id);
+    {
+        std::lock_guard lock(mutex_);
+        if (e->state != "registered" || e->manifest.kind != "processor" || !e->semantic_node)
+            fail(Status::incompatible, "ProcessorV2 unavailable: " + id);
+    }
+    auto context = semantic_;
+    return {
+        *e->semantic_node, [context, e, ms] {
+            context->shutdown.check();
+            return std::make_unique<SemanticFunctionNode>(
+                [context, e, ms](std::span<const data::SemanticPublished> inputs,
+                                 const CancellationToken &token) -> Result<data::SemanticPublished> {
+                    bool plugin_invoked = false;
+                    try {
+                        token.check();
+                        context->shutdown.check();
+                        {
+                            std::lock_guard lock(context->mutex);
+                            if (e->state != "registered")
+                                fail(Status::plugin_failed, "Processor unavailable");
+                        }
+                        if (inputs.size() != 1 || !inputs[0] ||
+                            data::semantic_type(*inputs[0]) != e->semantic_node->inputs[0].type)
+                            fail(Status::incompatible, "ProcessorV2 input type/schema mismatch");
+                        auto valid = data::validate(*inputs[0]);
+                        if (!valid)
+                            throw Failure(valid.error());
+                        if (e->loaded) {
+                            auto out = process_semantic(*e->loaded, *inputs[0], ms, token);
+                            if (data::semantic_type(*out) != e->semantic_node->outputs[0].type)
+                                fail(Status::incompatible,
+                                     "ProcessorV2 registered output type/schema changed");
+                            context->shutdown.check();
+                            return out;
+                        }
+                        auto dir = context->scratch / Id::random().value;
+                        std::filesystem::create_directory(dir);
+                        struct Cleanup {
+                            std::filesystem::path p;
+                            ~Cleanup() {
+                                std::error_code ec;
+                                std::filesystem::remove_all(p, ec);
+                            }
+                        } cleanup{dir};
+                        data::write_semantic_packet(dir / "input.semantic", *inputs[0]);
+                        // Parent enforces a finite lifetime even if an isolated plugin violates its callback
+                        // deadline.
+                        auto seconds = std::chrono::seconds((ms + 999) / 1000 + 1);
+                        plugin_invoked = true;
+                        auto rc = platform::run_process(
+                            context->host,
+                            {"process-semantic", e->manifest.library.string(),
+                             (dir / "input.semantic").string(), (dir / "output.semantic").string(),
+                             std::to_string(ms), (dir / "diagnostic.txt").string()},
+                            token, seconds, &context->shutdown);
+                        token.check();
+                        context->shutdown.check();
+                        if (rc) {
+                            std::string diagnostic;
+                            std::ifstream error(dir / "diagnostic.txt", std::ios::binary);
+                            char text[2048];
+                            if (error) {
+                                error.read(text, sizeof(text));
+                                diagnostic.assign(text, static_cast<size_t>(error.gcount()));
+                            }
+                            fail(Status::plugin_failed,
+                                 "ProcessorV2 host exited " + std::to_string(rc) +
+                                     (diagnostic.empty() ? "" : ": " + diagnostic),
+                                 e->manifest.id);
+                        }
+                        context->shutdown.check();
+                        token.check();
+                        auto out = data::read_semantic_packet(dir / "output.semantic");
+                        if (data::semantic_type(out) != e->semantic_node->outputs[0].type)
+                            fail(Status::incompatible, "ProcessorV2 isolated output type/schema mismatch");
+                        context->shutdown.check();
+                        return data::publish(std::move(out));
+                    } catch (const Failure &ex) {
+                        if (plugin_invoked)
+                            isolation_failure(context, e, ex.error);
+                        return std::unexpected(ex.error);
+                    } catch (const std::exception &ex) {
+                        Error error{Status::plugin_failed, ex.what(), e->manifest.id};
+                        if (plugin_invoked)
+                            isolation_failure(context, e, error);
+                        return std::unexpected(error);
+                    }
+                });
+        }};
 }
 } // namespace mantis::plugins

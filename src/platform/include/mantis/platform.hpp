@@ -40,8 +40,8 @@ Mapping map_read(const std::filesystem::path &);
 void durable_file(const std::filesystem::path &);
 void durable_directory(const std::filesystem::path &);
 int run_process(const std::filesystem::path &executable, const std::vector<std::string> &args,
-                const CancellationToken &cancel = {},
-                std::chrono::seconds timeout = std::chrono::seconds(30));
+                const CancellationToken &cancel = {}, std::chrono::seconds timeout = std::chrono::seconds(30),
+                const CancellationToken *owner_cancel = nullptr);
 class FileLock {
     intptr_t handle_{-1};
 

@@ -11,11 +11,30 @@ for module in foundation:
             assert not re.match(r"(Q[A-Z]|Qt|cuda|vulkan|Eigen|opencv|sqlite)", include), (path, include)
         assert "QColor" not in text
         assert not re.search(r'#include\s*[<"]linux/', text), path
+        if module == "data":
+            assert not re.search(r'#include\s*[<"](?:nlohmann|google/protobuf|mantis/(?:device_api|artifact_api|plugin_runtime|services|protocol))', text), path
+        if module == "calibration":
+            assert not re.search(r'#include\s*[<"](?:filesystem|nlohmann|google/protobuf|mantis/(?:artifact|data|memory|calibration_opencv|calibration_dataset_builder|calibration_solver_opencv|calibration_artifacts))', text), path
+            assert "BufferView" not in text, path
+
+for path in (root / "src" / "calibration-solver-opencv").rglob("*"):
+    if path.suffix not in (".cpp", ".hpp"):
+        continue
+    assert not re.search(r'#include\s*[<"](?:opencv2/(?:aruco|objdetect)|mantis/(?:artifact|data|memory|calibration_opencv|calibration_dataset_builder))', path.read_text()), path
+
+for path in (root / "src" / "calibration-artifacts").rglob("*"):
+    if path.suffix not in (".cpp", ".hpp"):
+        continue
+    assert not re.search(r'#include\s*[<"](?:opencv|Qt|mantis/(?:services|client|protocol|calibration_opencv|calibration_dataset_builder|calibration_solver_opencv))', path.read_text()), path
+    if "include" in path.parts:
+        assert "nlohmann" not in path.read_text(), path
+
 for folder in ["apps/studio", "apps/cli", "src/client"]:
     for path in (root / folder).rglob("*"):
         if path.suffix not in (".cpp", ".hpp"): continue
         text = path.read_text()
-        assert not re.search(r'#include.*(services|pipeline_runtime|device_runtime|artifact_store|plugin_runtime|jobs\.hpp)', text), path
+        assert not re.search(r'#include.*(opencv|sqlite)', text), path
+        assert not re.search(r'#include.*(services|pipeline_runtime|device_runtime|artifact_store|plugin_runtime|jobs\.hpp|calibration_artifacts|calibration_dataset_builder|calibration_opencv|calibration_solver_opencv)', text), path
 for path in (root / "plugins").rglob("*.cpp"):
     includes = re.findall(r'#include\s*[<"](mantis/[^>"]+)', path.read_text())
     assert all(x in ("mantis/plugin.h", "mantis/sdk.hpp") for x in includes), path
@@ -29,3 +48,11 @@ for path in (root / "plugins/first-party/devices").rglob("*.cpp"):
     if path.name != "linux.cpp":
         assert not re.search(r'#include\s*[<"]linux/', text), path
 print("Foundation, frontend, plugin and Linux media implementation boundaries passed")
+
+# Device APIs expose canonical domain types, never plugin tables/runtime policy.
+for path in (root / "src/device-api/include").rglob("*.hpp"):
+    assert not re.search(r'#include\s*[<"]mantis/(?:plugin|sdk|.*_runtime|services|protocol)', path.read_text()), path
+# The C++ plugin SDK wraps public C concepts only.
+for path in (root / "sdk/cpp").rglob("*.hpp"):
+    includes = re.findall(r'#include\s*[<"](mantis/[^>"]+)', path.read_text())
+    assert all((root / "sdk/c/include" / name).is_file() for name in includes), path

@@ -15,9 +15,12 @@ def require(condition, message):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--duration", type=float, default=1.0)
+    parser.add_argument("--minimum-framesets", type=int, default=0,
+                        help="Require this many committed pairs; allow at most 15 additional seconds for progress")
     parser.add_argument("--allow-fixture", action="store_true", help="Automated tests only")
     args = parser.parse_args()
     require(math.isfinite(args.duration) and 0 < args.duration <= 60, "Duration must be in (0, 60] seconds")
+    require(0 <= args.minimum_framesets <= 4096, "Minimum framesets must be in [0, 4096]")
     client = mantis.connect()
     parents = [d for d in client.devices.list() if d.plugin_id == "org.mantis.x1" and not d.parent]
     require(len(parents) == 1, "Expected one configured X1 parent; inspect device diagnostics")
@@ -33,11 +36,19 @@ def main():
     capture = client.capture.start(parent.id)
     try:
         deadline = time.monotonic() + args.duration
-        while time.monotonic() < deadline:
+        # Native phase crossings depend on frames, not elapsed delivery time.
+        # The optional progress condition is bounded independently and does not
+        # change the camera cadence or LOSSLESS recorder admission deadline.
+        progress_deadline = deadline + 15
+        while True:
             status = capture.status()
             require(not status.error, status.error)
             if status.framesets_produced:
                 require(abs(int(status.diagnostics["paired_v4l2_delta_ns"])) <= 5000000, "Selected pair exceeded 5 ms")
+            now = time.monotonic()
+            if now >= deadline and status.framesets_committed >= args.minimum_framesets:
+                break
+            require(now < progress_deadline, "Timed out waiting for required committed pairs")
             time.sleep(0.05)
     finally:
         capture.stop()  # surfaces capture errors, otherwise waits for finalization
@@ -46,6 +57,7 @@ def main():
     require(not status.error, status.error)
     require(not status.active, "Capture remained active after stop")
     require(status.framesets_produced > 0 and status.framesets_produced == status.framesets_committed, "Incomplete paired recording")
+    require(status.framesets_committed >= args.minimum_framesets, "Required committed pairs missing")
     require(status.dropped == 0 and status.queue_saturation == 0, "Raw recorder loss/saturation")
     require(metrics["pairing_policy_version"] == "2", "Unexpected software correspondence policy")
     require(metrics["steady_state_discard_limit_per_pair"] == "2", "Unexpected realignment bound")
