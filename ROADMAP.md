@@ -11,6 +11,16 @@ The roadmap intentionally distinguishes between **implemented/accepted**, **curr
 
 [L7b-2b-2 Q6A readiness and serial policy](docs/hardware/x1-q6a-uart-readiness.md) is FINAL ACCEPTED at `9b6f0cc72f44134009302abe09175b7158b27f38`: bounded offline/read-only evidence inspection and test-only 115200 8N1 PTY configuration. Physical authorization remains BLOCKED.
 
+## CUT-0B repository integration candidate
+
+`integration/cut-0b` includes pinned main `ec045dd`, Core `24c4d87` and UI `62428b0`
+histories. [Integration qualification](docs/architecture/cut-0b-integration-qualification.md)
+is separate from source-package acceptance. L8a-1a and the latest UI revision
+retain their independent review gates; passing integration tests does not promote
+them. No `develop` branch or Orchestrator pilot is created by this package.
+Unpublished Virtual Scanner work, untracked UI review files and the non-normative
+`docs/parallel-development-study` branch are excluded and preserved.
+
 ## Release sequence
 
 | Version | Theme | Status | Primary outcome |
