@@ -74,6 +74,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
         run: |
+          # A failed Core test is not evidence of a UI route crash.
+          if ! grep -Eq '^[0-9]+:studio-ui-m0-qml$' build/ci/Testing/Temporary/LastTestsFailed.log; then
+            echo "No studio-ui-m0-qml failure; route crash diagnostics do not apply."
+            exit 0
+          fi
           mkdir -p build/ci/ui-m2a/diagnostic
           for attempt in $(seq 1 10); do
             gdb -batch -ex run -ex 'thread apply all bt full' -ex 'print (char *)qt_v4StackTraceForEngine(routeDebugEngine)' --args build/ci/bin/mantis-studio-ui-m0-tests build/ci/ui-m2a/diagnostic > "build/ci/ui-m2a/diagnostic/route-$attempt.log" 2>&1
@@ -82,6 +87,17 @@ jobs:
               break
             fi
           done
+      - name: Upload project capability diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-capabilities-${{ matrix.runner }}-${{ matrix.studio }}
+          retention-days: 14
+          path: |
+            build/ci/ui-m2a/capabilities*/capabilities.log
+            build/ci/ui-m2a/capabilities*/client-result.json
+            build/ci/ui-m2a/capabilities*/*-failure.log
+            build/ci/ui-m2a/capabilities*/negative-result.log
       - name: Upload UI review evidence
         if: ${{ always() && matrix.studio == 'ON' }}
         uses: actions/upload-artifact@v4
@@ -112,3 +128,14 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: halt_on_error=1
+      - name: Upload project capability diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-capabilities-sanitizers
+          retention-days: 14
+          path: |
+            build/sanitizers/ui-m2a/capabilities*/capabilities.log
+            build/sanitizers/ui-m2a/capabilities*/client-result.json
+            build/sanitizers/ui-m2a/capabilities*/*-failure.log
+            build/sanitizers/ui-m2a/capabilities*/negative-result.log
