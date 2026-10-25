@@ -1,0 +1,3 @@
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Native release gentle/fast: velocity=500/2500 travel=46.8848/248.16
+Distinct gentle/fast gestures collapsed into the same release speed

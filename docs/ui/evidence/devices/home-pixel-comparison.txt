@@ -1,0 +1,1 @@
+Qt 6.4 Home accepted M2a evidence vs UI-M2b application: sizes (1536, 1024)/(1536, 1024), difference bounding box None

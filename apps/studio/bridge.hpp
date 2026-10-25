@@ -1,20 +1,34 @@
 #pragma once
-#include <QFutureWatcher>
+#include "cloud_retry.hpp"
 #include "preview.hpp"
+#include <QFutureWatcher>
 #include <QObject>
+#include <QPointer>
 #include <QTimer>
 #include <QVariantList>
 #include <mantis/client.hpp>
 #include <mantis/render.hpp>
+#include <optional>
+#include <vector>
+struct StudioIssue {
+    std::string phase, message;
+    std::optional<mantis::Error> cause;
+};
 struct StudioResult {
-    mantis::wire::v1::Response snapshot;
+    std::optional<mantis::wire::v1::Response> snapshot;
     mantis::data::Published cloud;
-    std::string cloud_id, newest_id, error;
+    std::string cloud_id, newest_id, cloud_project;
+    std::vector<StudioIssue> issues;
+    bool operationAttempted{}, artifactAttempted{};
+    std::optional<CloudRetry> retry;
+    std::optional<quint64> requestGeneration;
 };
 class StudioBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString acquisitionText READ acquisitionText NOTIFY changed)
     Q_PROPERTY(bool dualPreview READ dualPreview NOTIFY changed)
+    Q_PROPERTY(bool previewCurrent READ previewCurrent NOTIFY changed)
+    Q_PROPERTY(QString previewError READ previewError NOTIFY changed)
     Q_PROPERTY(QVariantList devices READ devices NOTIFY changed)
     Q_PROPERTY(QVariantList artifacts READ artifacts NOTIFY changed)
     Q_PROPERTY(QVariantList jobs READ jobs NOTIFY changed)
@@ -22,26 +36,58 @@ class StudioBridge : public QObject {
     Q_PROPERTY(QVariantList diagnostics READ diagnostics NOTIFY changed)
     Q_PROPERTY(QString project READ project NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
+    Q_PROPERTY(QVariantList errorDetails READ errorDetails NOTIFY changed)
     Q_PROPERTY(bool connected READ connected NOTIFY changed)
+    Q_PROPERTY(bool hasSnapshot READ hasSnapshot NOTIFY changed)
     Q_PROPERTY(bool capturing READ capturing NOTIFY changed)
+    Q_PROPERTY(bool captureStateKnown READ captureStateKnown NOTIFY changed)
+    Q_PROPERTY(bool lastKnownCapturing READ lastKnownCapturing NOTIFY changed)
+    Q_PROPERTY(QString captureStatusText READ captureStatusText NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString selectedArtifact READ selectedArtifact NOTIFY changed)
     QVariantList devices_, artifacts_, jobs_, plugins_, diagnostics_;
-    QString project_, error_, capture_, selected_, newest_;
-    bool connected_{};
+    QString project_, error_, capture_, selected_;
+    std::string project_identity_;
+    CloudRetry cloud_retry_;
+    CloudRetry::Clock retry_clock_;
+    QVariantList error_details_;
+    bool connected_{}, has_snapshot_{}, request_pending_{}, capture_state_valid_{};
+    int active_capture_count_{};
+    const bool runtime_enabled_;
     mantis::client::Client client_;
     QFutureWatcher<StudioResult> watcher_;
     QTimer timer_, preview_timer_;
     QFutureWatcher<PreviewResult> preview_watcher_;
-    MeasurementView *left_{}, *right_{};
-    QString acquisition_text_, replay_;
+    QPointer<MeasurementView> left_, right_;
+    QString acquisition_text_, replay_, preview_error_;
+    bool preview_current_{}, preview_pending_{};
     bool dual_preview_{}, preview_reported_{};
+    quint64 project_generation_{};
+
     void refreshPreview();
-    mantis::render::PointCloudView *view_{};
+    QPointer<mantis::render::PointCloudView> view_;
     void execute(std::function<void(const mantis::client::Client &)> action = {});
 
+  protected:
+    // Internal presentation seam; asynchronous completions and deterministic tests share this path.
+    void applyResult(const StudioResult &result);
+    void applyPreview(PreviewResult);
+    quint64 projectGeneration() const {
+        return project_generation_;
+    }
+    CloudRetry retryState() const {
+        return cloud_retry_;
+    }
+    static StudioResult collectResult(const mantis::client::Client &client,
+                                      const std::function<void(const mantis::client::Client &)> &action = {},
+                                      std::optional<std::string> artifact = {},
+                                      const std::string &displayedNewest = {},
+                                      std::optional<std::string> expectedProject = {}, CloudRetry retry = {},
+                                      CloudRetry::Clock clock = CloudRetry::monotonicNow);
+
   public:
-    explicit StudioBridge(QObject *parent = nullptr);
+    explicit StudioBridge(QObject *parent = nullptr, bool runtimeEnabled = true,
+                          CloudRetry::Clock clock = CloudRetry::monotonicNow);
     ~StudioBridge() override;
     QVariantList devices() const {
         return devices_;
@@ -64,24 +110,56 @@ class StudioBridge : public QObject {
     QString error() const {
         return error_;
     }
+    QVariantList errorDetails() const {
+        return error_details_;
+    }
     bool connected() const {
         return connected_;
     }
+    bool hasSnapshot() const {
+        return has_snapshot_;
+    }
     bool capturing() const {
-        return !capture_.isEmpty();
+        return connected_ && lastKnownCapturing();
+    }
+    bool lastKnownCapturing() const {
+        return active_capture_count_ > 0;
+    }
+    bool captureStateKnown() const {
+        return connected_ && has_snapshot_ && capture_state_valid_ && project_.size() <= 65536;
+    }
+    QString captureStatusText() const {
+        if (!connected_)
+            return lastKnownCapturing() ? "Last known: capture active · current state unknown"
+                                        : "Current capture state unknown";
+        if (!captureStateKnown())
+            return "Capture state ambiguous · controls unavailable";
+        return capturing() ? "Streaming · raw recording" : "No active capture in latest snapshot";
     }
     bool busy() const {
-        return watcher_.isRunning();
+        return request_pending_;
     }
     QString selectedArtifact() const {
         return selected_;
     }
-    QString acquisitionText() const { return acquisition_text_; }
-    bool dualPreview() const { return dual_preview_; }
+    QString acquisitionText() const {
+        return acquisition_text_;
+    }
+    bool previewCurrent() const {
+        return connected_ && preview_current_;
+    }
+    QString previewError() const {
+        return preview_error_;
+    }
+    bool dualPreview() const {
+        return dual_preview_;
+    }
     Q_INVOKABLE void attachPreview(QObject *left, QObject *right);
     Q_INVOKABLE void replay(QString artifact, bool verify);
     Q_INVOKABLE void attachView(QObject *);
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE bool canStartCapture(QString device) const;
+    Q_INVOKABLE bool canStopCapture() const;
     Q_INVOKABLE void startCapture(QString device);
     Q_INVOKABLE void stopCapture();
     Q_INVOKABLE void runPipeline(QString recipe);

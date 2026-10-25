@@ -1,0 +1,114 @@
+{
+  "format": 1,
+  "finding": "M3B-F01",
+  "date_utc": "2026-10-10T15:01:20.664336+00:00",
+  "branch": "feature/ui-m3-scan",
+  "reviewed_parent": "cbfd43fe5e19e94cfbc30f32841bf85f6841b2b2",
+  "final_commit": "Reported in independent handoff; remote revision.json records exact pushed SHA",
+  "full_suites": [
+    {
+      "build": "build/qt64",
+      "tests_passed": 79,
+      "outcome": "PASS",
+      "sanitizers": "off",
+      "seconds": 423.75,
+      "command": "ctest --test-dir build/qt64 --output-on-failure",
+      "log": "build/ui-m3b-verification/correction-qt64-full.log",
+      "log_sha256": "30124981ce88517dc016bc74b95123c57bd623bd197622e106d5c2cba45af553",
+      "build_command": "cmake --build build/qt64 --parallel 3",
+      "build_log": "build/ui-m3b-verification/correction-build-qt64.log",
+      "build_log_sha256": "3a70741922758589bc37241732b16d2bcda868242c05aa0642b8dfde7b6eb6cc"
+    },
+    {
+      "build": "build/debug",
+      "tests_passed": 79,
+      "outcome": "PASS",
+      "sanitizers": "off",
+      "seconds": 413.2,
+      "command": "ctest --test-dir build/debug --output-on-failure",
+      "log": "build/ui-m3b-verification/correction-qt69-full.log",
+      "log_sha256": "a4bafa9bfeaf352e7f21e5a457ea80ddf06494eab0eab9751a05170588f9eed6",
+      "build_command": "cmake --build build/debug --parallel 3",
+      "build_log": "build/ui-m3b-verification/correction-build-qt69.log",
+      "build_log_sha256": "7b8d3915e326066ffec5540da8244710a666e5b5f3ecf7c3a417e3f1292b51c6"
+    },
+    {
+      "build": "build/qt69-sanitizers",
+      "tests_passed": 79,
+      "outcome": "PASS",
+      "sanitizers": "ASan/UBSan/LSan, detect_leaks=1, halt_on_error=1",
+      "seconds": 688.43,
+      "command": "ctest --test-dir build/qt69-sanitizers --output-on-failure",
+      "log": "build/ui-m3b-verification/correction-qt69-sanitizers-full.log",
+      "log_sha256": "6c19d15cbc5041ac095e468e19d7740e6d3a25eb57e54f3aefc6e38dae4d58d6",
+      "build_command": "cmake --build build/qt69-sanitizers --parallel 3",
+      "build_log": "build/ui-m3b-verification/correction-build-qt69-sanitizers.log",
+      "build_log_sha256": "84b6bf79576393a06e49e5a51f00be6e135ec36357f5b1b9db1b25679ea01dfb"
+    },
+    {
+      "build": "build/qt64-headless",
+      "tests_passed": 42,
+      "outcome": "PASS",
+      "sanitizers": "off",
+      "seconds": 112.12,
+      "command": "ctest --test-dir build/qt64-headless --output-on-failure",
+      "log": "build/ui-m3b-verification/correction-headless-full.log",
+      "log_sha256": "95be3456d65f3d0191554ce9a1978f6643e0c36f8e29f4ce13f4a5d8608e6564",
+      "build_command": "cmake --build build/qt64-headless --parallel 3",
+      "build_log": "build/ui-m3b-verification/correction-build-headless.log",
+      "build_log_sha256": "8c35b1682f73592d30612d7b0fabdb384fcfff35cb5a076cb48b85b1368aa794"
+    },
+    {
+      "build": "build/qt64-headless-sanitizers",
+      "tests_passed": 42,
+      "outcome": "PASS",
+      "sanitizers": "ASan/UBSan/LSan, detect_leaks=1, halt_on_error=1",
+      "seconds": 245.08,
+      "command": "ctest --test-dir build/qt64-headless-sanitizers --output-on-failure",
+      "log": "build/ui-m3b-verification/correction-headless-sanitizers-full.log",
+      "log_sha256": "39b28169a22c1e1c6bb01c8a7c5280299a65221e1a2c096b3f1acfde1df57060",
+      "build_command": "cmake --build build/qt64-headless-sanitizers --parallel 3",
+      "build_log": "build/ui-m3b-verification/correction-build-headless-sanitizers.log",
+      "build_log_sha256": "8c35b1682f73592d30612d7b0fabdb384fcfff35cb5a076cb48b85b1368aa794"
+    }
+  ],
+  "full_tests_passed": 321,
+  "ui_repeat": {
+    "tests": 9,
+    "repetitions": 3,
+    "executions_passed": 27,
+    "log": "build/ui-m3b-verification/correction-ui-repeat.log",
+    "log_sha256": "c647cae83baed563117eca278405199391919698c061a46bc4752e88b51f09f3",
+    "seconds": 302.08
+  },
+  "focused_scan": {
+    "tests_passed": 7,
+    "log": "build/ui-m3b-verification/correction-focused.log",
+    "log_sha256": "c4fda59bfbdf16dcf2d806e398bd872c7b02517609f78c8ea2c833880da3627c"
+  },
+  "native": {
+    "outcome": "PASS",
+    "platform": "Qt 6.9.2 Wayland/software DPR 1.25",
+    "screenshots": 9,
+    "directory": "build/ui-m3b-verification/correction-native",
+    "log_sha256": "ebeec0c0ed044097f4e721db606a46a2450289c9e4ec304438d839f572b10765"
+  },
+  "source_sha256": {
+    "apps/studio/scan_model.cpp": "3f4d1d1d19495afadf305c9ed6430a4d87a9270629f905d21eefb0976614fabe",
+    "tests/unit/studio_scan.cpp": "9e26f5b4b3b616f19d9abc6616f2ca40eb42d24f8b71634a583de55e4419b124",
+    "ui/scan/ScanDemo.qml": "4b4571856839d5021049e56c700463c4870e146b5dc48fdad0b676538bc79252",
+    "ui/scan/ScanDock.qml": "e5ea469db96c2dd8d2e205c35dd14ba6dffdfd3c3e26f87aab89387d547e6ca0",
+    "ui/workspaces/ScanWorkspace.qml": "c419cdeb39fd10c7f9f657260a36e07aa612cebef03eea211a9d251fda2df090"
+  },
+  "screenshots_inspected": [
+    "docs/ui/evidence/m3b/stale-1920x1080.png",
+    "docs/ui/evidence/m3b/job-authority-stale-1920x1080.png",
+    "build/ui-m3b-verification/correction-native/native-normal-live.png"
+  ],
+  "other_checks": [
+    "clang-format --dry-run --Werror: PASS",
+    "git diff --check: PASS",
+    "Bridge, Classic Acquisition, CMake and CI unchanged relative to reviewed commit"
+  ],
+  "limitations": "Software fixtures and native UI evidence only; hardware, ARM64 and remote CI acceptance remain independent gates."
+}

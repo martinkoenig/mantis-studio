@@ -1,0 +1,12 @@
+{
+  "CMakeLists.txt": "e79487608d663fcaf80edd54ac73f19e6edbd61b7fc7fc5844abbb8d427ff054",
+  ".github/workflows/build.yml": "3929d69d2f89c8d514923e1c9ab1d89749a6b350b5f5b24ba737246bfbe25eb2",
+  "apps/studio/bridge.cpp": "a78f39306ba7c5d360f5c7664db4dfc22d878ed9a9f17181cb3ca96ad769460f",
+  "apps/studio/bridge.hpp": "6046dd95572c149fbd6fe264259790082f91c3bc16bb6086816c2c911562623e",
+  "apps/studio/cloud_retry.hpp": "fffb64aa3c5f7645bbf0e7a82eb6a1202186c677ae5f6e37fba997153a0e139b",
+  "tests/integration/studio_bridge.cpp": "082f9ef74773578328c08ff09c14f5c6cd519567ee134ab2a8a88aaae813b5ec",
+  "tests/integration/studio_bridge.py": "21671261d2fc3e9c60d6108af1f7341bfe4fbb83d739da298396220491582ae5",
+  "tests/integration/studio_home.py": "ae073ae20c0e7f0c7dbb55319a23c0665a3162a40e416343037f5135b8901fac",
+  "tests/unit/studio_cloud_retry.cpp": "f73fe48d0d721dbffcaa977004d1c93d3c182cf98598afdc0b6f2790c00f3b0d",
+  "tests/unit/studio_home.cpp": "56064d7c57cf6e784b6a1981f8b0bbe00c21c89643cc9b9a635f89b7eb1b2be9"
+}

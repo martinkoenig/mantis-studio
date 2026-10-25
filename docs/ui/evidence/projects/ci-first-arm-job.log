@@ -1,0 +1,130 @@
+2026-10-09T11:26:28.7919150Z Test project /home/runner/work/mantis-studio/mantis-studio/build/ci
+2026-10-09T11:26:28.7946371Z       Start  1: studio-bridge-errors
+2026-10-09T11:26:28.9916994Z  1/60 Test  #1: studio-bridge-errors ...............   Passed    0.20 sec
+2026-10-09T11:26:28.9922253Z       Start  2: studio-projects-qml
+2026-10-09T11:26:41.1360174Z  2/60 Test  #2: studio-projects-qml ................   Passed   12.14 sec
+2026-10-09T11:26:41.1360590Z       Start  3: studio-projects-states
+2026-10-09T11:26:49.4996397Z  3/60 Test  #3: studio-projects-states .............   Passed    8.36 sec
+2026-10-09T11:26:49.4997559Z       Start  4: studio-projects-resize
+2026-10-09T11:27:00.7428455Z  4/60 Test  #4: studio-projects-resize .............   Passed   11.24 sec
+2026-10-09T11:27:00.7429811Z       Start  5: studio-projects-hidpi
+2026-10-09T11:27:14.1753964Z  5/60 Test  #5: studio-projects-hidpi ..............   Passed   13.43 sec
+2026-10-09T11:27:14.1754939Z       Start  6: studio-projects-fractional-dpi
+2026-10-09T11:27:22.5068103Z  6/60 Test  #6: studio-projects-fractional-dpi .....   Passed    8.33 sec
+2026-10-09T11:27:22.5069174Z       Start  7: studio-projects-wire
+2026-10-09T11:27:25.2913174Z  7/60 Test  #7: studio-projects-wire ...............   Passed    2.78 sec
+2026-10-09T11:27:25.2913929Z       Start  8: studio-home-qml
+2026-10-09T11:27:55.1719944Z  8/60 Test  #8: studio-home-qml ....................   Passed   29.88 sec
+2026-10-09T11:27:55.1721468Z       Start  9: studio-home-wire
+2026-10-09T11:27:56.9598455Z  9/60 Test  #9: studio-home-wire ...................   Passed    1.79 sec
+2026-10-09T11:27:56.9598881Z       Start 10: studio-home-hidpi
+2026-10-09T11:28:04.8885183Z 10/60 Test #10: studio-home-hidpi ..................   Passed    7.93 sec
+2026-10-09T11:28:04.8886375Z       Start 11: studio-home-fractional-dpi
+2026-10-09T11:28:11.4553689Z 11/60 Test #11: studio-home-fractional-dpi .........   Passed    6.57 sec
+2026-10-09T11:28:11.4554935Z       Start 12: studio-home-resize
+2026-10-09T11:28:27.3465479Z 12/60 Test #12: studio-home-resize .................   Passed   15.89 sec
+2026-10-09T11:28:27.3466509Z       Start 13: studio-home-states
+2026-10-09T11:28:34.5064113Z 13/60 Test #13: studio-home-states .................   Passed    7.16 sec
+2026-10-09T11:28:34.5065193Z       Start 14: studio-ui-m0-qml
+2026-10-09T11:28:35.8193754Z 14/60 Test #14: studio-ui-m0-qml ...................***Exception: SegFault  1.31 sec
+2026-10-09T11:28:35.8194263Z 
+2026-10-09T11:28:35.8194502Z       Start 15: studio-ui-m0-cli
+2026-10-09T11:28:53.0721197Z 15/60 Test #15: studio-ui-m0-cli ...................   Passed   17.25 sec
+2026-10-09T11:28:53.0722279Z       Start 16: studio-calibration-controller
+2026-10-09T11:28:53.2022647Z 16/60 Test #16: studio-calibration-controller ......   Passed    0.13 sec
+2026-10-09T11:28:53.2023912Z       Start 17: studio-calibration-daemon
+2026-10-09T11:28:56.8591612Z 17/60 Test #17: studio-calibration-daemon ..........   Passed    3.66 sec
+2026-10-09T11:28:56.8592565Z       Start 18: studio-calibration-qml
+2026-10-09T11:28:57.2635347Z 18/60 Test #18: studio-calibration-qml .............   Passed    0.40 sec
+2026-10-09T11:28:57.2636359Z       Start 19: project-public-capabilities
+2026-10-09T11:28:58.7476449Z 19/60 Test #19: project-public-capabilities ........   Passed    1.48 sec
+2026-10-09T11:28:58.7477262Z       Start 20: calibration-service-protocol
+2026-10-09T11:29:07.1569804Z 20/60 Test #20: calibration-service-protocol .......   Passed    8.41 sec
+2026-10-09T11:29:07.1570239Z       Start 21: calibration-client-integration
+2026-10-09T11:29:12.8866389Z 21/60 Test #21: calibration-client-integration .....   Passed    5.73 sec
+2026-10-09T11:29:12.8866842Z       Start 22: python-calibration
+2026-10-09T11:29:12.9437408Z 22/60 Test #22: python-calibration .................   Passed    0.06 sec
+2026-10-09T11:29:12.9438519Z       Start 23: protocol-field-compatibility
+2026-10-09T11:29:13.0000845Z 23/60 Test #23: protocol-field-compatibility .......   Passed    0.06 sec
+2026-10-09T11:29:13.0002588Z       Start 24: calibration-artifacts
+2026-10-09T11:29:16.4245390Z 24/60 Test #24: calibration-artifacts ..............   Passed    3.42 sec
+2026-10-09T11:29:16.4245804Z       Start 25: active-calibration-binding
+2026-10-09T11:29:19.6780815Z 25/60 Test #25: active-calibration-binding .........   Passed    3.25 sec
+2026-10-09T11:29:19.6781538Z       Start 26: calibration-revision-store
+2026-10-09T11:29:19.6949471Z 26/60 Test #26: calibration-revision-store .........   Passed    0.02 sec
+2026-10-09T11:29:19.6950226Z       Start 27: project-migration-v1-v2
+2026-10-09T11:29:19.7139804Z 27/60 Test #27: project-migration-v1-v2 ............   Passed    0.02 sec
+2026-10-09T11:29:19.7140769Z       Start 28: provenance-calibration-reference
+2026-10-09T11:29:19.7235357Z 28/60 Test #28: provenance-calibration-reference ...   Passed    0.01 sec
+2026-10-09T11:29:19.7236299Z       Start 29: calibration-solver-opencv
+2026-10-09T11:29:21.5343856Z 29/60 Test #29: calibration-solver-opencv ..........   Passed    1.81 sec
+2026-10-09T11:29:21.5345123Z       Start 30: calibration-solve
+2026-10-09T11:29:21.5552465Z 30/60 Test #30: calibration-solve ..................   Passed    0.02 sec
+2026-10-09T11:29:21.5553730Z       Start 31: calibration-dataset
+2026-10-09T11:29:21.5614228Z 31/60 Test #31: calibration-dataset ................   Passed    0.01 sec
+2026-10-09T11:29:21.5615347Z       Start 32: calibration-dataset-ingestion
+2026-10-09T11:29:49.2282413Z 32/60 Test #32: calibration-dataset-ingestion ......   Passed   27.67 sec
+2026-10-09T11:29:49.2282824Z       Start 33: calibration-opencv
+2026-10-09T11:29:52.1428555Z 33/60 Test #33: calibration-opencv .................   Passed    2.91 sec
+2026-10-09T11:29:52.1430126Z       Start 34: calibration-observation
+2026-10-09T11:29:52.1449283Z 34/60 Test #34: calibration-observation ............   Passed    0.00 sec
+2026-10-09T11:29:52.1450387Z       Start 35: calibration-target
+2026-10-09T11:29:52.1465736Z 35/60 Test #35: calibration-target .................   Passed    0.00 sec
+2026-10-09T11:29:52.1466719Z       Start 36: legacy-abi
+2026-10-09T11:29:52.1481515Z 36/60 Test #36: legacy-abi .........................   Passed    0.00 sec
+2026-10-09T11:29:52.1482257Z       Start 37: frozen-l2-abi
+2026-10-09T11:29:52.1491039Z 37/60 Test #37: frozen-l2-abi ......................   Passed    0.00 sec
+2026-10-09T11:29:52.1492210Z       Start 38: frozen-l2-catalog
+2026-10-09T11:29:52.1915370Z 38/60 Test #38: frozen-l2-catalog ..................   Passed    0.04 sec
+2026-10-09T11:29:52.1916842Z       Start 39: calibration-service-activation
+2026-10-09T11:29:56.6717867Z 39/60 Test #39: calibration-service-activation .....   Passed    4.48 sec
+2026-10-09T11:29:56.6719244Z       Start 40: capture-calibration-binding
+2026-10-09T11:30:14.8096333Z 40/60 Test #40: capture-calibration-binding ........   Passed   18.14 sec
+2026-10-09T11:30:14.8097265Z       Start 41: x1-pairing
+2026-10-09T11:30:15.3788092Z 41/60 Test #41: x1-pairing .........................   Passed    0.57 sec
+2026-10-09T11:30:15.3789070Z       Start 42: x1-pairing-stream
+2026-10-09T11:30:24.2065897Z 42/60 Test #42: x1-pairing-stream ..................   Passed    8.83 sec
+2026-10-09T11:30:24.2067112Z       Start 43: x1-media
+2026-10-09T11:30:24.2117921Z 43/60 Test #43: x1-media ...........................   Passed    0.00 sec
+2026-10-09T11:30:24.2118906Z       Start 44: acquisition
+2026-10-09T11:30:25.3453359Z 44/60 Test #44: acquisition ........................   Passed    1.13 sec
+2026-10-09T11:30:25.3454491Z       Start 45: acquisition-integration
+2026-10-09T11:30:33.8742874Z 45/60 Test #45: acquisition-integration ............   Passed    8.53 sec
+2026-10-09T11:30:33.8744658Z       Start 46: acquisition-y10p-integration
+2026-10-09T11:30:42.9403115Z 46/60 Test #46: acquisition-y10p-integration .......   Passed    9.07 sec
+2026-10-09T11:30:42.9403822Z       Start 47: control-listener
+2026-10-09T11:30:49.2357385Z 47/60 Test #47: control-listener ...................   Passed    6.30 sec
+2026-10-09T11:30:49.2359879Z       Start 48: acquisition-qos
+2026-10-09T11:30:49.2889570Z 48/60 Test #48: acquisition-qos ....................   Passed    0.05 sec
+2026-10-09T11:30:49.2890343Z       Start 49: raw-capture
+2026-10-09T11:30:49.3589602Z 49/60 Test #49: raw-capture ........................   Passed    0.07 sec
+2026-10-09T11:30:49.3590883Z       Start 50: projected-sequencer
+2026-10-09T11:30:49.4786808Z 50/60 Test #50: projected-sequencer ................   Passed    0.12 sec
+2026-10-09T11:30:49.4787931Z       Start 51: projected-light-semantics
+2026-10-09T11:30:49.4978509Z 51/60 Test #51: projected-light-semantics ..........   Passed    0.02 sec
+2026-10-09T11:30:49.4979787Z       Start 52: packed-image
+2026-10-09T11:30:49.4994936Z 52/60 Test #52: packed-image .......................   Passed    0.00 sec
+2026-10-09T11:30:49.4995878Z       Start 53: core
+2026-10-09T11:30:49.6138237Z 53/60 Test #53: core ...............................   Passed    0.11 sec
+2026-10-09T11:30:49.6139109Z       Start 54: projected-light-contract
+2026-10-09T11:30:49.7013539Z 54/60 Test #54: projected-light-contract ...........   Passed    0.09 sec
+2026-10-09T11:30:49.7014552Z       Start 55: c-abi
+2026-10-09T11:30:49.7024482Z 55/60 Test #55: c-abi ..............................   Passed    0.00 sec
+2026-10-09T11:30:49.7025759Z       Start 56: boundaries
+2026-10-09T11:30:49.7313363Z 56/60 Test #56: boundaries .........................   Passed    0.03 sec
+2026-10-09T11:30:49.7314724Z       Start 57: python-capture
+2026-10-09T11:30:49.8340495Z 57/60 Test #57: python-capture .....................   Passed    0.10 sec
+2026-10-09T11:30:49.8341705Z       Start 58: acceptance
+2026-10-09T11:30:52.7443124Z 58/60 Test #58: acceptance .........................   Passed    2.91 sec
+2026-10-09T11:30:52.7443944Z       Start 59: q6a-validation-harness
+2026-10-09T11:30:53.7192503Z 59/60 Test #59: q6a-validation-harness .............   Passed    0.97 sec
+2026-10-09T11:30:53.7193544Z       Start 60: x1-calibration-validation
+2026-10-09T11:31:22.6480978Z 60/60 Test #60: x1-calibration-validation ..........   Passed   28.93 sec
+2026-10-09T11:31:22.6485856Z 
+2026-10-09T11:31:22.6486283Z 98% tests passed, 1 tests failed out of 60
+2026-10-09T11:31:22.6486508Z 
+2026-10-09T11:31:22.6486594Z Total Test time (real) = 293.86 sec
+2026-10-09T11:31:22.6486757Z 
+2026-10-09T11:31:22.6486841Z The following tests FAILED:
+2026-10-09T11:31:22.6487091Z 	 14 - studio-ui-m0-qml (SEGFAULT)
+2026-10-09T11:31:22.6487328Z Errors while running CTest

@@ -1,0 +1,2165 @@
+Start testing: Oct 09 19:27 CEST
+----------------------------------------------------------
+1/64 Testing: studio-bridge-errors
+1/64 Test: studio-bridge-errors
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_bridge.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-bridge-errors" start time: Oct 09 19:27 CEST
+Output:
+----------------------------------------------------------
+PASS: structured operation/data failures, confirmed snapshots, loss, authentication and recovery
+<end of output>
+Test time =   0.26 sec
+----------------------------------------------------------
+Test Passed.
+"studio-bridge-errors" end time: Oct 09 19:27 CEST
+"studio-bridge-errors" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/64 Testing: studio-projects-qml
+2/64 Test: studio-projects-qml
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/qml" "qml"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-qml" start time: Oct 09 19:27 CEST
+Output:
+----------------------------------------------------------
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=3256ms updates=0
+STUDIO_DUAL_PREVIEW_READY
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=1 card=320 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=2996 columns=6 card=420 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=2996 columns=6 card=420 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=2996 columns=6 card=420 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=12 inspector=892 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=188 inspector=892 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+PASS: Projects qml contracts and actual Qt evidence
+<end of output>
+Test time =  15.37 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-qml" end time: Oct 09 19:27 CEST
+"studio-projects-qml" time elapsed: 00:00:15
+----------------------------------------------------------
+
+3/64 Testing: studio-projects-states
+3/64 Test: studio-projects-states
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/states" "states"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-states" start time: Oct 09 19:27 CEST
+Output:
+----------------------------------------------------------
+Projects bounds: 1080x720 DPR=1 gallery=0 columns=1 card=0 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=0 columns=1 card=0 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=0 columns=1 card=0 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=0 columns=1 card=0 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=0 columns=1 card=0 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=0 columns=1 card=0 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=0 columns=1 card=0 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=0 columns=1 card=0 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=0 columns=1 card=0 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=0 columns=1 card=0 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=0 columns=1 card=0 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=0 columns=1 card=0 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=0 columns=1 card=0 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=0 columns=1 card=0 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=0 columns=1 card=0 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=0 columns=1 card=0 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=0 columns=1 card=0 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=0 columns=1 card=0 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=0 columns=1 card=0 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=0 columns=1 card=0 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=0 columns=1 card=0 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1 gallery=1068 columns=5 card=204 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+PASS: Projects states contracts and actual Qt evidence
+<end of output>
+Test time =   8.34 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-states" end time: Oct 09 19:27 CEST
+"studio-projects-states" time elapsed: 00:00:08
+----------------------------------------------------------
+
+4/64 Testing: studio-projects-resize
+4/64 Test: studio-projects-resize
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/resize" "resize"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-resize" start time: Oct 09 19:27 CEST
+Output:
+----------------------------------------------------------
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=608 columns=3 card=194.667 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=892 columns=4 card=214 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=892 columns=4 card=214 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=892 columns=4 card=214 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x900 DPR=1 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x900 DPR=1 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x900 DPR=1 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 1920x900 DPR=1 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x900 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1440x900 DPR=1 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1366x900 DPR=1 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1350x900 DPR=1 gallery=606 columns=3 card=194 rightGap=0 inspector=320 multi=1
+Projects bounds: 1322x900 DPR=1 gallery=578 columns=3 card=184.667 rightGap=0 inspector=320 multi=1
+Projects bounds: 1318x900 DPR=1 gallery=1106 columns=6 card=174.333 rightGap=1118 inspector=0 multi=0
+Projects bounds: 1300x900 DPR=1 gallery=1088 columns=5 card=208 rightGap=1100 inspector=0 multi=0
+Projects bounds: 1252x900 DPR=1 gallery=1040 columns=5 card=198.4 rightGap=1052 inspector=0 multi=0
+Projects bounds: 1248x900 DPR=1 gallery=1060 columns=5 card=202.4 rightGap=1072 inspector=0 multi=0
+Projects bounds: 1080x900 DPR=1 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 796x796 DPR=1 gallery=608 columns=3 card=194.667 rightGap=620 inspector=0 multi=0
+Projects bounds: 1080x720 DPR=1 gallery=892 columns=1 card=892 rightGap=904 inspector=0 multi=0
+PASS: Projects resize contracts and actual Qt evidence
+<end of output>
+Test time =  19.95 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-resize" end time: Oct 09 19:28 CEST
+"studio-projects-resize" time elapsed: 00:00:19
+----------------------------------------------------------
+
+5/64 Testing: studio-projects-hidpi
+5/64 Test: studio-projects-hidpi
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/hidpi" "hidpi"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-hidpi" start time: Oct 09 19:28 CEST
+Output:
+----------------------------------------------------------
+Projects bounds: 1080x720 DPR=2 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=2 gallery=1068 columns=5 card=204 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=2 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=2 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=2 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=2 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=2 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=2 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=2 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=2 gallery=2996 columns=1 card=320 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=2 gallery=2996 columns=6 card=420 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=2 gallery=2996 columns=6 card=420 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=2 gallery=2996 columns=6 card=420 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=2 gallery=2996 columns=6 card=420 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=2 gallery=2996 columns=6 card=420 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=2 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=2 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=2 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=2 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=2 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=2 gallery=1068 columns=5 card=204 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=2 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=2 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=2 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=2 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=2 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=2 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=2 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+PASS: Projects hidpi contracts and actual Qt evidence
+<end of output>
+Test time =  12.83 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-hidpi" end time: Oct 09 19:28 CEST
+"studio-projects-hidpi" time elapsed: 00:00:12
+----------------------------------------------------------
+
+6/64 Testing: studio-projects-fidelity
+6/64 Test: studio-projects-fidelity
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/fidelity" "fidelity"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-fidelity" start time: Oct 09 19:28 CEST
+Output:
+----------------------------------------------------------
+Fidelity: columns=6 tab drift=0 independent gallery viewport=1
+PASS: Projects fidelity contracts and actual Qt evidence
+<end of output>
+Test time =   0.75 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-fidelity" end time: Oct 09 19:28 CEST
+"studio-projects-fidelity" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/64 Testing: studio-projects-scroll
+7/64 Test: studio-projects-scroll
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/scroll" "scroll"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-scroll" start time: Oct 09 19:28 CEST
+Output:
+----------------------------------------------------------
+Native release gentle/fast: velocity=500/4000 travel=46.5542/310.774
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: mock
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: live
+Projects bounds: 1536x1024 DPR=1 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: hybrid
+PASS: Projects scroll contracts and actual Qt evidence
+<end of output>
+Test time =  33.76 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-scroll" end time: Oct 09 19:29 CEST
+"studio-projects-scroll" time elapsed: 00:00:33
+----------------------------------------------------------
+
+8/64 Testing: studio-projects-fractional-dpi
+8/64 Test: studio-projects-fractional-dpi
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/fractional-dpi" "hidpi"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-fractional-dpi" start time: Oct 09 19:29 CEST
+Output:
+----------------------------------------------------------
+Projects bounds: 1080x720 DPR=1.5 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1.5 gallery=1068 columns=5 card=204 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1.5 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1.5 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1.5 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1.5 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1.5 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1.5 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1.5 gallery=2996 columns=1 card=320 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 1080x720 DPR=1.5 gallery=892 columns=4 card=214 rightGap=904 inspector=0 multi=0
+Projects bounds: 1280x720 DPR=1.5 gallery=1068 columns=5 card=204 rightGap=1080 inspector=0 multi=0
+Projects bounds: 1366x768 DPR=1.5 gallery=622 columns=3 card=199.333 rightGap=0 inspector=320 multi=1
+Projects bounds: 1440x900 DPR=1.5 gallery=681 columns=3 card=219 rightGap=0.2 inspector=334.8 multi=1
+Projects bounds: 1536x1024 DPR=1.5 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 1920x1080 DPR=1.5 gallery=1076 columns=5 card=205.6 rightGap=0 inspector=420 multi=1
+Projects bounds: 2560x1440 DPR=1.5 gallery=1716 columns=6 card=276 rightGap=0 inspector=420 multi=1
+Projects bounds: 3440x1440 DPR=1.5 gallery=2596 columns=6 card=420 rightGap=0 inspector=420 multi=1
+Projects bounds: 3840x2160 DPR=1.5 gallery=2996 columns=6 card=420 rightGap=0 inspector=420 multi=1
+PASS: Projects hidpi contracts and actual Qt evidence
+<end of output>
+Test time =   8.70 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-fractional-dpi" end time: Oct 09 19:29 CEST
+"studio-projects-fractional-dpi" time elapsed: 00:00:08
+----------------------------------------------------------
+
+9/64 Testing: studio-projects-scroll-dpi-1.5
+9/64 Test: studio-projects-scroll-dpi-1.5
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/scroll-dpi-1.5" "scroll"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-scroll-dpi-1.5" start time: Oct 09 19:29 CEST
+Output:
+----------------------------------------------------------
+Native release gentle/fast: velocity=500/4000 travel=48.192/345
+Projects bounds: 1536x1024 DPR=1.5 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: mock
+Projects bounds: 1536x1024 DPR=1.5 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: live
+Projects bounds: 1536x1024 DPR=1.5 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: hybrid
+PASS: Projects scroll contracts and actual Qt evidence
+<end of output>
+Test time =  34.74 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-scroll-dpi-1.5" end time: Oct 09 19:29 CEST
+"studio-projects-scroll-dpi-1.5" time elapsed: 00:00:34
+----------------------------------------------------------
+
+10/64 Testing: studio-projects-scroll-dpi-2
+10/64 Test: studio-projects-scroll-dpi-2
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-projects-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m2a/scroll-dpi-2" "scroll"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-scroll-dpi-2" start time: Oct 09 19:29 CEST
+Output:
+----------------------------------------------------------
+Native release gentle/fast: velocity=500/4000 travel=48.8366/303.861
+Projects bounds: 1536x1024 DPR=2 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: mock
+Projects bounds: 1536x1024 DPR=2 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: live
+Projects bounds: 1536x1024 DPR=2 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Dock/scroll/tab/count routing passed: hybrid
+PASS: Projects scroll contracts and actual Qt evidence
+<end of output>
+Test time =  36.37 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-scroll-dpi-2" end time: Oct 09 19:30 CEST
+"studio-projects-scroll-dpi-2" time elapsed: 00:00:36
+----------------------------------------------------------
+
+11/64 Testing: studio-projects-wire
+11/64 Test: studio-projects-wire
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_projects.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-projects-wire" start time: Oct 09 19:30 CEST
+Output:
+----------------------------------------------------------
+PASS: Projects wire contracts and actual Qt evidence
+
+PASS: public Client/StudioBridge/Projects, source-specific passive interactions, refusal/busy lease, stale/auth/reconnect; zero GUI project_open/capture/replay/artifact_data/preview requests; one controlled uncertain-outcome public-wire audit {'snapshot': 12, 'pipeline_run': 1, 'plugin_enable': 4, 'project_open': 1}
+<end of output>
+Test time =   3.09 sec
+----------------------------------------------------------
+Test Passed.
+"studio-projects-wire" end time: Oct 09 19:30 CEST
+"studio-projects-wire" time elapsed: 00:00:03
+----------------------------------------------------------
+
+12/64 Testing: studio-home-qml
+12/64 Test: studio-home-qml
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/screenshots"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-home-qml" start time: Oct 09 19:30 CEST
+Output:
+----------------------------------------------------------
+STAGE: local Home actions in live
+STAGE: local Home actions in mock
+STAGE: local Home actions in hybrid
+Primary layout: hero 972x280, actions bottom 811, activity 823, first row bottom 916, viewport bottom 982
+Home stress: 90 immediate model/mode/route/resize transitions, observed 9814 ms (informational, not a latency budget)
+RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
+RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
+RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
+RGBA cover 520x279 transparent=67033 opaque=75300 edge=2747 inset=8/8
+RGBA scanner 196x351 transparent=33366 opaque=33322 edge=2108 inset=8/8
+Fluid Home: 1080x720 mock DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 mock DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 mock DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 mock DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Primary layout: hero 972x280, actions bottom 811, activity 823, first row bottom 916, viewport bottom 982
+Fluid Home: 1536x1024 mock DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 mock DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 mock DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 mock DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 mock DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 live DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 live DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 live DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 live DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 live DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 hybrid DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 hybrid DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 hybrid DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 hybrid DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 hybrid DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 hybrid DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 hybrid DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 hybrid DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 hybrid DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1248x900 mock DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 mock DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 mock DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 mock DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 mock DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 mock DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 mock DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 mock DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 mock DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 mock DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 mock DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 mock DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 mock DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 mock DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 mock DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 mock DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 mock DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 live DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 live DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 live DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 live DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 live DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 live DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 live DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 live DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 live DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 live DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 live DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 live DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 live DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 live DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 live DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 live DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 hybrid DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 hybrid DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 hybrid DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 hybrid DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 hybrid DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 hybrid DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 hybrid DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 hybrid DPR=1 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 hybrid DPR=1 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 hybrid DPR=1 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 hybrid DPR=1 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 hybrid DPR=1 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 hybrid DPR=1 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 hybrid DPR=1 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 hybrid DPR=1 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+PASS: Home presentation, authority, accessibility and visual evidence
+<end of output>
+Test time =  34.44 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-qml" end time: Oct 09 19:31 CEST
+"studio-home-qml" time elapsed: 00:00:34
+----------------------------------------------------------
+
+13/64 Testing: studio-home-wire
+13/64 Test: studio-home-wire
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_home.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-home-wire" start time: Oct 09 19:31 CEST
+Output:
+----------------------------------------------------------
+PASS: asynchronous public client/StudioBridge/Home UI, rejection, data access failure, transport loss, reconnection; navigation sent no mutable command
+PASS: Home presentation, authority, accessibility and visual evidence
+PASS: bounded public-wire fixture; no capture, project, calibration or cancellation mutation
+<end of output>
+Test time =   2.04 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-wire" end time: Oct 09 19:31 CEST
+"studio-home-wire" time elapsed: 00:00:02
+----------------------------------------------------------
+
+14/64 Testing: studio-home-hidpi
+14/64 Test: studio-home-hidpi
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/hidpi" "hidpi"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-home-hidpi" start time: Oct 09 19:31 CEST
+Output:
+----------------------------------------------------------
+RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
+RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
+RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
+RGBA cover 520x279 transparent=67033 opaque=75300 edge=2747 inset=8/8
+RGBA scanner 196x351 transparent=33366 opaque=33322 edge=2108 inset=8/8
+Primary layout: hero 972x280, actions bottom 811, activity 823, first row bottom 916, viewport bottom 982
+Fluid Home: 1536x1024 mock DPR=2 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 2560x1440 mock DPR=2 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 1536x1024 live DPR=2 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 2560x1440 live DPR=2 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 1536x1024 hybrid DPR=2 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 2560x1440 hybrid DPR=2 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 1248x900 mock DPR=2 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 mock DPR=2 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 mock DPR=2 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 mock DPR=2 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 mock DPR=2 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 mock DPR=2 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 mock DPR=2 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 mock DPR=2 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 mock DPR=2 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 mock DPR=2 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 mock DPR=2 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 mock DPR=2 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 mock DPR=2 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 mock DPR=2 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 mock DPR=2 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 mock DPR=2 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 mock DPR=2 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 live DPR=2 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 live DPR=2 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 live DPR=2 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 live DPR=2 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 live DPR=2 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 live DPR=2 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 live DPR=2 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 live DPR=2 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 live DPR=2 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 live DPR=2 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 live DPR=2 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 live DPR=2 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 live DPR=2 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 live DPR=2 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 live DPR=2 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 live DPR=2 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 live DPR=2 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 hybrid DPR=2 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 hybrid DPR=2 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 hybrid DPR=2 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 hybrid DPR=2 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 hybrid DPR=2 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 hybrid DPR=2 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 hybrid DPR=2 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 hybrid DPR=2 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 hybrid DPR=2 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 hybrid DPR=2 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 hybrid DPR=2 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 hybrid DPR=2 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 hybrid DPR=2 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 hybrid DPR=2 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 hybrid DPR=2 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 hybrid DPR=2 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 hybrid DPR=2 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+PASS: Home presentation, authority, accessibility and visual evidence
+<end of output>
+Test time =   8.84 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-hidpi" end time: Oct 09 19:31 CEST
+"studio-home-hidpi" time elapsed: 00:00:08
+----------------------------------------------------------
+
+15/64 Testing: studio-home-fractional-dpi
+15/64 Test: studio-home-fractional-dpi
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/fractional-dpi" "hidpi"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-home-fractional-dpi" start time: Oct 09 19:31 CEST
+Output:
+----------------------------------------------------------
+RGBA housing 426x345 transparent=38472 opaque=105673 edge=2825 inset=8/8
+RGBA rotor 388x328 transparent=46705 opaque=77781 edge=2778 inset=8/8
+RGBA bracket 412x355 transparent=78262 opaque=65364 edge=2634 inset=8/8
+RGBA cover 520x279 transparent=67033 opaque=75300 edge=2747 inset=8/8
+RGBA scanner 196x351 transparent=33366 opaque=33322 edge=2108 inset=8/8
+Primary layout: hero 972x280, actions bottom 811, activity 823, first row bottom 916, viewport bottom 982
+Fluid Home: 1536x1024 mock DPR=1.5 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 2560x1440 mock DPR=1.5 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 1536x1024 live DPR=1.5 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 2560x1440 live DPR=1.5 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 1536x1024 hybrid DPR=1.5 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 2560x1440 hybrid DPR=1.5 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 1248x900 mock DPR=1.5 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 mock DPR=1.5 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 mock DPR=1.5 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 mock DPR=1.5 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 mock DPR=1.5 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 mock DPR=1.5 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 mock DPR=1.5 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 mock DPR=1.5 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 mock DPR=1.5 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 mock DPR=1.5 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 mock DPR=1.5 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 mock DPR=1.5 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 mock DPR=1.5 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 mock DPR=1.5 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 mock DPR=1.5 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 mock DPR=1.5 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 mock DPR=1.5 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 live DPR=1.5 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 live DPR=1.5 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 live DPR=1.5 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 live DPR=1.5 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 live DPR=1.5 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 live DPR=1.5 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 live DPR=1.5 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 live DPR=1.5 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 live DPR=1.5 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 live DPR=1.5 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 live DPR=1.5 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 live DPR=1.5 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 live DPR=1.5 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 live DPR=1.5 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 live DPR=1.5 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 live DPR=1.5 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 live DPR=1.5 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1248x900 hybrid DPR=1.5 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+Fluid Home: 1252x900 hybrid DPR=1.5 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1298x900 hybrid DPR=1.5 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1302x900 hybrid DPR=1.5 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1322x900 hybrid DPR=1.5 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1326x900 hybrid DPR=1.5 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 2282x900 hybrid DPR=1.5 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 2286x900 hybrid DPR=1.5 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 3840x900 hybrid DPR=1.5 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 2286x900 hybrid DPR=1.5 content=2086 primary=1722 rightGap=0 hero=849 rail=348 card=203.25
+Fluid Home: 2282x900 hybrid DPR=1.5 content=2082 primary=1718 rightGap=0 hero=1718 rail=348 card=420.5
+Fluid Home: 1326x900 hybrid DPR=1.5 content=1126 primary=762 rightGap=0 hero=762 rail=348 card=181.5
+Fluid Home: 1322x900 hybrid DPR=1.5 content=1122 primary=758 rightGap=0 hero=758 rail=348 card=373
+Fluid Home: 1302x900 hybrid DPR=1.5 content=1102 primary=738 rightGap=0 hero=738 rail=348 card=363
+Fluid Home: 1298x900 hybrid DPR=1.5 content=1098 primary=1098 rightGap=0 hero=1098 rail=1098 card=265.5
+Fluid Home: 1252x900 hybrid DPR=1.5 content=1052 primary=1052 rightGap=0 hero=1052 rail=1052 card=254
+Fluid Home: 1248x900 hybrid DPR=1.5 content=1072 primary=1072 rightGap=0 hero=1072 rail=1072 card=259
+PASS: Home presentation, authority, accessibility and visual evidence
+<end of output>
+Test time =   7.50 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-fractional-dpi" end time: Oct 09 19:31 CEST
+"studio-home-fractional-dpi" time elapsed: 00:00:07
+----------------------------------------------------------
+
+16/64 Testing: studio-home-resize
+16/64 Test: studio-home-resize
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/resize" "resize"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-home-resize" start time: Oct 09 19:31 CEST
+Output:
+----------------------------------------------------------
+Fluid Home: 1080x900 mock DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1142x900 mock DPR=1 content=966 primary=966 rightGap=0 hero=966 rail=966 card=232.5
+Fluid Home: 1204x900 mock DPR=1 content=1028 primary=1028 rightGap=0 hero=1028 rail=1028 card=248
+Fluid Home: 1266x900 mock DPR=1 content=1066 primary=1066 rightGap=0 hero=1066 rail=1066 card=257.5
+Fluid Home: 1328x900 mock DPR=1 content=1128 primary=764 rightGap=0 hero=764 rail=348 card=182
+Fluid Home: 1390x900 mock DPR=1 content=1190 primary=826 rightGap=0 hero=826 rail=348 card=197.5
+Fluid Home: 1452x900 mock DPR=1 content=1252 primary=888 rightGap=0 hero=888 rail=348 card=213
+Fluid Home: 1514x900 mock DPR=1 content=1314 primary=950 rightGap=0 hero=950 rail=348 card=228.5
+Fluid Home: 1576x900 mock DPR=1 content=1376 primary=1012 rightGap=0 hero=1012 rail=348 card=244
+Fluid Home: 1638x900 mock DPR=1 content=1438 primary=1074 rightGap=0 hero=1074 rail=348 card=259.5
+Fluid Home: 1700x900 mock DPR=1 content=1500 primary=1136 rightGap=0 hero=1136 rail=348 card=275
+Fluid Home: 1762x900 mock DPR=1 content=1562 primary=1198 rightGap=0 hero=1198 rail=348 card=290.5
+Fluid Home: 1824x900 mock DPR=1 content=1624 primary=1260 rightGap=0 hero=1260 rail=348 card=306
+Fluid Home: 1886x900 mock DPR=1 content=1686 primary=1322 rightGap=0 hero=1322 rail=348 card=321.5
+Fluid Home: 1948x900 mock DPR=1 content=1748 primary=1384 rightGap=0 hero=1384 rail=348 card=337
+Fluid Home: 2010x900 mock DPR=1 content=1810 primary=1446 rightGap=0 hero=1446 rail=348 card=352.5
+Fluid Home: 2072x900 mock DPR=1 content=1872 primary=1508 rightGap=0 hero=1508 rail=348 card=368
+Fluid Home: 2134x900 mock DPR=1 content=1934 primary=1570 rightGap=0 hero=1570 rail=348 card=383.5
+Fluid Home: 2196x900 mock DPR=1 content=1996 primary=1632 rightGap=0 hero=1632 rail=348 card=399
+Fluid Home: 2258x900 mock DPR=1 content=2058 primary=1694 rightGap=0 hero=1694 rail=348 card=414.5
+Fluid Home: 2320x900 mock DPR=1 content=2120 primary=1756 rightGap=0 hero=866 rail=348 card=207.5
+Fluid Home: 2382x900 mock DPR=1 content=2182 primary=1818 rightGap=0 hero=897 rail=348 card=215.25
+Fluid Home: 2444x900 mock DPR=1 content=2244 primary=1880 rightGap=0 hero=928 rail=348 card=223
+Fluid Home: 2506x900 mock DPR=1 content=2306 primary=1942 rightGap=0 hero=959 rail=348 card=230.75
+Fluid Home: 2568x900 mock DPR=1 content=2368 primary=2004 rightGap=0 hero=990 rail=348 card=238.5
+Fluid Home: 2630x900 mock DPR=1 content=2430 primary=2066 rightGap=0 hero=1021 rail=348 card=246.25
+Fluid Home: 2692x900 mock DPR=1 content=2492 primary=2128 rightGap=0 hero=1052 rail=348 card=254
+Fluid Home: 2754x900 mock DPR=1 content=2554 primary=2190 rightGap=0 hero=1083 rail=348 card=261.75
+Fluid Home: 2816x900 mock DPR=1 content=2616 primary=2252 rightGap=0 hero=1114 rail=348 card=269.5
+Fluid Home: 2878x900 mock DPR=1 content=2678 primary=2314 rightGap=0 hero=1145 rail=348 card=277.25
+Fluid Home: 2940x900 mock DPR=1 content=2740 primary=2376 rightGap=0 hero=1176 rail=348 card=285
+Fluid Home: 3002x900 mock DPR=1 content=2802 primary=2438 rightGap=0 hero=1207 rail=348 card=292.75
+Fluid Home: 3064x900 mock DPR=1 content=2864 primary=2500 rightGap=0 hero=1238 rail=348 card=300.5
+Fluid Home: 3126x900 mock DPR=1 content=2926 primary=2562 rightGap=0 hero=1269 rail=348 card=308.25
+Fluid Home: 3188x900 mock DPR=1 content=2988 primary=2624 rightGap=0 hero=1300 rail=348 card=316
+Fluid Home: 3250x900 mock DPR=1 content=3050 primary=2686 rightGap=0 hero=1331 rail=348 card=323.75
+Fluid Home: 3312x900 mock DPR=1 content=3112 primary=2748 rightGap=0 hero=1362 rail=348 card=331.5
+Fluid Home: 3374x900 mock DPR=1 content=3174 primary=2810 rightGap=0 hero=1393 rail=348 card=339.25
+Fluid Home: 3436x900 mock DPR=1 content=3236 primary=2872 rightGap=0 hero=1424 rail=348 card=347
+Fluid Home: 3498x900 mock DPR=1 content=3298 primary=2934 rightGap=0 hero=1455 rail=348 card=354.75
+Fluid Home: 3560x900 mock DPR=1 content=3360 primary=2996 rightGap=0 hero=1486 rail=348 card=362.5
+Fluid Home: 3622x900 mock DPR=1 content=3422 primary=3058 rightGap=0 hero=1517 rail=348 card=370.25
+Fluid Home: 3684x900 mock DPR=1 content=3484 primary=3120 rightGap=0 hero=1548 rail=348 card=378
+Fluid Home: 3746x900 mock DPR=1 content=3546 primary=3182 rightGap=0 hero=1579 rail=348 card=385.75
+Fluid Home: 3808x900 mock DPR=1 content=3608 primary=3244 rightGap=0 hero=1610 rail=348 card=393.5
+Fluid Home: 3808x900 mock DPR=1 content=3608 primary=3244 rightGap=0 hero=1610 rail=348 card=393.5
+Fluid Home: 3746x900 mock DPR=1 content=3546 primary=3182 rightGap=0 hero=1579 rail=348 card=385.75
+Fluid Home: 3684x900 mock DPR=1 content=3484 primary=3120 rightGap=0 hero=1548 rail=348 card=378
+Fluid Home: 3622x900 mock DPR=1 content=3422 primary=3058 rightGap=0 hero=1517 rail=348 card=370.25
+Fluid Home: 3560x900 mock DPR=1 content=3360 primary=2996 rightGap=0 hero=1486 rail=348 card=362.5
+Fluid Home: 3498x900 mock DPR=1 content=3298 primary=2934 rightGap=0 hero=1455 rail=348 card=354.75
+Fluid Home: 3436x900 mock DPR=1 content=3236 primary=2872 rightGap=0 hero=1424 rail=348 card=347
+Fluid Home: 3374x900 mock DPR=1 content=3174 primary=2810 rightGap=0 hero=1393 rail=348 card=339.25
+Fluid Home: 3312x900 mock DPR=1 content=3112 primary=2748 rightGap=0 hero=1362 rail=348 card=331.5
+Fluid Home: 3250x900 mock DPR=1 content=3050 primary=2686 rightGap=0 hero=1331 rail=348 card=323.75
+Fluid Home: 3188x900 mock DPR=1 content=2988 primary=2624 rightGap=0 hero=1300 rail=348 card=316
+Fluid Home: 3126x900 mock DPR=1 content=2926 primary=2562 rightGap=0 hero=1269 rail=348 card=308.25
+Fluid Home: 3064x900 mock DPR=1 content=2864 primary=2500 rightGap=0 hero=1238 rail=348 card=300.5
+Fluid Home: 3002x900 mock DPR=1 content=2802 primary=2438 rightGap=0 hero=1207 rail=348 card=292.75
+Fluid Home: 2940x900 mock DPR=1 content=2740 primary=2376 rightGap=0 hero=1176 rail=348 card=285
+Fluid Home: 2878x900 mock DPR=1 content=2678 primary=2314 rightGap=0 hero=1145 rail=348 card=277.25
+Fluid Home: 2816x900 mock DPR=1 content=2616 primary=2252 rightGap=0 hero=1114 rail=348 card=269.5
+Fluid Home: 2754x900 mock DPR=1 content=2554 primary=2190 rightGap=0 hero=1083 rail=348 card=261.75
+Fluid Home: 2692x900 mock DPR=1 content=2492 primary=2128 rightGap=0 hero=1052 rail=348 card=254
+Fluid Home: 2630x900 mock DPR=1 content=2430 primary=2066 rightGap=0 hero=1021 rail=348 card=246.25
+Fluid Home: 2568x900 mock DPR=1 content=2368 primary=2004 rightGap=0 hero=990 rail=348 card=238.5
+Fluid Home: 2506x900 mock DPR=1 content=2306 primary=1942 rightGap=0 hero=959 rail=348 card=230.75
+Fluid Home: 2444x900 mock DPR=1 content=2244 primary=1880 rightGap=0 hero=928 rail=348 card=223
+Fluid Home: 2382x900 mock DPR=1 content=2182 primary=1818 rightGap=0 hero=897 rail=348 card=215.25
+Fluid Home: 2320x900 mock DPR=1 content=2120 primary=1756 rightGap=0 hero=866 rail=348 card=207.5
+Fluid Home: 2258x900 mock DPR=1 content=2058 primary=1694 rightGap=0 hero=1694 rail=348 card=414.5
+Fluid Home: 2196x900 mock DPR=1 content=1996 primary=1632 rightGap=0 hero=1632 rail=348 card=399
+Fluid Home: 2134x900 mock DPR=1 content=1934 primary=1570 rightGap=0 hero=1570 rail=348 card=383.5
+Fluid Home: 2072x900 mock DPR=1 content=1872 primary=1508 rightGap=0 hero=1508 rail=348 card=368
+Fluid Home: 2010x900 mock DPR=1 content=1810 primary=1446 rightGap=0 hero=1446 rail=348 card=352.5
+Fluid Home: 1948x900 mock DPR=1 content=1748 primary=1384 rightGap=0 hero=1384 rail=348 card=337
+Fluid Home: 1886x900 mock DPR=1 content=1686 primary=1322 rightGap=0 hero=1322 rail=348 card=321.5
+Fluid Home: 1824x900 mock DPR=1 content=1624 primary=1260 rightGap=0 hero=1260 rail=348 card=306
+Fluid Home: 1762x900 mock DPR=1 content=1562 primary=1198 rightGap=0 hero=1198 rail=348 card=290.5
+Fluid Home: 1700x900 mock DPR=1 content=1500 primary=1136 rightGap=0 hero=1136 rail=348 card=275
+Fluid Home: 1638x900 mock DPR=1 content=1438 primary=1074 rightGap=0 hero=1074 rail=348 card=259.5
+Fluid Home: 1576x900 mock DPR=1 content=1376 primary=1012 rightGap=0 hero=1012 rail=348 card=244
+Fluid Home: 1514x900 mock DPR=1 content=1314 primary=950 rightGap=0 hero=950 rail=348 card=228.5
+Fluid Home: 1452x900 mock DPR=1 content=1252 primary=888 rightGap=0 hero=888 rail=348 card=213
+Fluid Home: 1390x900 mock DPR=1 content=1190 primary=826 rightGap=0 hero=826 rail=348 card=197.5
+Fluid Home: 1328x900 mock DPR=1 content=1128 primary=764 rightGap=0 hero=764 rail=348 card=182
+Fluid Home: 1266x900 mock DPR=1 content=1066 primary=1066 rightGap=0 hero=1066 rail=1066 card=257.5
+Fluid Home: 1204x900 mock DPR=1 content=1028 primary=1028 rightGap=0 hero=1028 rail=1028 card=248
+Fluid Home: 1142x900 mock DPR=1 content=966 primary=966 rightGap=0 hero=966 rail=966 card=232.5
+Fluid Home: 1080x900 mock DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 796x796 mock DPR=1 content=620 primary=620 rightGap=0 hero=620 rail=620 card=304
+Primary layout: hero 972x280, actions bottom 811, activity 823, first row bottom 916, viewport bottom 982
+Fluid Home: 1536x1024 mock DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1080x900 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1142x900 live DPR=1 content=966 primary=966 rightGap=0 hero=966 rail=966 card=232.5
+Fluid Home: 1204x900 live DPR=1 content=1028 primary=1028 rightGap=0 hero=1028 rail=1028 card=248
+Fluid Home: 1266x900 live DPR=1 content=1066 primary=1066 rightGap=0 hero=1066 rail=1066 card=257.5
+Fluid Home: 1328x900 live DPR=1 content=1128 primary=764 rightGap=0 hero=764 rail=348 card=182
+Fluid Home: 1390x900 live DPR=1 content=1190 primary=826 rightGap=0 hero=826 rail=348 card=197.5
+Fluid Home: 1452x900 live DPR=1 content=1252 primary=888 rightGap=0 hero=888 rail=348 card=213
+Fluid Home: 1514x900 live DPR=1 content=1314 primary=950 rightGap=0 hero=950 rail=348 card=228.5
+Fluid Home: 1576x900 live DPR=1 content=1376 primary=1012 rightGap=0 hero=1012 rail=348 card=244
+Fluid Home: 1638x900 live DPR=1 content=1438 primary=1074 rightGap=0 hero=1074 rail=348 card=259.5
+Fluid Home: 1700x900 live DPR=1 content=1500 primary=1136 rightGap=0 hero=1136 rail=348 card=275
+Fluid Home: 1762x900 live DPR=1 content=1562 primary=1198 rightGap=0 hero=1198 rail=348 card=290.5
+Fluid Home: 1824x900 live DPR=1 content=1624 primary=1260 rightGap=0 hero=1260 rail=348 card=306
+Fluid Home: 1886x900 live DPR=1 content=1686 primary=1322 rightGap=0 hero=1322 rail=348 card=321.5
+Fluid Home: 1948x900 live DPR=1 content=1748 primary=1384 rightGap=0 hero=1384 rail=348 card=337
+Fluid Home: 2010x900 live DPR=1 content=1810 primary=1446 rightGap=0 hero=1446 rail=348 card=352.5
+Fluid Home: 2072x900 live DPR=1 content=1872 primary=1508 rightGap=0 hero=1508 rail=348 card=368
+Fluid Home: 2134x900 live DPR=1 content=1934 primary=1570 rightGap=0 hero=1570 rail=348 card=383.5
+Fluid Home: 2196x900 live DPR=1 content=1996 primary=1632 rightGap=0 hero=1632 rail=348 card=399
+Fluid Home: 2258x900 live DPR=1 content=2058 primary=1694 rightGap=0 hero=1694 rail=348 card=414.5
+Fluid Home: 2320x900 live DPR=1 content=2120 primary=1756 rightGap=0 hero=866 rail=348 card=207.5
+Fluid Home: 2382x900 live DPR=1 content=2182 primary=1818 rightGap=0 hero=897 rail=348 card=215.25
+Fluid Home: 2444x900 live DPR=1 content=2244 primary=1880 rightGap=0 hero=928 rail=348 card=223
+Fluid Home: 2506x900 live DPR=1 content=2306 primary=1942 rightGap=0 hero=959 rail=348 card=230.75
+Fluid Home: 2568x900 live DPR=1 content=2368 primary=2004 rightGap=0 hero=990 rail=348 card=238.5
+Fluid Home: 2630x900 live DPR=1 content=2430 primary=2066 rightGap=0 hero=1021 rail=348 card=246.25
+Fluid Home: 2692x900 live DPR=1 content=2492 primary=2128 rightGap=0 hero=1052 rail=348 card=254
+Fluid Home: 2754x900 live DPR=1 content=2554 primary=2190 rightGap=0 hero=1083 rail=348 card=261.75
+Fluid Home: 2816x900 live DPR=1 content=2616 primary=2252 rightGap=0 hero=1114 rail=348 card=269.5
+Fluid Home: 2878x900 live DPR=1 content=2678 primary=2314 rightGap=0 hero=1145 rail=348 card=277.25
+Fluid Home: 2940x900 live DPR=1 content=2740 primary=2376 rightGap=0 hero=1176 rail=348 card=285
+Fluid Home: 3002x900 live DPR=1 content=2802 primary=2438 rightGap=0 hero=1207 rail=348 card=292.75
+Fluid Home: 3064x900 live DPR=1 content=2864 primary=2500 rightGap=0 hero=1238 rail=348 card=300.5
+Fluid Home: 3126x900 live DPR=1 content=2926 primary=2562 rightGap=0 hero=1269 rail=348 card=308.25
+Fluid Home: 3188x900 live DPR=1 content=2988 primary=2624 rightGap=0 hero=1300 rail=348 card=316
+Fluid Home: 3250x900 live DPR=1 content=3050 primary=2686 rightGap=0 hero=1331 rail=348 card=323.75
+Fluid Home: 3312x900 live DPR=1 content=3112 primary=2748 rightGap=0 hero=1362 rail=348 card=331.5
+Fluid Home: 3374x900 live DPR=1 content=3174 primary=2810 rightGap=0 hero=1393 rail=348 card=339.25
+Fluid Home: 3436x900 live DPR=1 content=3236 primary=2872 rightGap=0 hero=1424 rail=348 card=347
+Fluid Home: 3498x900 live DPR=1 content=3298 primary=2934 rightGap=0 hero=1455 rail=348 card=354.75
+Fluid Home: 3560x900 live DPR=1 content=3360 primary=2996 rightGap=0 hero=1486 rail=348 card=362.5
+Fluid Home: 3622x900 live DPR=1 content=3422 primary=3058 rightGap=0 hero=1517 rail=348 card=370.25
+Fluid Home: 3684x900 live DPR=1 content=3484 primary=3120 rightGap=0 hero=1548 rail=348 card=378
+Fluid Home: 3746x900 live DPR=1 content=3546 primary=3182 rightGap=0 hero=1579 rail=348 card=385.75
+Fluid Home: 3808x900 live DPR=1 content=3608 primary=3244 rightGap=0 hero=1610 rail=348 card=393.5
+Fluid Home: 3808x900 live DPR=1 content=3608 primary=3244 rightGap=0 hero=1610 rail=348 card=393.5
+Fluid Home: 3746x900 live DPR=1 content=3546 primary=3182 rightGap=0 hero=1579 rail=348 card=385.75
+Fluid Home: 3684x900 live DPR=1 content=3484 primary=3120 rightGap=0 hero=1548 rail=348 card=378
+Fluid Home: 3622x900 live DPR=1 content=3422 primary=3058 rightGap=0 hero=1517 rail=348 card=370.25
+Fluid Home: 3560x900 live DPR=1 content=3360 primary=2996 rightGap=0 hero=1486 rail=348 card=362.5
+Fluid Home: 3498x900 live DPR=1 content=3298 primary=2934 rightGap=0 hero=1455 rail=348 card=354.75
+Fluid Home: 3436x900 live DPR=1 content=3236 primary=2872 rightGap=0 hero=1424 rail=348 card=347
+Fluid Home: 3374x900 live DPR=1 content=3174 primary=2810 rightGap=0 hero=1393 rail=348 card=339.25
+Fluid Home: 3312x900 live DPR=1 content=3112 primary=2748 rightGap=0 hero=1362 rail=348 card=331.5
+Fluid Home: 3250x900 live DPR=1 content=3050 primary=2686 rightGap=0 hero=1331 rail=348 card=323.75
+Fluid Home: 3188x900 live DPR=1 content=2988 primary=2624 rightGap=0 hero=1300 rail=348 card=316
+Fluid Home: 3126x900 live DPR=1 content=2926 primary=2562 rightGap=0 hero=1269 rail=348 card=308.25
+Fluid Home: 3064x900 live DPR=1 content=2864 primary=2500 rightGap=0 hero=1238 rail=348 card=300.5
+Fluid Home: 3002x900 live DPR=1 content=2802 primary=2438 rightGap=0 hero=1207 rail=348 card=292.75
+Fluid Home: 2940x900 live DPR=1 content=2740 primary=2376 rightGap=0 hero=1176 rail=348 card=285
+Fluid Home: 2878x900 live DPR=1 content=2678 primary=2314 rightGap=0 hero=1145 rail=348 card=277.25
+Fluid Home: 2816x900 live DPR=1 content=2616 primary=2252 rightGap=0 hero=1114 rail=348 card=269.5
+Fluid Home: 2754x900 live DPR=1 content=2554 primary=2190 rightGap=0 hero=1083 rail=348 card=261.75
+Fluid Home: 2692x900 live DPR=1 content=2492 primary=2128 rightGap=0 hero=1052 rail=348 card=254
+Fluid Home: 2630x900 live DPR=1 content=2430 primary=2066 rightGap=0 hero=1021 rail=348 card=246.25
+Fluid Home: 2568x900 live DPR=1 content=2368 primary=2004 rightGap=0 hero=990 rail=348 card=238.5
+Fluid Home: 2506x900 live DPR=1 content=2306 primary=1942 rightGap=0 hero=959 rail=348 card=230.75
+Fluid Home: 2444x900 live DPR=1 content=2244 primary=1880 rightGap=0 hero=928 rail=348 card=223
+Fluid Home: 2382x900 live DPR=1 content=2182 primary=1818 rightGap=0 hero=897 rail=348 card=215.25
+Fluid Home: 2320x900 live DPR=1 content=2120 primary=1756 rightGap=0 hero=866 rail=348 card=207.5
+Fluid Home: 2258x900 live DPR=1 content=2058 primary=1694 rightGap=0 hero=1694 rail=348 card=414.5
+Fluid Home: 2196x900 live DPR=1 content=1996 primary=1632 rightGap=0 hero=1632 rail=348 card=399
+Fluid Home: 2134x900 live DPR=1 content=1934 primary=1570 rightGap=0 hero=1570 rail=348 card=383.5
+Fluid Home: 2072x900 live DPR=1 content=1872 primary=1508 rightGap=0 hero=1508 rail=348 card=368
+Fluid Home: 2010x900 live DPR=1 content=1810 primary=1446 rightGap=0 hero=1446 rail=348 card=352.5
+Fluid Home: 1948x900 live DPR=1 content=1748 primary=1384 rightGap=0 hero=1384 rail=348 card=337
+Fluid Home: 1886x900 live DPR=1 content=1686 primary=1322 rightGap=0 hero=1322 rail=348 card=321.5
+Fluid Home: 1824x900 live DPR=1 content=1624 primary=1260 rightGap=0 hero=1260 rail=348 card=306
+Fluid Home: 1762x900 live DPR=1 content=1562 primary=1198 rightGap=0 hero=1198 rail=348 card=290.5
+Fluid Home: 1700x900 live DPR=1 content=1500 primary=1136 rightGap=0 hero=1136 rail=348 card=275
+Fluid Home: 1638x900 live DPR=1 content=1438 primary=1074 rightGap=0 hero=1074 rail=348 card=259.5
+Fluid Home: 1576x900 live DPR=1 content=1376 primary=1012 rightGap=0 hero=1012 rail=348 card=244
+Fluid Home: 1514x900 live DPR=1 content=1314 primary=950 rightGap=0 hero=950 rail=348 card=228.5
+Fluid Home: 1452x900 live DPR=1 content=1252 primary=888 rightGap=0 hero=888 rail=348 card=213
+Fluid Home: 1390x900 live DPR=1 content=1190 primary=826 rightGap=0 hero=826 rail=348 card=197.5
+Fluid Home: 1328x900 live DPR=1 content=1128 primary=764 rightGap=0 hero=764 rail=348 card=182
+Fluid Home: 1266x900 live DPR=1 content=1066 primary=1066 rightGap=0 hero=1066 rail=1066 card=257.5
+Fluid Home: 1204x900 live DPR=1 content=1028 primary=1028 rightGap=0 hero=1028 rail=1028 card=248
+Fluid Home: 1142x900 live DPR=1 content=966 primary=966 rightGap=0 hero=966 rail=966 card=232.5
+Fluid Home: 1080x900 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 796x796 live DPR=1 content=620 primary=620 rightGap=0 hero=620 rail=620 card=304
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1080x900 hybrid DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1142x900 hybrid DPR=1 content=966 primary=966 rightGap=0 hero=966 rail=966 card=232.5
+Fluid Home: 1204x900 hybrid DPR=1 content=1028 primary=1028 rightGap=0 hero=1028 rail=1028 card=248
+Fluid Home: 1266x900 hybrid DPR=1 content=1066 primary=1066 rightGap=0 hero=1066 rail=1066 card=257.5
+Fluid Home: 1328x900 hybrid DPR=1 content=1128 primary=764 rightGap=0 hero=764 rail=348 card=182
+Fluid Home: 1390x900 hybrid DPR=1 content=1190 primary=826 rightGap=0 hero=826 rail=348 card=197.5
+Fluid Home: 1452x900 hybrid DPR=1 content=1252 primary=888 rightGap=0 hero=888 rail=348 card=213
+Fluid Home: 1514x900 hybrid DPR=1 content=1314 primary=950 rightGap=0 hero=950 rail=348 card=228.5
+Fluid Home: 1576x900 hybrid DPR=1 content=1376 primary=1012 rightGap=0 hero=1012 rail=348 card=244
+Fluid Home: 1638x900 hybrid DPR=1 content=1438 primary=1074 rightGap=0 hero=1074 rail=348 card=259.5
+Fluid Home: 1700x900 hybrid DPR=1 content=1500 primary=1136 rightGap=0 hero=1136 rail=348 card=275
+Fluid Home: 1762x900 hybrid DPR=1 content=1562 primary=1198 rightGap=0 hero=1198 rail=348 card=290.5
+Fluid Home: 1824x900 hybrid DPR=1 content=1624 primary=1260 rightGap=0 hero=1260 rail=348 card=306
+Fluid Home: 1886x900 hybrid DPR=1 content=1686 primary=1322 rightGap=0 hero=1322 rail=348 card=321.5
+Fluid Home: 1948x900 hybrid DPR=1 content=1748 primary=1384 rightGap=0 hero=1384 rail=348 card=337
+Fluid Home: 2010x900 hybrid DPR=1 content=1810 primary=1446 rightGap=0 hero=1446 rail=348 card=352.5
+Fluid Home: 2072x900 hybrid DPR=1 content=1872 primary=1508 rightGap=0 hero=1508 rail=348 card=368
+Fluid Home: 2134x900 hybrid DPR=1 content=1934 primary=1570 rightGap=0 hero=1570 rail=348 card=383.5
+Fluid Home: 2196x900 hybrid DPR=1 content=1996 primary=1632 rightGap=0 hero=1632 rail=348 card=399
+Fluid Home: 2258x900 hybrid DPR=1 content=2058 primary=1694 rightGap=0 hero=1694 rail=348 card=414.5
+Fluid Home: 2320x900 hybrid DPR=1 content=2120 primary=1756 rightGap=0 hero=866 rail=348 card=207.5
+Fluid Home: 2382x900 hybrid DPR=1 content=2182 primary=1818 rightGap=0 hero=897 rail=348 card=215.25
+Fluid Home: 2444x900 hybrid DPR=1 content=2244 primary=1880 rightGap=0 hero=928 rail=348 card=223
+Fluid Home: 2506x900 hybrid DPR=1 content=2306 primary=1942 rightGap=0 hero=959 rail=348 card=230.75
+Fluid Home: 2568x900 hybrid DPR=1 content=2368 primary=2004 rightGap=0 hero=990 rail=348 card=238.5
+Fluid Home: 2630x900 hybrid DPR=1 content=2430 primary=2066 rightGap=0 hero=1021 rail=348 card=246.25
+Fluid Home: 2692x900 hybrid DPR=1 content=2492 primary=2128 rightGap=0 hero=1052 rail=348 card=254
+Fluid Home: 2754x900 hybrid DPR=1 content=2554 primary=2190 rightGap=0 hero=1083 rail=348 card=261.75
+Fluid Home: 2816x900 hybrid DPR=1 content=2616 primary=2252 rightGap=0 hero=1114 rail=348 card=269.5
+Fluid Home: 2878x900 hybrid DPR=1 content=2678 primary=2314 rightGap=0 hero=1145 rail=348 card=277.25
+Fluid Home: 2940x900 hybrid DPR=1 content=2740 primary=2376 rightGap=0 hero=1176 rail=348 card=285
+Fluid Home: 3002x900 hybrid DPR=1 content=2802 primary=2438 rightGap=0 hero=1207 rail=348 card=292.75
+Fluid Home: 3064x900 hybrid DPR=1 content=2864 primary=2500 rightGap=0 hero=1238 rail=348 card=300.5
+Fluid Home: 3126x900 hybrid DPR=1 content=2926 primary=2562 rightGap=0 hero=1269 rail=348 card=308.25
+Fluid Home: 3188x900 hybrid DPR=1 content=2988 primary=2624 rightGap=0 hero=1300 rail=348 card=316
+Fluid Home: 3250x900 hybrid DPR=1 content=3050 primary=2686 rightGap=0 hero=1331 rail=348 card=323.75
+Fluid Home: 3312x900 hybrid DPR=1 content=3112 primary=2748 rightGap=0 hero=1362 rail=348 card=331.5
+Fluid Home: 3374x900 hybrid DPR=1 content=3174 primary=2810 rightGap=0 hero=1393 rail=348 card=339.25
+Fluid Home: 3436x900 hybrid DPR=1 content=3236 primary=2872 rightGap=0 hero=1424 rail=348 card=347
+Fluid Home: 3498x900 hybrid DPR=1 content=3298 primary=2934 rightGap=0 hero=1455 rail=348 card=354.75
+Fluid Home: 3560x900 hybrid DPR=1 content=3360 primary=2996 rightGap=0 hero=1486 rail=348 card=362.5
+Fluid Home: 3622x900 hybrid DPR=1 content=3422 primary=3058 rightGap=0 hero=1517 rail=348 card=370.25
+Fluid Home: 3684x900 hybrid DPR=1 content=3484 primary=3120 rightGap=0 hero=1548 rail=348 card=378
+Fluid Home: 3746x900 hybrid DPR=1 content=3546 primary=3182 rightGap=0 hero=1579 rail=348 card=385.75
+Fluid Home: 3808x900 hybrid DPR=1 content=3608 primary=3244 rightGap=0 hero=1610 rail=348 card=393.5
+Fluid Home: 3808x900 hybrid DPR=1 content=3608 primary=3244 rightGap=0 hero=1610 rail=348 card=393.5
+Fluid Home: 3746x900 hybrid DPR=1 content=3546 primary=3182 rightGap=0 hero=1579 rail=348 card=385.75
+Fluid Home: 3684x900 hybrid DPR=1 content=3484 primary=3120 rightGap=0 hero=1548 rail=348 card=378
+Fluid Home: 3622x900 hybrid DPR=1 content=3422 primary=3058 rightGap=0 hero=1517 rail=348 card=370.25
+Fluid Home: 3560x900 hybrid DPR=1 content=3360 primary=2996 rightGap=0 hero=1486 rail=348 card=362.5
+Fluid Home: 3498x900 hybrid DPR=1 content=3298 primary=2934 rightGap=0 hero=1455 rail=348 card=354.75
+Fluid Home: 3436x900 hybrid DPR=1 content=3236 primary=2872 rightGap=0 hero=1424 rail=348 card=347
+Fluid Home: 3374x900 hybrid DPR=1 content=3174 primary=2810 rightGap=0 hero=1393 rail=348 card=339.25
+Fluid Home: 3312x900 hybrid DPR=1 content=3112 primary=2748 rightGap=0 hero=1362 rail=348 card=331.5
+Fluid Home: 3250x900 hybrid DPR=1 content=3050 primary=2686 rightGap=0 hero=1331 rail=348 card=323.75
+Fluid Home: 3188x900 hybrid DPR=1 content=2988 primary=2624 rightGap=0 hero=1300 rail=348 card=316
+Fluid Home: 3126x900 hybrid DPR=1 content=2926 primary=2562 rightGap=0 hero=1269 rail=348 card=308.25
+Fluid Home: 3064x900 hybrid DPR=1 content=2864 primary=2500 rightGap=0 hero=1238 rail=348 card=300.5
+Fluid Home: 3002x900 hybrid DPR=1 content=2802 primary=2438 rightGap=0 hero=1207 rail=348 card=292.75
+Fluid Home: 2940x900 hybrid DPR=1 content=2740 primary=2376 rightGap=0 hero=1176 rail=348 card=285
+Fluid Home: 2878x900 hybrid DPR=1 content=2678 primary=2314 rightGap=0 hero=1145 rail=348 card=277.25
+Fluid Home: 2816x900 hybrid DPR=1 content=2616 primary=2252 rightGap=0 hero=1114 rail=348 card=269.5
+Fluid Home: 2754x900 hybrid DPR=1 content=2554 primary=2190 rightGap=0 hero=1083 rail=348 card=261.75
+Fluid Home: 2692x900 hybrid DPR=1 content=2492 primary=2128 rightGap=0 hero=1052 rail=348 card=254
+Fluid Home: 2630x900 hybrid DPR=1 content=2430 primary=2066 rightGap=0 hero=1021 rail=348 card=246.25
+Fluid Home: 2568x900 hybrid DPR=1 content=2368 primary=2004 rightGap=0 hero=990 rail=348 card=238.5
+Fluid Home: 2506x900 hybrid DPR=1 content=2306 primary=1942 rightGap=0 hero=959 rail=348 card=230.75
+Fluid Home: 2444x900 hybrid DPR=1 content=2244 primary=1880 rightGap=0 hero=928 rail=348 card=223
+Fluid Home: 2382x900 hybrid DPR=1 content=2182 primary=1818 rightGap=0 hero=897 rail=348 card=215.25
+Fluid Home: 2320x900 hybrid DPR=1 content=2120 primary=1756 rightGap=0 hero=866 rail=348 card=207.5
+Fluid Home: 2258x900 hybrid DPR=1 content=2058 primary=1694 rightGap=0 hero=1694 rail=348 card=414.5
+Fluid Home: 2196x900 hybrid DPR=1 content=1996 primary=1632 rightGap=0 hero=1632 rail=348 card=399
+Fluid Home: 2134x900 hybrid DPR=1 content=1934 primary=1570 rightGap=0 hero=1570 rail=348 card=383.5
+Fluid Home: 2072x900 hybrid DPR=1 content=1872 primary=1508 rightGap=0 hero=1508 rail=348 card=368
+Fluid Home: 2010x900 hybrid DPR=1 content=1810 primary=1446 rightGap=0 hero=1446 rail=348 card=352.5
+Fluid Home: 1948x900 hybrid DPR=1 content=1748 primary=1384 rightGap=0 hero=1384 rail=348 card=337
+Fluid Home: 1886x900 hybrid DPR=1 content=1686 primary=1322 rightGap=0 hero=1322 rail=348 card=321.5
+Fluid Home: 1824x900 hybrid DPR=1 content=1624 primary=1260 rightGap=0 hero=1260 rail=348 card=306
+Fluid Home: 1762x900 hybrid DPR=1 content=1562 primary=1198 rightGap=0 hero=1198 rail=348 card=290.5
+Fluid Home: 1700x900 hybrid DPR=1 content=1500 primary=1136 rightGap=0 hero=1136 rail=348 card=275
+Fluid Home: 1638x900 hybrid DPR=1 content=1438 primary=1074 rightGap=0 hero=1074 rail=348 card=259.5
+Fluid Home: 1576x900 hybrid DPR=1 content=1376 primary=1012 rightGap=0 hero=1012 rail=348 card=244
+Fluid Home: 1514x900 hybrid DPR=1 content=1314 primary=950 rightGap=0 hero=950 rail=348 card=228.5
+Fluid Home: 1452x900 hybrid DPR=1 content=1252 primary=888 rightGap=0 hero=888 rail=348 card=213
+Fluid Home: 1390x900 hybrid DPR=1 content=1190 primary=826 rightGap=0 hero=826 rail=348 card=197.5
+Fluid Home: 1328x900 hybrid DPR=1 content=1128 primary=764 rightGap=0 hero=764 rail=348 card=182
+Fluid Home: 1266x900 hybrid DPR=1 content=1066 primary=1066 rightGap=0 hero=1066 rail=1066 card=257.5
+Fluid Home: 1204x900 hybrid DPR=1 content=1028 primary=1028 rightGap=0 hero=1028 rail=1028 card=248
+Fluid Home: 1142x900 hybrid DPR=1 content=966 primary=966 rightGap=0 hero=966 rail=966 card=232.5
+Fluid Home: 1080x900 hybrid DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 796x796 hybrid DPR=1 content=620 primary=620 rightGap=0 hero=620 rail=620 card=304
+Fluid Home: 1536x1024 hybrid DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+PASS: Home presentation, authority, accessibility and visual evidence
+<end of output>
+Test time =  21.23 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-resize" end time: Oct 09 19:31 CEST
+"studio-home-resize" time elapsed: 00:00:21
+----------------------------------------------------------
+
+17/64 Testing: studio-home-states
+17/64 Test: studio-home-states
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-home-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m1/states" "states"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-home-states" start time: Oct 09 19:31 CEST
+Output:
+----------------------------------------------------------
+Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 live DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 live DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 live DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 live DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 live DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 live DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 live DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 live DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 live DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 live DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 live DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 live DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 live DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 live DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 live DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+Fluid Home: 1080x720 live DPR=1 content=904 primary=904 rightGap=0 hero=904 rail=904 card=217
+Fluid Home: 1280x720 live DPR=1 content=1080 primary=1080 rightGap=0 hero=1080 rail=1080 card=261
+Fluid Home: 1366x768 live DPR=1 content=1166 primary=802 rightGap=0 hero=802 rail=348 card=191.5
+Fluid Home: 1440x900 live DPR=1 content=1240 primary=876 rightGap=0 hero=876 rail=348 card=210
+Fluid Home: 1536x1024 live DPR=1 content=1336 primary=972 rightGap=0 hero=972 rail=348 card=234
+Fluid Home: 1920x1080 live DPR=1 content=1720 primary=1356 rightGap=0 hero=1356 rail=348 card=330
+Fluid Home: 2560x1440 live DPR=1 content=2360 primary=1996 rightGap=0 hero=986 rail=348 card=237.5
+Fluid Home: 3440x1440 live DPR=1 content=3240 primary=2876 rightGap=0 hero=1426 rail=348 card=347.5
+Fluid Home: 3840x2160 live DPR=1 content=3640 primary=3276 rightGap=0 hero=1626 rail=348 card=397.5
+PASS: Home presentation, authority, accessibility and visual evidence
+<end of output>
+Test time =   7.31 sec
+----------------------------------------------------------
+Test Passed.
+"studio-home-states" end time: Oct 09 19:31 CEST
+"studio-home-states" time elapsed: 00:00:07
+----------------------------------------------------------
+
+18/64 Testing: studio-ui-m0-qml
+18/64 Test: studio-ui-m0-qml
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-ui-m0-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m0/screenshots"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-ui-m0-qml" start time: Oct 09 19:31 CEST
+Output:
+----------------------------------------------------------
+STAGE: route home
+STAGE: route scan
+STAGE: route process
+STAGE: route inspect
+STAGE: route reverse
+STAGE: route automate
+STAGE: route projects
+STAGE: route devices
+STAGE: route plugins
+STAGE: route settings
+STAGE: dynamic device removal followed by immediate resize
+STAGE: presentation provider
+STAGE: controller eligibility and stale snapshot transitions
+STAGE: button interactions
+STAGE: rendered-frame screenshot deadlines
+PASS: ten routes, mouse/keyboard navigation, source/capability transitions, mock authority boundary, legacy hooks and three viewport sizes
+<end of output>
+Test time =   7.72 sec
+----------------------------------------------------------
+Test Passed.
+"studio-ui-m0-qml" end time: Oct 09 19:31 CEST
+"studio-ui-m0-qml" time elapsed: 00:00:07
+----------------------------------------------------------
+
+19/64 Testing: studio-ui-m0-cli
+19/64 Test: studio-ui-m0-cli
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_ui_m0.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/ui-m0/cli"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-ui-m0-cli" start time: Oct 09 19:31 CEST
+Output:
+----------------------------------------------------------
+PASS: CLI validation, short screenshot timeout, token-free offline startup, twelve initial routes without network access
+<end of output>
+Test time =  23.84 sec
+----------------------------------------------------------
+Test Passed.
+"studio-ui-m0-cli" end time: Oct 09 19:32 CEST
+"studio-ui-m0-cli" time elapsed: 00:00:23
+----------------------------------------------------------
+
+20/64 Testing: studio-calibration-controller
+20/64 Test: studio-calibration-controller
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-calibration-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-calibration-controller" start time: Oct 09 19:32 CEST
+Output:
+----------------------------------------------------------
+Studio calibration presentation contracts passed
+<end of output>
+Test time =   0.35 sec
+----------------------------------------------------------
+Test Passed.
+"studio-calibration-controller" end time: Oct 09 19:32 CEST
+"studio-calibration-controller" time elapsed: 00:00:00
+----------------------------------------------------------
+
+21/64 Testing: studio-calibration-daemon
+21/64 Test: studio-calibration-daemon
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/studio_calibration.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-calibration-daemon" start time: Oct 09 19:32 CEST
+Output:
+----------------------------------------------------------
+Studio controller → mantis-client → Protobuf → real mantisd passed; UI heartbeat 4630
+<end of output>
+Test time =  10.49 sec
+----------------------------------------------------------
+Test Passed.
+"studio-calibration-daemon" end time: Oct 09 19:32 CEST
+"studio-calibration-daemon" time elapsed: 00:00:10
+----------------------------------------------------------
+
+22/64 Testing: studio-calibration-qml
+22/64 Test: studio-calibration-qml
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-studio-calibration-qml"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"studio-calibration-qml" start time: Oct 09 19:32 CEST
+Output:
+----------------------------------------------------------
+Calibration QML loaded and bound all seven stages without binding/type warnings
+<end of output>
+Test time =   0.93 sec
+----------------------------------------------------------
+Test Passed.
+"studio-calibration-qml" end time: Oct 09 19:32 CEST
+"studio-calibration-qml" time elapsed: 00:00:00
+----------------------------------------------------------
+
+23/64 Testing: project-public-capabilities
+23/64 Test: project-public-capabilities
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/project_capabilities.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"project-public-capabilities" start time: Oct 09 19:32 CEST
+Output:
+----------------------------------------------------------
+Refusal: Project does not exist
+Refusal: Project already open by another runtime
+Refusal: Invalid local access token
+Embedded NUL rejected; current identity unchanged (partial directory side effects require a separate backend policy).
+Refusal: Stop captures before switching projects
+Refusal: Jobs must finish before switching projects
+BLOCKER VERIFIED: completed replay from A remains readable after both clients confirm B; old preview written into /tmp/mantis-project-capabilities-ag868ci0/B-測定.mantis/cache/previews/0fd03165-f3f4-4a0c-9365-bdf4811f006c.packet
+PASS: published create/open semantics, two clients, capture/job refusal, auth/invalid/missing path, Unicode/literal paths; New/Open remain BLOCKED in UI
+
+<end of output>
+Test time =   1.47 sec
+----------------------------------------------------------
+Test Passed.
+"project-public-capabilities" end time: Oct 09 19:32 CEST
+"project-public-capabilities" time elapsed: 00:00:01
+----------------------------------------------------------
+
+24/64 Testing: calibration-service-protocol
+24/64 Test: calibration-service-protocol
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-service-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-service-protocol" start time: Oct 09 19:32 CEST
+Output:
+----------------------------------------------------------
+CalibrationService and generated protocol dispatch passed
+<end of output>
+Test time =  23.18 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-service-protocol" end time: Oct 09 19:32 CEST
+"calibration-service-protocol" time elapsed: 00:00:23
+----------------------------------------------------------
+
+25/64 Testing: calibration-client-integration
+25/64 Test: calibration-client-integration
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/calibration_api.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-client-integration" start time: Oct 09 19:32 CEST
+Output:
+----------------------------------------------------------
+C++ calibration SDK against real mantisd passed
+Real daemon Python/C++/CLI calibration APIs and compositional camera/rig workflow passed
+Strict CLI malformed-option rejection passed without contacting a daemon
+<end of output>
+Test time =  14.88 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-client-integration" end time: Oct 09 19:33 CEST
+"calibration-client-integration" time elapsed: 00:00:14
+----------------------------------------------------------
+
+26/64 Testing: python-calibration
+26/64 Test: python-calibration
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/unit/python_calibration.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"python-calibration" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Python calibration encoding, presence, bounds, artifact arguments, Job and active semantics passed
+<end of output>
+Test time =   0.07 sec
+----------------------------------------------------------
+Test Passed.
+"python-calibration" end time: Oct 09 19:33 CEST
+"python-calibration" time elapsed: 00:00:00
+----------------------------------------------------------
+
+27/64 Testing: protocol-field-compatibility
+27/64 Test: protocol-field-compatibility
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/contract/protocol_fields.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"protocol-field-compatibility" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Protocol v1: Request 10..31 and Response 1..12 frozen; M6 Request 32..40 / Response 13..15 verified
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"protocol-field-compatibility" end time: Oct 09 19:33 CEST
+"protocol-field-compatibility" time elapsed: 00:00:00
+----------------------------------------------------------
+
+28/64 Testing: calibration-artifacts
+28/64 Test: calibration-artifacts
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-artifacts-tests" "codec"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-artifacts" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+OpenCV 4.10.0; full target/dataset/camera/rig graph round-trip passed
+codec passed
+<end of output>
+Test time =   9.37 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-artifacts" end time: Oct 09 19:33 CEST
+"calibration-artifacts" time elapsed: 00:00:09
+----------------------------------------------------------
+
+29/64 Testing: active-calibration-binding
+29/64 Test: active-calibration-binding
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-artifacts-tests" "binding"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"active-calibration-binding" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+binding passed
+<end of output>
+Test time =   9.07 sec
+----------------------------------------------------------
+Test Passed.
+"active-calibration-binding" end time: Oct 09 19:33 CEST
+"active-calibration-binding" time elapsed: 00:00:09
+----------------------------------------------------------
+
+30/64 Testing: calibration-revision-store
+30/64 Test: calibration-revision-store
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-revision-store-tests" "revision"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-revision-store" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+revision passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-revision-store" end time: Oct 09 19:33 CEST
+"calibration-revision-store" time elapsed: 00:00:00
+----------------------------------------------------------
+
+31/64 Testing: project-migration-v1-v2
+31/64 Test: project-migration-v1-v2
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-revision-store-tests" "migration"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"project-migration-v1-v2" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+migration passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"project-migration-v1-v2" end time: Oct 09 19:33 CEST
+"project-migration-v1-v2" time elapsed: 00:00:00
+----------------------------------------------------------
+
+32/64 Testing: provenance-calibration-reference
+32/64 Test: provenance-calibration-reference
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-revision-store-tests" "provenance"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"provenance-calibration-reference" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+provenance passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"provenance-calibration-reference" end time: Oct 09 19:33 CEST
+"provenance-calibration-reference" time elapsed: 00:00:00
+----------------------------------------------------------
+
+33/64 Testing: calibration-solver-opencv
+33/64 Test: calibration-solver-opencv
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-solver-opencv-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-solver-opencv" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+M4 solver OpenCV 4.10.0 (core/calib3d)
+Checkerboard mono: fx=1000.00000361 fy=1015.0000275 held-out RMS=2.80845910206e-06 px; stereo rejected
+ChArUco mono: LEFT fx error=-0.000141765485068 RIGHT fx error=6.97737621067e-05 held-out RMS LEFT/RIGHT=1.06062533324e-05/3.99442980673e-06 px
+Stereo: max R error=2.22288003573e-07 max T error=0.000180768356924 mm; baseline=120.012048852 (expected 120.012041063) mm; training/held-out/final epipolar RMS=4.87708504302e-06/4.69709530384e-06/4.71825840413e-06 px
+Finite noisy fit retained: final RMS=2.98637219259 px held-out RMS=3.00129525213 px
+Numerical failure converted: Camera model coefficients must be finite
+OpenCV calibration solver contracts passed
+<end of output>
+Test time =   1.54 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-solver-opencv" end time: Oct 09 19:33 CEST
+"calibration-solver-opencv" time elapsed: 00:00:01
+----------------------------------------------------------
+
+34/64 Testing: calibration-solve
+34/64 Test: calibration-solve
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-solve-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-solve" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Pure calibration solve contracts passed
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-solve" end time: Oct 09 19:33 CEST
+"calibration-solve" time elapsed: 00:00:00
+----------------------------------------------------------
+
+35/64 Testing: calibration-dataset
+35/64 Test: calibration-dataset
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-dataset-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-dataset" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Policy v1 exact keys: left A/17 B/17 B/18; right B/17 A/18 B/18
+Calibration dataset: pure structure, descriptors, checked fixed-point distance and deterministic per-camera selection passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-dataset" end time: Oct 09 19:33 CEST
+"calibration-dataset" time elapsed: 00:00:00
+----------------------------------------------------------
+
+36/64 Testing: calibration-dataset-ingestion
+36/64 Test: calibration-dataset-ingestion
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-dataset-ingestion-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-dataset-ingestion" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Multi-capture RAW8/Y10P exact selection: left canonical A/17 B/17 B/18; right B/17 A/18 B/18
+RawCapture dataset ingestion: canonical identities, exact roles, packing, partial visibility, selection, source errors and metadata-only lifetime passed
+<end of output>
+Test time =  23.54 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-dataset-ingestion" end time: Oct 09 19:33 CEST
+"calibration-dataset-ingestion" time elapsed: 00:00:23
+----------------------------------------------------------
+
+37/64 Testing: calibration-opencv
+37/64 Test: calibration-opencv
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-opencv-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-opencv" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+OpenCV 4.10.0: 4.6-generation SB/ArUco/ChArUco contracts
+Checkerboard rotation 180: detector ID 0 -> physical fixture corner 0
+Checkerboard rotation 90: detector ID 0 -> physical fixture corner 34
+Checkerboard rotation 270: detector ID 0 -> physical fixture corner 0
+Checkerboard normal/perspective: detector ID 0 -> physical fixture corner 34/34; plain symmetric board cannot supply absolute physical IDs across 180 degrees
+ChArUco contract: 35 full corners, 20/20 partial corners, common IDs 3 10 17 24 31; native board indexing and physical scaling verified
+ChArUco white-origin even-row layout: full/partial IDs, planar mapping, scale and opposite-layout rejection verified
+Calibration OpenCV: synthetic detection, identity, partial visibility, scale, dictionaries and input validation passed
+<end of output>
+Test time =   2.92 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-opencv" end time: Oct 09 19:33 CEST
+"calibration-opencv" time elapsed: 00:00:02
+----------------------------------------------------------
+
+38/64 Testing: calibration-observation
+38/64 Test: calibration-observation
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-observation-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-observation" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Calibration observations: pure validation, ID semantics and correspondence intersection passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-observation" end time: Oct 09 19:33 CEST
+"calibration-observation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+39/64 Testing: calibration-target
+39/64 Test: calibration-target
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-target-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-target" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Calibration targets: nominal/measured scale, anisotropy, marker dimensions, points and structural validation passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-target" end time: Oct 09 19:33 CEST
+"calibration-target" time elapsed: 00:00:00
+----------------------------------------------------------
+
+40/64 Testing: legacy-abi
+40/64 Test: legacy-abi
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-legacy-abi-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins/libmantis-legacy-device.so" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins/libmantis-legacy-acquisition.so"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"legacy-abi" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Frozen-header C ABI v1 DSO, callbacks and retained buffers passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"legacy-abi" end time: Oct 09 19:33 CEST
+"legacy-abi" time elapsed: 00:00:00
+----------------------------------------------------------
+
+41/64 Testing: frozen-l2-abi
+41/64 Test: frozen-l2-abi
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-l2-abi-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"frozen-l2-abi" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Frozen L2 ABI: 2023 layout/numeric checks and 22 identity checks passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"frozen-l2-abi" end time: Oct 09 19:33 CEST
+"frozen-l2-abi" time elapsed: 00:00:00
+----------------------------------------------------------
+
+42/64 Testing: frozen-l2-catalog
+42/64 Test: frozen-l2-catalog
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/contract/l2/generate_catalog.py" "--check"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"frozen-l2-catalog" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+L2 frozen catalogs: 129 structs, 10 callback aliases, 816 fields, 113 numeric constants, 22 IDs
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"frozen-l2-catalog" end time: Oct 09 19:33 CEST
+"frozen-l2-catalog" time elapsed: 00:00:00
+----------------------------------------------------------
+
+43/64 Testing: calibration-service-activation
+43/64 Test: calibration-service-activation
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-calibration-activation-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins" "/home/martin/src/mantis-studio-ui/tests/fixtures/x1-acceptance-env.json"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"calibration-service-activation" start time: Oct 09 19:33 CEST
+Output:
+----------------------------------------------------------
+Calibration service discovered activation, strict parsing and M5 capture snapshot passed
+<end of output>
+Test time =  11.80 sec
+----------------------------------------------------------
+Test Passed.
+"calibration-service-activation" end time: Oct 09 19:34 CEST
+"calibration-service-activation" time elapsed: 00:00:11
+----------------------------------------------------------
+
+44/64 Testing: capture-calibration-binding
+44/64 Test: capture-calibration-binding
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-capture-calibration-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins" "/home/martin/src/mantis-studio-ui/tests/fixtures/x1-acceptance-env.json"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"capture-calibration-binding" start time: Oct 09 19:34 CEST
+Output:
+----------------------------------------------------------
+Real Runtime/fake-X1: no-active, snapshot rev1 while active changes, future rev2, historical replay, identical pixel hashes and BufferView identities, strict discovery geometry, capture-start geometry rejection and packing/FPS compatibility passed
+<end of output>
+Test time =  25.35 sec
+----------------------------------------------------------
+Test Passed.
+"capture-calibration-binding" end time: Oct 09 19:34 CEST
+"capture-calibration-binding" time elapsed: 00:00:25
+----------------------------------------------------------
+
+45/64 Testing: x1-pairing
+45/64 Test: x1-pairing
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-x1-pairing-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"x1-pairing" start time: Oct 09 19:34 CEST
+Output:
+----------------------------------------------------------
+bounded timestamp-nearest pairing passed
+<end of output>
+Test time =   1.46 sec
+----------------------------------------------------------
+Test Passed.
+"x1-pairing" end time: Oct 09 19:34 CEST
+"x1-pairing" time elapsed: 00:00:01
+----------------------------------------------------------
+
+46/64 Testing: x1-pairing-stream
+46/64 Test: x1-pairing-stream
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-x1-pairing-stream-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"x1-pairing-stream" start time: Oct 09 19:34 CEST
+Output:
+----------------------------------------------------------
+GREY normal hardware=0
+GREY close-timestamps hardware=0
+GREY startup-left hardware=0
+GREY startup-right hardware=0
+GREY unequal-origins hardware=0
+GREY phase-out-of-bound hardware=0
+Expected failure: Nearest camera timestamps exceed profile pairing limit
+GREY startup-limit hardware=0
+Expected failure: Startup timestamp alignment exceeded unmatched-observation limit
+GREY incomparable hardware=0
+Expected failure: Camera timestamp clocks are not comparable
+GREY unknown-clock hardware=0
+Expected failure: Camera timestamp clocks are not comparable
+GREY startup-left-gap hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+GREY startup-left-repeat hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+GREY startup-left-reverse hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+GREY startup-left-timestamp-jump hardware=0
+Expected failure: right.timestamp discontinuity
+GREY startup-left-clock-change hardware=0
+Expected failure: right.timestamp clock discontinuity
+GREY startup-left-steady-delta hardware=0
+GREY normal hardware=1
+GREY close-timestamps hardware=1
+GREY startup-left hardware=1
+Expected failure: Camera timestamp delta exceeds profile pairing limit
+GREY unequal-origins hardware=1
+Expected failure: Hardware-mode native camera counters disagree
+Y10P normal hardware=0
+Y10P close-timestamps hardware=0
+Y10P startup-left hardware=0
+Y10P startup-right hardware=0
+Y10P unequal-origins hardware=0
+Y10P phase-out-of-bound hardware=0
+Expected failure: Nearest camera timestamps exceed profile pairing limit
+Y10P startup-limit hardware=0
+Expected failure: Startup timestamp alignment exceeded unmatched-observation limit
+Y10P incomparable hardware=0
+Expected failure: Camera timestamp clocks are not comparable
+Y10P unknown-clock hardware=0
+Expected failure: Camera timestamp clocks are not comparable
+Y10P startup-left-gap hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+Y10P startup-left-repeat hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+Y10P startup-left-reverse hardware=0
+Expected failure: right.native sequence discontinuity; raw capture failed
+Y10P startup-left-timestamp-jump hardware=0
+Expected failure: right.timestamp discontinuity
+Y10P startup-left-clock-change hardware=0
+Expected failure: right.timestamp clock discontinuity
+Y10P startup-left-steady-delta hardware=0
+Y10P normal hardware=1
+Y10P close-timestamps hardware=1
+Y10P startup-left hardware=1
+Expected failure: Camera timestamp delta exceeds profile pairing limit
+Y10P unequal-origins hardware=1
+Expected failure: Hardware-mode native camera counters disagree
+GREY phase-4000 counted exclusions, zero recorder loss and exact replay passed
+GREY phase-half counted exclusions, zero recorder loss and exact replay passed
+GREY phase-4300 counted exclusions, zero recorder loss and exact replay passed
+GREY phase-drift-left counted exclusions, zero recorder loss and exact replay passed
+GREY phase-drift-right counted exclusions, zero recorder loss and exact replay passed
+GREY phase-jitter-left counted exclusions, zero recorder loss and exact replay passed
+GREY phase-jitter-right counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-4000 counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-half counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-4300 counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-drift-left counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-drift-right counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-jitter-left counted exclusions, zero recorder loss and exact replay passed
+Y10P phase-jitter-right counted exclusions, zero recorder loss and exact replay passed
+<end of output>
+Test time =  22.90 sec
+----------------------------------------------------------
+Test Passed.
+"x1-pairing-stream" end time: Oct 09 19:35 CEST
+"x1-pairing-stream" time elapsed: 00:00:22
+----------------------------------------------------------
+
+47/64 Testing: x1-media
+47/64 Test: x1-media
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-x1-media-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"x1-media" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+Disabled-link route discovery and explicit ambiguity checks passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"x1-media" end time: Oct 09 19:35 CEST
+"x1-media" time elapsed: 00:00:00
+----------------------------------------------------------
+
+48/64 Testing: acquisition
+48/64 Test: acquisition
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-acquisition-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins" "/home/martin/src/mantis-studio-ui/profiles/x1-q6a.json"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"acquisition" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+normal passed
+y10p passed
+renumber passed
+eagain passed
+drop-left passed
+drop-right passed
+disconnect passed
+mismatch passed
+repeat passed
+timestamp-jump passed
+phase-out-of-bound passed
+stall-left passed
+stall-right passed
+stop-right passed
+stream-mismatch passed
+<end of output>
+Test time =   1.56 sec
+----------------------------------------------------------
+Test Passed.
+"acquisition" end time: Oct 09 19:35 CEST
+"acquisition" time elapsed: 00:00:01
+----------------------------------------------------------
+
+49/64 Testing: acquisition-integration
+49/64 Test: acquisition-integration
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/acquisition.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"acquisition-integration" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+C++ acquisition client passed
+Fake X1 CLI/Python/C++ controls, dual preview, immutable references, kill/recovery and hardware-free replay passed
+<end of output>
+Test time =  11.88 sec
+----------------------------------------------------------
+Test Passed.
+"acquisition-integration" end time: Oct 09 19:35 CEST
+"acquisition-integration" time elapsed: 00:00:11
+----------------------------------------------------------
+
+50/64 Testing: acquisition-y10p-integration
+50/64 Test: acquisition-y10p-integration
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/acquisition.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers" "Y10P"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"acquisition-y10p-integration" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+C++ acquisition client passed
+Fake X1 CLI/Python/C++ controls, dual preview, immutable references, kill/recovery and hardware-free replay passed
+<end of output>
+Test time =  12.90 sec
+----------------------------------------------------------
+Test Passed.
+"acquisition-y10p-integration" end time: Oct 09 19:35 CEST
+"acquisition-y10p-integration" time elapsed: 00:00:12
+----------------------------------------------------------
+
+51/64 Testing: control-listener
+51/64 Test: control-listener
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/control_listener.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"control-listener" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+Blocking idle listener remains quiet and handles requests/shutdown after six seconds
+<end of output>
+Test time =   6.37 sec
+----------------------------------------------------------
+Test Passed.
+"control-listener" end time: Oct 09 19:35 CEST
+"control-listener" time elapsed: 00:00:06
+----------------------------------------------------------
+
+52/64 Testing: acquisition-qos
+52/64 Test: acquisition-qos
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-acquisition-qos-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"acquisition-qos" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+Bounded raw saturation/failure, preview isolation and cooperative shutdown passed
+<end of output>
+Test time =   0.07 sec
+----------------------------------------------------------
+Test Passed.
+"acquisition-qos" end time: Oct 09 19:35 CEST
+"acquisition-qos" time elapsed: 00:00:00
+----------------------------------------------------------
+
+53/64 Testing: raw-capture
+53/64 Test: raw-capture
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-raw-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"raw-capture" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+Segment storage, prefix recovery, legacy compatibility and two byte-identical replays passed
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"raw-capture" end time: Oct 09 19:35 CEST
+"raw-capture" time elapsed: 00:00:00
+----------------------------------------------------------
+
+54/64 Testing: projected-sequencer
+54/64 Test: projected-sequencer
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-projected-run-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"projected-sequencer" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+1884 deterministic sequencer checks passed
+<end of output>
+Test time =   0.54 sec
+----------------------------------------------------------
+Test Passed.
+"projected-sequencer" end time: Oct 09 19:35 CEST
+"projected-sequencer" time elapsed: 00:00:00
+----------------------------------------------------------
+
+55/64 Testing: projected-light-semantics
+55/64 Test: projected-light-semantics
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-projected-light-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"projected-light-semantics" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+735 canonical projected-light checks passed
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"projected-light-semantics" end time: Oct 09 19:35 CEST
+"projected-light-semantics" time elapsed: 00:00:00
+----------------------------------------------------------
+
+56/64 Testing: packed-image
+56/64 Test: packed-image
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-packed-image-tests"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"packed-image" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+Y10P known vectors, padding, display reduction and raw preservation passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"packed-image" end time: Oct 09 19:35 CEST
+"packed-image" time elapsed: 00:00:00
+----------------------------------------------------------
+
+57/64 Testing: core
+57/64 Test: core
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-core-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/plugins"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"core" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+2113 architecture assertions passed
+<end of output>
+Test time =   0.27 sec
+----------------------------------------------------------
+Test Passed.
+"core" end time: Oct 09 19:35 CEST
+"core" time elapsed: 00:00:00
+----------------------------------------------------------
+
+58/64 Testing: projected-light-contract
+58/64 Test: projected-light-contract
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-projected-contract-tests" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/contract-plugins/libmantis-projected-contract.so" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/contract-plugins"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"projected-light-contract" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+553 projected-light ABI/adapter checks passed
+<end of output>
+Test time =   0.31 sec
+----------------------------------------------------------
+Test Passed.
+"projected-light-contract" end time: Oct 09 19:35 CEST
+"projected-light-contract" time elapsed: 00:00:00
+----------------------------------------------------------
+
+59/64 Testing: c-abi
+59/64 Test: c-abi
+Command: "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers/bin/mantis-c-contract"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"c-abi" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"c-abi" end time: Oct 09 19:35 CEST
+"c-abi" time elapsed: 00:00:00
+----------------------------------------------------------
+
+60/64 Testing: boundaries
+60/64 Test: boundaries
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/contract/boundaries.py" "/home/martin/src/mantis-studio-ui"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"boundaries" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+Foundation, frontend, plugin and Linux media implementation boundaries passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"boundaries" end time: Oct 09 19:35 CEST
+"boundaries" time elapsed: 00:00:00
+----------------------------------------------------------
+
+61/64 Testing: python-capture
+61/64 Test: python-capture
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/unit/python_capture.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"python-capture" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+OK
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"python-capture" end time: Oct 09 19:35 CEST
+"python-capture" time elapsed: 00:00:00
+----------------------------------------------------------
+
+62/64 Testing: acceptance
+62/64 Test: acceptance
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/acceptance.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"acceptance" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+PASS: Python, CLI, Studio/viewport/UI restart, deterministic replay, isolated crash, capture continuity, daemon crash recovery
+<end of output>
+Test time =   4.93 sec
+----------------------------------------------------------
+Test Passed.
+"acceptance" end time: Oct 09 19:35 CEST
+"acceptance" time elapsed: 00:00:04
+----------------------------------------------------------
+
+63/64 Testing: q6a-validation-harness
+63/64 Test: q6a-validation-harness
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/q6a_validation_harness.py"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"q6a-validation-harness" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 0.820s
+
+OK
+<end of output>
+Test time =   0.91 sec
+----------------------------------------------------------
+Test Passed.
+"q6a-validation-harness" end time: Oct 09 19:35 CEST
+"q6a-validation-harness" time elapsed: 00:00:00
+----------------------------------------------------------
+
+64/64 Testing: x1-calibration-validation
+64/64 Test: x1-calibration-validation
+Command: "/usr/bin/python3" "/home/martin/src/mantis-studio-ui/tests/integration/x1_calibration_validation.py" "/home/martin/src/mantis-studio-ui/build/qt69-sanitizers"
+Directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+"x1-calibration-validation" start time: Oct 09 19:35 CEST
+Output:
+----------------------------------------------------------
+Fixture-only M4 fixed evaluation, lineage and directional evidence PASS
+.{
+  "schema_version": 1,
+  "evidence_mode": "real",
+  "software_harness": "FAIL",
+  "acquisition_integrity": "NOT ESTABLISHED",
+  "calibration_pipeline_execution": "NOT ESTABLISHED",
+  "activation_binding": "NOT ESTABLISHED",
+  "deterministic_replay": "NOT ESTABLISHED",
+  "characterization": "NOT ESTABLISHED",
+  "final_m8_acceptance": "NOT ESTABLISHED",
+  "failures": [
+    {
+      "stage": "preflight",
+      "reason": "Real evidence rejects MANTIS_X1_FAKE"
+    }
+  ],
+  "started_utc": "20261009-173632-387466",
+  "output": "/tmp/tmpz5cxr8yb/fake/x1-calibration-20261009-173632-387466",
+  "cleanup_errors": []
+}
+<frozen importlib._bootstrap>:488: DeprecationWarning: Type google.protobuf.pyext._message.ScalarMapContainer uses PyType_Spec with a metaclass that has custom tp_new. This is deprecated and will no longer be allowed in Python 3.14.
+<frozen importlib._bootstrap>:488: DeprecationWarning: Type google.protobuf.pyext._message.MessageMapContainer uses PyType_Spec with a metaclass that has custom tp_new. This is deprecated and will no longer be allowed in Python 3.14.
+.{
+  "schema_version": 1,
+  "evidence_mode": "fixture",
+  "software_harness": "FAIL",
+  "acquisition_integrity": "NOT ESTABLISHED",
+  "calibration_pipeline_execution": "NOT ESTABLISHED",
+  "activation_binding": "NOT ESTABLISHED",
+  "deterministic_replay": "NOT ESTABLISHED",
+  "characterization": "NOT ESTABLISHED",
+  "final_m8_acceptance": "NOT ESTABLISHED",
+  "failures": [
+    {
+      "stage": "preflight",
+      "reason": "Interrupted"
+    }
+  ],
+  "started_utc": "20261009-173632-638658",
+  "output": "/tmp/tmpz5cxr8yb/interrupt/x1-calibration-20261009-173632-638658",
+  "cleanup_errors": []
+}
+......../usr/lib/python3/dist-packages/google/protobuf/internal/well_known_types.py:91: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  _EPOCH_DATETIME_NAIVE = datetime.datetime.utcfromtimestamp(0)
+....
+----------------------------------------------------------------------
+Ran 14 tests in 85.062s
+
+OK
+<end of output>
+Test time =  85.18 sec
+----------------------------------------------------------
+Test Passed.
+"x1-calibration-validation" end time: Oct 09 19:37 CEST
+"x1-calibration-validation" time elapsed: 00:01:25
+----------------------------------------------------------
+
+End testing: Oct 09 19:37 CEST

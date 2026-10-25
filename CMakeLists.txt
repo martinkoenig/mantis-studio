@@ -143,9 +143,25 @@ if(MANTIS_BUILD_STUDIO)
  set_target_properties(mantis-studio-calibration PROPERTIES AUTOMOC ON)
  target_include_directories(mantis-studio-calibration PUBLIC apps/studio)
  target_link_libraries(mantis-studio-calibration PUBLIC mantis-client Qt6::Core Qt6::Concurrent)
- add_executable(mantis-studio apps/studio/main.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+ add_library(mantis-studio-home STATIC apps/studio/home_model.cpp apps/studio/home_model.hpp)
+ set_target_properties(mantis-studio-home PROPERTIES AUTOMOC ON)
+ target_include_directories(mantis-studio-home PUBLIC apps/studio)
+ target_link_libraries(mantis-studio-home PUBLIC Qt6::Qml mantis-options)
+ add_library(mantis-studio-projects STATIC apps/studio/projects_model.cpp apps/studio/projects_model.hpp apps/studio/projects_scroll.cpp apps/studio/projects_scroll.hpp)
+ set_target_properties(mantis-studio-projects PROPERTIES AUTOMOC ON)
+ target_include_directories(mantis-studio-projects PUBLIC apps/studio)
+ target_link_libraries(mantis-studio-projects PUBLIC Qt6::Quick mantis-options)
+ add_library(mantis-studio-devices STATIC apps/studio/devices_model.cpp apps/studio/devices_model.hpp)
+ set_target_properties(mantis-studio-devices PROPERTIES AUTOMOC ON)
+ target_include_directories(mantis-studio-devices PUBLIC apps/studio)
+ target_link_libraries(mantis-studio-devices PUBLIC mantis-studio-calibration Qt6::Qml mantis-options)
+ add_library(mantis-studio-scan STATIC apps/studio/scan_model.cpp apps/studio/scan_model.hpp apps/studio/live_views.cpp apps/studio/live_views.hpp)
+ set_target_properties(mantis-studio-scan PROPERTIES AUTOMOC ON)
+ target_include_directories(mantis-studio-scan PUBLIC apps/studio)
+ target_link_libraries(mantis-studio-scan PUBLIC mantis-render Qt6::Quick mantis-options)
+ add_executable(mantis-studio apps/studio/main.cpp apps/studio/screenshot.hpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
  set_target_properties(mantis-studio PROPERTIES AUTOMOC ON)
- target_link_libraries(mantis-studio PRIVATE mantis-studio-calibration mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
+ target_link_libraries(mantis-studio PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-client mantis-render Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
  set(MANTIS_STUDIO_QML_FILES
   ui/calibration/ArtifactSelector.qml
   ui/calibration/CamerasStage.qml
@@ -157,11 +173,159 @@ if(MANTIS_BUILD_STUDIO)
   ui/calibration/SolveEvidence.qml
   ui/calibration/StageError.qml
   ui/calibration/TargetStage.qml
+  ui/design/Theme.qml
+  ui/design/qmldir
+  ui/components/DeviceSummary.qml
+  ui/components/LiveSurfaces.qml
+  ui/components/NavigationItem.qml
+  ui/components/Panel.qml
+  ui/components/SourceBadge.qml
+  ui/components/StatusIndicator.qml
+  ui/components/StudioButton.qml
+  ui/components/StudioIcon.qml
+  ui/home/HomeText.qml
+  ui/home/HomeCard.qml
+  ui/home/HomeDemo.qml
+  ui/home/HomeRows.qml
+  ui/home/HomeProjects.qml
+  ui/home/HomePreview.qml
+  ui/home/HomeActivity.qml
+  ui/home/HomeGuide.qml
+  ui/home/assets/hero.jpg
+  ui/home/assets/scanner.png
+  ui/home/assets/housing.png
+  ui/home/assets/rotor.png
+  ui/home/assets/bracket.png
+  ui/home/assets/cover.png
+  ui/home/HomeDashboard.qml
+  ui/workspaces/ProjectsWorkspace.qml
+  ui/projects/ProjectsComboBox.qml
+  ui/projects/ProjectsText.qml
+  ui/projects/ProjectsDemo.qml
+  ui/projects/ProjectsViewport.qml
+  ui/projects/ProjectsTags.js
+  ui/projects/ProjectsChip.qml
+  ui/projects/ProjectsGallery.qml
+  ui/projects/ProjectsNavigator.qml
+  ui/projects/ProjectsInspector.qml
+  ui/projects/ProjectsContents.qml
+  ui/projects/UnavailableAction.qml
+  ui/projects/assets/engine.png
+  ui/projects/assets/bracket-qc.png
+  ui/projects/assets/pipe.png
+  ui/projects/assets/enclosure.png
+  ui/projects/assets/gear.png
+  ui/projects/assets/manifold.png
+  ui/projects/assets/flange.png
+  ui/projects/assets/cover-qc.png
+  ui/workspaces/HomeWorkspace.qml
+  ui/state/AppUiState.qml
+  ui/state/MockFixtures.qml
+  ui/workspaces/AcquisitionWorkspace.qml
+  ui/workspaces/FoundationWorkspace.qml
   ui/shell/Main.qml
   ui/workspaces/CalibrationWorkspace.qml
-  ui/workspaces/DevicesWorkspace.qml)
+  ui/workspaces/ScanWorkspace.qml
+  ui/scan/ScanText.qml
+  ui/scan/ScanUnavailable.qml
+  ui/scan/ScanDemo.qml
+  ui/scan/ScanCapture.qml
+  ui/scan/ScanCameras.qml
+  ui/scan/ScanViewport.qml
+  ui/scan/ScanSetup.qml
+  ui/scan/ScanDock.qml
+  ui/workspaces/DevicesWorkspace.qml
+  ui/devices/DevicesText.qml
+  ui/devices/DevicesDemo.qml
+  ui/devices/DevicesNavigator.qml
+  ui/devices/DevicesOverview.qml
+  ui/devices/DevicesInspector.qml)
  qt_add_resources(mantis-studio studio-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
  if(BUILD_TESTING)
+  find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
+  add_executable(mantis-studio-bridge-tests tests/integration/studio_bridge.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+  set_target_properties(mantis-studio-bridge-tests PROPERTIES AUTOMOC ON)
+  target_include_directories(mantis-studio-bridge-tests PRIVATE apps/studio)
+  target_link_libraries(mantis-studio-bridge-tests PRIVATE mantis-client mantis-render Qt6::Concurrent Qt6::Test)
+  add_executable(mantis-studio-cloud-retry-tests tests/unit/studio_cloud_retry.cpp)
+  target_include_directories(mantis-studio-cloud-retry-tests PRIVATE apps/studio)
+  target_link_libraries(mantis-studio-cloud-retry-tests PRIVATE mantis-base)
+  add_test(NAME studio-cloud-retry COMMAND mantis-studio-cloud-retry-tests)
+  add_test(NAME studio-bridge-errors COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_bridge.py ${CMAKE_BINARY_DIR})
+  set_tests_properties(studio-bridge-errors PROPERTIES TIMEOUT 45)
+  add_executable(mantis-studio-scan-tests tests/unit/studio_scan.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+  set_target_properties(mantis-studio-scan-tests PROPERTIES AUTOMOC ON)
+  target_link_libraries(mantis-studio-scan-tests PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
+  qt_add_resources(mantis-studio-scan-tests studio-scan-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
+  foreach(task model qml matrix stress surfaces)
+   if(task STREQUAL "surfaces")
+    set(scan_evidence ${CMAKE_BINARY_DIR}/ui-m3c/${task})
+   else()
+    set(scan_evidence ${CMAKE_BINARY_DIR}/ui-m3b/${task})
+   endif()
+   add_test(NAME studio-scan-${task} COMMAND mantis-studio-scan-tests ${scan_evidence} ${task})
+   set_tests_properties(studio-scan-${task} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 180)
+  endforeach()
+  foreach(scale 1.5 2)
+   add_test(NAME studio-scan-dpi-${scale} COMMAND mantis-studio-scan-tests ${CMAKE_BINARY_DIR}/ui-m3b/dpi-${scale} hidpi)
+   set_tests_properties(studio-scan-dpi-${scale} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale}" TIMEOUT 180)
+  endforeach()
+  add_test(NAME studio-scan-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_scan.py ${CMAKE_BINARY_DIR})
+  set_tests_properties(studio-scan-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 45)
+  add_test(NAME studio-scan-capture-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_scan.py ${CMAKE_BINARY_DIR} --capture)
+  set_tests_properties(studio-scan-capture-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 90)
+  add_executable(mantis-studio-devices-tests tests/unit/studio_devices.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+  set_target_properties(mantis-studio-devices-tests PROPERTIES AUTOMOC ON)
+  target_link_libraries(mantis-studio-devices-tests PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
+  qt_add_resources(mantis-studio-devices-tests studio-devices-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
+  foreach(task model qml matrix stress)
+   add_test(NAME studio-devices-${task} COMMAND mantis-studio-devices-tests ${CMAKE_BINARY_DIR}/ui-m2b/${task} ${task})
+   set_tests_properties(studio-devices-${task} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 180)
+  endforeach()
+  foreach(scale 1.5 2)
+   add_test(NAME studio-devices-dpi-${scale} COMMAND mantis-studio-devices-tests ${CMAKE_BINARY_DIR}/ui-m2b/dpi-${scale} hidpi)
+   set_tests_properties(studio-devices-dpi-${scale} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale}" TIMEOUT 180)
+  endforeach()
+  add_test(NAME studio-devices-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_devices.py ${CMAKE_BINARY_DIR})
+  set_tests_properties(studio-devices-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 45)
+  add_executable(mantis-studio-projects-tests tests/unit/studio_projects.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+  set_target_properties(mantis-studio-projects-tests PROPERTIES AUTOMOC ON)
+  target_link_libraries(mantis-studio-projects-tests PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
+  qt_add_resources(mantis-studio-projects-tests studio-projects-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
+  foreach(task qml states resize hidpi fidelity scroll)
+   add_test(NAME studio-projects-${task} COMMAND mantis-studio-projects-tests ${CMAKE_BINARY_DIR}/ui-m2a/${task} ${task})
+   set_tests_properties(studio-projects-${task} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 120)
+  endforeach()
+  set_tests_properties(studio-projects-hidpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=2")
+  add_test(NAME studio-projects-fractional-dpi COMMAND mantis-studio-projects-tests ${CMAKE_BINARY_DIR}/ui-m2a/fractional-dpi hidpi)
+  set_tests_properties(studio-projects-fractional-dpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=1.5" TIMEOUT 120)
+  foreach(scale 1.5 2)
+   add_test(NAME studio-projects-scroll-dpi-${scale} COMMAND mantis-studio-projects-tests ${CMAKE_BINARY_DIR}/ui-m2a/scroll-dpi-${scale} scroll)
+   set_tests_properties(studio-projects-scroll-dpi-${scale} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale}" TIMEOUT 120)
+  endforeach()
+  add_test(NAME studio-projects-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_projects.py ${CMAKE_BINARY_DIR})
+  set_tests_properties(studio-projects-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 45)
+  add_executable(mantis-studio-home-tests tests/unit/studio_home.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+  set_target_properties(mantis-studio-home-tests PROPERTIES AUTOMOC ON)
+  target_link_libraries(mantis-studio-home-tests PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
+  qt_add_resources(mantis-studio-home-tests studio-home-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
+  add_test(NAME studio-home-qml COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/screenshots)
+  add_test(NAME studio-home-wire COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_home.py ${CMAKE_BINARY_DIR})
+  set_tests_properties(studio-home-qml studio-home-wire PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 60)
+  add_test(NAME studio-home-hidpi COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/hidpi hidpi)
+  set_tests_properties(studio-home-hidpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=2" TIMEOUT 60)
+  add_test(NAME studio-home-fractional-dpi COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/fractional-dpi hidpi)
+  set_tests_properties(studio-home-fractional-dpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=1.5" TIMEOUT 60)
+  add_test(NAME studio-home-resize COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/resize resize)
+  add_test(NAME studio-home-states COMMAND mantis-studio-home-tests ${CMAKE_BINARY_DIR}/ui-m1/states states)
+  set_tests_properties(studio-home-resize studio-home-states PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 60)
+  add_executable(mantis-studio-ui-m0-tests tests/unit/studio_ui_m0.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
+  set_target_properties(mantis-studio-ui-m0-tests PROPERTIES AUTOMOC ON)
+  target_link_libraries(mantis-studio-ui-m0-tests PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2 Qt6::Test)
+  qt_add_resources(mantis-studio-ui-m0-tests studio-m0-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
+  add_test(NAME studio-ui-m0-qml COMMAND mantis-studio-ui-m0-tests ${CMAKE_BINARY_DIR}/ui-m0/screenshots)
+  add_test(NAME studio-ui-m0-cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/studio_ui_m0.py $<TARGET_FILE:mantis-studio> ${CMAKE_BINARY_DIR}/ui-m0/cli)
+  set_tests_properties(studio-ui-m0-qml studio-ui-m0-cli PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 45)
   add_executable(mantis-studio-calibration-tests tests/unit/studio_calibration.cpp)
   target_link_libraries(mantis-studio-calibration-tests PRIVATE mantis-studio-calibration)
   add_test(NAME studio-calibration-controller COMMAND mantis-studio-calibration-tests)
@@ -171,13 +335,17 @@ if(MANTIS_BUILD_STUDIO)
   set_tests_properties(studio-calibration-daemon PROPERTIES TIMEOUT 180)
   add_executable(mantis-studio-calibration-qml tests/unit/studio_calibration_qml.cpp apps/studio/bridge.cpp apps/studio/bridge.hpp apps/studio/preview.hpp)
   set_target_properties(mantis-studio-calibration-qml PROPERTIES AUTOMOC ON)
-  target_link_libraries(mantis-studio-calibration-qml PRIVATE mantis-studio-calibration mantis-render Qt6::QuickControls2)
+  target_link_libraries(mantis-studio-calibration-qml PRIVATE mantis-studio-scan mantis-studio-devices mantis-studio-home mantis-studio-projects mantis-studio-calibration mantis-render Qt6::QuickControls2)
   qt_add_resources(mantis-studio-calibration-qml studio-test-ui PREFIX / FILES ${MANTIS_STUDIO_QML_FILES})
   add_test(NAME studio-calibration-qml COMMAND mantis-studio-calibration-qml)
   set_tests_properties(studio-calibration-qml PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QSG_RHI_BACKEND=software" TIMEOUT 30)
  endif()
 endif()
 if(BUILD_TESTING)
+ add_executable(mantis-project-capabilities-tests tests/integration/project_capabilities.cpp)
+ target_link_libraries(mantis-project-capabilities-tests PRIVATE mantis-client)
+ add_test(NAME project-public-capabilities COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/project_capabilities.py ${CMAKE_BINARY_DIR})
+ set_tests_properties(project-public-capabilities PROPERTIES TIMEOUT 45)
  add_executable(mantis-calibration-service-tests tests/unit/calibration_service.cpp)
  target_include_directories(mantis-calibration-service-tests SYSTEM PRIVATE ${OpenCV_INCLUDE_DIRS})
  target_link_libraries(mantis-calibration-service-tests PRIVATE mantis-service-adapter mantis-calibration-artifacts mantis-calibration-solver-opencv opencv_core opencv_calib3d nlohmann_json::nlohmann_json)

@@ -1,0 +1,25 @@
+Internal ctest changing into directory: /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+Test project /home/martin/src/mantis-studio-ui/build/qt69-sanitizers
+    Start 2: studio-projects-qml
+    Test #2: studio-projects-qml ..............   Passed   15.27 sec
+    Start 2: studio-projects-qml
+    Test #2: studio-projects-qml ..............   Passed   17.07 sec
+    Start 2: studio-projects-qml
+    Test #2: studio-projects-qml ..............   Passed   16.35 sec
+    Start 2: studio-projects-qml
+    Test #2: studio-projects-qml ..............   Passed   13.56 sec
+    Start 2: studio-projects-qml
+    Test #2: studio-projects-qml ..............***Failed    6.09 sec
+Scale: 12000 entries, processed=512 rendered=128; 100 identical presentations=3017ms updates=0
+STUDIO_DUAL_PREVIEW_READY
+Focused card rect=1077:1159 viewport=853 scrollY=23 contentHeight=1384
+Keyboard-focused card did not scroll into view
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =  68.36 sec
+
+The following tests FAILED:
+	  2 - studio-projects-qml (Failed)
+Errors while running CTest

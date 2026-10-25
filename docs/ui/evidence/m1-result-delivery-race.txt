@@ -1,0 +1,49 @@
+UI-M1, Ubuntu 24.04 / Qt 6.4.2, 2026-10-08
+
+Repeated asynchronous public-wire integration exposed lost error presentation:
+4 wire runs passed, the fifth timed out at artifact confirmation. The fixture
+recorded artifact_data followed by snapshots, but the bridge retained only the
+preceding operation error. The mapped locator did not exist.
+
+Root cause: QFutureWatcher::isRunning() becomes false when worker work completes,
+before its queued GUI finished signal is delivered. The bridge used isRunning()
+as both busy state and request admission. A GUI intent/timer could setFuture()
+on the watcher while its preceding result still awaited GUI delivery, replacing
+that result and its root-cause diagnostics.
+
+Deterministic regression holds GUI delivery for 200 ms after the bounded fixture
+replies to a rejected pipeline operation. The outstanding presentation lease must
+still be busy. A refresh and second forbidden operation must be refused, then
+normal event delivery must present the original failure. Fixture command logs
+assert exactly one rejected operation, one later transport-failure operation,
+one artifact access and one explicit fixture restoration, with no Home mutation.
+The 200 ms is a fixture scheduling interval, not a product latency claim.
+
+Before the fix:
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start 3: studio-home-wire
+1/1 Test #3: studio-home-wire .................***Failed    0.91 sec
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Finished worker released busy before GUI result delivery
+Traceback (most recent call last):
+  File "/work/tests/integration/studio_home.py", line 95, in <module>
+    assert result.returncode == 0, result.returncode
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   0.92 sec
+
+The following tests FAILED:
+	  3 - studio-home-wire (Failed)
+Errors while running CTest
+
+Correction: an internal request_pending_ lease is acquired before setFuture and
+released only in the finished callback after copying the result, immediately
+before applyResult. execute/selectArtifact and busy() use that lease. One watcher,
+no queue, no extra polling or retries, unchanged public client/daemon contracts.
+Reproduce with the normal Studio build:
+ctest --test-dir build/debug -R '^studio-home-wire$' --repeat until-fail:10 --output-on-failure

@@ -1,0 +1,13 @@
+Projects bounds: 1536x1024 DPR=1.25 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 2048x1210 DPR=1.25 gallery=1204 columns=6 card=190.667 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x1024 DPR=1.25 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Native focus: mode=mock active=1 item=projectsSearch searchFocus=1 searchActive=1
+Projects bounds: 1536x1024 DPR=1.25 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 2048x1210 DPR=1.25 gallery=751 columns=4 card=178.75 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x1024 DPR=1.25 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Native focus: mode=live active=1 item=projectsSearch searchFocus=1 searchActive=1
+Projects bounds: 1536x1024 DPR=1.25 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Projects bounds: 2048x1210 DPR=1.25 gallery=1204 columns=6 card=190.667 rightGap=0 inspector=420 multi=1
+Projects bounds: 1536x1024 DPR=1.25 gallery=751 columns=4 card=178.75 rightGap=0.28 inspector=360.72 multi=1
+Native focus: mode=hybrid active=1 item=projectsSearch searchFocus=1 searchActive=1
+PASS: Projects native contracts and actual Qt evidence

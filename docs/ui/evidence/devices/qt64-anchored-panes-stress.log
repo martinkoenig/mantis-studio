@@ -1,0 +1,12 @@
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start 5: studio-devices-stress
+    Test #5: studio-devices-stress ............   Passed   15.67 sec
+    Start 5: studio-devices-stress
+    Test #5: studio-devices-stress ............   Passed   15.48 sec
+    Start 5: studio-devices-stress
+1/1 Test #5: studio-devices-stress ............   Passed   15.64 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =  46.80 sec

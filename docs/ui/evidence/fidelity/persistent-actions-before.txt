@@ -1,0 +1,17 @@
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start 2: studio-home-qml
+1/1 Test #2: studio-home-qml ..................***Failed    3.62 sec
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+STAGE: local Home actions in live
+STAGE: local Home actions in mock
+Mode change recreated a persistent Home action
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   3.63 sec
+
+The following tests FAILED:
+	  2 - studio-home-qml (Failed)
+Errors while running CTest

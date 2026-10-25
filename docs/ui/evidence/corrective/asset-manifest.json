@@ -1,0 +1,157 @@
+[
+  {
+    "file": "hero.jpg",
+    "dimensions": [
+      1600,
+      480
+    ],
+    "mode": "RGB",
+    "bytes": 61884,
+    "sha256": "03897c01d1f9806df8f53f237f6def1aa5e6109c02ea6db91b54e4a314bbf7e0"
+  },
+  {
+    "file": "bracket.png",
+    "dimensions": [
+      412,
+      355
+    ],
+    "mode": "RGBA",
+    "bytes": 139718,
+    "sha256": "4527db3b48af8c5aa940fe904b32ed2bb38680c86a02c891781469ea17247817",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "bounds": [
+      8,
+      8,
+      404,
+      347
+    ],
+    "transparent": 78262,
+    "opaque": 65364,
+    "antialiased": 2634,
+    "corners": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "cover.png",
+    "dimensions": [
+      520,
+      279
+    ],
+    "mode": "RGBA",
+    "bytes": 147763,
+    "sha256": "122dad0e958c757b2d0185d63ccbd60744432117ad9b535a5ec50452eb9184de",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "bounds": [
+      8,
+      8,
+      512,
+      271
+    ],
+    "transparent": 67033,
+    "opaque": 75300,
+    "antialiased": 2747,
+    "corners": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "housing.png",
+    "dimensions": [
+      426,
+      345
+    ],
+    "mode": "RGBA",
+    "bytes": 180342,
+    "sha256": "8c6423066bcac0d5a908a26fd9bb69b2083d57f30b1bc60522b2f347015a6448",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "bounds": [
+      8,
+      8,
+      418,
+      337
+    ],
+    "transparent": 38472,
+    "opaque": 105673,
+    "antialiased": 2825,
+    "corners": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "rotor.png",
+    "dimensions": [
+      388,
+      328
+    ],
+    "mode": "RGBA",
+    "bytes": 171662,
+    "sha256": "73dbc0f3d8887905ba404747afb797c06f4f5f77a2caca7e8602be1e0be9da0d",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "bounds": [
+      8,
+      8,
+      380,
+      320
+    ],
+    "transparent": 46705,
+    "opaque": 77781,
+    "antialiased": 2778,
+    "corners": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "scanner.png",
+    "dimensions": [
+      196,
+      351
+    ],
+    "mode": "RGBA",
+    "bytes": 64509,
+    "sha256": "ace51a5ad7dcf9f38f542103872d3205ec428824805bc5d71a1795ccf1218aca",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "bounds": [
+      8,
+      8,
+      188,
+      343
+    ],
+    "transparent": 33366,
+    "opaque": 33322,
+    "antialiased": 2108,
+    "corners": [
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

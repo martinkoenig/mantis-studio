@@ -1,0 +1,261 @@
+Internal ctest changing into directory: /work/build/ui-m0-review/baseline-asan
+Test project /work/build/ui-m0-review/baseline-asan
+    Start 5: studio-calibration-qml
+1/1 Test #5: studio-calibration-qml ...........***Failed    3.13 sec
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+
+=================================================================
+==18784==ERROR: LeakSanitizer: detected memory leaks
+
+Indirect leak of 6272 byte(s) in 2 object(s) allocated from:
+    #0 0x7481eae9f9c7 in malloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:69
+    #1 0x7481e9638c19 in QImageData::create(QSize const&, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147c19) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #2 0x7481e9638df7 in QImage::QImage(QSize const&, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147df7) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #3 0x7481e9638e3d in QImage::QImage(int, int, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147e3d) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #4 0x7481e963917b in QImage::copy(QRect const&) const (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x14817b) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #5 0x7481e96399bf in QImage::operator=(QImage const&) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1489bf) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #6 0x7481ea768b1f in QQuickDefaultTextureFactory::QQuickDefaultTextureFactory(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:71
+    #7 0x7481ea769888 in QQuickTextureFactory::textureFactoryForImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickimageprovider.cpp:82
+    #8 0x7481ea769888 in QQuickTextureFactory::textureFactoryForImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickimageprovider.cpp:75
+    #9 0x7481ea77232c in QQuickPixmap::setImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:1574
+    #10 0x7481ea77232c in QQuickPixmap::setImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:1569
+    #11 0x7481e33b6ea5 in QQuickColorImage::pixmapChange() (/lib/x86_64-linux-gnu/libQt6QuickControls2Impl.so.6+0x26ea5) (BuildId: f4a5aa784a2e2e9cb344b0a1a8e625ccc92b7fe7)
+    #12 0x7481ea5decaf in QQuickImageBase::requestFinished() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimagebase.cpp:372
+    #13 0x7481ea5e367b in QQuickImageBase::loadPixmap(QUrl const&, QFlags<QQuickImageBase::LoadPixmapOption>) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimagebase.cpp:337
+    #14 0x7481ea13111e in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlobjectcreator.cpp:1432
+    #15 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1027
+    #16 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1023
+    #17 0x7481ea0d022e in QQmlComponentPrivate::completeDeferred(QQmlEnginePrivate*, std::vector<QQmlComponentPrivate::ConstructionState, std::allocator<QQmlComponentPrivate::ConstructionState> >*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1020
+    #18 0x7481e825e278 in QtQuickPrivate::completeDeferred(QObject*, QString const&, QQuickUntypedDeferredPointer*) (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0x107278) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #19 0x7481e82313f7 in QQuickAbstractButtonPrivate::executeIndicator(bool) (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0xda3f7) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #20 0x7481e82314fd in non-virtual thunk to QQuickAbstractButton::componentComplete() (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0xda4fd) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #21 0x7481ea13111e in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlobjectcreator.cpp:1432
+    #22 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1027
+    #23 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1023
+    #24 0x7481ea0d03be in QQmlComponentPrivate::completeCreate() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1121
+    #25 0x7481ea0d0549 in QQmlComponent::completeCreate() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1108
+    #26 0x7481ea0d0549 in QQmlComponent::create(QQmlContext*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:840
+    #27 0x7481ea0bc402 in QQmlApplicationEnginePrivate::finishLoad(QQmlComponent*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlapplicationengine.cpp:122
+    #28 0x7481ea0bc969 in QQmlApplicationEngine::load(QUrl const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlapplicationengine.cpp:287
+    #29 0x5d671a60f82f in main /work/build/ui-m0-review/baseline/tests/unit/studio_calibration_qml.cpp:36
+    #30 0x7481e83ef1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #31 0x7481e83ef28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #32 0x5d671a5fc244 in _start (/work/build/ui-m0-review/baseline-asan/bin/mantis-studio-calibration-qml+0x4e5244) (BuildId: b58e298988e6b645d2c51b0ff1c92c26508ef774)
+
+Indirect leak of 4480 byte(s) in 1 object(s) allocated from:
+    #0 0x7481eae9f9c7 in malloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:69
+    #1 0x7481e9638c19 in QImageData::create(QSize const&, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147c19) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #2 0x7481e9638df7 in QImage::QImage(QSize const&, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147df7) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #3 0x7481e9638e3d in QImage::QImage(int, int, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147e3d) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #4 0x7481e963bdbd in QImage::convertToFormat_helper(QImage::Format, QFlags<Qt::ImageConversionFlag>) const (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x14adbd) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #5 0x7481ea768b69 in QImage::convertToFormat(QImage::Format, QFlags<Qt::ImageConversionFlag>) const & /usr/include/x86_64-linux-gnu/qt6/QtGui/qimage.h:125
+    #6 0x7481ea768b69 in QQuickDefaultTextureFactory::QQuickDefaultTextureFactory(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:73
+    #7 0x7481ea769888 in QQuickTextureFactory::textureFactoryForImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickimageprovider.cpp:82
+    #8 0x7481ea769888 in QQuickTextureFactory::textureFactoryForImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickimageprovider.cpp:75
+    #9 0x7481ea773df7 in createPixmapDataSync /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:1419
+    #10 0x7481ea773df7 in QQuickPixmap::load(QQmlEngine*, QUrl const&, QRect const&, QSize const&, QFlags<QQuickPixmap::Option>, QQuickImageProviderOptions const&, int, int, double) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:1684
+    #11 0x7481ea5e35b1 in QQuickImageBase::loadPixmap(QUrl const&, QFlags<QQuickImageBase::LoadPixmapOption>) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimagebase.cpp:305
+    #12 0x7481ea13111e in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlobjectcreator.cpp:1432
+    #13 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1027
+    #14 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1023
+    #15 0x7481ea0d022e in QQmlComponentPrivate::completeDeferred(QQmlEnginePrivate*, std::vector<QQmlComponentPrivate::ConstructionState, std::allocator<QQmlComponentPrivate::ConstructionState> >*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1020
+    #16 0x7481e825e278 in QtQuickPrivate::completeDeferred(QObject*, QString const&, QQuickUntypedDeferredPointer*) (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0x107278) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #17 0x7481e8247607  (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0xf0607) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #18 0x7481e824805e in QQuickComboBox::componentComplete() (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0xf105e) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #19 0x7481ea13111e in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlobjectcreator.cpp:1432
+    #20 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1027
+    #21 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1023
+    #22 0x7481ea0d03be in QQmlComponentPrivate::completeCreate() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1121
+    #23 0x7481ea0d0549 in QQmlComponent::completeCreate() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1108
+    #24 0x7481ea0d0549 in QQmlComponent::create(QQmlContext*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:840
+    #25 0x7481ea0bc402 in QQmlApplicationEnginePrivate::finishLoad(QQmlComponent*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlapplicationengine.cpp:122
+    #26 0x7481ea0bc969 in QQmlApplicationEngine::load(QUrl const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlapplicationengine.cpp:287
+    #27 0x5d671a60f82f in main /work/build/ui-m0-review/baseline/tests/unit/studio_calibration_qml.cpp:36
+    #28 0x7481e83ef1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #29 0x7481e83ef28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #30 0x5d671a5fc244 in _start (/work/build/ui-m0-review/baseline-asan/bin/mantis-studio-calibration-qml+0x4e5244) (BuildId: b58e298988e6b645d2c51b0ff1c92c26508ef774)
+
+Indirect leak of 480 byte(s) in 3 object(s) allocated from:
+    #0 0x7481eaea0548 in operator new(unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:95
+    #1 0x7481ea6e1367 in QSGTexture::QSGTexture() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/coreapi/qsgtexture.cpp:304
+    #2 0x7481ea69f7ec in QSGSoftwarePixmapTexture::QSGSoftwarePixmapTexture(QImage const&, unsigned int) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarepixmaptexture.cpp:9
+    #3 0x7481ea69f7ec in QSGSoftwareRenderContext::createTexture(QImage const&, unsigned int) const /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarecontext.cpp:116
+    #4 0x7481ea769ad5 in QQuickDefaultTextureFactory::createTexture(QQuickWindow*) const /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:81
+    #5 0x7481ea6eceb3 in QSGRenderContext::textureForFactory(QQuickTextureFactory*, QQuickWindow*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/qsgcontext.cpp:408
+    #6 0x7481ea5da0af in QQuickImage::updatePaintNode(QSGNode*, QQuickItem::UpdatePaintNodeData*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimage.cpp:682
+    #7 0x7481ea6972f5 in QQuickWindowPrivate::updateDirtyNode(QQuickItem*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:2137
+    #8 0x7481ea69798b in QQuickWindowPrivate::updateDirtyNodes() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:1888
+    #9 0x7481ea68d338 in QQuickWindowPrivate::syncSceneGraph() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:552
+    #10 0x7481ea6b5521 in QSGSoftwareRenderLoop::renderWindow(QQuickWindow*, bool) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarerenderloop.cpp:127
+    #11 0x7481ea6b6040 in QSGSoftwareRenderLoop::exposureChanged(QQuickWindow*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarerenderloop.cpp:196
+    #12 0x7481e96ccd28 in QWindow::event(QEvent*) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1dbd28) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #13 0x7481e911d447 in QCoreApplication::notifyInternal2(QObject*, QEvent*) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x138447) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #14 0x7481e9691ba6 in QGuiApplicationPrivate::processExposeEvent(QWindowSystemInterfacePrivate::ExposeEvent*) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1a0ba6) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #15 0x7481e96d25cb in QWindowSystemInterface::sendWindowSystemEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1e15cb) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #16 0x7481e9a062b3  (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x5152b3) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #17 0x7481e7d8a634  (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0x5d634) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #18 0x7481e7de9bf6  (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0xbcbf6) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #19 0x7481e7d89ad2 in g_main_context_iteration (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0x5cad2) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #20 0x7481e93165ee in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x3315ee) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #21 0x5d671a6103d3 in main /work/build/ui-m0-review/baseline/tests/unit/studio_calibration_qml.cpp:49
+    #22 0x7481e83ef1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #23 0x7481e83ef28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #24 0x5d671a5fc244 in _start (/work/build/ui-m0-review/baseline-asan/bin/mantis-studio-calibration-qml+0x4e5244) (BuildId: b58e298988e6b645d2c51b0ff1c92c26508ef774)
+
+Indirect leak of 320 byte(s) in 2 object(s) allocated from:
+    #0 0x7481eaea0548 in operator new(unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:95
+    #1 0x7481e9638bdf in QImageData::create(QSize const&, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147bdf) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #2 0x7481e9638df7 in QImage::QImage(QSize const&, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147df7) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #3 0x7481e9638e3d in QImage::QImage(int, int, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147e3d) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #4 0x7481e963917b in QImage::copy(QRect const&) const (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x14817b) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #5 0x7481e96399bf in QImage::operator=(QImage const&) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1489bf) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #6 0x7481ea768b1f in QQuickDefaultTextureFactory::QQuickDefaultTextureFactory(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:71
+    #7 0x7481ea769888 in QQuickTextureFactory::textureFactoryForImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickimageprovider.cpp:82
+    #8 0x7481ea769888 in QQuickTextureFactory::textureFactoryForImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickimageprovider.cpp:75
+    #9 0x7481ea77232c in QQuickPixmap::setImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:1574
+    #10 0x7481ea77232c in QQuickPixmap::setImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:1569
+    #11 0x7481e33b6ea5 in QQuickColorImage::pixmapChange() (/lib/x86_64-linux-gnu/libQt6QuickControls2Impl.so.6+0x26ea5) (BuildId: f4a5aa784a2e2e9cb344b0a1a8e625ccc92b7fe7)
+    #12 0x7481ea5decaf in QQuickImageBase::requestFinished() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimagebase.cpp:372
+    #13 0x7481ea5e367b in QQuickImageBase::loadPixmap(QUrl const&, QFlags<QQuickImageBase::LoadPixmapOption>) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimagebase.cpp:337
+    #14 0x7481ea13111e in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlobjectcreator.cpp:1432
+    #15 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1027
+    #16 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1023
+    #17 0x7481ea0d022e in QQmlComponentPrivate::completeDeferred(QQmlEnginePrivate*, std::vector<QQmlComponentPrivate::ConstructionState, std::allocator<QQmlComponentPrivate::ConstructionState> >*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1020
+    #18 0x7481e825e278 in QtQuickPrivate::completeDeferred(QObject*, QString const&, QQuickUntypedDeferredPointer*) (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0x107278) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #19 0x7481e82313f7 in QQuickAbstractButtonPrivate::executeIndicator(bool) (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0xda3f7) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #20 0x7481e82314fd in non-virtual thunk to QQuickAbstractButton::componentComplete() (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0xda4fd) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #21 0x7481ea13111e in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlobjectcreator.cpp:1432
+    #22 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1027
+    #23 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1023
+    #24 0x7481ea0d03be in QQmlComponentPrivate::completeCreate() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1121
+    #25 0x7481ea0d0549 in QQmlComponent::completeCreate() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1108
+    #26 0x7481ea0d0549 in QQmlComponent::create(QQmlContext*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:840
+    #27 0x7481ea0bc402 in QQmlApplicationEnginePrivate::finishLoad(QQmlComponent*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlapplicationengine.cpp:122
+    #28 0x7481ea0bc969 in QQmlApplicationEngine::load(QUrl const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlapplicationengine.cpp:287
+    #29 0x5d671a60f82f in main /work/build/ui-m0-review/baseline/tests/unit/studio_calibration_qml.cpp:36
+    #30 0x7481e83ef1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #31 0x7481e83ef28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #32 0x5d671a5fc244 in _start (/work/build/ui-m0-review/baseline-asan/bin/mantis-studio-calibration-qml+0x4e5244) (BuildId: b58e298988e6b645d2c51b0ff1c92c26508ef774)
+
+Indirect leak of 216 byte(s) in 3 object(s) allocated from:
+    #0 0x7481eaea0548 in operator new(unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:95
+    #1 0x7481e96602ed in QPixmap::fromImage(QImage const&, QFlags<Qt::ImageConversionFlag>) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x16f2ed) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #2 0x7481ea69f81d in QSGSoftwarePixmapTexture::QSGSoftwarePixmapTexture(QImage const&, unsigned int) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarepixmaptexture.cpp:15
+    #3 0x7481ea69f81d in QSGSoftwareRenderContext::createTexture(QImage const&, unsigned int) const /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarecontext.cpp:116
+    #4 0x7481ea769ad5 in QQuickDefaultTextureFactory::createTexture(QQuickWindow*) const /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:81
+    #5 0x7481ea6eceb3 in QSGRenderContext::textureForFactory(QQuickTextureFactory*, QQuickWindow*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/qsgcontext.cpp:408
+    #6 0x7481ea5da0af in QQuickImage::updatePaintNode(QSGNode*, QQuickItem::UpdatePaintNodeData*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimage.cpp:682
+    #7 0x7481ea6972f5 in QQuickWindowPrivate::updateDirtyNode(QQuickItem*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:2137
+    #8 0x7481ea69798b in QQuickWindowPrivate::updateDirtyNodes() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:1888
+    #9 0x7481ea68d338 in QQuickWindowPrivate::syncSceneGraph() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:552
+    #10 0x7481ea6b5521 in QSGSoftwareRenderLoop::renderWindow(QQuickWindow*, bool) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarerenderloop.cpp:127
+    #11 0x7481ea6b6040 in QSGSoftwareRenderLoop::exposureChanged(QQuickWindow*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarerenderloop.cpp:196
+    #12 0x7481e96ccd28 in QWindow::event(QEvent*) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1dbd28) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #13 0x7481e911d447 in QCoreApplication::notifyInternal2(QObject*, QEvent*) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x138447) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #14 0x7481e9691ba6 in QGuiApplicationPrivate::processExposeEvent(QWindowSystemInterfacePrivate::ExposeEvent*) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1a0ba6) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #15 0x7481e96d25cb in QWindowSystemInterface::sendWindowSystemEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1e15cb) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #16 0x7481e9a062b3  (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x5152b3) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #17 0x7481e7d8a634  (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0x5d634) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #18 0x7481e7de9bf6  (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0xbcbf6) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #19 0x7481e7d89ad2 in g_main_context_iteration (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0x5cad2) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #20 0x7481e93165ee in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x3315ee) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #21 0x5d671a6103d3 in main /work/build/ui-m0-review/baseline/tests/unit/studio_calibration_qml.cpp:49
+    #22 0x7481e83ef1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #23 0x7481e83ef28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #24 0x5d671a5fc244 in _start (/work/build/ui-m0-review/baseline-asan/bin/mantis-studio-calibration-qml+0x4e5244) (BuildId: b58e298988e6b645d2c51b0ff1c92c26508ef774)
+
+Indirect leak of 160 byte(s) in 1 object(s) allocated from:
+    #0 0x7481eaea0548 in operator new(unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:95
+    #1 0x7481e9638bdf in QImageData::create(QSize const&, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147bdf) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #2 0x7481e9638df7 in QImage::QImage(QSize const&, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147df7) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #3 0x7481e9638e3d in QImage::QImage(int, int, QImage::Format) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x147e3d) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #4 0x7481e963bdbd in QImage::convertToFormat_helper(QImage::Format, QFlags<Qt::ImageConversionFlag>) const (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x14adbd) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #5 0x7481ea768b69 in QImage::convertToFormat(QImage::Format, QFlags<Qt::ImageConversionFlag>) const & /usr/include/x86_64-linux-gnu/qt6/QtGui/qimage.h:125
+    #6 0x7481ea768b69 in QQuickDefaultTextureFactory::QQuickDefaultTextureFactory(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:73
+    #7 0x7481ea769888 in QQuickTextureFactory::textureFactoryForImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickimageprovider.cpp:82
+    #8 0x7481ea769888 in QQuickTextureFactory::textureFactoryForImage(QImage const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickimageprovider.cpp:75
+    #9 0x7481ea773df7 in createPixmapDataSync /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:1419
+    #10 0x7481ea773df7 in QQuickPixmap::load(QQmlEngine*, QUrl const&, QRect const&, QSize const&, QFlags<QQuickPixmap::Option>, QQuickImageProviderOptions const&, int, int, double) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:1684
+    #11 0x7481ea5e35b1 in QQuickImageBase::loadPixmap(QUrl const&, QFlags<QQuickImageBase::LoadPixmapOption>) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimagebase.cpp:305
+    #12 0x7481ea13111e in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlobjectcreator.cpp:1432
+    #13 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1027
+    #14 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1023
+    #15 0x7481ea0d022e in QQmlComponentPrivate::completeDeferred(QQmlEnginePrivate*, std::vector<QQmlComponentPrivate::ConstructionState, std::allocator<QQmlComponentPrivate::ConstructionState> >*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1020
+    #16 0x7481e825e278 in QtQuickPrivate::completeDeferred(QObject*, QString const&, QQuickUntypedDeferredPointer*) (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0x107278) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #17 0x7481e8247607  (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0xf0607) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #18 0x7481e824805e in QQuickComboBox::componentComplete() (/lib/x86_64-linux-gnu/libQt6QuickTemplates2.so.6+0xf105e) (BuildId: 52376c64155dc8f326751a30312723e0f0a155c4)
+    #19 0x7481ea13111e in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlobjectcreator.cpp:1432
+    #20 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1027
+    #21 0x7481ea0d0176 in QQmlComponentPrivate::complete(QQmlEnginePrivate*, QQmlComponentPrivate::ConstructionState*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1023
+    #22 0x7481ea0d03be in QQmlComponentPrivate::completeCreate() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1121
+    #23 0x7481ea0d0549 in QQmlComponent::completeCreate() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:1108
+    #24 0x7481ea0d0549 in QQmlComponent::create(QQmlContext*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlcomponent.cpp:840
+    #25 0x7481ea0bc402 in QQmlApplicationEnginePrivate::finishLoad(QQmlComponent*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlapplicationengine.cpp:122
+    #26 0x7481ea0bc969 in QQmlApplicationEngine::load(QUrl const&) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/qml/qml/qqmlapplicationengine.cpp:287
+    #27 0x5d671a60f82f in main /work/build/ui-m0-review/baseline/tests/unit/studio_calibration_qml.cpp:36
+    #28 0x7481e83ef1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #29 0x7481e83ef28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #30 0x5d671a5fc244 in _start (/work/build/ui-m0-review/baseline-asan/bin/mantis-studio-calibration-qml+0x4e5244) (BuildId: b58e298988e6b645d2c51b0ff1c92c26508ef774)
+
+Indirect leak of 120 byte(s) in 3 object(s) allocated from:
+    #0 0x7481eaea0548 in operator new(unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:95
+    #1 0x7481ea69f7e1 in QSGSoftwareRenderContext::createTexture(QImage const&, unsigned int) const /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarecontext.cpp:116
+    #2 0x7481ea769ad5 in QQuickDefaultTextureFactory::createTexture(QQuickWindow*) const /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/util/qquickpixmapcache.cpp:81
+    #3 0x7481ea6eceb3 in QSGRenderContext::textureForFactory(QQuickTextureFactory*, QQuickWindow*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/qsgcontext.cpp:408
+    #4 0x7481ea5da0af in QQuickImage::updatePaintNode(QSGNode*, QQuickItem::UpdatePaintNodeData*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimage.cpp:682
+    #5 0x7481ea6972f5 in QQuickWindowPrivate::updateDirtyNode(QQuickItem*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:2137
+    #6 0x7481ea69798b in QQuickWindowPrivate::updateDirtyNodes() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:1888
+    #7 0x7481ea68d338 in QQuickWindowPrivate::syncSceneGraph() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:552
+    #8 0x7481ea6b5521 in QSGSoftwareRenderLoop::renderWindow(QQuickWindow*, bool) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarerenderloop.cpp:127
+    #9 0x7481ea6b6040 in QSGSoftwareRenderLoop::exposureChanged(QQuickWindow*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarerenderloop.cpp:196
+    #10 0x7481e96ccd28 in QWindow::event(QEvent*) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1dbd28) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #11 0x7481e911d447 in QCoreApplication::notifyInternal2(QObject*, QEvent*) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x138447) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #12 0x7481e9691ba6 in QGuiApplicationPrivate::processExposeEvent(QWindowSystemInterfacePrivate::ExposeEvent*) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1a0ba6) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #13 0x7481e96d25cb in QWindowSystemInterface::sendWindowSystemEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1e15cb) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #14 0x7481e9a062b3  (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x5152b3) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #15 0x7481e7d8a634  (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0x5d634) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #16 0x7481e7de9bf6  (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0xbcbf6) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #17 0x7481e7d89ad2 in g_main_context_iteration (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0x5cad2) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #18 0x7481e93165ee in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x3315ee) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #19 0x5d671a6103d3 in main /work/build/ui-m0-review/baseline/tests/unit/studio_calibration_qml.cpp:49
+    #20 0x7481e83ef1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #21 0x7481e83ef28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #22 0x5d671a5fc244 in _start (/work/build/ui-m0-review/baseline-asan/bin/mantis-studio-calibration-qml+0x4e5244) (BuildId: b58e298988e6b645d2c51b0ff1c92c26508ef774)
+
+Indirect leak of 48 byte(s) in 3 object(s) allocated from:
+    #0 0x7481eaea0548 in operator new(unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:95
+    #1 0x7481e9233d95 in QtSharedPointer::ExternalRefCountData::getAndRef(QObject const*) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x24ed95) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #2 0x7481ea6a098f in QWeakPointer<QObject>::QWeakPointer<QObject, true>(QObject*, bool) /usr/include/x86_64-linux-gnu/qt6/QtCore/qsharedpointer_impl.h:666
+    #3 0x7481ea6a098f in QWeakPointer<QObject>& QWeakPointer<QObject>::assign<QObject>(QObject*) /usr/include/x86_64-linux-gnu/qt6/QtCore/qsharedpointer_impl.h:662
+    #4 0x7481ea6a098f in QPointer<QSGTexture>::operator=(QSGTexture*) /usr/include/x86_64-linux-gnu/qt6/QtCore/qpointer.h:38
+    #5 0x7481ea6a098f in QSGSoftwareInternalImageNode::setTexture(QSGTexture*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwareinternalimagenode.cpp:326
+    #6 0x7481ea5dad00 in QQuickImage::updatePaintNode(QSGNode*, QQuickItem::UpdatePaintNodeData*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickimage.cpp:809
+    #7 0x7481ea6972f5 in QQuickWindowPrivate::updateDirtyNode(QQuickItem*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:2137
+    #8 0x7481ea69798b in QQuickWindowPrivate::updateDirtyNodes() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:1888
+    #9 0x7481ea68d338 in QQuickWindowPrivate::syncSceneGraph() /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/items/qquickwindow.cpp:552
+    #10 0x7481ea6b5521 in QSGSoftwareRenderLoop::renderWindow(QQuickWindow*, bool) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarerenderloop.cpp:127
+    #11 0x7481ea6b6040 in QSGSoftwareRenderLoop::exposureChanged(QQuickWindow*) /usr/src/qt6-declarative-6.4.2+dfsg-4build3/src/quick/scenegraph/adaptations/software/qsgsoftwarerenderloop.cpp:196
+    #12 0x7481e96ccd28 in QWindow::event(QEvent*) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1dbd28) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #13 0x7481e911d447 in QCoreApplication::notifyInternal2(QObject*, QEvent*) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x138447) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #14 0x7481e9691ba6 in QGuiApplicationPrivate::processExposeEvent(QWindowSystemInterfacePrivate::ExposeEvent*) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1a0ba6) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #15 0x7481e96d25cb in QWindowSystemInterface::sendWindowSystemEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x1e15cb) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #16 0x7481e9a062b3  (/lib/x86_64-linux-gnu/libQt6Gui.so.6+0x5152b3) (BuildId: 500dda7095f45c8cd1ba0bf43fd4bb9448174ad5)
+    #17 0x7481e7d8a634  (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0x5d634) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #18 0x7481e7de9bf6  (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0xbcbf6) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #19 0x7481e7d89ad2 in g_main_context_iteration (/lib/x86_64-linux-gnu/libglib-2.0.so.0+0x5cad2) (BuildId: 559554a70029e72a04fb73e3b34fc142e8383293)
+    #20 0x7481e93165ee in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) (/lib/x86_64-linux-gnu/libQt6Core.so.6+0x3315ee) (BuildId: 9b85b15d08445ceca32a75ffedf3453d8c6fab47)
+    #21 0x5d671a6103d3 in main /work/build/ui-m0-review/baseline/tests/unit/studio_calibration_qml.cpp:49
+    #22 0x7481e83ef1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #23 0x7481e83ef28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #24 0x5d671a5fc244 in _start (/work/build/ui-m0-review/baseline-asan/bin/mantis-studio-calibration-qml+0x4e5244) (BuildId: b58e298988e6b645d2c51b0ff1c92c26508ef774)
+
+SUMMARY: AddressSanitizer: 12096 byte(s) leaked in 18 allocation(s).
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   3.13 sec
+
+The following tests FAILED:
+	  5 - studio-calibration-qml (Failed)
+Errors while running CTest

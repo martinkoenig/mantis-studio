@@ -1,0 +1,20 @@
+Internal ctest changing into directory: /work/build/qt64
+Test project /work/build/qt64
+    Start  1: studio-bridge-errors
+1/7 Test  #1: studio-bridge-errors .............   Passed    0.18 sec
+    Start  2: studio-home-qml
+2/7 Test  #2: studio-home-qml ..................   Passed   11.02 sec
+    Start  3: studio-home-wire
+3/7 Test  #3: studio-home-wire .................   Passed    1.55 sec
+    Start  4: studio-ui-m0-qml
+4/7 Test  #4: studio-ui-m0-qml .................   Passed    6.62 sec
+    Start  5: studio-ui-m0-cli
+5/7 Test  #5: studio-ui-m0-cli .................   Passed   14.58 sec
+    Start  8: studio-calibration-qml
+6/7 Test  #8: studio-calibration-qml ...........   Passed    0.19 sec
+    Start 47: acceptance
+7/7 Test #47: acceptance .......................   Passed    2.70 sec
+
+100% tests passed, 0 tests failed out of 7
+
+Total Test time (real) =  36.84 sec
