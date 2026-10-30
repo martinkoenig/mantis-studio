@@ -164,30 +164,94 @@ class PrivacyTests(unittest.TestCase):
 
 
 class OfflineConfigTests(unittest.TestCase):
-    def test_append_and_rollback_preserve_every_other_field(self):
+    @staticmethod
+    def execution_config():
+        return {"worker": {"agentConfig": {"model": "gpt-6.1-sol", "effort": "high"}},
+                "orchestrator": {"agentConfig": {"model": "gpt-6.1-sol", "effort": "medium"}}}
+
+    def test_append_and_independent_copies_preserve_every_other_field(self):
         cfg = {"agentRules": "existing worker", "orchestratorRules": "existing coordinator",
                "agentRulesFile": "existing.md", "identity": SECRET,
                "worker": {"agent": "codex", "agentConfig": {"model": "gpt-6.1-sol", "effort": "high",
                            "permissions": "default"}},
-               "orchestrator": {"agentConfig": {"effort": "medium"}},
+               "orchestrator": {"agentConfig": {"model": "gpt-6.1-sol", "effort": "medium"}},
                "futureUnknownField": {"secret": [SECRET]}, "autoReview": True}
         expected = copy.deepcopy(cfg)
-        old, proposed = eff.propose_rules(cfg, "worker addition", "coordinator addition")
+        old, proposed = eff.propose_rules(cfg, "worker addition", "coordinator addition",
+                                         reference_config=expected)
         self.assertEqual(cfg, expected)
         self.assertEqual(old, expected)
         for key in cfg.keys() - {"agentRules", "orchestratorRules"}:
             self.assertEqual(cfg[key], proposed[key])
         self.assertTrue(proposed["agentRules"].startswith(cfg["agentRules"] + "\n\n"))
-        self.assertEqual(eff.propose_rules(proposed, "worker addition", "coordinator addition")[1], proposed)
+        self.assertEqual(eff.propose_rules(proposed, "worker addition", "coordinator addition",
+                                          reference_config=copy.deepcopy(proposed))[1], proposed)
         proposed["futureUnknownField"]["secret"].append("changed")
         self.assertEqual(old, expected)
 
     def test_invalid_rules_fail_without_mutating_input(self):
-        for cfg, rule in (({"agentRules": {}}, "new"), ({}, "")):
+        valid = self.execution_config()
+        for cfg, rule in ((dict(valid, agentRules={}), "new"), (valid, "")):
             original = copy.deepcopy(cfg)
             with self.assertRaises(eff.InvalidEvidence):
-                eff.propose_rules(cfg, rule, "new")
+                eff.propose_rules(cfg, rule, "new", reference_config=original)
             self.assertEqual(original, cfg)
+
+    def test_missing_independent_reference_rejected(self):
+        with self.assertRaises(eff.InvalidEvidence):
+            eff.propose_rules(self.execution_config(), "worker", "coordinator")
+
+    def test_two_lossy_copies_cannot_satisfy_known_role_preconditions(self):
+        for role in ("worker", "orchestrator"):
+            for key in ("model", "effort"):
+                lossy = self.execution_config()
+                del lossy[role]["agentConfig"][key]
+                with self.assertRaises(eff.InvalidEvidence):
+                    eff.propose_rules(lossy, "worker", "coordinator",
+                                      reference_config=copy.deepcopy(lossy))
+
+    def test_each_missing_effort_and_unknown_field_rejected_without_mutation(self):
+        reference = {"worker": {"agentConfig": {"model": "gpt-6.1-sol", "effort": "high"}},
+                     "orchestrator": {"agentConfig": {"model": "gpt-6.1-sol", "effort": "medium"}},
+                     "futureUnknownField": {"private": SECRET}, "autoReview": True}
+        for path in (("worker", "agentConfig", "effort"),
+                     ("orchestrator", "agentConfig", "effort"), ("futureUnknownField",)):
+            captured = copy.deepcopy(reference)
+            parent = captured
+            for key in path[:-1]:
+                parent = parent[key]
+            del parent[path[-1]]
+            before = copy.deepcopy(captured)
+            with self.assertRaises(eff.InvalidEvidence):
+                eff.propose_rules(captured, "worker", "coordinator", reference_config=reference)
+            self.assertEqual(captured, before)
+            self.assertIn("effort", reference["worker"]["agentConfig"])
+
+    def test_changed_type_and_reference_drift_rejected(self):
+        for reference, captured in (({"autoReview": True}, {"autoReview": 1}),
+                                    ({"future": "new"}, {"future": "old"})):
+            with self.assertRaises(eff.InvalidEvidence):
+                eff.propose_rules(dict(self.execution_config(), **captured), "worker", "coordinator",
+                                  reference_config=dict(self.execution_config(), **reference))
+
+    def test_actual_installed_cli_projection_is_rejected(self):
+        # Only allowlisted presence booleans from a read-only installed-CLI vs
+        # saved-config comparison; no live configuration values are in Git.
+        fixture = SCRIPT.parents[1] / "tests/fixtures/agent-efficiency/installed-config-capture-schema.json"
+        observed = json.loads(fixture.read_text())
+        reference = {"worker": {"agentConfig": {"model": "gpt-6.1-sol", "effort": "high"}},
+                     "orchestrator": {"agentConfig": {"model": "gpt-6.1-sol", "effort": "medium"}}}
+        captured = copy.deepcopy(reference)
+        for path, presence in observed["allowlisted_presence"].items():
+            if presence["saved_config"] and not presence["cli_get"]:
+                parent = captured
+                keys = path.split(".")
+                for key in keys[:-1]:
+                    parent = parent[key]
+                del parent[keys[-1]]
+        self.assertNotEqual(captured, reference)
+        with self.assertRaises(eff.InvalidEvidence):
+            eff.propose_rules(captured, "worker", "coordinator", reference_config=reference)
 
 
 class CliTests(unittest.TestCase):

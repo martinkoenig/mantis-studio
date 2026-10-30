@@ -139,7 +139,11 @@ categories and actual rollout `turn_context`. No installed code was patched.
 - The installed project schema supports `agentRules`, `agentRulesFile`,
   `orchestratorRules`, and role `agentConfig` fields `model`, `effort`, `mode`,
   `permissions`. The CLI says `set-config` **replaces** the project configuration;
-  individual flags cannot preserve all fields, and there is no effort flag.
+  its typed config mirror omits `effort`, and there is no effort flag. In this
+  release `ao project get --json` omits both role effort fields, while even
+  `set-config --config-json` drops them during CLI serialization. Supplying a
+  complete JSON object does not make this writer lossless. The installed
+  using-ao project guide explicitly documents both losses.
   No `orchestratorRulesFile` or generic shell-completion subscription is exposed
   by this CLI. Current project rules already contain efficiency guidance; the
   proposed supplements refine it rather than replace all standing instructions.
@@ -165,60 +169,60 @@ explains configuration layers and distinguishes the automatic reviewer from the
 sandbox boundary. This proposal changes neither. Installed runtime evidence
 takes precedence over assumptions about a newer online product version.
 
-## Proposed changes and safe activation/rollback
+## Proposed changes; activation and rollback BLOCKED
 
 Only [worker](worker-execution-rules.md) and
 [orchestrator](orchestrator-execution-rules.md) supplements are proposed.
 They call for supported blocking completion, bounded and truthful handoff,
 consolidated authorized reads, all applicable final gates and event-driven AO
 report handling. They add no permissions or test-selection changes.
-**No live configuration has been activated.**
+**No live configuration has been activated. Activation and rollback through the
+installed CLI are unsafe and prohibited, including full-JSON replacement.**
 
 Precise proposed delta: append the worker supplement to existing `agentRules`
 and the orchestrator supplement to existing `orchestratorRules`, separated by a
 blank line. Preserve all other keys and values, including `agentRulesFile` if
-present. `propose_rules(full_config, worker_text, orchestrator_text)` is a pure,
-offline helper implementing that delta, returning independent original and
-candidate snapshots. It has no AO I/O. Test fixtures verify unknown fields,
-role model/effort, permissions, identity and nested data survive unchanged.
+present. The pure offline helper now requires
+`propose_rules(config, worker_text, orchestrator_text, reference_config=reference)`:
+the capture must match an independently verified complete reference, including
+types and all unknown fields, before any candidate is produced. Both role
+model/effort pairs must be explicitly present and nonempty, even if both inputs
+are identically incomplete. Missing effort,
+field loss, reference drift and type changes fail closed without mutating inputs.
+Comparing two copies from the same lossy source cannot establish completeness.
+The helper verifies neither reference provenance nor read/write transport
+fidelity. Its independent copies are not a verified backup/rollback mechanism.
 
-After separate independent review and activation authorization, the operator
-must use this procedure, not a minimal CLI flag invocation:
+The original handoff's CLI capture/application procedure is withdrawn. The
+following is the current evidence and stop condition, not an activation recipe:
 
-1. Coordinate exclusive configuration editing. The inspected CLI has no
-   compare-and-set option; do not overwrite concurrently edited configuration.
-2. Capture the complete object with the supported
-   `ao project get mantis-studio --json` **into private local memory**, not model
-   output, chat, public evidence or Git. Extract its full `config`. Retain a
-   private original snapshot through the operator's existing authorized storage.
-   If it contains unknown fields the installed writer cannot round-trip, STOP.
-3. Produce the offline candidate with `propose_rules`; review conflicts with
-   existing instructions. If a rule file exists, verify actual composition
-   semantics first. Assert the only changed keys are `agentRules` and
-   `orchestratorRules`, with all original text retained. In particular, preserve
-   `worker.agentConfig.model/effort = gpt-6.1-sol/high`, orchestrator
-   `gpt-6.1-sol/medium`, auth/identity, permissions and every other field.
-4. Re-read and compare the whole current config to the original; stop on any
-   difference. The supported application operation is
-   `ao project set-config mantis-studio --config-json <COMPLETE_CANDIDATE_JSON>`.
-   Only an independently authorized operator should perform it, passing the
-   private object locally and capturing output without printing/exporting raw
-   config, secrets or expanded arguments. Never use `--clear` or rule-only
-   flags as an update. Do not run this through an agent transcript containing
-   private object values. Keep other config writers excluded until readback.
-5. Capture readback privately and assert exact structural equality with the
-   candidate. Observe a separately authorized fresh session's actual
-   `turn_context`; model/effort and security boundaries must remain unchanged.
-   Existing sessions are not proof of new spawn behavior.
-6. Rollback uses the same supported **full-object** operation with the original
-   snapshot and exact readback verification. First require current == candidate;
-   if it differs, stop and reconcile instead of erasing unrelated edits.
-   Preserve config-writer exclusion through rollback and verify a fresh session.
-
-This is a reviewed-object protocol, not a claim of atomic compare-and-set or a
-new automatic activation API. The CLI's full replacement and missing effort
-flag are explicit risks. If private round-trip preservation or exclusive editing
-cannot be established, activation remains BLOCKED; do not waive those checks.
+1. Do not use the installed `project get --json` for lossless capture, backup or
+   verification. Do not use `project set-config`, any focused flags, `--clear`
+   or `--config-json` for application or rollback. Both CLI capture and writing
+   can silently remove effort; post-write detection would already be too late.
+2. A local read-only comparison captured only model/effort field-presence
+   booleans from the CLI versus authoritative saved project configuration.
+   [The sanitized schema fixture](../../tests/fixtures/agent-efficiency/installed-config-capture-schema.json)
+   records model presence in both, effort presence only in saved configuration,
+   and whole-object inequality. No raw live configuration was exported. The
+   coordinator also independently verified that the existing read-only
+   `GET /api/v1/projects/mantis-studio` retains both effort fields. This establishes
+   read evidence only; it does not establish a safe write mechanism.
+3. No full-fidelity application/rollback mechanism has been verified in this
+   worker. The installed guide points to Desktop Project Settings or the daemon
+   API, but that recommendation alone does not prove their write path preserves
+   all fields. No daemon write route is proposed or inferred, and no live write
+   was issued to probe it. **Activation and rollback remain BLOCKED** until a
+   supported mechanism and its lossless serialization are independently verified.
+4. Any future separately authorized activation plan must first establish complete
+   private capture, lossless writer/readback and rollback support, unknown-field
+   preservation, and protection against concurrent config changes. It must
+   preserve worker `gpt-6.1-sol/high`, orchestrator `gpt-6.1-sol/medium`, auth,
+   identity, permissions and all other settings. Review rule composition and
+   conflicts, compare the entire precondition object, verify exact readback and
+   a separately authorized fresh session's actual model/effort/security context.
+   Rollback must not overwrite unrelated intervening edits. These are required
+   preconditions, not a verified executable procedure or activation approval.
 
 ## Verification scope and measured limits
 
@@ -226,7 +230,9 @@ The deterministic tests exercise response/cumulative accounting, resets,
 compaction, conflicting/foreign records, malformed/partial input, missing files,
 unknown accounting semantics, private sentinels, command/time ambiguity,
 concurrent read-only execution, symlinks/FIFOs, invalid output options, and exact
-offline configuration preservation. A safely owned protected-path stand-in
+offline configuration preservation and rejection of lossy CLI-derived captures,
+missing references, missing effort/unknown fields, drift and type changes. A
+safely owned protected-path stand-in
 remains byte-identical; no real protected worktree is attacked. A Python audit
 tripwire verifies analysis succeeds with filesystem writes, child-process launch
 and network creation denied. The tripwire and analyzer are **not OS sandboxes**.

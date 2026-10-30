@@ -1,0 +1,26 @@
+{
+  "activation": "BLOCKED",
+  "allowlisted_presence": {
+    "orchestrator.agentConfig.effort": {
+      "cli_get": false,
+      "saved_config": true
+    },
+    "orchestrator.agentConfig.model": {
+      "cli_get": true,
+      "saved_config": true
+    },
+    "worker.agentConfig.effort": {
+      "cli_get": false,
+      "saved_config": true
+    },
+    "worker.agentConfig.model": {
+      "cli_get": true,
+      "saved_config": true
+    }
+  },
+  "comparison": "read_only_cli_vs_saved_project_config",
+  "installed_release": "20261029233428-9192",
+  "schema_version": 1,
+  "whole_config_equal": false,
+  "write_path_verified": false
+}

@@ -4,11 +4,13 @@ on:
     paths:
       - tools/agent_efficiency.py
       - tests/unit/agent_efficiency_test.py
+      - tests/fixtures/agent-efficiency/**
       - .github/workflows/agent-efficiency.yml
   pull_request:
     paths:
       - tools/agent_efficiency.py
       - tests/unit/agent_efficiency_test.py
+      - tests/fixtures/agent-efficiency/**
       - .github/workflows/agent-efficiency.yml
 permissions:
   contents: read

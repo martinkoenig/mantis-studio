@@ -128,14 +128,29 @@ def executable_category(command):
                             "mkdir", "cp", "rg", "bash") else "other"
 
 
-def propose_rules(config, worker_rules, orchestrator_rules):
+def propose_rules(config, worker_rules, orchestrator_rules, *, reference_config=None):
     """Offline only. Preserve every unknown/config/model/security field verbatim.
 
-    The returned original is the rollback snapshot, not a public deliverable.
-    An operator must review, authorize, and apply using supported AO controls.
-    No live config is read or changed here.
+    The caller must obtain reference_config from an independently verified
+    complete source. Comparing two copies of a lossy capture proves nothing.
+    The installed AO CLI cannot supply this reference or apply it losslessly.
+    These copies do not establish an activation or rollback mechanism. This
+    helper verifies neither transport fidelity nor provenance and does no AO I/O.
     """
     mapping(config)
+    mapping(reference_config)
+    try:
+        captured = json.dumps(config, sort_keys=True, allow_nan=False)
+        reference = json.dumps(reference_config, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError):
+        raise InvalidEvidence("invalid configuration schema") from None
+    if captured != reference:
+        raise InvalidEvidence("capture differs from complete reference")
+    for role in ("worker", "orchestrator"):
+        settings = mapping(mapping(config.get(role)).get("agentConfig"))
+        if not all(isinstance(settings.get(key), str) and settings[key].strip()
+                   for key in ("model", "effort")):
+            raise InvalidEvidence("missing role execution setting")
     if not all(isinstance(x, str) and x.strip() for x in (worker_rules, orchestrator_rules)):
         raise InvalidEvidence("empty rules")
     original = copy.deepcopy(config)
