@@ -1,0 +1,23 @@
+name: agent-efficiency
+on:
+  push:
+    paths:
+      - tools/agent_efficiency.py
+      - tests/unit/agent_efficiency_test.py
+      - .github/workflows/agent-efficiency.yml
+  pull_request:
+    paths:
+      - tools/agent_efficiency.py
+      - tests/unit/agent_efficiency_test.py
+      - .github/workflows/agent-efficiency.yml
+permissions:
+  contents: read
+jobs:
+  analyzer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: python3 -B -m unittest discover -s tests/unit -p agent_efficiency_test.py -v
