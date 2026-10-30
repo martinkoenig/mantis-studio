@@ -8,11 +8,13 @@ import json
 import os
 from pathlib import Path
 import resource
+import re
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from urllib.parse import unquote, urlsplit
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "tools" / "agent_efficiency.py"
@@ -358,6 +360,106 @@ runpy.run_path(sys.argv[0], run_name="__main__")
                                  "worker=" + str(self.input)], capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["sessions"][0]["accounting"]["total_tokens"], 14)
+
+
+def instruction_references(source, root):
+    """Audit this repository's simple inline Markdown links; not a Codex loader.
+
+    Resolve real paths before reading a linked document. Links never execute
+    code or fetch external content. Cycles are handled by instruction_closure.
+    """
+    root = root.resolve()
+    source = source.resolve(strict=True)
+    if not source.is_relative_to(root):
+        raise ValueError("instruction source outside repository")
+    targets = []
+    for link in re.findall(r"\[[^\]\n]+\]\(([^()\n]+)\)", source.read_text()):
+        parsed = urlsplit(link)
+        if parsed.scheme or parsed.netloc or not parsed.path:
+            continue
+        target = (source.parent / unquote(parsed.path)).resolve(strict=True)
+        if not target.is_relative_to(root) or not target.is_file():
+            raise ValueError("instruction reference is not a repository file")
+        targets.append(target)
+    return targets
+
+
+def instruction_closure(source, root):
+    pending = [source.resolve()]
+    visited = set()
+    while pending:
+        current = pending.pop()
+        if current not in visited:
+            visited.add(current)
+            if current.suffix == ".md":
+                pending.extend(instruction_references(current, root))
+    return visited
+
+
+class RepositoryInstructionTests(unittest.TestCase):
+    def test_root_worker_reference_is_scoped_and_resolves(self):
+        root = SCRIPT.parents[1]
+        text = (root / "AGENTS.md").read_text()
+        heading = "## Implementation worker execution\n"
+        self.assertEqual(text.count(heading), 1)
+        before, section = text.split(heading)
+        section = section.split("\n## ", 1)[0]
+        worker = root / "docs/agents/worker-execution-rules.md"
+        self.assertIn(worker, instruction_references(root / "AGENTS.md", root))
+        # The new mandatory reference is confined to its worker section. No
+        # orchestrator proposal or live-configuration file is bootstrapped.
+        self.assertNotIn("(docs/agents/worker-execution-rules.md)", before)
+        self.assertEqual(re.findall(r"\]\(([^)]+)\)", section),
+                         ["docs/agents/worker-execution-rules.md"])
+        closure = instruction_closure(root / "AGENTS.md", root)
+        self.assertTrue({worker, root / "CONTRIBUTING.md",
+                         root / "docs/adr/033-reliability-performance-release-gates.md"} <= closure)
+        self.assertNotIn(root / "docs/agents/orchestrator-execution-rules.md", closure)
+
+    def test_root_reference_fits_default_native_discovery_preconditions(self):
+        root = SCRIPT.parents[1]
+        self.assertFalse((root / "AGENTS.override.md").exists())
+        size = (root / "AGENTS.md").stat().st_size
+        self.assertGreater(size, 0)
+        self.assertLess(size, 32 * 1024)  # Documented default; not a custom profile guarantee.
+
+    def test_missing_reference_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "AGENTS.md"
+            source.write_text("[missing](missing.md)")
+            with self.assertRaises(FileNotFoundError):
+                instruction_closure(source, root)
+
+    def test_parent_and_symlink_escape_fail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outer = Path(directory)
+            root = outer / "repo"; root.mkdir()
+            outside = outer / "outside.md"; outside.write_text("outside fixture")
+            (root / "escape.md").symlink_to(outside)
+            source = root / "AGENTS.md"
+            for target in ("../outside.md", "escape.md"):
+                source.write_text("[escape](" + target + ")")
+                with self.assertRaises(ValueError):
+                    instruction_closure(source, root)
+
+    def test_cycles_anchors_and_external_links_do_not_expand_forever(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "AGENTS.md"
+            supplement = root / "worker.md"
+            source.write_text("[worker](worker.md#section) [web](https://example.invalid/no-fetch)")
+            supplement.write_text("[root](AGENTS.md) [anchor](#section)")
+            self.assertEqual(instruction_closure(source, root), {source, supplement})
+
+    def test_non_markdown_file_is_verified_without_parsing_its_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "AGENTS.md"
+            asset = root / "LICENSE"
+            asset.write_bytes(b"\xff")  # Proves the terminal node is not decoded.
+            source.write_text("[license](LICENSE)")
+            self.assertEqual(instruction_closure(source, root), {source, asset})
 
 
 if __name__ == "__main__":
