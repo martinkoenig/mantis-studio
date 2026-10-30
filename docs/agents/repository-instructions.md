@@ -95,10 +95,52 @@ No workflow path filters or build/test registration are changed. Therefore a
 future AGENTS-only edit does not automatically trigger this narrow workflow;
 run the command explicitly when reviewing instruction/reference changes.
 
-Applicable final checks are the full focused Python suite, Python syntax/static
-checks, Markdown reference resolution, and the Git scope/policy-preservation
-comparison. Product CMake/CTest, Qt/headless, ARM64 and sanitizer registrations
-and behavior are unchanged; unrelated builds and historical qualification are
-not rerun for this documentation/test-only patch. Required remote CI remains an
-independent-review gate. No model-efficiency savings, universal session loading,
-hardware validity or permanent AO rule activation is claimed.
+Applicable instruction checks are the full focused Python suite, Python
+syntax/static checks, Markdown reference resolution, and the Git
+scope/policy-preservation comparison. Product code and build/test registration
+are unchanged. The C++ fixture correction below also requires the relevant
+compiled and sanitizer validation. Historical qualification is not repeated.
+Required remote CI remains an independent-review gate. No model-efficiency
+savings, universal session loading, hardware validity or permanent AO rule
+activation is claimed.
+
+## CI recovery: fixture delivery load
+
+The sanitizer push run for the initial ENG-EFF-2A head failed `projected-controls`
+with an explicit LOSSLESS queue-saturation error, without a sanitizer memory
+diagnostic. Its camera-only contract fixture emitted at approximately 1,000
+frames/second although its sole ordinary-capture caller tests camera/projected
+ownership exclusion, not storage throughput. Slow durable writes could fill
+the real lossless recorder before that ownership test completed.
+
+The fixture now supplies one startup FrameSet per start, then honors the
+acquisition ABI's not-ready return with a bounded timeout. A deterministic ABI
+regression checks repeated empty reads, invalid timeouts, stop and restart;
+the ownership case also verifies exactly one produced/committed frame, no
+saturation and no capture error. The regression fails against the old fixture.
+Production queue capacity, admission deadline, explicit saturation failure,
+negative writer tests, test selection and registrations are unchanged.
+
+The separate sanitizer PR run failed the valid GREY `phase-jitter-right`
+recorder scenario during capture construction. Its catch block replaced the
+runtime error with `CHECK(!valid)`, so that CI log cannot establish the original
+exception. Inspection found that the recorder scenarios did not select the
+existing finite-rate fake-camera option documented in
+[projected-light control validation](../architecture/projected-light-control-api.md).
+Their phase sources therefore delivered at CPU speed rather than the profile's
+120 Hz host rate. Algorithm-only scenarios intentionally retain that behavior.
+
+Recorder scenarios now explicitly select `MANTIS_X1_FAKE_PACE=1`, preserving
+every native timestamp, sequence, pixel, exclusion, accounting and exact-replay
+assertion. A 150 ms first-writer pause exercises the storage/scheduler-stall
+condition; it is fault injection, not a new throughput claim. The catch block
+also retains the actual runtime diagnostic for unexpected valid-case failures.
+No production fake-backend implementation, queue bound, admission deadline,
+test timeout or detector option is changed.
+
+With the injected pause and pacing disabled, the local sanitizer baseline
+failed the existing three-second recorder-readiness assertion. With pacing
+selected, the same GREY jitter case passes ASan/UBSan with leak detection;
+all 18 recorder scenarios also pass headless. This establishes local
+stall sensitivity and the correction's effect, not the exception hidden in
+the original CI log.

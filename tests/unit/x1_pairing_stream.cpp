@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <set>
+#include <thread>
 #include <mantis/device_runtime.hpp>
 #include <mantis/plugin_runtime.hpp>
 #include <mantis/replay.hpp>
@@ -183,6 +184,9 @@ int main(int argc, char **argv) {
             if (!select(format, name, "recorder")) continue;
             const std::string_view scenario = name;
             const bool valid = scenario != "phase-drift-gap" && scenario != "phase-limit";
+            // Keep native timing fixtures exact while delivering at the configured
+            // camera rate. CPU-speed phase delivery is for algorithm-only tests.
+            CHECK(setenv("MANTIS_X1_FAKE_PACE", "1", 1) == 0);
             nlohmann::json profile{{"format_version", 1}, {"measurement_cameras", {
                 {"left", {{"sensor_identity", "ov9281 18-0060"}}}, {"right", {{"sensor_identity", "ov9281 20-0060"}}}}},
                 {"mode", {{"width", 64}, {"height", 48}, {"fourcc", format}, {"fps", 120}}},
@@ -198,20 +202,36 @@ int main(int argc, char **argv) {
             std::atomic_bool signalled{};
             std::unique_ptr<device::Session> session;
             try {
-                session = std::make_unique<device::Session>(device::CaptureDescriptor{Id::random(), {devices[0]->descriptor().id}, {}},
-                    std::vector<device::ImageStream *>{devices[0].get()}, [&](data::Published packet) {
-                        store->append(id, *packet); live.push_back(packet);
-                        if (valid && live.size() == 96 && !signalled.exchange(true)) ready.set_value();
-                    }, [&](const LogRecord &) { if (!valid && !signalled.exchange(true)) ready.set_value(); });
+                session = std::make_unique<device::Session>(
+                    device::CaptureDescriptor{Id::random(), {devices[0]->descriptor().id}, {}},
+                    std::vector<device::ImageStream *>{devices[0].get()},
+                    [&](data::Published packet) {
+                        // Exercise a bounded durable-writer stall without turning
+                        // this pairing/replay fixture into a CPU-speed load test.
+                        if (live.empty())
+                            std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                        store->append(id, *packet);
+                        live.push_back(packet);
+                        if (valid && live.size() == 96 && !signalled.exchange(true))
+                            ready.set_value();
+                    },
+                    [&](const LogRecord &) {
+                        if (!valid && !signalled.exchange(true))
+                            ready.set_value();
+                    });
             } catch (const Failure &) {
                 // Accelerated invalid fixtures may fail before the first writer
                 // commit. Construction then stops/drains without returning a
                 // handle; check the same exact failure from retained diagnostics.
-                CHECK(!valid);
+                if (valid)
+                    throw; // Retain the actual recorder failure diagnostic.
             }
             if (session) {
-                CHECK(reached.wait_for(std::chrono::seconds(3)) == std::future_status::ready);
+                auto readiness = reached.wait_for(std::chrono::seconds(3));
                 session->stop();
+                if (valid && !session->error().empty())
+                    throw std::runtime_error(session->error());
+                CHECK(readiness == std::future_status::ready);
                 CHECK(session->metrics().dropped == 0 && session->saturation() == 0);
                 CHECK(session->produced() == session->committed() && session->committed() == live.size());
             }
@@ -330,6 +350,7 @@ int main(int argc, char **argv) {
             std::cout << format << ' ' << name << " counted exclusions, zero recorder loss and exact replay passed\n";
         }
         CHECK(selected == (argc == 2 ? 56u : 1u));
+        unsetenv("MANTIS_X1_FAKE_PACE");
         unsetenv("MANTIS_X1_PROFILE"); unsetenv("MANTIS_X1_FAKE");
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
