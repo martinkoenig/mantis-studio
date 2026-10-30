@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.24)
+project(QtSanitizerQualification LANGUAGES CXX)
+
+# Deliberately independent of the Mantis build graph and libraries.
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(NOT QUALIFICATION_QT_VERSION)
+    message(FATAL_ERROR "An explicit QUALIFICATION_QT_VERSION is required")
+endif()
+find_package(Qt6 ${QUALIFICATION_QT_VERSION} EXACT REQUIRED COMPONENTS Core Gui Qml Quick)
+foreach(target qt-leak-probe leak-detector-selftest)
+    add_executable(${target} ${target}.cpp)
+    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
+    target_compile_options(${target} PRIVATE -O0 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+endforeach()
+file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/qualification.json" CONTENT
+    "{\"qt_version\":\"${Qt6_VERSION}\",\"compiler_id\":\"${CMAKE_CXX_COMPILER_ID}\",\"compiler_version\":\"${CMAKE_CXX_COMPILER_VERSION}\"}\n")
