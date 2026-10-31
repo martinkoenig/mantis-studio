@@ -26,7 +26,7 @@ Each ordinary work issue needs a compact, **maintained** body with:
 4. **Implementation and review links.** The assigned AO session/worker/PR only if actually observed; link to exact revisions, relevant CI jobs and findings. An AO review is supporting evidence, not final acceptance.
 5. **Next action / ownership and blocked reason.** A worker may report status, but cannot self-authorize a new milestone, mark ACCEPT, or bypass a failing required check.
 
-Use the issue **body as the up-to-date summary**, with a short comment only when it preserves a significant new experiment, causal result or reviewer decision. Do not copy whole chat transcripts, long CI logs, repeated AI summaries or volatile session metadata into issues. Retain links to original evidence wherever accessible. Do not post credentials, private secrets, unpublished exploit details or unredacted alert payloads to public issues.
+**Two-layer issue record:** Keep the issue **body as a compact current-state summary**, never an accumulating series of dated status paragraphs. Create **a new chronological comment for each material evidence/decision event** (new confirmed or disproven root cause, relevant exact-SHA CI outcome, independent review decision, lifecycle transition), with epistemic status and original source links. GitHub provides comment timestamps; do not fabricate within-day ordering or rewrite old comments to conceal history. Keep the body synchronized when the **current** state changes. Minor progress updates, duplicate polls and already linked evidence do not warrant comments. Do not copy chat transcripts, full CI logs, repeated AI summaries or volatile session metadata. Never publish credentials, secrets, unpublished exploit details or unredacted alert payloads.
 
 ## 3. Index and maintenance triggers
 
@@ -40,7 +40,7 @@ Update the **work issue** when:
 - AO review or independent review requests changes;
 - final applicable remote CI checks pass/fail and independent reviewer decides ACCEPT / CHANGES REQUIRED / BLOCKED.
 
-Update the **hub** only for important changes: new active priority, new blocker, changed accepted integration head, package accepted/blocked, promoted release, material security coverage change or new source-of-truth conflict. Use timestamp and original evidence links. It is fine to update both in **one** coherent maintenance action; avoid wakeups, polling or recurring heartbeat edits.
+Update the **hub** only for important changes: new active priority, new blocker, changed accepted integration head, package accepted/blocked, promoted release, material security coverage change or new source-of-truth conflict. **Update #14's current-state body AND add one concise chronological hub comment linking to the authoritative work-issue comment/PR/CI**. The hub comment records *what changed*; detailed engineering findings belong in the work issue. Historic comments are not authoritative for the present without a fresh GitHub check. Avoid wakeups, polling and recurring heartbeat edits.
 
 GitHub issues usually auto-close through closing keywords on default-branch merges; for PRs targeting `develop` (while default remains `main`), **explicitly close an issue only after verified authorized integration and independent ACCEPT** if its scope is complete. Retain source SHA, PR, CI run and remaining risk in the final body. Never close based on a worker's last message.
 
