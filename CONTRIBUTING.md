@@ -29,6 +29,10 @@ Reserve removed Protobuf field numbers and names. Do not reassign them. Protocol
 
 Architectural changes require a new ADR describing the problem, inadequate extension points, alternatives, compatibility impact and migration path. Feature convenience alone is insufficient.
 
+## Issue memory and public engineering records
+
+For each substantive authorized work package, maintain a work issue. Its description records current scope, verified status, blockers and acceptance gates; material findings, disproven hypotheses, exact-SHA CI and independent review decisions belong in **new chronological comments**. The coordinator synchronizes the issue body when current status changes. Update hub [#14](https://github.com/martinkoenig/mantis-studio/issues/14) and add one concise link-bearing comment only for material project-wide changes. Write all new GitHub issues, PR descriptions, comments, review decisions and repository documentation **in English**. Screen every public write for secrets, private infrastructure details and raw logs. Avoid closing keywords for PRs targeting `develop` when `main` is the default branch; close only after independent ACCEPT and authorized integration. See [ENG-KNOW-1](docs/engineering/knowledge-and-handoff.md).
+
 ## Pull requests
 
 Explain the problem, behavior change and verification. Include a reproducible fixture for storage or plugin crashes. State which platforms were actually tested. Keep dependency updates separate from semantic changes where practical.
