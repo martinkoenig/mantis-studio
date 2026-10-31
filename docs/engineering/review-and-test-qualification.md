@@ -60,7 +60,11 @@ A correction review should consolidate all evidenced blocking findings into one 
 
 Use the [SEC-EVENT-1 GitHub-security intake charter](github-security-event-intake.md) when an alert, Dependabot PR, scanner outage or security-configuration change intersects a review. Distinguish a zero-finding completed scan from a scan that was never run. For security remediation, preserve branch-specific evidence and treat secret disclosure as an immediate restricted incident, never as an ordinary public issue or automated code-only fix. This reference does not activate AO security-event ingestion.
 
-## 7. Recurring CI incidents and improvement
+## 7. Durable review findings and handoff
+
+For any material incident or multi-session package, preserve confirmed/disproven findings, exact SHA/CI evidence, outstanding hypotheses and final independent acceptance in its issue, and link the live status from [ENG-KNOW-1](knowledge-and-handoff.md). Do not replace actual code inspection with an issue or duplicate the full implementation transcript. A dated issue snapshot is never itself final acceptance evidence. The related documentation remains a proposal until merged.
+
+## 8. Recurring CI incidents and improvement
 
 Treat intermittent failures as incidents requiring cause classification, evidence preservation and an explanation or narrowly bounded external limitation. Correlate unrelated red-test families for shared fixture, resources, scheduler and CI causes. Never declare success solely because a subsequent push is green.
 

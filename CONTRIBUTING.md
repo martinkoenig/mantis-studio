@@ -31,7 +31,7 @@ Architectural changes require a new ADR describing the problem, inadequate exten
 
 ## Independent review and test qualification
 
-After acceptance/merge, the [independent adversarial review standard](docs/engineering/review-and-test-qualification.md) governs planning/review decisions and evidence for risk-critical changes. Inspect relevant actual production and test code, not only implementation summaries or green CI. Implementing workers hand off review-ready evidence but do not self-approve. The planned [CI-STAB-2 whole-suite audit](docs/engineering/ci-stab-2-qualification.md) is a separate qualification milestone, not yet accepted.
+After acceptance/merge, the [independent adversarial review standard](docs/engineering/review-and-test-qualification.md) governs planning/review decisions and evidence for risk-critical changes. Inspect relevant actual production and test code, not only implementation summaries or green CI. Implementing workers hand off review-ready evidence but do not self-approve. The planned [CI-STAB-2 whole-suite audit](docs/engineering/ci-stab-2-qualification.md) is a separate qualification milestone, not yet accepted. The proposed [ENG-KNOW-1 project-memory and handoff process](docs/engineering/knowledge-and-handoff.md) provides a small issue-based context index and evidence ledger, not a new architecture authority or permission for autonomous issue intake.
 
 ## Pull requests
 
