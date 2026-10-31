@@ -596,6 +596,7 @@ if(BUILD_TESTING)
  add_test(NAME c-abi COMMAND mantis-c-contract)
  add_test(NAME boundaries COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/contract/boundaries.py ${CMAKE_CURRENT_SOURCE_DIR})
  add_test(NAME python-capture COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/python_capture.py ${CMAKE_BINARY_DIR})
+ add_test(NAME acceptance-lifecycle COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/capture_lifecycle_test.py)
  add_test(NAME acceptance COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/acceptance.py ${CMAKE_BINARY_DIR})
  # Deliberately contaminate the caller environment: acceptance must isolate X1.
  set_tests_properties(acceptance PROPERTIES TIMEOUT 90 ENVIRONMENT

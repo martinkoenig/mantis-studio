@@ -8,7 +8,6 @@ import struct
 import subprocess
 import sys
 import threading
-import time
 
 build = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(build / 'python'))
@@ -29,6 +28,7 @@ active = False
 offline = False
 operations = []
 held_threads = []
+start_release = threading.Event()
 if capture_test:
     subprocess.run([str(build / "bin/mantis-studio-scan-tests"), str(out), "fixtures"], check=True)
 
@@ -66,6 +66,10 @@ def serve():
                         if req.events.after == 90:
                             for name, count in collections.Counter(requests).items():
                                 response.events.add(kind=name, sequence=count)
+                        elif req.events.after == 91:
+                            assert mode == 20 and not start_release.is_set()
+                            active = True
+                            start_release.set()
                         else:
                             mode = req.events.after
                             assert 10 <= mode <= 31
@@ -123,9 +127,23 @@ def serve():
                             worker.start()
                             continue
                         if mode == 20:
-                            time.sleep(.3)  # completion lease, repeated input and route changes
-                            active = True
                             response.result_id = 'wire-capture'
+                            payload = response.SerializeToString()
+                            held = conn.dup()
+                            def complete_start(sock=held, payload=payload):
+                                with sock:
+                                    if not start_release.wait(5):
+                                        failures.append('Start completion release missing')
+                                        return
+                                    if not stop.is_set():
+                                        try:
+                                            sock.sendall(struct.pack('!I', len(payload)) + payload)
+                                        except OSError as error:
+                                            failures.append(repr(error))
+                            worker = threading.Thread(target=complete_start)
+                            held_threads.append(worker)
+                            worker.start()
+                            continue
                         else:
                             response.error.code = 6
                             response.error.component = 'wire.capture_start'
@@ -206,7 +224,12 @@ try:
         print('PASS: unchanged bridge snapshot/preview polling; zero Scan capture, stop, replay, pipeline, artifact_data, plugin or project writes', counts)
 finally:
     stop.set()
+    start_release.set()
     thread.join(timeout=3)
     listener.close()
     for worker in held_threads:
         worker.join(timeout=2)
+    # Preserve the exact operation prefix and server diagnostics on failure too.
+    (out / 'requests.json').write_text(json.dumps(dict(collections.Counter(requests)), indent=2) + '\n')
+    (out / 'operations.json').write_text(json.dumps(operations, indent=2) + '\n')
+    (out / 'server-failures.json').write_text(json.dumps(failures, indent=2) + '\n')

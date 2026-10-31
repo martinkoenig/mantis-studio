@@ -26,6 +26,7 @@ struct Scenario {
     const char *counter{};
 };
 int main(int argc, char **argv) {
+    std::string context = "arguments", diagnostic_phase = "selection";
     try {
         CHECK(argc == 2 || argc == 5);
         // CTest runs each independent scenario with the original finite deadline.
@@ -35,6 +36,8 @@ int main(int argc, char **argv) {
             if (argc == 5 && (std::string_view(argv[2]) != format ||
                 std::string_view(argv[3]) != name || std::string_view(argv[4]) != mode)) return false;
             ++selected;
+            context = std::string(format) + " / " + name + " / " + mode;
+            diagnostic_phase = "source/pairing";
             return true;
         };
         auto root = std::filesystem::temp_directory_path() / Id::random().value;
@@ -201,6 +204,7 @@ int main(int argc, char **argv) {
             std::promise<void> ready; auto reached = ready.get_future();
             std::atomic_bool signalled{};
             std::unique_ptr<device::Session> session;
+            diagnostic_phase = "recorder construction";
             try {
                 session = std::make_unique<device::Session>(
                     device::CaptureDescriptor{Id::random(), {devices[0]->descriptor().id}, {}},
@@ -227,6 +231,7 @@ int main(int argc, char **argv) {
                     throw; // Retain the actual recorder failure diagnostic.
             }
             if (session) {
+                diagnostic_phase = "recorder progress/stop";
                 auto readiness = reached.wait_for(std::chrono::seconds(3));
                 session->stop();
                 if (valid && !session->error().empty())
@@ -236,6 +241,7 @@ int main(int argc, char **argv) {
                 CHECK(session->produced() == session->committed() && session->committed() == live.size());
             }
             auto metrics = session ? session->diagnostics() : devices[0]->diagnostics();
+            diagnostic_phase = "accounting/replay";
             CHECK(metrics.at("sync_quality") == "software" && metrics.at("exposure_skew") == "unavailable");
             CHECK(metrics.at("pairing_pending_saturation") == "0");
             for (const char *role : {"left", "right"}) CHECK(std::stoull(metrics.at(std::string("pending_high_water_") + role)) <= 2);
@@ -353,5 +359,8 @@ int main(int argc, char **argv) {
         unsetenv("MANTIS_X1_FAKE_PACE");
         unsetenv("MANTIS_X1_PROFILE"); unsetenv("MANTIS_X1_FAKE");
         return 0;
-    } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
+    } catch (const std::exception &e) {
+        std::cerr << context << " [" << diagnostic_phase << "]: " << e.what() << '\n';
+        return 1;
+    }
 }

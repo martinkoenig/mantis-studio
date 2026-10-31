@@ -1,6 +1,7 @@
 """Real processes, real Protobuf, loaded DSOs, SQLite recovery and Qt client survival."""
 from pathlib import Path
 import json
+import collections
 import os
 import socket
 import subprocess
@@ -12,6 +13,7 @@ build = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(build / "python"))
 import mantis
 from mantis import mantis_pb2 as wire
+from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, initial_capture, require_capture, retain_failure
 
 with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
     root = Path(directory)
@@ -25,18 +27,27 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
     client = mantis.connect(port=port, token=env["MANTIS_TOKEN"])
     log = open(root / "daemon.log", "w+")
     daemon = None
-    studios = []
+    ui_log = None
+    daemons = OwnedProcesses()
+    studios = OwnedProcesses()
+    observations = collections.deque(maxlen=32)
+    def observe():
+        state = client.snapshot()
+        observations.append(capture_evidence(state))
+        return state
     def start():
-        process = subprocess.Popen([str(build / "bin/mantisd"), "--project", str(root / "Project.mantis")], env=env, stdout=log, stderr=log)
-        for _ in range(100):
-            if process.poll() is not None:
-                log.seek(0)
-                raise AssertionError(log.read())
-            try:
-                client.snapshot()
-                return process
-            except (OSError, mantis.MantisError): time.sleep(0.05)
-        raise AssertionError("Daemon startup timeout")
+        def ready(process):
+            for _ in range(100):
+                if process.poll() is not None:
+                    log.seek(0)
+                    raise AssertionError(log.read())
+                try:
+                    client.snapshot()
+                    return
+                except (OSError, mantis.MantisError): time.sleep(0.05)
+            raise AssertionError("Daemon startup timeout")
+        return daemons.start_ready([str(build / "bin/mantisd"), "--project", str(root / "Project.mantis")],
+                                   ready=ready, env=env, stdout=log, stderr=log)
     def cli(*args):
         return json.loads(subprocess.check_output([str(build / "bin/mantis-cli"), *args], env=env, text=True))
     def until(predicate, timeout=10):
@@ -84,16 +95,15 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         active = None
         if studio_bin.exists():
             ui_log = open(root / "studio.log", "w+")
-            studio = subprocess.Popen([str(studio_bin), "--ui-mode=live", "--workspace=home", "--window-size=1080x720", "--acceptance-export", str(root / "studio.ply")], env=env, stdout=ui_log, stderr=ui_log)
-            studios.append(studio)
+            studio = studios.start([str(studio_bin), "--ui-mode=live", "--workspace=home", "--window-size=1080x720", "--acceptance-export", str(root / "studio.ply")], env=env, stdout=ui_log, stderr=ui_log)
             until(lambda: (root / "studio.ply").exists())
             until(lambda: "STUDIO_ACCEPTANCE_READY" in (root / "studio.log").read_text())
             assert studio.poll() is None
             assert (root / "studio.ply").read_bytes() == (root / "python.ply").read_bytes()
-            active = next(c for c in client.snapshot().captures if c.active)
+            active = initial_capture(observe(), "Studio acceptance ready")
         else:
             capture = client.capture.start(devices[0])
-            active = next(c for c in client.snapshot().captures if c.id == capture.id)
+            active = require_capture(observe(), capture, "headless capture started")
         crash = client.pipeline.run(capture=active.id, recipe="crash-test")
         try:
             crash.wait()
@@ -104,19 +114,21 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         failed = next(p for p in client.snapshot().plugins if p.id == "org.mantis.crash-test")
         assert failed.state == "failed" and failed.diagnostic
         assert any("crash-test" in event.message for event in client.events())
-        until(lambda: next(c for c in client.snapshot().captures if c.id == active.id).frames > active.frames)
+        active = await_progress(observe, active, "after isolated plugin crash")
         assert all(p.poll() is None for p in studios)
         # Disconnect and restart the actual Studio while capture remains daemon-owned.
+        active = require_capture(observe(), active, "before Studio termination")
         for studio in studios: studio.terminate(); studio.wait(timeout=5)
+        active = await_progress(observe, active, "after Studio termination")
         if studio_bin.exists():
-            studio = subprocess.Popen([str(studio_bin), "--quit-after", "1400"], env=env, stdout=ui_log, stderr=ui_log)
+            studio = studios.start([str(studio_bin), "--quit-after", "1400"], env=env, stdout=ui_log, stderr=ui_log)
             assert studio.wait(timeout=8) == 0
             ui_log.flush(); ui_log.seek(0)
             ui_text = ui_log.read()
             assert "failed to load" not in ui_text.lower(), ui_text
             assert "ReferenceError" not in ui_text and "TypeError" not in ui_text, ui_text
             ui_log.close()
-        assert next(c for c in client.snapshot().captures if c.id == active.id).active
+        active = await_progress(observe, active, "after Studio restart/exit")
         client.pipeline.run(capture=active.id).wait()
         client.enable_plugin("org.mantis.crash-test", False)
         assert next(p for p in client.snapshot().plugins if p.id == "org.mantis.crash-test").state == "disabled"
@@ -133,8 +145,20 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         client.pipeline.run(raw_artifact=raw).wait()
         client.shutdown(); assert daemon.wait(timeout=8) == 0
         print("PASS: Python, CLI, " + ("Studio/viewport/UI restart, " if studio_bin.exists() else "headless client reconnect, ") + "deterministic replay, isolated crash, capture continuity, daemon crash recovery")
+    except BaseException:
+        # TemporaryDirectory would otherwise erase the only daemon-side cause.
+        # Retain test-process logs and allowlisted capture state, never credentials.
+        try:
+            evidence = build / "test-diagnostics" / "acceptance" / root.name
+            log.flush()
+            retain_failure(root, evidence, observations, [process.poll() for process in daemons],
+                           [process.poll() for process in studios])
+            print(f"Acceptance failure evidence: {evidence}", file=sys.stderr)
+        except OSError as evidence_error:
+            print(f"Acceptance evidence could not be retained: {evidence_error}", file=sys.stderr)
+        raise
     finally:
-        for process in studios:
-            if process.poll() is None: process.kill(); process.wait()
-        if daemon and daemon.poll() is None: daemon.kill(); daemon.wait()
+        studios.close()
+        daemons.close()
+        if ui_log and not ui_log.closed: ui_log.close()
         log.close()
