@@ -24,3 +24,9 @@ new configuration field or permission grant.
 - Respect the exact-SHA, single nonblocking CI handoff in AGENTS.md. Do not add
   Actions wait/poll loops after a worker reports pending CI. Obtain final CI
   evidence at the independent review decision; pending is not PASS.
+
+## Independent review and total-execution-efficiency handoff (proposal, not activated)
+
+For each separately authorized package, give the worker bounded scope, applicable [review-risk tier and evidence requirements](../engineering/review-and-test-qualification.md), original acceptance criteria, local verification and report format. Request one compact exact-SHA report with affected contracts, meaningful failure tests, results, performance evidence if applicable and unverified boundaries. **The independent reviewer**, not AO or its workers, determines ACCEPT/CHANGES REQUIRED/BLOCKED after inspecting actual source, tests and final GitHub Actions. On correction, preserve already correct work and send one consolidated focused prompt; no speculative extra workers, auto-merge or auto-next-package execution.
+
+Retain [ENG-EFF-1A](execution-efficiency.md) and the linked worker guidance: batch necessary reads, use durable `ao report`/`ao send`, avoid idle model wakeups and repeated status/log polling, and do not rerun unchanged suites after minor intermediate edits. Never trade away required local verification, retained failure evidence or final independent CI. [CI-STAB-2](../engineering/ci-stab-2-qualification.md) is planned, not completed. This documentation does **not** modify live AO settings or activate the orchestrator proposal.

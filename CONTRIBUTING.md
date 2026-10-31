@@ -29,6 +29,10 @@ Reserve removed Protobuf field numbers and names. Do not reassign them. Protocol
 
 Architectural changes require a new ADR describing the problem, inadequate extension points, alternatives, compatibility impact and migration path. Feature convenience alone is insufficient.
 
+## Independent review and test qualification
+
+After acceptance/merge, the [independent adversarial review standard](docs/engineering/review-and-test-qualification.md) governs planning/review decisions and evidence for risk-critical changes. Inspect relevant actual production and test code, not only implementation summaries or green CI. Implementing workers hand off review-ready evidence but do not self-approve. The planned [CI-STAB-2 whole-suite audit](docs/engineering/ci-stab-2-qualification.md) is a separate qualification milestone, not yet accepted.
+
 ## Pull requests
 
 Explain the problem, behavior change and verification. Include a reproducible fixture for storage or plugin crashes. State which platforms were actually tested. Keep dependency updates separate from semantic changes where practical.

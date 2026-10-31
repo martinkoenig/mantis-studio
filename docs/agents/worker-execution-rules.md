@@ -39,3 +39,7 @@ validation, security, architecture, or publishing requirements are reduced.
   PTY communication bypasses. After an authorized push, make at most one
   nonblocking CI status check for the exact SHA, report pending truthfully and
   end the turn. Independent review checks final CI and authorizes acceptance.
+
+## Review-ready evidence, not self-acceptance
+
+For critical R1 work, provide a compact requirement/invariant-to-source/test map following [REVIEW-QA-1](../engineering/review-and-test-qualification.md), including explicit negative/exception/cleanup cases, verified local results, exact commit and limitations. Distinguish observed incident symptoms from verified production defects, invalid fixtures and unresolved hypotheses; repeated green runs do not prove causality. Preserve original error and separate secondary cleanup failures. Prefer retained logs with concise links over large repeatedly transmitted output. This is repository-linked worker guidance only; it does not activate additional AO configuration or permit independent acceptance by a worker.
