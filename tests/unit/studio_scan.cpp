@@ -13,6 +13,7 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QImage>
+#include <QKeyEvent>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickItem>
@@ -29,6 +30,7 @@
 #include <iostream>
 #include <mantis/data_io.hpp>
 #include <stdexcept>
+#include <source_location>
 
 namespace w = mantis::wire::v1;
 class Probe : public QObject {
@@ -1185,10 +1187,27 @@ void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
     auto *cloud = qobject_cast<mantis::render::PointCloudView *>(owner->cloud());
     auto *left = qobject_cast<MeasurementView *>(owner->left());
     auto *right = qobject_cast<MeasurementView *>(owner->right());
-    const auto await = [&](auto predicate, int deadline = 6000) {
-        check(QTest::qWaitFor(predicate, deadline), "Capture wire deadline");
+    int fixtureMode = 10;
+    QString intent;
+    const auto await = [&](auto predicate, int deadline = 6000,
+                           std::source_location where = std::source_location::current()) {
+        if (!QTest::qWaitFor(predicate, deadline))
+            throw std::runtime_error(
+                QString("Capture wire deadline: line=%1 mode=%2 intent=%3 connected=%4 busy=%5 "
+                        "captureKnown=%6 capturing=%7 previewCurrent=%8 error=%9")
+                    .arg(where.line())
+                    .arg(fixtureMode)
+                    .arg(intent)
+                    .arg(b.connected())
+                    .arg(b.busy())
+                    .arg(b.captureStateKnown())
+                    .arg(b.capturing())
+                    .arg(b.previewCurrent())
+                    .arg(b.error())
+                    .toStdString());
     };
     const auto captureClick = [&](const QString &name, bool keyboard = false) {
+        intent = name;
         // Begin input just after an actual periodic snapshot completes. Otherwise its
         // busy lease can correctly disable/cancel a button between key press/release.
         // Send one intent only; preserve the authoritative post-click assertions.
@@ -1200,12 +1219,30 @@ void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
         auto *button = item(w, name);
         button->forceActiveFocus(Qt::TabFocusReason);
         check(w->activeFocusItem() == button, "Capture control did not acquire input focus");
-        if (keyboard)
-            QTest::keyClick(w, Qt::Key_Space);
-        else
-            QTest::mouseClick(
-                w, Qt::LeftButton, Qt::NoModifier,
-                button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
+        QSignalSpy clicks(button, SIGNAL(clicked()));
+        // Deterministically put a normal periodic refresh at the next event-loop
+        // turn. A test gesture must not yield between its press and release.
+        QTimer::singleShot(0, &b, &StudioBridge::refresh);
+        // QTest's key helper calls processEvents after each edge. Deliver this
+        // one ready gesture synchronously through Qt's normal window input path;
+        // the queued refresh must run after admission, not cancel a held button.
+        if (keyboard) {
+            QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, " ");
+            QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, " ");
+            QCoreApplication::sendEvent(w, &press);
+            QCoreApplication::sendEvent(w, &release);
+        } else {
+            const auto position = button->mapToScene(QPointF(button->width() / 2, button->height() / 2));
+            // Unlike keyClick, mouseClick delivers both QPA edges before it
+            // processes events. Retain its platform-device/timestamp handling.
+            QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, position.toPoint());
+        }
+        if (clicks.size() != 1)
+            throw std::runtime_error(QString("Capture gesture cancelled: mode=%1 intent=%2 busy=%3")
+                                         .arg(fixtureMode)
+                                         .arg(name)
+                                         .arg(b.busy())
+                                         .toStdString());
     };
     const auto refresh = [&] {
         await([&] { return !b.busy(); });
@@ -1213,6 +1250,8 @@ void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
         await([&] { return !b.busy(); });
     };
     const auto control = [&](int mode) {
+        fixtureMode = mode;
+        intent.clear();
         w::Request req;
         req.mutable_events()->set_after(mode);
         (void)client.call(req);
@@ -1269,6 +1308,12 @@ void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
         b.stopCapture();
     }
     r->setProperty("activeSource", "mock");
+    w->setProperty("workspace", "acquisition");
+    QCoreApplication::processEvents();
+    check(b.busy() && !b.capturing(), "Start completion escaped the fixture release gate");
+    w::Request releaseStart;
+    releaseStart.mutable_events()->set_after(91);
+    (void)client.call(releaseStart);
     for (int i = 0; i < 100; ++i) {
         w->setProperty("workspace", i % 2 ? "scan" : "acquisition");
         QCoreApplication::processEvents();
