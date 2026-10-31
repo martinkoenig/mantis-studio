@@ -7,9 +7,10 @@ import subprocess
 import tempfile
 import shutil
 import json
+import io
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "integration"))
-from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, initial_capture, require_capture, retain_failure
+from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, emit_failure, initial_capture, require_capture, retain_failure
 
 
 def capture(**changes):
@@ -22,6 +23,55 @@ def snapshot(*captures):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_exported_evidence_survives_all_runner_files_being_removed(self):
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            (evidence / "daemon.log").write_text("disk failure; token=fixture-secret\n")
+            (evidence / "studio.log").write_text("Studio ready\n")
+            (evidence / "capture-state.json").write_text(json.dumps({
+                "observations": [capture_evidence(snapshot(capture(error="disk failure")))],
+            }))
+            emit_failure(evidence, output, secret="fixture-secret")
+        self.assertFalse(evidence.exists())
+        records = [json.loads(line.removeprefix("ACCEPTANCE_FAILURE_EVIDENCE "))
+                   for line in output.getvalue().splitlines()]
+        self.assertNotIn("fixture-secret", output.getvalue())
+        self.assertIn("disk failure; token=[REDACTED]", records[0]["tail"])
+        self.assertEqual(records[1]["tail"], "Studio ready\n")
+        self.assertEqual(json.loads(records[2]["tail"])["observations"][0][0]["id"], "original")
+
+    def test_output_is_bounded_escaped_and_redacts_a_token_crossing_tail_boundary(self):
+        output = io.StringIO()
+        token = "fixture-secret"
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            suffix = b"\n::error::untrusted\x1b[31m\xff" + b"z" * 20
+            payload = b"x" * 20000 + token.encode() + suffix
+            (evidence / "daemon.log").write_bytes(payload)
+            limit = len(suffix) + 4  # Cut through the token, not at its beginning.
+            emit_failure(evidence, output, secret=token, limit=limit)
+        lines = output.getvalue().splitlines()
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(all(line.startswith("ACCEPTANCE_FAILURE_EVIDENCE ") for line in lines))
+        self.assertTrue(all(len(line) < 1000 for line in lines))
+        record = json.loads(lines[0].removeprefix("ACCEPTANCE_FAILURE_EVIDENCE "))
+        self.assertEqual(record["size_bytes"], len(payload))
+        self.assertEqual(record["omitted_prefix_bytes"], 20000)
+        self.assertEqual(record["tail"], "[REDACTED]" + suffix.decode(errors="backslashreplace"))
+        self.assertNotIn(token, output.getvalue())
+        self.assertNotIn("\x1b", output.getvalue())
+
+    def test_missing_optional_log_is_explicit_and_invalid_bound_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = io.StringIO()
+            emit_failure(Path(directory), output)
+            for line in output.getvalue().splitlines():
+                self.assertEqual(json.loads(line.removeprefix("ACCEPTANCE_FAILURE_EVIDENCE "))["read_error"],
+                                 "FileNotFoundError")
+            with self.assertRaises(ValueError):
+                emit_failure(Path(directory), output, limit=0)
+
     def test_readiness_failure_before_return_does_not_orphan_child(self):
         state = dict(alive=True, reaped=False)
         process = State(poll=lambda: None if state["alive"] else -9,

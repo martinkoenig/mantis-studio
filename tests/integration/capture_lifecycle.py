@@ -43,6 +43,44 @@ def retain_failure(root, evidence, observations, daemon_exits, studio_exits):
     }, indent=2) + "\n")
 
 
+def emit_failure(evidence, stream, *, secret="", limit=4096):
+    """Export bounded log/state tails to CI output without exposing the fixture token.
+
+    Each record is one escaped JSON line, so log control characters and runner
+    commands cannot become output directives. Full files remain available locally.
+    """
+    if limit <= 0:
+        raise ValueError("Evidence output limit must be positive")
+    token = secret.encode("utf-8")
+    for name in ("daemon.log", "studio.log", "capture-state.json"):
+        record = {"file": name}
+        try:
+            with (evidence / name).open("rb") as source:
+                size = source.seek(0, 2)
+                start = max(0, size - limit)
+                # Include overlap so a token crossing the tail boundary can be
+                # redacted in full rather than leaking its suffix.
+                read_start = max(0, start - max(0, len(token) - 1))
+                source.seek(read_start)
+                data = source.read(size - read_start)
+            cut = start - read_start
+            if token:
+                position = data.find(token)
+                while position != -1 and position < cut:
+                    if position + len(token) > cut:
+                        cut = position
+                        break
+                    position = data.find(token, position + 1)
+            tail = data[cut:]
+            if token:
+                tail = tail.replace(token, b"[REDACTED]")
+            record.update(size_bytes=size, omitted_prefix_bytes=read_start + cut,
+                          tail=tail.decode("utf-8", errors="backslashreplace"))
+        except OSError as error:
+            record["read_error"] = type(error).__name__
+        print("ACCEPTANCE_FAILURE_EVIDENCE " + json.dumps(record), file=stream, flush=True)
+
+
 def capture_evidence(snapshot):
     # Explicit allowlist: never serialize requests, credentials or environment.
     fields = ("id", "raw_artifact", "active", "frames", "error", "produced",

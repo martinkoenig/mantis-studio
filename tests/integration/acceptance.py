@@ -13,7 +13,7 @@ build = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(build / "python"))
 import mantis
 from mantis import mantis_pb2 as wire
-from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, initial_capture, require_capture, retain_failure
+from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, emit_failure, initial_capture, require_capture, retain_failure
 
 with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
     root = Path(directory)
@@ -104,6 +104,8 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         else:
             capture = client.capture.start(devices[0])
             active = require_capture(observe(), capture, "headless capture started")
+        if "--fail-for-diagnostics" in sys.argv:
+            raise AssertionError("Injected acceptance diagnostics export failure")
         crash = client.pipeline.run(capture=active.id, recipe="crash-test")
         try:
             crash.wait()
@@ -154,6 +156,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
             retain_failure(root, evidence, observations, [process.poll() for process in daemons],
                            [process.poll() for process in studios])
             print(f"Acceptance failure evidence: {evidence}", file=sys.stderr)
+            emit_failure(evidence, sys.stderr, secret=env["MANTIS_TOKEN"])
         except OSError as evidence_error:
             print(f"Acceptance evidence could not be retained: {evidence_error}", file=sys.stderr)
         raise
