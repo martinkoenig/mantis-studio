@@ -7,11 +7,45 @@
 ## Observed repository facts (2026-10-31; configuration must be rechecked)
 
 - GitHub default branch is **`main`**, while active implementation and architecture CI normally use **`develop`**. `main` is protected; `develop` was not reported protected by the repository branch API at inspection.
-- The `develop` tree has `architecture` and `agent-efficiency` workflows; its `architecture` workflow handles PRs and pushes to `develop`, `main`, `integration/**`. Neither `.github/dependabot.yml` nor `.github/dependabot.yaml` existed on `develop` during inspection.
+- The `develop` tree has `architecture` and `agent-efficiency` workflows; its `architecture` workflow handles PRs and pushes to `develop`, `main`, `integration/**`. Neither `.github/dependabot.yml` nor `.github/dependabot.yaml` existed on **either `main` or `develop`** at subsequent direct content checks.
 - GitHub's default-branch Dependabot dependency graph/alerts and security-update PRs do **not** automatically certify the newer `develop` dependency set. `target-branch: develop` is supported for **version-update** PRs, **not security-update** PRs. Default-branch and protected-branch CodeQL configurations require independent inspection. Do **not** change the default branch merely to suppress this mismatch.
-- The user's newly enabled Dependabot, secret-scanning, CodeQL, push-protection and other security settings/alerts could not be independently enumerated through the available integration. Their **effective enablement, findings, available permissions and successful scan coverage remain unverified**. GitHub CodeQL default setup may live outside a committed workflow file.
+- GitHub Settings > Advanced Security screenshots supplied on 2026-10-31 **visually confirm enabled UI toggles**, but are not equivalent to successful completed scans or enumerated alerts. The available connector cannot retrieve the effective private security configuration, alerts or per-language CodeQL success. GitHub CodeQL default setup can exist without a committed workflow file. Neither the screenshots nor the repository API show successful scanning coverage of current `develop` source.
 
 References: [Dependabot alerts](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-alerts), [Dependabot target branch restriction](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference), [CodeQL setup types](https://docs.github.com/en/code-security/concepts/code-scanning/setup-types), [GitHub webhook events](https://docs.github.com/en/webhooks/webhook-events-and-payloads), [AO lifecycle events](https://docs.orchestrator.inc/configuration/lifecycle-automation/), [AO project configuration](https://docs.orchestrator.inc/configuration/projects/).
+
+## Screenshot-confirmed UI configuration (2026-10-31; not a scan-success claim)
+
+The user supplied screenshots of GitHub **Settings > Advanced Security**, showing:
+
+| Setting in UI | Observed state | Verification consequence |
+| --- | --- | --- |
+| Private vulnerability reporting | Enabled (visible `Disable` control at cropped top) | Responsible disclosure entry point; does not by itself guarantee timely review. |
+| Dependency graph / Dependabot alerts / malware alerts | ON / ON / ON | Detection features selected, **actual dependency inventory and findings not enumerated**. |
+| Automatic dependency submission | Disabled | Assess supported manifests and additional C/C++ system/CMake dependencies before enabling or declaring complete SBOM coverage. |
+| Dependabot auto-triage | 1 rule enabled | **Rule content unknown**; inspect for suppressive dismissals before trusting an empty alert list. |
+| Dependabot security updates | ON | Can create patch PRs for supported vulnerable dependencies on default `main`; it does not automatically update newer `develop` sources. |
+| Grouped security updates | OFF | Separate security updates currently selected. |
+| Dependabot version updates | `Create dependabot.yml` shown | No version-update schedule configured; repository content checks confirm no config on `main` or `develop`. Security updates can still be enabled through settings. |
+| CodeQL analysis | Default setup, last scan listed ~8 hours earlier | **Red configuration error:** `Code scanning configuration error`; **yellow warning:** `The default setup for CodeQL failed to enable JavaScript`. Successful JavaScript coverage is **not** established. This does not prove other languages failed or succeeded. Investigate tool-status per-language reports. |
+| AI Scan for repositories | ON | Screenshot explicitly says **default branch only**, i.e. `main`, not independent proof of current `develop` coverage. |
+| AI Scan for pull requests | ON | Supplemental AI findings for non-CodeQL languages; actual PR runs/coverage unverified. |
+| Scan for AI applications | OFF | No AI application-specific scan selected. |
+| Copilot Autofix | ON | Fix suggestions enabled; **not** approval, automatic merge or correct-patch guarantee. |
+| Agentic autofix | OFF | No autonomous agentic-fix policy selected. |
+| Code scanning protection rule UI | High or higher security level; standard alerts: only errors | These are **displayed thresholds**, not proof that an enforcing branch ruleset exists or applies to `develop`. |
+| Secret Protection / Push protection | ON / ON | Secret detection and push blocking selected; effectiveness and bypass/alert history need authorized verification. |
+
+### Immediate remediation: CodeQL setup failure before AO event automation
+
+**SEC-CODEQL-01 (HIGH, configuration/coverage):** Open GitHub **Security > Code scanning > Tool status** and inspect the error for the default-setup JavaScript/TypeScript configuration, per-language successful/failed timestamps, percent of files scanned, actual `main` scans and whether C/C++ and Python are enabled. Follow the specific error; do not blindly switch to advanced setup, omit JavaScript solely to turn the UI green, or infer that `Last scan` means PASS. A documented `N/A` for a language is valid only if the current intended branch has no relevant production/test source in it. Re-run and verify affected analysis, preserving error details. GitHub's tool-status view reports **default-branch** tool health, not a guarantee of `develop` coverage.
+
+**SEC-BRANCH-01 (HIGH, coverage policy):** Because `main` is default and protected while `develop` is the active integration branch, verify a reliable **CodeQL C/C++ and Python analysis path on `develop` and PRs targeting it**. The documented default setup runs on default/protected branches and PRs targeting them; `develop` may require a separately approved branch ruleset/protection or explicit advanced workflow. Review actual settings and avoid unreviewed branch-protection changes. In addition, evaluate version-update automation and distinct security-alert coverage for dependencies introduced on `develop`; changing `target-branch` is not a security-update fix.
+
+**SEC-DEPS-01 (MEDIUM, inventory):** Verify which manifests and resolved dependency versions GitHub actually recognizes. The C++/Qt/OpenCV/SQLite/Protobuf/CMake/apt toolchain includes dependencies that are not necessarily representable in ordinary Dependabot ecosystems. Enable automatic submission only if a supported detector adds useful validated coverage; use an authenticated inventory/SBOM submission process otherwise, subject to separate permissions and reviewer approval.
+
+**SEC-RULES-01 (MEDIUM, enforcement):** Inspect the enabled Dependabot auto-triage rule and the actual ruleset binding Code Scanning merge-protection thresholds. A severity dropdown shown under Settings is not evidence of merge blocking. An empty alert list can mean **no completed scan, stale branch, unsupported manifest, auto-dismissal or genuine no findings**; distinguish these possibilities.
+
+Do not treat any of these observations as authorization to toggle GitHub settings, expose security alerts, open public vulnerability issues, start autonomous remediation or activate AO hooks.
 
 ## Event classes and intended handling
 
