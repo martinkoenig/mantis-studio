@@ -47,6 +47,16 @@ The user supplied screenshots of GitHub **Settings > Advanced Security**, showin
 
 Do not treat any of these observations as authorization to toggle GitHub settings, expose security alerts, open public vulnerability issues, start autonomous remediation or activate AO hooks.
 
+### CodeQL tool-status follow-up (user screenshots, 2026-10-31)
+
+The subsequent GitHub `Security and quality > Code scanning > Tool status > CodeQL` screenshot shows the following **successful** default-branch language configurations: **C 18/18 files, C++ 247/248 (UI rounded to 100%), Python 46/46, and GitHub Actions 1/1**. These file counts/green indicators describe **`main` at `d2614b96`**, not a completed analysis of the newer `develop` branch. File coverage is not proof of vulnerability detection, effective C++ dataflow/build configuration, or 100% security assurance.
+
+**JavaScript/TypeScript is the sole shown failed configuration**, reporting `CodeQL exited with errors`, `No JavaScript/TypeScript code found`, `No code scanning results` and `Could not process some files due to syntax errors: Unexpected token`. Live Git-tree checks at `d2614b96304ff5fd45db8f09076da058afb9230d` (`main`) and `c068462d35fd20a1d882084ffd86056ee23c18a7` (`develop`) found exactly **one** `.js` file on each branch: `ui/projects/ProjectsTags.js`. Its first line, `.pragma library`, is a Qt/QML JavaScript directive, not ordinary ECMAScript syntax. It is a **plausible** origin of `Unexpected token`, but the screenshot does not identify the rejected file; do not state the parser diagnosis as proven.
+
+The user then displayed CodeQL default configuration with **JavaScript/TypeScript unchecked**, while GitHub Actions, C/C++ and Python remained checked; **`Save changes` was still visible**, so saving and a subsequent successful scan were **not yet verified**. For the current QML-only JavaScript footprint, deliberately disabling unsupported/unhelpful JS/TS CodeQL analysis is reasonable **if documented**; it must be revisited when conventional JS/TS code is introduced. Do not alter the QML source merely to appease a generic JS parser. After saving, confirm a new successful scan for the three selected language groups, no continuing active-configuration error, and actual `develop`/PR coverage separately. Inspect the CodeQL failed-run file link if the language is retained instead.
+
+Do not reinterpret **SEC-CODEQL-01** as a failure of C/C++ or Python: those language analyses show successful statuses for the inspected default-branch revision. The remaining priority is making the coverage and protection of `develop` evidence-based. Note that the CodeQL C++ default setup may use build mode `none`; successful file scanning alone is insufficient to establish the depth of interprocedural analysis for Qt/CMake-specific paths.
+
 ## Event classes and intended handling
 
 | GitHub signal | Routing / priority | Approval boundary |
