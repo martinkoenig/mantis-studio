@@ -55,6 +55,68 @@ ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
 
 The crash fixture deliberately aborts. It is successful only when the parent detects the failure and the other processes remain operational. Do not remove the fixture to make an error log appear clean.
 
+## Architecture CI compiler cache and events
+
+Architecture runs the full five configurations for every `pull_request` target,
+direct pushes to `develop`, `main` and `integration/**`, and manual dispatches.
+Ordinary feature pushes deliberately do not start Architecture, with or without
+an open PR: open a PR for required remote acceptance. Default PR checkout still
+tests GitHub's merge result. Job names, serial CTest, sanitizer options, native
+ARM64, UI repeats, diagnostics and artifact collection are unchanged. The separate
+agent-efficiency workflow retains its existing path/event policy.
+
+All five jobs install Noble's `ccache` package and configure both CMake compiler
+launchers. Only the ccache directory is restored; each checkout still configures,
+builds and tests. Cache misses compile normally. Neither a hit nor cache statistics
+can skip validation or turn a compiler/build/test failure into success.
+
+Keys have the form
+`ccache-v1-Linux-{X64|ARM64}-studio-{ON|OFF}-sanitize-{ON|OFF}-{ISO-year}-W{week}`.
+Restore falls back only within that exact schema/OS/architecture/Studio/sanitizer
+prefix. The key isolates configurations; ccache additionally validates compiler
+**contents**, source/includes and options. Working-directory hashing stays enabled
+for debug information; no path remapping or sloppiness is enabled. The isolated
+configuration lives outside the restored directory, with no remote ccache backend.
+Unexpected pre-existing ccache environment overrides fail preparation. Restored
+files remain untrusted: ccache checks detect accidental corruption, not malicious
+forgery, so cache keys are not an authenticity boundary.
+
+PRs, integration pushes and dispatches restore only. Only successful `push` runs
+on `develop`/`main` may save, after all validation, and only when the current weekly
+key is absent. Before saving, cleanup enforces the approximately **384 MiB** local
+limit. This starts conservatively at about 1.875 GiB for five configurations per
+trusted branch per weekly generation before archive compression. The first
+successful run creates an immutable snapshot for that week; corrections do not
+publish per-commit snapshots. A new UTC ISO week permits refresh from the latest
+compatible snapshot. This bounds publication to at most ten entries/week across
+the two trusted branches, not a separate hard repository storage quota. GitHub's
+unused-cache eviction and repository quota apply; no cache-deletion API or quota
+configuration is added. A 384 MiB cache may evict entries from a large build;
+measure hosted hit rates before adjusting it.
+
+GitHub's branch scope governs restoration: PRs can read their base/default branch
+caches, including permitted fork-PR access; sibling/child scopes are not bypassed.
+This workflow never saves PR snapshots, never uses `pull_request_target`, and
+requires no extra repository permissions. No credentials, environment dumps,
+build directories, executables or test results belong in the cache path.
+
+Each job logs the ccache version and effective correctness settings, resets
+restored statistics, and summarizes current hits/misses, cacheable/uncacheable
+calls, size, build seconds and restore/save outcomes even after validation fails.
+Build timing excludes restore/save, dependencies and tests; their Actions step
+durations must be included in any hosted end-to-end comparison. An empty-cache
+run and a warm local compiler probe are not evidence of a hosted CI speedup.
+
+The first-party restore/save actions are pinned to the verified v6.1.0 commit
+(Node 24, cache-service v2; hosted runners supply the required runtime).
+References: [action release](https://github.com/actions/cache/releases/tag/v6.1.0),
+[cache scope/immutability/eviction](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching),
+[ccache 4.9 correctness/configuration](https://ccache.dev/manual/4.9.html),
+[Noble ARM64 package](https://packages.ubuntu.com/noble/arm64/ccache).
+Run the focused helper/event regressions with ccache, GCC/G++, and `python3-yaml`
+installed: `python3 -B tests/ci/compiler_cache_test.py`. They supplement the full
+project tests; they do not replace them.
+
 ## Running
 
 ```bash
