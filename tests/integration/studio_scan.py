@@ -8,13 +8,16 @@ import struct
 import subprocess
 import sys
 import threading
+import uuid
 
 build = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(build / 'python'))
 from mantis import mantis_pb2 as w
 
-capture_test = '--capture' in sys.argv
-out = build / ('ui-m3c/wire' if capture_test else 'ui-m3b/wire')
+start_order_probe = '--start-order-probe' in sys.argv
+capture_test = '--capture' in sys.argv or start_order_probe
+out = build / ('ui-m3c/start-order' if start_order_probe else
+               'ui-m3c/wire' if capture_test else 'ui-m3b/wire')
 out.mkdir(parents=True, exist_ok=True)
 listener = socket.socket()
 listener.bind(('127.0.0.1', 0))
@@ -29,7 +32,9 @@ offline = False
 operations = []
 held_threads = []
 start_release = threading.Event()
-if capture_test:
+start_received = threading.Event()
+start_release_requested = False
+if capture_test and not start_order_probe:
     subprocess.run([str(build / "bin/mantis-studio-scan-tests"), str(out), "fixtures"], check=True)
 
 
@@ -44,7 +49,7 @@ def receive(sock, n):
 
 
 def serve():
-    global mode, active, offline
+    global mode, active, offline, start_release_requested
     try:
         while not stop.is_set():
             try:
@@ -67,12 +72,20 @@ def serve():
                             for name, count in collections.Counter(requests).items():
                                 response.events.add(kind=name, sequence=count)
                         elif req.events.after == 91:
-                            assert mode == 20 and not start_release.is_set()
-                            active = True
-                            start_release.set()
+                            assert mode == 20 and not start_release_requested
+                            # The GUI lease precedes QtConcurrent's socket send.
+                            # Latch an early release, but receipt grants activation.
+                            start_release_requested = True
+                            if start_received.is_set():
+                                active = True
+                                start_release.set()
                         else:
                             mode = req.events.after
                             assert 10 <= mode <= 31
+                            if mode == 20:
+                                start_received.clear()
+                                start_release.clear()
+                                start_release_requested = False
                             offline = mode == 25
                             active = mode in (11, 21, 22, 28, 31)
                     else:
@@ -127,6 +140,10 @@ def serve():
                             worker.start()
                             continue
                         if mode == 20:
+                            start_received.set()
+                            if start_release_requested:
+                                active = True
+                                start_release.set()
                             response.result_id = 'wire-capture'
                             payload = response.SerializeToString()
                             held = conn.dup()
@@ -191,11 +208,82 @@ def serve():
         failures.append(repr(error))
 
 
+def run_start_order_probe():
+    """Exercise real wire ordering with a sender held before its socket write.
+
+    This models a QtConcurrent Start task delayed after the GUI acquired busy;
+    no sleeps or GUI-thread busy/snapshot assumptions establish receipt.
+    """
+    def call(kind, after=0):
+        req = w.Request(protocol_version=1, request_id=uuid.uuid4().hex, token=token)
+        if kind == 'events':
+            req.events.after = after
+        elif kind == 'capture_start':
+            req.capture_start.devices.append('stereo-parent')
+        else:
+            assert kind == 'snapshot'
+            req.snapshot.SetInParent()
+        payload = req.SerializeToString()
+        with socket.create_connection(listener.getsockname(), timeout=5) as conn:
+            conn.sendall(struct.pack('!I', len(payload)) + payload)
+            size, = struct.unpack('!I', receive(conn, 4))
+            response = w.Response.FromString(receive(conn, size))
+        assert response.request_id == req.request_id and not response.HasField('error')
+        return response
+
+    for order in ('release-first', 'receipt-first'):
+        call('events', 20)
+        entered, resume, done = threading.Event(), threading.Event(), threading.Event()
+        responses, errors = [], []
+        def delayed_start():
+            try:
+                entered.set()
+                assert resume.wait(5), 'Start sender was not resumed'
+                responses.append(call('capture_start'))
+            except BaseException as error:
+                errors.append(repr(error))
+            finally:
+                done.set()
+        sender = threading.Thread(target=delayed_start)
+        sender.start()
+        try:
+            assert entered.wait(5), 'Start sender did not enter its gate'
+            if order == 'release-first':
+                assert not start_received.is_set()
+                call('events', 91)
+                assert not start_received.is_set(), 'Delayed sender unexpectedly sent Start'
+                assert not any(c.active for c in call('snapshot').captures), 'Release activated capture before Start receipt'
+                resume.set()
+            else:
+                resume.set()
+                assert start_received.wait(5), 'Fixture did not receive Start'
+                assert not any(c.active for c in call('snapshot').captures), 'Receipt activated capture before release'
+                assert not done.is_set(), 'Held Start completed before release'
+                call('events', 91)
+            assert done.wait(5), 'Start completion missing after receipt and release'
+            assert not errors, errors
+            assert len(responses) == 1 and responses[0].result_id == 'wire-capture'
+            captures = [c for c in call('snapshot').captures if c.active]
+            assert len(captures) == 1 and captures[0].id == 'wire-capture'
+        finally:
+            resume.set()
+            start_release.set()
+            sender.join(timeout=6)
+            assert not sender.is_alive(), 'Start sender did not stop'
+        for held in held_threads:
+            held.join(timeout=5)
+            assert not held.is_alive(), 'Start response worker did not stop'
+        assert not failures, failures
+        print(f'PASS: {order}, activation/completion require both validated receipt and release')
+    assert operations == [{'mode': 20, 'command': 'capture_start'}] * 2, operations
+    assert requests.count('capture_start') == 2 and requests.count('capture_stop') == 0
+
+
 thread = threading.Thread(target=serve)
 thread.start()
 env = dict(os.environ, MANTIS_PORT=str(listener.getsockname()[1]), MANTIS_TOKEN=token,
            QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software')
-try:
+def run_qt():
     proc = subprocess.run([str(build / 'bin/mantis-studio-scan-tests'), str(out), 'capture-wire' if capture_test else 'wire'],
                           env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=75 if capture_test else 35)
     (out / 'fixture.log').write_text(proc.stdout)
@@ -222,6 +310,11 @@ try:
         assert 4 <= counts.get('snapshot', 0) < 35, counts
         assert counts.get('preview', 0) > 0, counts
         print('PASS: unchanged bridge snapshot/preview polling; zero Scan capture, stop, replay, pipeline, artifact_data, plugin or project writes', counts)
+try:
+    if start_order_probe:
+        run_start_order_probe()
+    else:
+        run_qt()
 finally:
     stop.set()
     start_release.set()
