@@ -126,6 +126,40 @@ struct BlockedRead : memory::Fence {
         changed.notify_all();
     }
 };
+void camera_fixture_test(const plugins::Loaded &plugin) {
+    const auto *api = plugin.query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1);
+    CHECK(api);
+    void *instance{};
+    CHECK(api->open(plugins::host_api(), "parent-alpha", &instance) == 0);
+    struct Lifetime {
+        const MantisAcquisitionV1 *api;
+        void *instance;
+        ~Lifetime() {
+            api->stop(instance);
+            api->destroy(instance);
+        }
+    } lifetime{api, instance};
+    // Ownership tests need one durable startup frame, not a storage-throughput
+    // workload. Repeated nonblocking reads must not manufacture more frames.
+    for (unsigned restart = 0; restart < 2; ++restart) {
+        unsigned emitted{};
+        auto emit = [](void *context, const MantisFrameSetV1 *) {
+            ++*static_cast<unsigned *>(context);
+            return 0;
+        };
+        CHECK(api->start(instance) == 0);
+        CHECK(api->next(instance, 0, emit, &emitted) == 0);
+        CHECK(emitted == 1);
+        for (unsigned call = 0; call < 64; ++call)
+            CHECK(api->next(instance, 0, emit, &emitted) == 2);
+        CHECK(emitted == 1);
+        CHECK(api->next(instance, MANTIS_MAX_TIMEOUT_MS + 1, emit, &emitted) != 0);
+        CHECK(emitted == 1);
+        CHECK(api->stop(instance) == 0);
+        CHECK(api->next(instance, 0, emit, &emitted) != 0);
+        CHECK(emitted == 1);
+    }
+}
 void header_probe(void *context) {
     auto &probe = *static_cast<Probe *>(context);
     auto artifacts = probe.runtime->artifacts();
@@ -422,7 +456,9 @@ void tests(services::Runtime &runtime, const TestProjectedControl &control,
     q.set_request_id("camera-busy");
     dispatch(runtime, q, Status::busy);
     CHECK(control.opens() == opened);
-    runtime.stop_capture(camera.id);
+    auto camera_stopped = runtime.stop_capture(camera.id);
+    CHECK(camera_stopped.produced == 1 && camera_stopped.committed == 1);
+    CHECK(camera_stopped.queue_saturation == 0 && camera_stopped.error.empty());
     control.fault(TEST_SERVICE_ABORT_STATES);
     auto stopped = start(runtime, "stop");
     q.Clear();
@@ -512,6 +548,9 @@ int main(int argc, char **argv) {
         auto *control =
             static_cast<const TestProjectedControl *>(plugin.api()->query_interface(TEST_PROJECTED_CONTROL));
         CHECK(control);
+        control->fault(TEST_NORMAL);
+        camera_fixture_test(plugin);
+        CHECK(control->live_instances() == 0);
         auto root = std::filesystem::path(argv[3]) / ("projected-control-" + Id::random().value);
         {
             std::atomic<int64_t> lease_time{};

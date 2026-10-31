@@ -52,3 +52,11 @@ Keep the final report concise and factual:
 4. Any deviations from the assignment and their rationale.
 
 A successful agent exit is **not** independent acceptance. The planning/review chat performs the final external code review; provide enough evidence for it to decide ACCEPT, CHANGES REQUIRED or BLOCKED.
+
+## Implementation worker execution
+
+For implementation worker assignments, read and follow the
+[worker execution supplement](docs/agents/worker-execution-rules.md).
+This adopts its execution guidance through repository instructions; its AO
+project-configuration proposal remains unactivated. Orchestrators and
+independent reviewers retain their assigned roles.

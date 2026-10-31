@@ -1044,6 +1044,8 @@ void camera_destroy(void *p) {
 }
 int camera_start(void *p) {
     auto &s = *static_cast<Instance *>(p);
+    s.publication = 0;
+    s.inhibited = false;
     s.started = true;
     return 0;
 }
@@ -1058,7 +1060,14 @@ int camera_next(void *p, uint32_t t, MantisFrameSetEmitV1 emit, void *ctx) {
         auto &s = *static_cast<Instance *>(p);
         if (!s.started)
             return;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        // Camera-only tests exercise ownership exclusion, not storage throughput.
+        // One startup frame keeps their load independent of fsync/sanitizer speed.
+        if (s.publication) {
+            std::unique_lock lock(s.mutex);
+            s.wake.wait_for(lock, std::chrono::milliseconds(t), [&] { return s.inhibited; });
+            rc = 2; // Acquisition ABI: no frame ready within the requested timeout.
+            return;
+        }
         mantis::sdk::Buffer buffer(s.host, 4);
         std::fill(buffer.writable().begin(), buffer.writable().end(), std::byte{5});
         buffer.publish();
