@@ -210,20 +210,25 @@ int main(int argc, char **argv) {
                     device::CaptureDescriptor{Id::random(), {devices[0]->descriptor().id}, {}},
                     std::vector<device::ImageStream *>{devices[0].get()},
                     [&](data::Published packet) {
-                        // Exercise a bounded durable-writer stall without turning
-                        // this pairing/replay fixture into a CPU-speed load test.
-                        if (live.empty())
-                            std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                        // This is the supported paced capture/exact replay path.
+                        // A fixed 150ms sleep plus unbounded host/storage latency
+                        // never guaranteed first-commit success within 32 slots.
+                        // QoS gates separately prove first-commit block/recovery
+                        // and explicit prolonged-block saturation/accounting.
                         store->append(id, *packet);
                         live.push_back(packet);
                         if (valid && live.size() == 96 && !signalled.exchange(true))
                             ready.set_value();
                     },
-                    [&](const LogRecord &) {
+                    [&](const LogRecord &record) {
+                        if (record.component == "capture.diagnostics")
+                            std::cerr << record.component << ": " << record.message << '\n';
                         if (!valid && !signalled.exchange(true))
                             ready.set_value();
                     });
             } catch (const Failure &) {
+                std::cerr << "capture.storage.diagnostics: "
+                          << nlohmann::json(store->raw_append_diagnostics(id)).dump() << '\n';
                 // Accelerated invalid fixtures may fail before the first writer
                 // commit. Construction then stops/drains without returning a
                 // handle; check the same exact failure from retained diagnostics.
@@ -234,6 +239,15 @@ int main(int argc, char **argv) {
                 diagnostic_phase = "recorder progress/stop";
                 auto readiness = reached.wait_for(std::chrono::seconds(3));
                 session->stop();
+                std::cout << "recorder evidence: "
+                          << nlohmann::json({{"format", format},
+                                             {"scenario", name},
+                                             {"fixture_delivery_pacing", "1"},
+                                             {"target_fps", 120},
+                                             {"session", session->diagnostics()},
+                                             {"storage", store->raw_append_diagnostics(id)}})
+                                 .dump()
+                          << '\n';
                 if (valid && !session->error().empty())
                     throw std::runtime_error(session->error());
                 CHECK(readiness == std::future_status::ready);

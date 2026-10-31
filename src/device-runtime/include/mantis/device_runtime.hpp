@@ -24,11 +24,35 @@ class Session {
     mutable std::mutex mutex_;
     data::Published first_;
     std::string error_;
+    std::string secondary_error_; // At most one 512-byte secondary failure.
     std::condition_variable first_ready_;
     std::jthread writer_, producer_;
     std::function<void(data::Published)> record_;
     LogSink logger_;
     std::atomic_bool active_{true};
+    // Fixed fields, protected by mutex_. Nanoseconds are relative to started_;
+    // -1 means unavailable. Existing producer/commit critical sections update
+    // them; serialization is only on snapshot/failure paths. "Commit" retains
+    // its callback-success meaning, not segment fsync/power-loss durability.
+    struct Timing {
+        int64_t writer_started{-1}, producer_started{-1}, first_acquired{-1}, last_acquired{-1};
+        int64_t first_callback{-1}, first_commit{-1}, first_append{-1}, max_append{};
+        int64_t first_error{-1}, secondary_error{-1};
+        int64_t cleanup_started{-1}, cleanup_finished{-1};
+        uint64_t diagnostic_errors{}, cleanup_errors{};
+        bool secondary_error_truncated{};
+        bool writer_running{}, producer_running{};
+        int source_paced{-1};
+    } timing_;
+    size_t attempted_streams_{};
+    bool failure_reported_{};
+    int64_t elapsed_ns() const;
+    struct WorkerMark;
+    void source_diagnostics(ImageStream &, bool acquired = false) noexcept;
+    void failed(const char *);
+    bool latch_error(std::string_view); // Caller holds mutex_.
+    void report_failure(bool final) noexcept;
+    data::Metadata snapshot(bool include_source) const;
 
   public:
     Session(CaptureDescriptor, std::vector<ImageStream *>, std::function<void(data::Published)>, LogSink);

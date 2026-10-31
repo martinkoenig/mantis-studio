@@ -125,6 +125,27 @@ struct Store::Impl {
         }
         ObservationReservation(const ObservationReservation &) = delete;
     };
+    struct RawTrace {
+        std::array<int64_t, 6> stages{-1, -1, -1, -1, -1, -1};
+        int64_t total{-1};
+        int stage{-1};
+        bool complete{};
+    };
+    struct RawStage {
+        RawTrace *trace;
+        size_t stage;
+        int64_t began;
+        RawStage(RawTrace *value, size_t index)
+            : trace(value), stage(index), began(value ? time::MonotonicTimestamp::now().nanoseconds : 0) {
+            if (trace)
+                trace->stage = static_cast<int>(index);
+        }
+        ~RawStage() {
+            if (trace)
+                trace->stages[stage] = time::MonotonicTimestamp::now().nanoseconds - began;
+        }
+    };
+    std::optional<std::pair<Id, RawTrace>> failed_raw_initialization;
     struct Writer {
         CaptureOutput output;
         std::filesystem::path part;
@@ -132,6 +153,7 @@ struct Store::Impl {
         std::optional<uint64_t> last_sequence;
         std::unique_ptr<BundleState> bundles;
         bool outcome_published{};
+        RawTrace first_append;
     };
     std::map<Id, std::unique_ptr<Writer>> writers;
     void seal(const Id &id, Writer &writer) {
@@ -160,51 +182,115 @@ struct Store::Impl {
         writer.records = 0;
     }
     void append_raw(const Id &id, const data::Packet &packet) {
-        if (packet.type != schema::frameset) fail(Status::incompatible, "RawCapture v2 requires FrameSet");
+        if (packet.type != schema::frameset)
+            fail(Status::incompatible, "RawCapture v2 requires FrameSet");
         auto found = writers.find(id);
-        if (found == writers.end()) {
-            auto artifact = get(id);
-            if (artifact.state != ArtifactState::open) fail(Status::invalid_argument, "Only OPEN captures accept records");
-            // Capture-level observed clocks/calibrations/modes are initialized
-            // once, before the first record. Subsequent records do not touch
-            // SQLite until their segment is sealed.
-            artifact.provenance.calibration = packet.header.calibration;
-            Json observations = Json::array();
-            for (const auto &frame : packet.frames) {
-                Json attributes = Json::array();
-                for (const auto &attribute : frame->attributes)
-                    attributes.push_back({{"name", attribute.descriptor.name}, {"shape", attribute.descriptor.shape}, {"stride", attribute.descriptor.stride}});
-                observations.push_back({{"metadata", frame->header.metadata},
-                    {"clock_domain", {{"id", frame->header.timestamp.domain.id.value}, {"name", frame->header.timestamp.domain.name}}},
-                    {"calibration", {{"id", frame->header.calibration.id.value}, {"schema_version", frame->header.calibration.schema_version}, {"revision", frame->header.calibration.revision}}},
-                    {"attributes", attributes}});
+        const bool initial = found == writers.end();
+        RawTrace measured;
+        auto *trace = initial ? &measured : nullptr;
+        const auto began = initial ? time::MonotonicTimestamp::now().nanoseconds : 0;
+        try {
+            if (initial) {
+                ArtifactDescriptor artifact;
+                {
+                    RawStage stage(trace, 0);
+                    MANTIS_STORAGE_POINT("raw-first-provenance-before", root, id.value);
+                    artifact = get(id);
+                    if (artifact.state != ArtifactState::open)
+                        fail(Status::invalid_argument, "Only OPEN captures accept records");
+                    // One initial provenance update; never a per-FrameSet transaction.
+                    artifact.provenance.calibration = packet.header.calibration;
+                    Json observations = Json::array();
+                    for (const auto &frame : packet.frames) {
+                        Json attributes = Json::array();
+                        for (const auto &attribute : frame->attributes)
+                            attributes.push_back({{"name", attribute.descriptor.name},
+                                                  {"shape", attribute.descriptor.shape},
+                                                  {"stride", attribute.descriptor.stride}});
+                        observations.push_back(
+                            {{"metadata", frame->header.metadata},
+                             {"clock_domain",
+                              {{"id", frame->header.timestamp.domain.id.value},
+                               {"name", frame->header.timestamp.domain.name}}},
+                             {"calibration",
+                              {{"id", frame->header.calibration.id.value},
+                               {"schema_version", frame->header.calibration.schema_version},
+                               {"revision", frame->header.calibration.revision}}},
+                             {"attributes", attributes}});
+                    }
+                    artifact.provenance.parameters["initial_observations"] = observations.dump();
+                    Statement update(db, "UPDATE artifacts SET provenance=? WHERE id=?");
+                    update.text(1, provenance_json(artifact.provenance));
+                    update.text(2, id.value);
+                    update.row();
+                }
+                {
+                    RawStage stage(trace, 1);
+                    MANTIS_STORAGE_POINT("raw-first-writer-init-before", root, id.value);
+                    auto writer = std::make_unique<Writer>();
+                    writer->index = artifact.chunks;
+                    if (auto limit = artifact.provenance.parameters.find("segment_max_bytes");
+                        limit != artifact.provenance.parameters.end()) {
+                        writer->limit = std::stoull(limit->second);
+                        if (writer->limit < 4096 || writer->limit > segments::max_segment_bytes)
+                            fail(Status::invalid_argument, "Segment size must be 4 KiB..64 MiB");
+                    }
+                    found = writers.emplace(id, std::move(writer)).first;
+                }
             }
-            artifact.provenance.parameters["initial_observations"] = observations.dump();
+            auto &writer = *found->second;
+            if (writer.last_sequence && packet.header.sequence.value != *writer.last_sequence + 1)
+                fail(Status::corrupt, "RawCapture FrameSet sequence discontinuity");
+            if (!writer.output.is_open()) {
+                {
+                    RawStage stage(trace, 2);
+                    if (initial)
+                        MANTIS_STORAGE_POINT("raw-first-segment-open-before", root, id.value);
+                    writer.part =
+                        root / "objects" / id.value / (std::to_string(writer.index) + ".segment.part");
+                    if (std::filesystem::exists(writer.part))
+                        fail(Status::busy, "Existing provisional segment requires recovery");
+                    writer.output.open(writer.part, std::ios::binary | std::ios::trunc);
+                    if (!writer.output)
+                        fail(Status::io, "Cannot create RawCapture segment");
+                }
+                RawStage stage(trace, 3);
+                if (initial)
+                    MANTIS_STORAGE_POINT("raw-first-directory-sync-before", root, id.value);
+                platform::durable_directory(writer.part.parent_path());
+            }
             {
-                Statement update(db, "UPDATE artifacts SET provenance=? WHERE id=?");
-                update.text(1, provenance_json(artifact.provenance)); update.text(2, id.value); update.row();
+                RawStage stage(trace, 4);
+                if (initial)
+                    MANTIS_STORAGE_POINT("raw-first-record-before", root, id.value);
+                segments::append(writer.output, packet);
             }
-            auto writer = std::make_unique<Writer>(); writer->index = artifact.chunks;
-            if (auto limit = artifact.provenance.parameters.find("segment_max_bytes"); limit != artifact.provenance.parameters.end()) {
-                writer->limit = std::stoull(limit->second);
-                if (writer->limit < 4096 || writer->limit > segments::max_segment_bytes)
-                    fail(Status::invalid_argument, "Segment size must be 4 KiB..64 MiB");
+            writer.last_sequence = packet.header.sequence.value;
+            ++writer.records;
+            if (static_cast<uint64_t>(writer.output.tellp()) >= writer.limit || writer.records >= 100000) {
+                RawStage stage(trace, 5);
+                seal(id, writer);
             }
-            found = writers.emplace(id, std::move(writer)).first;
+            if (initial) {
+                measured.total = time::MonotonicTimestamp::now().nanoseconds - began;
+                measured.complete = true;
+                writer.first_append = measured;
+            }
+        } catch (...) {
+            if (initial) {
+                measured.total = time::MonotonicTimestamp::now().nanoseconds - began;
+                if (found != writers.end())
+                    found->second->first_append = measured;
+                else {
+                    try {
+                        failed_raw_initialization = std::pair{id, measured};
+                    } catch (...) {
+                        // Evidence allocation must never replace the storage cause.
+                    }
+                }
+            }
+            throw;
         }
-        auto &writer = *found->second;
-        if (writer.last_sequence && packet.header.sequence.value != *writer.last_sequence + 1)
-            fail(Status::corrupt, "RawCapture FrameSet sequence discontinuity");
-        if (!writer.output.is_open()) {
-            writer.part = root / "objects" / id.value / (std::to_string(writer.index) + ".segment.part");
-            if (std::filesystem::exists(writer.part)) fail(Status::busy, "Existing provisional segment requires recovery");
-            writer.output.open(writer.part, std::ios::binary | std::ios::trunc);
-            if (!writer.output) fail(Status::io, "Cannot create RawCapture segment");
-            platform::durable_directory(writer.part.parent_path());
-        }
-        segments::append(writer.output, packet);
-        writer.last_sequence = packet.header.sequence.value; ++writer.records;
-        if (static_cast<uint64_t>(writer.output.tellp()) >= writer.limit || writer.records >= 100000) seal(id, writer);
     }
     void verify_projected_identity(const ArtifactDescriptor &a) const {
         if (a.state != ArtifactState::finalized || a.type.name != "org.mantis.RawCapture" ||
@@ -973,6 +1059,30 @@ void Store::initialize_projected_source_provenance(const ArtifactId &id, data::M
     update.text(1, provenance_json(a.provenance));
     update.text(2, id.value);
     update.row();
+}
+data::Metadata Store::raw_append_diagnostics(const Id &id) const {
+    std::lock_guard guard(impl_->mutex);
+    const Impl::RawTrace *trace{};
+    if (auto writer = impl_->writers.find(id);
+        writer != impl_->writers.end() && writer->second->first_append.total >= 0)
+        trace = &writer->second->first_append;
+    else if (impl_->failed_raw_initialization && impl_->failed_raw_initialization->first == id)
+        trace = &impl_->failed_raw_initialization->second;
+    data::Metadata out{{"raw_append_artifact_id", id.value},
+                       {"raw_append_diagnostic_version", "1"},
+                       {"raw_append_available", trace ? "1" : "0"},
+                       {"raw_append_scope", "first append_raw; excludes outer dispatch/mutex wait"}};
+    if (!trace)
+        return out;
+    out["raw_first_append_ns"] = std::to_string(trace->total);
+    out["raw_first_append_complete"] = trace->complete ? "1" : "0";
+    out["raw_first_append_failed_stage"] = trace->complete ? "-1" : std::to_string(trace->stage);
+    const std::array<const char *, 6> keys{"raw_first_provenance_ns",   "raw_first_writer_init_ns",
+                                           "raw_first_segment_open_ns", "raw_first_directory_sync_ns",
+                                           "raw_first_record_write_ns", "raw_first_segment_seal_ns"};
+    for (size_t i = 0; i < keys.size(); ++i)
+        out[keys[i]] = std::to_string(trace->stages[i]);
+    return out;
 }
 void Store::append(const Id &id, const data::Packet &packet) {
     std::lock_guard guard(impl_->mutex);
