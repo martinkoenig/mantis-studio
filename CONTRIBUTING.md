@@ -33,6 +33,10 @@ Architectural changes require a new ADR describing the problem, inadequate exten
 
 After acceptance/merge, the [independent adversarial review standard](docs/engineering/review-and-test-qualification.md) governs planning/review decisions and evidence for risk-critical changes. Inspect relevant actual production and test code, not only implementation summaries or green CI. Implementing workers hand off review-ready evidence but do not self-approve. The planned [CI-STAB-2 whole-suite audit](docs/engineering/ci-stab-2-qualification.md) is a separate qualification milestone, not yet accepted. The proposed [ENG-KNOW-1 project-memory and handoff process](docs/engineering/knowledge-and-handoff.md) provides a small issue-based context index and evidence ledger, not a new architecture authority or permission for autonomous issue intake.
 
+## Issue-linked handoff and PR evidence
+
+For substantive work, link the relevant GitHub issue and milestone, if it exists, and preserve its evolving evidence state. Explain in the PR how review findings and negative tests affect the issue; link the actual exact-SHA verification. A PR targeting \`develop\` should use \`Refs #N\` rather than relying on closing keywords to close an issue on a non-default branch. Reviewers should reconcile material issue state before final ACCEPT and update the central status index only when priorities or acceptance change. The proposed process is [ENG-KNOW-1](docs/engineering/knowledge-and-handoff.md).
+
 ## Pull requests
 
 Explain the problem, behavior change and verification. Include a reproducible fixture for storage or plugin crashes. State which platforms were actually tested. Keep dependency updates separate from semantic changes where practical.

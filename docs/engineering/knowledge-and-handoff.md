@@ -63,7 +63,37 @@ Suggested AO worker assignment: **`Implement the explicitly authorized scope in 
 - High-severity security data stays in restricted incident channels; public index links only to sanitized process records.
 - The temporary docs branch `docs/review-qa1-ci-stab2` is a **proposal**; until accepted/merged its documents cannot be cited as binding policy. Existing accepted ADRs, branch rules and `AGENTS.md` govern.
 
-## 6. Pilot checks (KNOW-1A–D)
+## 6. Labels, Milestones and prioritization
+
+Use a small, orthogonal vocabulary rather than one label for every implementation step. **Type:** `type:process`, `type:quality`, `type:security`, `type:meta`; existing native `bug`, `enhancement`, `documentation`, `security` may coexist. **Priority:** `priority:P0` (urgent verified security/data-integrity incident), `priority:P1` (blocking/high), `priority:P2` (planned normal), `priority:P3` (deferred). **Workflow:** `status:planned`, `status:active`, `status:blocked`, `status:review`, `status:reference`; **never** use a status label as evidence of ACCEPT. Mutually exclusive priority/status labels must be replaced, not accumulated. Only assign `P0` based on evidenced severity, never to game the queue.
+
+GitHub **Milestones** represent a multi-issue deliverable or release gate, **not** every worker attempt. Initial proposed registry:
+
+| Milestone title (create once on GitHub) | Priority in the hub | Issues | Completion |
+| --- | --- | --- | --- |
+| `ENG-QA — Reliable CI and Test Qualification` | **P1, first** | [#12](https://github.com/martinkoenig/mantis-studio/issues/12), then [#11](https://github.com/martinkoenig/mantis-studio/issues/11) | Recorder cause/corrections independently qualified; CI-STAB-2 completed; required CI verified |
+| `ENG-KNOW — Durable Engineering Memory` | **P1, parallel** | [#10](https://github.com/martinkoenig/mantis-studio/issues/10) | Cold-start check + independent review + accepted documentation |
+| `SEC — Security Coverage and Intake` | **P2, planned** | [#13](https://github.com/martinkoenig/mantis-studio/issues/13) | Verified protected-branch scanning and authorized, secure alert routing where approved |
+
+Hub [#14](https://github.com/martinkoenig/mantis-studio/issues/14) is an **evergreen index without milestone**. Do not create a milestone for every small task. Product milestones `FS-1` and v0.3–v0.8 stay on the [ROADMAP](../../ROADMAP.md) until their scope/issue breakdown is frozen; introduce GitHub milestones only as actionable deliverables.
+
+GitHub Milestones **do not have a native priority field**: the hub's priority/dependency order is authoritative; milestone due dates are optional and must reflect real commitments, not invented estimates. Issue labels denote the current issue-level priority. For a PR targeting protected `develop`, set its milestone to the related issue milestone only when useful; avoid counting every subtask twice. Revisit milestone status only on actual evidence; close after independent gate, not simply because all worker sessions ended.
+
+**Permission boundary (2026-10-31):** The connected GitHub interface can add issue labels and associate an **existing** milestone with an issue, but cannot currently create/edit milestone definitions or label colors. Therefore this registry is a **proposal** until a repository administrator creates the three real GitHub Milestones via the web UI. Do not claim association or progress counters before verified creation. Labels applied to issues #10–#14 have no special enforcement by themselves.
+
+## 7. Enforcement hooks and scheduled reconciliation
+
+**Event-driven primary control (not background magic):**
+1. On every **new planning package**, find existing issue or create one material issue; attach type/priority/status and existing milestone, record boundaries and acceptance criteria. Existing in-flight work is not re-dispatched.
+2. On every **Codex/AO handoff**, record exact head/PR and meaningful evidence in the work issue, **without** asserting acceptance. The worker reports facts; the owner/reviewer writes authoritative status.
+3. On every **independent review decision**, reconcile issue evidence and status first; require real source and remote CI. Update the hub only if priority, acceptance, blocker or integration baseline changed. Record reason when an issue intentionally stays open.
+4. Before **closing** any issue, verify exact accepted SHA, required CI and target branch integration; check linked milestone; update hub. On `develop` closing keywords alone are not reliable.
+5. On **cold start/new chat**, issue #14 is the first retrieval step; stale or missing evidence is an explicit warning, not permission to reconstruct from remembered guesses.
+6. **Backup audit:** A separate ChatGPT weekly scheduled audit (configured 2026-10-31 for Mondays, Europe/Berlin) checks live GitHub and proposes/commits only **material, verified** status corrections if its GitHub permissions allow; on failure it reports what could not be synced. It **does not** continuously monitor other chats, guarantee all edits, dispatch workers, or substitute for event-driven updates.
+
+**Future optional enforcement:** PR/issue templates are prepared on this docs branch, but GitHub only activates repository templates when they are present on the **default `main` branch**. Promoting them to `main` requires separately reviewed, authorized repository governance work. A future CI metadata gate must be designed/tested separately; do not create an easy-to-game check that claims issue status proves source correctness. Never make a CI gate required until its own stable successful run is verified.
+
+## 8. Pilot checks (KNOW-1A–D)
 
 - **KNOW-1A** Hub and 3–5 useful cross-linked issues exist, no duplicate active task or forgotten earlier incident; verified `develop`/CI/branch-protection facts date-stamped.
 - **KNOW-1B** Process and evidence classification are documented; tested against an actual fluctuating incident and a proposed milestone.
