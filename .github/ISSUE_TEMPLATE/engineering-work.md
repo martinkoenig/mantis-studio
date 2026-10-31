@@ -32,3 +32,12 @@ labels: ["status:planned"]
 - Link [Engineering Status #14](https://github.com/martinkoenig/mantis-studio/issues/14) if this is new active priority
 
 > This template will only appear in the GitHub issue picker once deployed to the default `main` branch. Never publish secret-scanning payloads in a public issue.
+
+<!--
+Maintenance contract: write all issue content and future comments in English.
+Keep this description as the concise current state. Post material findings,
+disproven hypotheses, exact-SHA CI evidence and review decisions as new
+chronological comments with public-safe evidence links. Update the body
+only when its current status/acceptance gates change. Never post secrets.
+-->
+

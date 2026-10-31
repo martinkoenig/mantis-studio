@@ -26,3 +26,11 @@
 - [ ] No worker self-ACCEPT or unauthorized issue/milestone closure.
 
 > This PR template is a handoff aid, **not automatic independent approval**. On GitHub, repository templates become active only after promotion to the default `main` branch.
+
+<!--
+English-only public GitHub records. Significant independent review findings
+and exact-SHA CI decisions belong in chronological comments on the linked
+work issue. Keep the work issue body synchronized with current status,
+rather than appending dated history. Do not post private logs or secrets.
+-->
+
