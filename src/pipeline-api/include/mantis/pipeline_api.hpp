@@ -9,6 +9,9 @@ enum class QueuePolicy { block, drop_oldest, drop_newest, latest_only, lossless 
 struct QueueMetrics {
     size_t occupancy{}, high_water{};
     uint64_t dropped{}, pushed{}, popped{};
+    // Monotonic steady-clock nanoseconds; -1 means no successful enqueue yet.
+    int64_t first_push_ns{-1};
+    uint64_t full_ns{}, last_failed_wait_ns{};
 };
 template <class T> class BoundedQueue {
     mutable std::mutex mutex_;
@@ -18,6 +21,26 @@ template <class T> class BoundedQueue {
     QueuePolicy policy_;
     bool closed_{};
     QueueMetrics metrics_;
+    std::optional<std::chrono::steady_clock::time_point> full_since_;
+    void entered_full() {
+        if (items_.size() == capacity_ && !full_since_ && !closed_)
+            full_since_ = std::chrono::steady_clock::now();
+    }
+    void left_full() {
+        if (full_since_) {
+            metrics_.full_ns += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                          std::chrono::steady_clock::now() - *full_since_)
+                                                          .count());
+            full_since_.reset();
+        }
+    }
+    void enqueued() {
+        if (metrics_.first_push_ns < 0)
+            metrics_.first_push_ns = time::MonotonicTimestamp::now().nanoseconds;
+        ++metrics_.pushed;
+        metrics_.high_water = std::max(metrics_.high_water, items_.size());
+        entered_full();
+    }
 
   public:
     BoundedQueue(size_t capacity, QueuePolicy policy)
@@ -41,8 +64,7 @@ template <class T> class BoundedQueue {
             items_.pop_front();
         }
         items_.push_back(std::move(value));
-        ++metrics_.pushed;
-        metrics_.high_water = std::max(metrics_.high_water, items_.size());
+        enqueued();
         readable_.notify_one();
         return true;
     }
@@ -51,6 +73,7 @@ template <class T> class BoundedQueue {
         if (!readable_.wait(lock, stop, [&] { return closed_ || !items_.empty(); }) || items_.empty())
             return {};
         auto v = std::move(items_.front());
+        left_full();
         items_.pop_front();
         ++metrics_.popped;
         writable_.notify_one();
@@ -60,20 +83,38 @@ template <class T> class BoundedQueue {
         if (policy_ != QueuePolicy::lossless && policy_ != QueuePolicy::block)
             return push(std::move(value), stop);
         std::unique_lock lock(mutex_);
-        if (!writable_.wait_for(lock, stop, timeout, [&] { return closed_ || items_.size() < capacity_; }) || closed_)
+        const auto began = items_.size() == capacity_ ? std::chrono::steady_clock::now()
+                                                      : std::chrono::steady_clock::time_point{};
+        if (!writable_.wait_for(lock, stop, timeout, [&] { return closed_ || items_.size() < capacity_; }) ||
+            closed_) {
+            metrics_.last_failed_wait_ns =
+                began == std::chrono::steady_clock::time_point{}
+                    ? 0
+                    : static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                std::chrono::steady_clock::now() - began)
+                                                .count());
             return false;
-        items_.push_back(std::move(value)); ++metrics_.pushed;
-        metrics_.high_water = std::max(metrics_.high_water, items_.size()); readable_.notify_one(); return true;
+        }
+        items_.push_back(std::move(value));
+        enqueued();
+        readable_.notify_one();
+        return true;
     }
     std::optional<T> try_pop() {
         std::lock_guard lock(mutex_);
         if (items_.empty()) return {};
-        auto value = std::move(items_.front()); items_.pop_front(); ++metrics_.popped; writable_.notify_one(); return value;
+        auto value = std::move(items_.front());
+        left_full();
+        items_.pop_front();
+        ++metrics_.popped;
+        writable_.notify_one();
+        return value;
     }
     size_t capacity() const { return capacity_; }
     void close() {
         std::lock_guard lock(mutex_);
         closed_ = true;
+        left_full();
         readable_.notify_all();
         writable_.notify_all();
     }
@@ -81,6 +122,10 @@ template <class T> class BoundedQueue {
         std::lock_guard lock(mutex_);
         auto m = metrics_;
         m.occupancy = items_.size();
+        if (full_since_)
+            m.full_ns += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                   std::chrono::steady_clock::now() - *full_since_)
+                                                   .count());
         return m;
     }
 };
