@@ -1,6 +1,8 @@
 #include "calibration_controller.hpp"
+#include "studio_calibration_fixture.hpp"
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QPointer>
 #include <QThread>
 #include <atomic>
 #include <iostream>
@@ -8,7 +10,8 @@
 #define CHECK(x)                                                                                             \
     do {                                                                                                     \
         if (!(x))                                                                                            \
-            throw std::runtime_error(#x);                                                                    \
+            throw std::runtime_error(std::string("studio_calibration.cpp:") + std::to_string(__LINE__) +     \
+                                     ": " + #x);                                                             \
     } while (false)
 namespace w = mantis::wire::v1;
 void until(const std::function<bool()> &condition) {
@@ -31,169 +34,211 @@ QVariantMap jobs(const CalibrationController &c) {
 QVariantMap errors(const CalibrationController &c) {
     return c.state()["errors"].toMap();
 }
-w::CalibrationInfo info(const std::string &id, const std::string &type) {
-    w::CalibrationInfo i;
-    auto *e = i.mutable_entry();
-    e->mutable_artifact()->set_id(id);
-    e->mutable_artifact()->set_type("org.mantis." + type);
-    e->mutable_artifact()->set_state("FINALIZED");
-    e->mutable_reference()->set_id("logical." + id);
-    e->mutable_reference()->set_revision(2);
-    return i;
+using namespace calibration_test;
+void loaded(CalibrationController &c, int revision) {
+    until([&] {
+        return !c.artifacts().empty() && c.artifacts().front().toMap()["revision"].toInt() == revision;
+    });
 }
-class Fake final : public CalibrationClient {
-  public:
-    mutable std::mutex mutex;
-    mutable std::map<std::string, w::CalibrationInfo> infos;
-    mutable w::Response current;
-    mutable w::CalibrationTargetSpecification created;
-    mutable w::CalibrationDatasetBuild built;
-    mutable w::CalibrationRigSolve solvedRig;
-    mutable std::map<std::string, w::CalibrationCameraSolve> solvedCameras;
-    mutable std::optional<w::ActiveCalibrationBinding> binding;
-    mutable std::string cancelled;
-    mutable std::atomic<int> activations{};
-    mutable bool rejectActivation{};
-    Fake() {
-        auto t = ::info("T", "CalibrationTarget");
-        auto *s = t.mutable_target_info()->mutable_target();
-        s->set_squares_x(8);
-        s->set_squares_y(6);
-        s->set_nominal_square_size_mm(40);
-        s->mutable_charuco()->set_pattern_layout("black_square_at_origin");
-        infos["T"] = t;
-        auto d = ::info("D", "CalibrationDataset");
-        d.mutable_dataset_info()->mutable_target()->set_id("T");
-        infos["D"] = d;
-        for (auto role : {"left", "right"}) {
-            std::string id = std::string(role) == "left" ? "L" : "R";
-            auto c = ::info(id, "CameraCalibration");
-            c.mutable_camera_info()->mutable_dataset()->set_id("D");
-            c.mutable_camera_info()->mutable_target()->set_id("T");
-            c.mutable_camera_info()->mutable_camera()->set_role(role);
-            infos[id] = c;
+void cleared(const CalibrationController &c) {
+    for (auto slot : {"target", "dataset", "left", "right", "rig"}) {
+        CHECK(selected(c)[slot].toString().isEmpty());
+        CHECK(c.state()[slot].toMap().isEmpty());
+    }
+    CHECK(c.artifacts().empty());
+    CHECK(c.state()["rawIds"].toStringList().empty());
+    CHECK(c.state()["captureId"].toString().isEmpty());
+    CHECK(c.state()["deviceId"].toString().isEmpty());
+    CHECK(c.state()["active"].toMap().empty());
+    CHECK(jobs(c).empty());
+    CHECK(errors(c).empty());
+    CHECK(!c.state()["canBuild"].toBool());
+}
+void projectGenerations(bool returnToA, bool failOperation) {
+    auto fake = std::make_shared<Fake>();
+    CalibrationController c(fake);
+    auto refresh = std::make_shared<Gate>(), operation = std::make_shared<Gate>();
+    // Must unwind before c's destructor joins either future, including failed CHECKs.
+    ReleaseGates release{refresh, operation};
+    bool wrongThread{}, stalePublication{};
+    int changes{};
+    QString expectedGeneration;
+    QObject::connect(&c, &CalibrationController::changed, &c, [&] {
+        ++changes;
+        wrongThread |= QThread::currentThread() != c.thread();
+        if (!expectedGeneration.isEmpty()) {
+            stalePublication |= c.state()["projectGeneration"] != expectedGeneration;
+            stalePublication |= !c.state()["projectConfirmed"].toBool();
+            stalePublication |= errors(c).contains("connection");
+            for (const auto &v : c.artifacts())
+                stalePublication |= v.toMap()["revision"].toInt() == 2;
+            stalePublication |= c.state()["active"].toMap()["revision"].toInt() == 2;
         }
-        auto other = infos["L"];
-        other.mutable_entry()->mutable_artifact()->set_id("cross-dataset");
-        other.mutable_camera_info()->mutable_dataset()->set_id("other");
-        infos["cross-dataset"] = other;
-        auto r = ::info("G", "RigCalibration");
-        auto *rig = r.mutable_rig_info();
-        rig->mutable_dataset()->set_id("D");
-        rig->mutable_target()->set_id("T");
-        rig->mutable_left_camera()->set_id("L");
-        rig->mutable_right_camera()->set_id("R");
-        infos["G"] = r;
-        auto incomplete = ::info("open", "CalibrationTarget");
-        incomplete.mutable_entry()->mutable_artifact()->set_state("OPEN");
-        infos["open"] = incomplete;
-        infos["broken"] = ::info("broken", "CalibrationTarget");
-        auto *dev = current.add_devices();
-        dev->set_id("third-party");
-        dev->set_name("Generic scanner");
-        dev->add_capabilities("org.mantis.camera.frameset-stream.v1");
-        auto *child = current.add_devices();
-        child->set_id("sensor");
-        child->set_parent("third-party");
-        child->add_capabilities("org.mantis.camera.image-stream.v1");
-        for (int n = 0; n < 1025; ++n) {
-            auto *a = current.add_artifacts();
-            a->set_id("raw" + std::to_string(n));
-            a->set_type("org.mantis.RawCapture");
-            a->set_schema_version(2);
-            a->set_state("FINALIZED");
+    });
+    c.refresh();
+    loaded(c, 2);
+    c.selectDevice("third-party");
+    c.selectArtifact("rig", "G");
+    c.setCaptureSelected("raw0", true);
+    c.activate("third-party", "G");
+    until([&] { return c.state()["active"].toMap()["id"] == "G"; });
+    c.startCapture();
+    until([&] { return c.state()["captureId"] == "capture"; });
+    c.buildDataset(40);
+    until([&] { return jobs(c).contains("dataset"); });
+    fake->job("dataset-job", "Failed");
+    c.observeSnapshot(fake->snapshot());
+    c.setCaptureSelected("not-finalized", true);
+    CHECK(!errors(c).empty());
+    CHECK(selected(c)["target"] == "T" && selected(c)["dataset"] == "D");
+    CHECK(selected(c)["left"] == "L" && selected(c)["right"] == "R");
+    CHECK(selected(c)["rig"] == "G");
+    {
+        std::lock_guard lock(fake->mutex);
+        fake->listGate = refresh;
+        fake->datasetGate = operation;
+        fake->failDataset = failOperation;
+        fake->failList = failOperation;
+    }
+    c.refresh();
+    until([&] { return refresh->entered.load(); });
+    c.buildDataset(40);
+    until([&] { return operation->entered.load(); });
+    const auto before = c.state()["projectGeneration"].toString();
+    fake->project("/fixture/B/project.mantis", 22);
+    c.observeSnapshot(fake->snapshot());
+    cleared(c);
+    CHECK(c.state()["projectGeneration"] != before);
+    // A stale dialog's IDs must not admit a command after project confirmation.
+    c.activate("third-party", "G");
+    CHECK(fake->activations == 1);
+    if (returnToA) {
+        fake->project("/fixture/A/project.mantis", 33);
+        c.observeSnapshot(fake->snapshot());
+        cleared(c);
+    }
+    expectedGeneration = c.state()["projectGeneration"].toString();
+    c.buildDataset(40);
+    CHECK(fake->datasetCalls == 2);
+    CHECK(errors(c)["dataset"].toMap()["status"] == "busy");
+    c.refresh(); // Coalesces an explicit current-generation read after old work retires.
+    refresh->release();
+    loaded(c, returnToA ? 33 : 22);
+    CHECK(refresh->exited);
+    CHECK(!stalePublication);
+    CHECK(c.state()["active"].toMap().empty());
+    CHECK(jobs(c).empty());
+    for (const auto &v : c.artifacts())
+        CHECK(v.toMap()["error"].toMap().empty());
+    c.selectArtifact("dataset", "D"); // Clear B's own busy diagnostic through current-project input.
+    c.selectArtifact("rig", "G");
+    CHECK(c.state()["target"].toMap()["squareMm"].toInt() == (returnToA ? 33 : 22));
+    CHECK(c.state()["rig"].toMap()["revision"].toInt() == (returnToA ? 33 : 22));
+    const auto freshSelection = selected(c);
+    const auto freshErrors = errors(c);
+    const auto beforeCompletion = changes;
+    operation->release(); // Old A operation is genuinely completed, but retired last.
+    until([&] { return changes > beforeCompletion; });
+    CHECK(operation->exited);
+    CHECK(jobs(c).empty());
+    CHECK(errors(c) == freshErrors);
+    CHECK(selected(c) == freshSelection);
+    CHECK(fake->datasetCalls == 2); // No automatic replay on B or the new A generation.
+    CHECK(!stalePublication && !wrongThread);
+    std::cout << "PASS: held refresh/" << (failOperation ? "failure" : "success")
+              << " completion fenced across " << (returnToA ? "A->B->A" : "A->B") << '\n';
+}
+void refreshDiscoversProject() {
+    auto fake = std::make_shared<Fake>();
+    CalibrationController c(fake);
+    c.refresh();
+    loaded(c, 2);
+    c.selectArtifact("rig", "G");
+    c.setCaptureSelected("raw0", true);
+    const auto before = fake->infoCalls.load();
+    fake->project("/fixture/B/project.mantis", 22);
+    c.refresh();
+    loaded(c, 22);
+    CHECK(fake->infoCalls > before);
+    CHECK(selected(c)["rig"].toString().isEmpty());
+    CHECK(c.state()["rawIds"].toStringList().empty());
+    c.selectArtifact("rig", "G");
+    CHECK(c.state()["target"].toMap()["squareMm"].toInt() == 22);
+    CHECK(c.choices("target").size() == 2); // B's same-ID formerly corrupt artifact was inspected afresh.
+    std::cout << "PASS: refresh-discovered identity rejects same-ID cached project-A info\n";
+}
+void disconnectAndLifetime() {
+    auto fake = std::make_shared<Fake>();
+    {
+        CalibrationController c(fake);
+        c.refresh();
+        loaded(c, 2);
+        c.selectArtifact("rig", "G");
+        c.setCaptureSelected("raw0", true);
+        const auto selection = selected(c);
+        const auto generation = c.state()["projectGeneration"];
+        {
+            std::lock_guard lock(fake->mutex);
+            fake->disconnected = true;
         }
-        auto *a = current.add_artifacts();
-        a->set_id("not-finalized");
-        a->set_type("org.mantis.RawCapture");
-        a->set_schema_version(2);
-        a->set_state("OPEN");
-    }
-    std::vector<w::CalibrationEntry> list() const override {
-        std::lock_guard lock(mutex);
-        std::vector<w::CalibrationEntry> out;
-        for (const auto &[id, i] : infos) {
-            (void)id;
-            out.push_back(i.entry());
+        c.refresh();
+        until([&] { return errors(c).contains("connection"); });
+        CHECK(!c.state()["projectConfirmed"].toBool());
+        CHECK(selected(c) == selection && c.state()["rawIds"].toStringList().size() == 1);
+        CHECK(c.state()["projectGeneration"] == generation);
+        c.buildDataset(40);
+        CHECK(fake->datasetCalls == 0);
+        CHECK(errors(c)["dataset"].toMap()["status"] == "incompatible");
+        {
+            std::lock_guard lock(fake->mutex);
+            fake->disconnected = false;
         }
-        return out;
+        c.refresh();
+        until([&] { return c.state()["projectConfirmed"].toBool(); });
+        CHECK(c.state()["projectGeneration"] == generation && selected(c) == selection);
+        c.buildDataset(40);
+        until([&] { return jobs(c).contains("dataset"); });
+        CHECK(fake->datasetCalls == 1);
+        CHECK(errors(c).empty());
+        // Missing identity is unconfirmed authority, not a different project.
+        c.observeSnapshot(w::Response{});
+        CHECK(c.state()["projectGeneration"] == generation && selected(c) == selection);
+        CHECK(!c.state()["projectConfirmed"].toBool());
     }
-    w::CalibrationInfo info(const std::string &id) const override {
-        std::lock_guard lock(mutex);
-        CHECK(id != "open");
-        if (id == "broken")
-            mantis::fail(mantis::Status::corrupt, "Broken immutable graph", "calibration.inspection");
-        return infos.at(id);
+    auto refresh = std::make_shared<Gate>(), operation = std::make_shared<Gate>();
+    QPointer<CalibrationController> lifetime;
+    bool expectedFailure{};
+    try {
+        auto controller = std::make_unique<CalibrationController>(fake);
+        lifetime = controller.get();
+        ReleaseGates release{refresh, operation};
+        controller->observeSnapshot(fake->snapshot());
+        {
+            std::lock_guard lock(fake->mutex);
+            fake->listGate = refresh;
+            fake->datasetGate = operation;
+        }
+        controller->refresh();
+        controller->buildDataset(40);
+        until([&] { return refresh->entered && operation->entered; });
+        throw std::runtime_error("intentional held-worker assertion unwind");
+    } catch (const std::runtime_error &e) {
+        expectedFailure = std::string(e.what()) == "intentional held-worker assertion unwind";
     }
-    w::Response snapshot() const override {
-        std::lock_guard lock(mutex);
-        return current;
-    }
-    w::CalibrationEntry create(const w::CalibrationTargetSpecification &s) const override {
-        std::lock_guard lock(mutex);
-        created = s;
-        auto t = ::info("new-target", "CalibrationTarget");
-        *t.mutable_target_info()->mutable_target() = s;
-        infos["new-target"] = t;
-        return t.entry();
-    }
-    std::string dataset(const w::CalibrationDatasetBuild &r) const override {
-        std::lock_guard lock(mutex);
-        built = r;
-        return "dataset-job";
-    }
-    std::string camera(const w::CalibrationCameraSolve &r) const override {
-        std::lock_guard lock(mutex);
-        solvedCameras[r.camera_role()] = r;
-        return r.camera_role() + "-job";
-    }
-    std::string rig(const w::CalibrationRigSolve &r) const override {
-        std::lock_guard lock(mutex);
-        solvedRig = r;
-        return "rig-job";
-    }
-    std::optional<w::ActiveCalibrationBinding> active(const std::string &) const override {
-        std::lock_guard lock(mutex);
-        return binding;
-    }
-    void activate(const std::string &d, const std::string &r) const override {
-        std::lock_guard lock(mutex);
-        if (rejectActivation)
-            mantis::fail(mantis::Status::incompatible, "Physical camera identity / image geometry differs",
-                         "calibration.activation");
-        ++activations;
-        binding.emplace();
-        binding->set_logical_device_id(d);
-        binding->mutable_artifact()->set_id(r);
-        *binding->mutable_reference() = infos.at(r).entry().reference();
-    }
-    void clear(const std::string &) const override {
-        std::lock_guard lock(mutex);
-        binding.reset();
-    }
-    std::string start(const std::string &) const override {
-        return "capture";
-    }
-    void stop(const std::string &) const override {}
-    void cancel(const std::string &id) const override {
-        std::lock_guard lock(mutex);
-        cancelled = id;
-    }
-    void job(const std::string &id, const std::string &state, const std::string &result = {},
-             double progress = 0) {
-        std::lock_guard lock(mutex);
-        auto *j = current.add_jobs();
-        j->set_id(id);
-        j->set_state(state);
-        j->set_progress(progress);
-        j->set_status("solver status");
-        j->set_diagnostics("useful diagnostics");
-        j->set_result_artifact(result);
-    }
-};
+    CHECK(expectedFailure && lifetime.isNull());
+    CHECK(refresh->exited && operation->exited);
+    QCoreApplication::processEvents(); // Queued watcher notifications cannot access the dead controller.
+    std::cout << "PASS: disconnect fail-closed admission and held-worker GUI lifetime cleanup\n";
+}
+
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     try {
+        projectGenerations(false, false);
+        projectGenerations(true, false);
+        projectGenerations(true, true);
+        refreshDiscoversProject();
+        disconnectAndLifetime();
         QVariantMap form{{"pattern", "charuco"},
                          {"squaresX", "8"},
                          {"squaresY", 6},

@@ -65,6 +65,7 @@ class CalibrationController : public QObject {
         QMap<QString, mantis::wire::v1::CalibrationInfo> infos;
         mantis::wire::v1::Response snapshot;
         std::optional<mantis::wire::v1::ActiveCalibrationBinding> active;
+        uint64_t generation{};
         QString id, device;
         QVariantMap error, inspectionErrors;
     };
@@ -81,6 +82,10 @@ class CalibrationController : public QObject {
     std::vector<mantis::wire::v1::CalibrationEntry> entries_;
     mantis::wire::v1::Response snapshot_;
     QMap<QString, QString> selected_;
+    QMap<QString, uint64_t> requestGenerations_;
+    std::string project_;
+    uint64_t generation_{};
+    bool confirmed_{}, refreshing_{};
     QStringList raw_;
     QString device_, capture_;
     QVariantMap active_, errors_, inspectionErrors_;
