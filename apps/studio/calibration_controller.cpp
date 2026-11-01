@@ -104,13 +104,25 @@ CalibrationController::CalibrationController(std::shared_ptr<const CalibrationCl
     : QObject(p), client_(std::move(c)) {
     connect(&refresh_, &QFutureWatcher<Reply>::finished, this, [this] {
         const auto r = refresh_.result();
+        refreshing_ = false;
+        if (r.generation != generation_) {
+            if (std::exchange(refreshAgain_, false))
+                refresh();
+            return;
+        }
         if (!r.error.isEmpty()) {
+            if (!r.snapshot.project_path().empty())
+                observeSnapshot(r.snapshot);
+            confirmed_ = false;
             errors_["connection"] = r.error;
             emit changed();
             if (std::exchange(refreshAgain_, false))
                 refresh();
             return;
         }
+        observeSnapshot(r.snapshot);
+        if (!confirmed_)
+            return;
         errors_.remove("connection");
         entries_ = r.entries;
         infos_ = r.infos;
@@ -123,7 +135,6 @@ CalibrationController::CalibrationController(std::shared_ptr<const CalibrationCl
                            {"logicalId", q(r.active->reference().id())},
                            {"revision", QString::number(r.active->reference().revision())}};
         }
-        observeSnapshot(r.snapshot);
         bindResults();
         emit changed();
         if (std::exchange(refreshAgain_, false))
@@ -158,8 +169,7 @@ void CalibrationController::setStage(int s) {
     }
 }
 bool CalibrationController::pending(const QString &s) const {
-    auto it = requests_.find(s);
-    return it != requests_.end() && it->second->isRunning();
+    return requestGenerations_.contains(s) && requestGenerations_.value(s) == generation_;
 }
 bool CalibrationController::running(const QString &s) const {
     auto state = jobs_.value(s).display.value("state").toString();
@@ -171,23 +181,42 @@ void CalibrationController::error(const QString &slot, const mantis::Error &e) {
 }
 void CalibrationController::request(const QString &slot, std::function<Reply(const CalibrationClient &)> work,
                                     std::function<void(const Reply &)> done) {
-    if (pending(slot))
+    if (!confirmed_) {
+        error(slot, {mantis::Status::incompatible,
+                     "Refresh to confirm the current project before changing it", "studio.calibration"});
         return;
+    }
+    // Retire the previous slot's completion before reusing its GUI-owned watcher.
+    if (requestGenerations_.contains(slot)) {
+        if (requestGenerations_.value(slot) != generation_)
+            error(slot,
+                  {mantis::Status::busy, "Previous project request is still finishing; retry afterwards",
+                   "studio.calibration"});
+        return;
+    }
+    const auto generation = generation_;
+    requestGenerations_[slot] = generation;
     auto &watcher = requests_[slot];
     if (!watcher)
         watcher = std::make_unique<QFutureWatcher<Reply>>();
     disconnect(watcher.get(), nullptr, this, nullptr);
-    connect(watcher.get(), &QFutureWatcher<Reply>::finished, this, [this, slot, done, ptr = watcher.get()] {
-        auto r = ptr->result();
-        if (!r.error.isEmpty())
-            errors_[slot] = r.error;
-        else {
-            errors_.remove(slot);
-            done(r);
-        }
-        emit changed();
-        refresh();
-    });
+    connect(watcher.get(), &QFutureWatcher<Reply>::finished, this,
+            [this, slot, done, generation, ptr = watcher.get()] {
+                auto r = ptr->result();
+                requestGenerations_.remove(slot);
+                if (generation != generation_) {
+                    emit changed();
+                    return;
+                }
+                if (!r.error.isEmpty())
+                    errors_[slot] = r.error;
+                else {
+                    errors_.remove(slot);
+                    done(r);
+                }
+                emit changed();
+                refresh();
+            });
     auto c = client_;
     watcher->setFuture(QtConcurrent::run([c, work] {
         Reply r;
@@ -204,24 +233,31 @@ void CalibrationController::request(const QString &slot, std::function<Reply(con
     emit changed();
 }
 void CalibrationController::refresh() {
-    if (refresh_.isRunning()) {
+    if (refreshing_) {
         refreshAgain_ = true;
         return;
     }
     auto c = client_;
     auto known = infos_;
     auto d = device_;
-    refresh_.setFuture(QtConcurrent::run([c, known, d] {
+    auto project = project_;
+    const auto generation = generation_;
+    refreshing_ = true;
+    refresh_.setFuture(QtConcurrent::run([c, known, d, project, generation] {
         Reply r;
         r.device = d;
+        r.generation = generation;
         try {
             r.snapshot = c->snapshot();
+            if (r.snapshot.project_path().empty())
+                mantis::fail(mantis::Status::incompatible, "Runtime did not confirm a project identity",
+                             "studio.calibration");
             r.entries = c->list();
             for (const auto &e : r.entries) {
                 auto id = q(e.artifact().id());
                 if (e.artifact().state() != "FINALIZED")
                     continue;
-                if (known.contains(id))
+                if (project == r.snapshot.project_path() && known.contains(id))
                     r.infos[id] = known[id];
                 else {
                     try {
@@ -235,8 +271,15 @@ void CalibrationController::refresh() {
                     }
                 }
             }
-            if (!d.isEmpty())
+            if (!d.isEmpty() && project == r.snapshot.project_path())
                 r.active = c->active(d.toStdString());
+            // Compact calls are separate RPCs; do not publish a visibly mixed-project read.
+            auto finalSnapshot = c->snapshot();
+            if (finalSnapshot.project_path() != r.snapshot.project_path()) {
+                r.snapshot = std::move(finalSnapshot);
+                mantis::fail(mantis::Status::incompatible, "Project changed during calibration refresh",
+                             "studio.calibration");
+            }
         } catch (const mantis::Failure &e) {
             r.error = failure(e.error);
         } catch (const std::exception &e) {
@@ -246,6 +289,30 @@ void CalibrationController::refresh() {
     }));
 }
 void CalibrationController::observeSnapshot(const w::Response &s) {
+    if (s.project_path().empty()) {
+        confirmed_ = false;
+        error("connection", {mantis::Status::incompatible, "Runtime did not confirm a project identity",
+                             "studio.calibration"});
+        return;
+    }
+    if (project_ != s.project_path()) {
+        ++generation_;
+        project_ = s.project_path();
+        selected_.clear();
+        raw_.clear();
+        infos_.clear();
+        entries_.clear();
+        inspectionErrors_.clear();
+        errors_.clear();
+        jobs_.clear();
+        device_.clear();
+        capture_.clear();
+        active_.clear();
+        // Old work is never replayed; obtain this generation's artifacts explicitly.
+        refreshAgain_ = refreshing_;
+    }
+    confirmed_ = true;
+    errors_.remove("connection");
     snapshot_ = s;
     for (auto it = jobs_.begin(); it != jobs_.end(); ++it) {
         for (const auto &j : s.jobs())
@@ -708,7 +775,9 @@ QVariantMap CalibrationController::evidence(const QString &slot) const {
     return out;
 }
 QVariantMap CalibrationController::state() const {
-    QVariantMap out{{"deviceId", device_},
+    QVariantMap out{{"projectGeneration", QString::number(generation_)},
+                    {"projectConfirmed", confirmed_},
+                    {"deviceId", device_},
                     {"active", active_},
                     {"errors", errors_},
                     {"rawIds", raw_},
@@ -760,15 +829,16 @@ QVariantMap CalibrationController::state() const {
     out["captureState"] = captureState;
     auto target = evidence("target");
     out["checkerboard"] = target.value("pattern") == "checkerboard";
-    out["canBuild"] =
-        !selected_.value("target").isEmpty() && !raw_.isEmpty() && !pending("dataset") && !running("dataset");
+    out["canBuild"] = confirmed_ && !selected_.value("target").isEmpty() && !raw_.isEmpty() &&
+                      !pending("dataset") && !running("dataset");
     QVariantMap canSolveCamera;
     for (auto role : {"left", "right"})
-        canSolveCamera[role] = !selected_.value("dataset").isEmpty() && !pending(role) && !running(role);
+        canSolveCamera[role] =
+            confirmed_ && !selected_.value("dataset").isEmpty() && !pending(role) && !running(role);
     out["canSolveCamera"] = canSolveCamera;
     out["canSolveBoth"] = canSolveCamera.value("left").toBool() && canSolveCamera.value("right").toBool();
-    out["canSolveRig"] = !selected_.value("dataset").isEmpty() && !selected_.value("left").isEmpty() &&
-                         !selected_.value("right").isEmpty() && !out.value("checkerboard").toBool() &&
-                         !pending("rig") && !running("rig");
+    out["canSolveRig"] = confirmed_ && !selected_.value("dataset").isEmpty() &&
+                         !selected_.value("left").isEmpty() && !selected_.value("right").isEmpty() &&
+                         !out.value("checkerboard").toBool() && !pending("rig") && !running("rig");
     return out;
 }

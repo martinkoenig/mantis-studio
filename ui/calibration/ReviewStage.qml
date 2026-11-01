@@ -26,32 +26,45 @@ ColumnLayout {
     }
     Label { text: "Selected device · " + root.controller.state.device.name; Layout.fillWidth: true; wrapMode: Text.Wrap }
     Button {
-        text: "Activate this Rig revision…"; enabled: !!root.evidence.id && !!root.controller.state.deviceId && !root.controller.state.pending.activation
-        onClicked: { confirm.deviceId = root.controller.state.deviceId; confirm.rigId = root.evidence.id; confirm.revision = root.evidence.revision; confirm.open() }
+        objectName: "activateRig"
+        text: "Activate this Rig revision…"; enabled: root.controller.state.projectConfirmed && !!root.evidence.id && !!root.controller.state.deviceId && !root.controller.state.pending.activation
+        onClicked: { confirm.deviceId = root.controller.state.deviceId; confirm.rigId = root.evidence.id; confirm.revision = root.evidence.revision; confirm.generation = root.controller.state.projectGeneration; confirm.open() }
     }
     Label { Layout.fillWidth: true; wrapMode: Text.Wrap; text: "Active calibration applies to future captures. Historical captures retain the exact calibration revision recorded with them."; opacity: 0.7 }
     Label { Layout.fillWidth: true; wrapMode: Text.Wrap; text: root.controller.state.active.id ? "Current active · r" + root.controller.state.active.revision + " · " + root.controller.state.active.id : "No active calibration" }
     Button {
-        text: "Clear active calibration…"; enabled: !!root.controller.state.active.id && !root.controller.state.pending.activation
-        onClicked: { clearConfirm.deviceId = root.controller.state.deviceId; clearConfirm.open() }
+        text: "Clear active calibration…"; enabled: root.controller.state.projectConfirmed && !!root.controller.state.active.id && !root.controller.state.pending.activation
+        onClicked: { clearConfirm.deviceId = root.controller.state.deviceId; clearConfirm.generation = root.controller.state.projectGeneration; clearConfirm.open() }
     }
     StageError { controller: root.controller; slot: "activation"; Layout.fillWidth: true }
+    Connections {
+        target: root.controller
+        function onChanged() {
+            if (!root.controller.state.projectConfirmed || confirm.generation !== root.controller.state.projectGeneration)
+                confirm.close()
+            if (!root.controller.state.projectConfirmed || clearConfirm.generation !== root.controller.state.projectGeneration)
+                clearConfirm.close()
+        }
+    }
     Dialog {
         id: confirm
+        objectName: "activateRigConfirmation"
+        property string generation
         property string deviceId
         property string rigId
         property var revision
         title: "Activate calibration?"; modal: true; standardButtons: Dialog.Ok | Dialog.Cancel
         anchors.centerIn: Overlay.overlay; width: 520
         contentItem: Label { wrapMode: Text.Wrap; text: "Device · " + confirm.deviceId + "\nRig artifact · " + confirm.rigId + "\nExact revision · " + confirm.revision + "\nApplies to future captures only." }
-        onAccepted: root.controller.activate(deviceId, rigId)
+        onAccepted: { if (root.controller.state.projectConfirmed && generation === root.controller.state.projectGeneration) root.controller.activate(deviceId, rigId) }
     }
     Dialog {
         id: clearConfirm
+        property string generation
         property string deviceId
         title: "Clear active calibration?"; modal: true; standardButtons: Dialog.Ok | Dialog.Cancel
         anchors.centerIn: Overlay.overlay; width: 520
         contentItem: Label { wrapMode: Text.Wrap; text: "Remove the active binding for " + clearConfirm.deviceId + "? Calibration artifacts and historical captures are retained." }
-        onAccepted: root.controller.clearActive(deviceId)
+        onAccepted: { if (root.controller.state.projectConfirmed && generation === root.controller.state.projectGeneration) root.controller.clearActive(deviceId) }
     }
 }
