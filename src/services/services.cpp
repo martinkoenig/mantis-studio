@@ -15,6 +15,12 @@
 #include <sstream>
 namespace mantis::services {
 namespace {
+std::string capture_error_excerpt(std::string_view value) {
+    auto size = value.size() < 1024 ? value.size() : 1024;
+    while (size && size < value.size() && (static_cast<unsigned char>(value[size]) & 0xc0) == 0x80)
+        --size;
+    return std::string(value.substr(0, size));
+}
 class ReplayDigest : public std::streambuf {
     uint64_t position_{};
   public:
@@ -127,6 +133,8 @@ struct Runtime::Impl {
         out.queue_depth = m.occupancy; out.queue_capacity = c.session->queue_capacity(); out.queue_saturation = c.session->saturation();
         out.preview_drops = c.session->preview_metrics().dropped; out.duration = c.session->duration();
         out.diagnostics = c.session->diagnostics();
+        for (auto &[key, value] : store->raw_append_diagnostics(c.raw))
+            out.diagnostics[key] = std::move(value); // Host-owned fields override source metadata.
         // Loss count is only known for observed sequence gaps / produced uncommitted packets.
         // A disconnect cannot reveal how many physical exposures were never delivered.
         out.dropped = out.queue_saturation;
@@ -268,8 +276,22 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
             },
             impl_->logger());
     } catch (...) {
-        store->abandon(raw);
-        throw;
+        const auto original = std::current_exception();
+        try {
+            impl_->event("capture.storage.diagnostics", "capture",
+                         nlohmann::json(store->raw_append_diagnostics(raw)).dump());
+        } catch (...) {
+            // Failure evidence must not replace the original capture error.
+        }
+        try {
+            store->abandon(raw);
+        } catch (const std::exception &cleanup) {
+            try {
+                impl_->event("capture.cleanup.failed", "capture", capture_error_excerpt(cleanup.what()));
+            } catch (...) {
+            }
+        }
+        std::rethrow_exception(original);
     }
     auto [it, inserted] = impl_->captures.emplace(id, Impl::Capture{raw, std::move(session), binding, {}});
     (void)inserted;

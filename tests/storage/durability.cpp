@@ -133,6 +133,96 @@ void prefix(artifact::Store &store, const Id &id) {
     store.append_bundle(id, bundle(1));
     CHECK(store.get(id).chunks == 1);
 }
+data::Published raw_frame() {
+    data::Packet image;
+    image.type = schema::image;
+    memory::BufferBuilder pixels(4);
+    image.attributes.push_back(
+        {{"org.mantis.pixels", schema::ScalarType::u8, {2, 2}, {2, 1}, ""}, std::move(pixels).publish()});
+    data::Packet parent;
+    parent.type = schema::frameset;
+    parent.frames = {data::publish(std::move(image))};
+    return data::publish(std::move(parent));
+}
+std::string raw_bytes(const data::Packet &packet) {
+    std::ostringstream out(std::ios::binary);
+    data::write_packet(out, packet);
+    return out.str();
+}
+void raw_first_append_stages() {
+    const std::array<const char *, 5> stages{"raw-first-provenance-before", "raw-first-writer-init-before",
+                                             "raw-first-segment-open-before",
+                                             "raw-first-directory-sync-before", "raw-first-record-before"};
+    for (size_t stage = 0; stage < stages.size(); ++stage) {
+        Directory dir;
+        artifact::Store store(dir.path);
+        auto packet = raw_frame();
+        const auto id = store.begin({"org.mantis.RawCapture", 2}, {});
+        {
+            st::Arm fault({dir.path, id.value, stages[stage], st::Action::fail, 0, 0, EIO});
+            bool rejected{};
+            try {
+                store.append(id, *packet);
+            } catch (const Failure &failure) {
+                rejected = true;
+                CHECK(failure.error.code == Status::io);
+                CHECK(failure.error.message.find(std::string("Injected ") + stages[stage]) == 0);
+            }
+            CHECK(rejected && fault.metrics().hits == 1);
+        }
+        const auto evidence = store.raw_append_diagnostics(id);
+        CHECK(evidence.at("raw_first_append_complete") == "0");
+        CHECK(evidence.at("raw_first_append_failed_stage") == std::to_string(stage));
+        CHECK(std::stoll(evidence.at("raw_first_append_ns")) >= 0);
+        CHECK(store.get(id).state == artifact::ArtifactState::open);
+        store.abandon(id);
+        CHECK(store.get(id).state == artifact::ArtifactState::recoverable);
+        const auto healthy = store.begin({"org.mantis.RawCapture", 2}, {});
+        Pipe notification, release;
+        st::Plan plan{dir.path, healthy.value, stages[stage], st::Action::pause};
+        plan.notify = notification.fd[1];
+        plan.release = release.fd[0];
+        st::Arm held(plan);
+        std::future<void> pending;
+        struct Release {
+            int fd;
+            bool opened{};
+            void open() {
+                if (!opened) {
+                    st::release_gate(fd);
+                    opened = true;
+                }
+            }
+            ~Release() {
+                try {
+                    open();
+                } catch (...) {
+                }
+            }
+        } guard{release.fd[1]};
+        pending = std::async(std::launch::async, [&] { store.append(healthy, *packet); });
+        auto event = st::await_event(notification.fd[0], Clock::now() + 10s);
+        CHECK(std::string(event.id) == healthy.value && std::string(event.point) == stages[stage]);
+        CHECK(pending.wait_for(0s) == std::future_status::timeout);
+        guard.open();
+        CHECK(pending.wait_for(10s) == std::future_status::ready);
+        pending.get();
+        const auto resumed = store.raw_append_diagnostics(healthy);
+        CHECK(resumed.at("raw_first_append_complete") == "1");
+        CHECK(resumed.at("raw_first_append_failed_stage") == "-1");
+        CHECK(held.metrics().hits == 1);
+        store.finalize(healthy);
+        for (unsigned pass = 0; pass < 2; ++pass) {
+            unsigned records{};
+            store.replay(healthy, [&](data::Published observed) {
+                CHECK(raw_bytes(*observed) == raw_bytes(*packet));
+                ++records;
+            });
+            CHECK(records == 1);
+        }
+        std::cout << "RawCapture2 first-append stage fault/held-request/recovery: " << stages[stage] << '\n';
+    }
+}
 void failures() {
     struct Fault {
         const char *name, *point;
@@ -443,6 +533,7 @@ int main(int argc, char **argv) {
         if (argc > 1)
             return child(argc, argv);
         CHECK(record(0).size() < 4096 && record(0).size() + record(1).size() > 4096);
+        raw_first_append_stages();
         failures();
         crashes(std::filesystem::absolute(argv[0]).c_str());
         retry();

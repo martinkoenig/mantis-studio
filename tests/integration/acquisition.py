@@ -70,6 +70,39 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert not any(d.plugin_id == "org.mantis.x1" for d in client.devices.list())
         unavailable_profile.rename(profile_path)
         assert next(d.id for d in client.devices.list() if d.plugin_id == "org.mantis.x1" and not d.parent) == parent.id
+        # First-append failure must survive Session construction and even a
+        # second failure while abandoning its raw artifact. No capture may be
+        # registered; the same device must remain usable after the fault clears.
+        for fail_cleanup in (False, True):
+            database_path = root / "Project.mantis/project.sqlite"
+            with sqlite3.connect(database_path) as database:
+                database.execute("""CREATE TRIGGER fail_first_provenance BEFORE UPDATE OF provenance
+                    ON artifacts BEGIN SELECT RAISE(FAIL, 'Injected first provenance failure'); END""")
+                if fail_cleanup:
+                    cleanup_message = "Injected abandonment failure:" + "µ" * 800
+                    database.execute(f"""CREATE TRIGGER fail_abandon BEFORE UPDATE OF state ON artifacts
+                        WHEN NEW.state=3 BEGIN SELECT RAISE(FAIL, '{cleanup_message}'); END""")
+            try:
+                try:
+                    client.capture.start(parent)
+                    raise AssertionError("Faulted first append unexpectedly succeeded")
+                except mantis.MantisError as error:
+                    assert "Injected first provenance failure" in str(error), str(error)
+                    assert "Injected abandonment failure" not in str(error), str(error)
+                assert not client.snapshot().captures
+                events = list(client.events())
+                diagnostics = [json.loads(event.message) for event in events
+                               if event.kind == "capture.storage.diagnostics"]
+                assert diagnostics and diagnostics[-1]["raw_first_append_failed_stage"] == "0"
+                assert diagnostics[-1]["raw_first_append_complete"] == "0"
+                if fail_cleanup:
+                    cleanup_event = next(event for event in events if event.kind == "capture.cleanup.failed")
+                    assert "Injected abandonment failure" in cleanup_event.message
+                    assert len(cleanup_event.message.encode("utf-8")) <= 1024
+            finally:
+                with sqlite3.connect(database_path) as database:
+                    database.execute("DROP TRIGGER fail_first_provenance")
+                    database.execute("DROP TRIGGER IF EXISTS fail_abandon")
         # CLI creates the capture through the same protocol used by both SDKs.
         started = cli("capture", "start", parent.id)["captures"][0]
         capture = mantis.Capture(client, started["id"], started["raw_artifact"])
@@ -80,6 +113,10 @@ with tempfile.TemporaryDirectory(prefix="mantis-acquisition-") as directory:
         assert status.preview_drops > 0 and status.dropped == 0 and not status.error
         assert status.total_bytes > 0 and status.writer_mb_s > 0
         assert status.diagnostics["copy_count"] == "1"
+        assert status.diagnostics["raw_first_append_complete"] == "1"
+        assert int(status.diagnostics["raw_first_provenance_ns"]) >= 0
+        assert int(status.diagnostics["raw_first_directory_sync_ns"]) >= 0
+        assert int(status.diagnostics["recorder_first_commit_ns"]) >= int(status.diagnostics["recorder_first_enqueued_ns"]) >= 0
         assert status.diagnostics["pairing_mode"] == "timestamp-nearest"
         assert status.diagnostics["native_counter_equality"] == "different"
         assert status.diagnostics["native_sequence_offset"] == ("6" if packed else "-6")

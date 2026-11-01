@@ -71,7 +71,38 @@ int main() {
             artifact::Store store(root);
             artifact::Provenance provenance; provenance.parameters = {{"segment_max_bytes", "8192"}, {"profile", "fixture"}};
             finalized = store.begin({"org.mantis.RawCapture", 2}, provenance);
-            for (uint64_t i = 0; i < 20; ++i) store.append(finalized, *frame_set(i));
+            data::Metadata first_append;
+            for (uint64_t i = 0; i < 20; ++i) {
+                store.append(finalized, *frame_set(i));
+                if (!i) {
+                    first_append = store.raw_append_diagnostics(finalized);
+                    CHECK(first_append.at("raw_append_available") == "1");
+                    CHECK(first_append.at("raw_first_append_complete") == "1");
+                    CHECK(first_append.at("raw_first_append_failed_stage") == "-1");
+                    for (const auto *key :
+                         {"raw_first_provenance_ns", "raw_first_writer_init_ns", "raw_first_segment_open_ns",
+                          "raw_first_directory_sync_ns", "raw_first_record_write_ns"})
+                        CHECK(std::stoll(first_append.at(key)) >= 0);
+                }
+            }
+            CHECK(store.raw_append_diagnostics(finalized) == first_append); // Fixed first-call snapshot.
+            artifact::Provenance invalid_limit;
+            invalid_limit.parameters["segment_max_bytes"] = "1";
+            auto invalid = store.begin({"org.mantis.RawCapture", 2}, invalid_limit);
+            bool invalid_rejected{};
+            try {
+                store.append(invalid, *frame_set(0));
+            } catch (const Failure &failure) {
+                invalid_rejected = true;
+                CHECK(failure.error.message == "Segment size must be 4 KiB..64 MiB");
+            }
+            CHECK(invalid_rejected);
+            auto failed_initialization = store.raw_append_diagnostics(invalid);
+            CHECK(failed_initialization.at("raw_first_append_complete") == "0");
+            CHECK(failed_initialization.at("raw_first_append_failed_stage") == "1");
+            CHECK(failed_initialization.at("raw_first_segment_open_ns") == "-1");
+            store.abandon(invalid);
+            CHECK(store.raw_append_diagnostics(invalid) == failed_initialization);
             auto a = store.finalize(finalized);
             CHECK(a.chunks < 20 && a.chunks > 1); CHECK(a.provenance.parameters.at("profile") == "fixture");
             CHECK(a.provenance.calibration.id == Id{"calibration.test"});

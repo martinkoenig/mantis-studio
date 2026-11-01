@@ -30,6 +30,10 @@ class Store {
     const std::filesystem::path &root() const;
     ArtifactId begin(ArtifactType, Provenance);
     void append(const ArtifactId &, const data::Packet &);
+    // Internal runtime diagnostics, not persisted provenance or a Client/Plugin
+    // SDK contract. Fixed first-append timings per live schema-2 writer; one
+    // failed-initialization slot survives failure before a writer exists.
+    data::Metadata raw_append_diagnostics(const ArtifactId &) const;
     // A single immutable semantic observation per derived artifact, with exact context/lineage.
     ArtifactId begin_laser_observation(Provenance = {});
     void append_laser_observation(const ArtifactId &, const data::LaserObservation &);
