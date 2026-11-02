@@ -672,3 +672,20 @@ endif()
 if(BUILD_TESTING)
  add_subdirectory(tests/storage)
 endif()
+
+# Wait observation is linked ONLY into the three existing concurrency tests.
+# --wrap also sees wait calls in static runtime archives, without a second
+# runtime build or production instrumentation. These probes qualify the Linux
+# libstdc++ matrix; other platforms report unavailable entry proof explicitly.
+if(BUILD_TESTING)
+ foreach(target mantis-core-tests mantis-semantic-processing-tests mantis-projected-raw-tests)
+  target_sources(${target} PRIVATE tests/support/observed_wait.cpp)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+   target_compile_definitions(${target} PRIVATE MANTIS_TEST_WAIT_WRAP)
+   target_link_options(${target} PRIVATE
+    "LINKER:--wrap=_ZNSt18condition_variable4waitERSt11unique_lockISt5mutexE"
+    "LINKER:--wrap=pthread_cond_clockwait"
+    "LINKER:--wrap=pthread_cond_timedwait")
+  endif()
+ endforeach()
+endif()

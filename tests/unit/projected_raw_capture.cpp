@@ -1,4 +1,6 @@
 #include "../../src/artifact-store/segments.hpp"
+#include "../support/async_scope.hpp"
+#include "../support/observed_wait.hpp"
 #include "projected_storage_values.hpp"
 #include <fstream>
 #include <future>
@@ -69,7 +71,9 @@ int main() {
         auto root = std::filesystem::temp_directory_path() / Id::random().value;
         struct Cleanup {
             std::filesystem::path p;
-            ~Cleanup() { std::filesystem::remove_all(p); }
+            ~Cleanup() {
+                std::filesystem::remove_all(p);
+            }
         } cleanup{root};
         std::filesystem::create_directories(root);
         Id finalized, empty;
@@ -242,31 +246,63 @@ int main() {
             CHECK(a == p);
             CHECK(asap.next() && asap.finished());
             CHECK(paced.next() && paced.finished());
-            std::promise<void> entered;
-            std::atomic_bool report_wait{false};
-            auto waiting_clock = [&] {
-                if (report_wait.exchange(false))
-                    entered.set_value();
-                return clock();
+            // ADR-043 requires bounded pacing/cancellation, not a sub-poll
+            // notification latency. Observe the real wait, retain busy and exact
+            // delivery oracles, and allow the existing 50-ms fallback contract.
+            auto stop_wait = [&](bool unwind) {
+                ns = 0;
+                device::BundleReplay waiting(store, finalized, true, clock);
+                CHECK(waiting.next());
+                test::ObservedWait wait;
+                test::Async future(
+                    [&] {
+                        waiting.stop();
+                        ns = 4000000; // Also rescues a deliberately broken stop.
+                        waiting.notify_clock_advanced();
+                        wait.wake();
+                    },
+                    [&] {
+                        test::ObservedWait::Arm arm(wait);
+                        return waiting.next(60000);
+                    });
+                CHECK(wait.blocked());
+                auto busy = waiting.next();
+                CHECK(!busy && busy.error().code == Status::busy);
+                CHECK(!unwind && "replay stop unwind");
+                waiting.stop();
+                CHECK(future.future.wait_for(1s) == std::future_status::ready);
+                auto cancelled = future.future.get();
+                CHECK(!cancelled && cancelled.error().code == Status::cancelled);
+                CHECK(waiting.finished());
             };
-            device::BundleReplay waiting(store, finalized, true, waiting_clock);
-            ns = 0;
-            CHECK(waiting.next());
-            report_wait = true;
-            auto future = std::async(std::launch::async, [&] { return waiting.next(60000); });
-            CHECK(entered.get_future().wait_for(1s) == std::future_status::ready);
-            auto busy = waiting.next();
-            CHECK(!busy && busy.error().code == Status::busy);
-            waiting.stop();
-            CHECK(future.wait_for(1s) == std::future_status::ready);
-            CHECK(!future.get());
-            device::BundleReplay advance(store, finalized, true, clock);
-            CHECK(advance.next());
-            auto delivery = std::async(std::launch::async, [&] { return advance.next(60000); });
-            ns = 1000000;
-            advance.notify_clock_advanced();
-            CHECK(delivery.wait_for(1s) == std::future_status::ready);
-            CHECK(delivery.get());
+            stop_wait(false);
+            test::assertion_unwinds("replay stop unwind", [&] { stop_wait(true); });
+            auto advance_wait = [&](bool unwind) {
+                ns = 0;
+                device::BundleReplay advance(store, finalized, true, clock);
+                CHECK(advance.next());
+                test::ObservedWait wait;
+                test::Async delivery(
+                    [&] {
+                        advance.stop();
+                        ns = 4000000;
+                        advance.notify_clock_advanced();
+                        wait.wake();
+                    },
+                    [&] {
+                        test::ObservedWait::Arm arm(wait);
+                        return advance.next(60000);
+                    });
+                CHECK(wait.blocked());
+                CHECK(!unwind && "replay clock unwind");
+                ns = 1000000;
+                advance.notify_clock_advanced();
+                CHECK(delivery.future.wait_for(1s) == std::future_status::ready);
+                auto value = delivery.future.get();
+                CHECK(value && *value && encode(**value) == encode(bundle(1)));
+            };
+            advance_wait(false);
+            test::assertion_unwinds("replay clock unwind", [&] { advance_wait(true); });
         }
         // Every incomplete trailing region truncates only to the verified prefix.
         for (auto tail : {std::string("MRAWREC3"), record(bundle(1)).substr(0, 100),
@@ -355,25 +391,45 @@ int main() {
                 store->append_bundle(id, evidence_only(n));
             store->abandon(id);
             CancellationToken token;
-            auto recovering = std::async(std::launch::async, [&] {
-                try {
-                    store->recover(id, token);
-                    return Status::ok;
-                } catch (const Failure &e) {
-                    return e.error.code;
-                }
-            });
-            auto deadline = std::chrono::steady_clock::now() + 2s;
-            while (store->get(id).state != artifact::ArtifactState::finalizing &&
-                   std::chrono::steady_clock::now() < deadline)
-                std::this_thread::yield();
-            CHECK(store->get(id).state == artifact::ArtifactState::finalizing);
-            token.cancel();
-            CHECK(recovering.wait_for(2s) == std::future_status::ready &&
-                  recovering.get() == Status::cancelled);
+            test::Async recovering([&] { token.cancel(); },
+                                   [&] {
+                                       try {
+                                           store->recover(id, token);
+                                           return Status::ok;
+                                       } catch (const Failure &e) {
+                                           return e.error.code;
+                                       }
+                                   });
+            test::assertion_unwinds(
+                "recovery assertion unwind",
+                [&] {
+                    // This inner guard retires the operation before observing the
+                    // assertion; Async also covers a failure anywhere outside it.
+                    test::OnExit cancel{[&] {
+                        token.cancel();
+                        recovering.future.wait();
+                    }};
+                    auto deadline = std::chrono::steady_clock::now() + 2s;
+                    while (store->get(id).state != artifact::ArtifactState::finalizing &&
+                           std::chrono::steady_clock::now() < deadline)
+                        std::this_thread::yield();
+                    CHECK(store->get(id).state == artifact::ArtifactState::finalizing);
+                    CHECK(false && "recovery assertion unwind");
+                },
+                2s);
+            CHECK(recovering.future.wait_for(2s) == std::future_status::ready &&
+                  recovering.future.get() == Status::cancelled);
             CHECK(store->get(id).state == artifact::ArtifactState::recoverable);
             store->recover(id);
-            CHECK(store->bundle_summary(id).records == 5000 && !store->bundle_summary(id).final_outcome);
+            artifact::BundleCaptureReader verified(store, id);
+            CHECK(!verified.final_outcome());
+            uint64_t records = 0;
+            while (auto value = verified.next()) {
+                CHECK(records < 5000);
+                CHECK(encode(*value) == encode(evidence_only(records)));
+                ++records;
+            }
+            CHECK(records == 5000);
         }
         // Corrupt complete records, semantic discontinuities and header corruption never get truncated.
         for (unsigned mode = 0; mode < 10; ++mode) {

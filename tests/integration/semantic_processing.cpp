@@ -1,3 +1,5 @@
+#include "../support/async_scope.hpp"
+#include "../support/observed_wait.hpp"
 #include "../unit/laser_observation_values.hpp"
 #include <cstdlib>
 #include <fstream>
@@ -38,10 +40,14 @@ void env(const char *key, std::string value) {
     CHECK(setenv(key, value.c_str(), 1) == 0);
 #endif
 }
-void mode(unsigned n) { env("MANTIS_PROCESSOR_TEST_MODE", std::to_string(n)); }
+void mode(unsigned n) {
+    env("MANTIS_PROCESSOR_TEST_MODE", std::to_string(n));
+}
 struct Temporary {
     std::filesystem::path path = std::filesystem::temp_directory_path() / Id::random().value;
-    Temporary() { std::filesystem::create_directories(path); }
+    Temporary() {
+        std::filesystem::create_directories(path);
+    }
     ~Temporary() {
         std::error_code ec;
         std::filesystem::remove_all(path, ec);
@@ -521,57 +527,90 @@ void stream_tests(const std::filesystem::path &plugin_dir, const std::filesystem
     env("MANTIS_SYNTHETIC_OBSERVATION_FIXTURE", fixture_path.string());
     store->clear_active_calibration({"logical-device"});
     CHECK(storage_fixture::encode(store->bundle(raw, 1)) == input_bytes);
-    // Real local lossless stream, finite source/sink queues, deterministic order and closure.
-    pipeline::BoundedQueue<data::SemanticPublished> in(2, pipeline::QueuePolicy::lossless);
-    pipeline::BoundedQueue<pipeline::SemanticExecutionResult> out(2, pipeline::QueuePolicy::lossless);
-    std::stop_source stop;
-    auto processing = std::async(
-        std::launch::async, [&] { return pipeline::execute_stream(compiled, in, out, stop.get_token()); });
-    std::thread producer([&] {
-        for (unsigned i = 0; i < 64; ++i) {
-            auto b = bundle(1);
-            b.key.sequence = {i};
-            b.evidence.key.ordinal = {i};
-            b.evidence.causal_predecessors.clear();
-            CHECK(in.push(data::publish(SemanticPacket{b}), stop.get_token()));
+    // Real lossless stream. Each task owns exceptions; every exit closes input.
+    auto stream_case = [&](unsigned fault) {
+        pipeline::BoundedQueue<data::SemanticPublished> in(2, pipeline::QueuePolicy::lossless);
+        pipeline::BoundedQueue<pipeline::SemanticExecutionResult> out(2, pipeline::QueuePolicy::lossless);
+        std::stop_source stop;
+        auto unblock = [&] {
+            stop.request_stop();
+            in.close();
+            out.close();
+        };
+        test::Async processing(unblock,
+                               [&] { return pipeline::execute_stream(compiled, in, out, stop.get_token()); });
+        test::Async producer(unblock, [&] {
+            test::OnExit close{[&] { in.close(); }};
+            for (unsigned i = 0; i < 64; ++i) {
+                CHECK(!(fault == 2 && i == 1) && "semantic producer unwind");
+                auto b = bundle(1);
+                b.key.sequence = {i};
+                b.evidence.key.ordinal = {i};
+                b.evidence.causal_predecessors.clear();
+                CHECK(in.push(data::publish(SemanticPacket{b}), stop.get_token()));
+            }
+        });
+        uint64_t received = 0;
+        while (auto v = out.pop()) {
+            auto &o = std::get<LaserObservation>(*v->output);
+            CHECK(o.key.sequence.value == received++);
+            CHECK(o.context.bundle.get()->sequence.value == o.key.sequence.value);
+            CHECK(fault != 1 && "semantic consumer unwind");
         }
-        in.close();
-    });
-    uint64_t received = 0;
-    while (auto v = out.pop()) {
-        auto &o = std::get<LaserObservation>(*v->output);
-        CHECK(o.key.sequence.value == received++);
-        CHECK(o.context.bundle.get()->sequence.value == o.key.sequence.value);
-    }
-    producer.join();
-    CHECK(processing.get());
-    CHECK(received == 64);
-    CHECK(in.metrics().dropped == 0 && out.metrics().dropped == 0);
-    CHECK(in.metrics().high_water <= 2 && out.metrics().high_water <= 2);
-    // Cancellation while sink is blocked and with queued publications wakes every participant.
-    pipeline::BoundedQueue<data::SemanticPublished> pending_in(2, pipeline::QueuePolicy::lossless);
-    pipeline::BoundedQueue<pipeline::SemanticExecutionResult> pending_out(1, pipeline::QueuePolicy::lossless);
-    std::stop_source cancellation;
-    CHECK(pending_in.push(source));
-    CHECK(pending_in.push(source));
-    auto pending = std::async(std::launch::async, [&] {
-        return pipeline::execute_stream(compiled, pending_in, pending_out, cancellation.get_token());
-    });
-    const auto deadline = std::chrono::steady_clock::now() + 2s;
-    while (pending_out.metrics().occupancy != 1 && std::chrono::steady_clock::now() < deadline)
-        std::this_thread::sleep_for(1ms);
-    CHECK(pending_out.metrics().occupancy == 1);
-    auto begin = std::chrono::steady_clock::now();
-    cancellation.request_stop();
-    CHECK(pending.wait_for(1s) == std::future_status::ready);
-    auto cancelled = pending.get();
-    CHECK(!cancelled && cancelled.error().code == Status::cancelled);
-    CHECK(std::chrono::steady_clock::now() - begin < 1s);
+        producer.future.get(); // Original producer CHECK is rethrown here.
+        CHECK(processing.future.get());
+        CHECK(received == 64);
+        CHECK(in.metrics().dropped == 0 && out.metrics().dropped == 0);
+        CHECK(in.metrics().high_water <= 2 && out.metrics().high_water <= 2);
+    };
+    stream_case(0);
+    test::assertion_unwinds("semantic consumer unwind", [&] { stream_case(1); });
+    test::assertion_unwinds("semantic producer unwind", [&] { stream_case(2); });
+
+    auto cancel_sink = [&](bool unwind) {
+        pipeline::BoundedQueue<data::SemanticPublished> pending_in(2, pipeline::QueuePolicy::lossless);
+        pipeline::BoundedQueue<pipeline::SemanticExecutionResult> pending_out(
+            1, pipeline::QueuePolicy::lossless);
+        std::stop_source cancellation;
+        test::ObservedWait wait;
+        CHECK(pending_in.push(source));
+        CHECK(pending_in.push(source));
+        test::Async pending(
+            [&] {
+                cancellation.request_stop();
+                pending_in.close();
+                pending_out.close();
+                wait.wake();
+            },
+            [&] {
+                test::ObservedWait::Arm arm(wait);
+                return pipeline::execute_stream(compiled, pending_in, pending_out, cancellation.get_token());
+            });
+        // Actual wait + two consumed inputs + one output distinguishes second
+        // sink publication from producer-start, occupancy, or source waiting.
+        CHECK(wait.blocked());
+        CHECK(pending_in.metrics().popped == 2 && pending_out.metrics().pushed == 1);
+        CHECK(!unwind && "semantic sink unwind");
+        cancellation.request_stop();
+        CHECK(pending.future.wait_for(1s) == std::future_status::ready);
+        auto cancelled = pending.future.get();
+        CHECK(!cancelled && cancelled.error().code == Status::cancelled);
+        CHECK(pending_out.metrics().pushed == 1 && pending_out.metrics().dropped == 0);
+        auto retained = pending_out.pop();
+        CHECK(retained);
+        CHECK(std::get<LaserObservation>(*retained->output).key.sequence.value ==
+              std::get<AcquisitionBundle>(*source).key.sequence.value);
+        CHECK(!pending_out.pop());
+        CHECK(!pending_in.push(source)); // execute_stream closed both queues.
+    };
+    cancel_sink(false);
+    test::assertion_unwinds("semantic sink unwind", [&] { cancel_sink(true); });
     pipeline::BoundedQueue<data::SemanticPublished> no_input(1, pipeline::QueuePolicy::lossless);
     pipeline::BoundedQueue<pipeline::SemanticExecutionResult> no_output(1, pipeline::QueuePolicy::lossless);
     std::stop_source pre_cancel;
     pre_cancel.request_stop();
-    CHECK(!pipeline::execute_stream(compiled, no_input, no_output, pre_cancel.get_token()));
+    auto pre_stopped = pipeline::execute_stream(compiled, no_input, no_output, pre_cancel.get_token());
+    CHECK(!pre_stopped && pre_stopped.error().code == Status::cancelled);
     // Failed node closes output and source without a valid-looking publication.
     pipeline::BoundedQueue<data::SemanticPublished> failed_in(1, pipeline::QueuePolicy::lossless);
     pipeline::BoundedQueue<pipeline::SemanticExecutionResult> failed_out(1, pipeline::QueuePolicy::lossless);

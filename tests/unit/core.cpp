@@ -1,3 +1,5 @@
+#include "../support/async_scope.hpp"
+#include "../support/observed_wait.hpp"
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -39,21 +41,168 @@ data::Published image() {
                             std::move(builder).publish()});
     return data::publish(std::move(p));
 }
+void queue_waits() {
+    using namespace pipeline;
+    using namespace std::chrono_literals;
+    enum class Release { peer, close, stop };
+    for (auto policy : {QueuePolicy::block, QueuePolicy::lossless}) {
+        for (bool timed : {false, true}) {
+            for (auto release : {Release::peer, Release::close, Release::stop}) {
+                BoundedQueue<int> q(1, policy);
+                CHECK(q.push(1));
+                std::stop_source stop;
+                test::ObservedWait wait;
+                test::Async pending(
+                    [&] {
+                        stop.request_stop();
+                        q.close();
+                        wait.wake();
+                    },
+                    [&] {
+                        test::ObservedWait::Arm arm(wait);
+                        return timed ? q.push_for(2, 1s, stop.get_token()) : q.push(2, stop.get_token());
+                    });
+                CHECK(wait.blocked());
+                CHECK(q.metrics().occupancy == 1 && q.metrics().pushed == 1);
+                if (release == Release::peer)
+                    CHECK(q.pop() == 1);
+                else if (release == Release::close)
+                    q.close();
+                else
+                    stop.request_stop();
+                CHECK(pending.future.wait_for(1s) == std::future_status::ready);
+                CHECK(pending.future.get() == (release == Release::peer));
+                // A timed close/stop must NOT pass by reaching its own deadline.
+                CHECK(wait.timeouts() == 0);
+                q.close();
+                const auto closed = q.metrics();
+                CHECK(q.pop() == (release == Release::peer ? 2 : 1));
+                CHECK(!q.pop() && !q.try_pop());
+                const auto metrics = q.metrics();
+                CHECK(metrics.dropped == 0 && metrics.high_water == 1 && metrics.occupancy == 0);
+                CHECK(metrics.pushed == (release == Release::peer ? 2u : 1u));
+                CHECK(metrics.popped == metrics.pushed && metrics.first_push_ns >= 0);
+                CHECK(metrics.full_ns > 0);
+                CHECK(metrics.full_ns == closed.full_ns);
+                if (timed && release != Release::peer)
+                    CHECK(metrics.last_failed_wait_ns > 0);
+                else
+                    CHECK(metrics.last_failed_wait_ns == 0);
+                CHECK(!q.push(3) && !q.push_for(3, 0ms));
+                CHECK(q.metrics().last_failed_wait_ns == 0);
+                CHECK(q.metrics().full_ns == metrics.full_ns); // close freezes full duration.
+            }
+        }
+        for (auto release : {Release::peer, Release::close, Release::stop}) {
+            BoundedQueue<int> q(1, policy);
+            std::stop_source stop;
+            test::ObservedWait wait;
+            test::Async pending(
+                [&] {
+                    stop.request_stop();
+                    q.close();
+                    wait.wake();
+                },
+                [&] {
+                    test::ObservedWait::Arm arm(wait);
+                    return q.pop(stop.get_token());
+                });
+            CHECK(wait.blocked());
+            CHECK(q.metrics().occupancy == 0 && q.metrics().popped == 0);
+            if (release == Release::peer)
+                CHECK(q.push(7));
+            else if (release == Release::close)
+                q.close();
+            else
+                stop.request_stop();
+            CHECK(pending.future.wait_for(1s) == std::future_status::ready);
+            auto value = pending.future.get();
+            CHECK(value == (release == Release::peer ? std::optional<int>{7} : std::nullopt));
+            CHECK(q.metrics().pushed == (release == Release::peer ? 1u : 0u));
+            CHECK(q.metrics().pushed == q.metrics().popped && q.metrics().dropped == 0);
+        }
+        BoundedQueue<int> stopped(1, policy);
+        std::stop_source stop;
+        stop.request_stop();
+        CHECK(!stopped.pop(stop.get_token()));
+        CHECK(stopped.push(11));
+        CHECK(!stopped.push(12, stop.get_token()));
+        CHECK(!stopped.push_for(12, 1s, stop.get_token()));
+        CHECK(stopped.metrics().last_failed_wait_ns > 0);
+        CHECK(stopped.pop() == 11 && stopped.metrics().dropped == 0);
+
+        BoundedQueue<int> timeout(1, policy);
+        CHECK(timeout.push(19));
+        CHECK(!timeout.push_for(20, 25ms));
+        const auto failed = timeout.metrics();
+        CHECK(failed.last_failed_wait_ns >= 25000000 && failed.full_ns >= failed.last_failed_wait_ns);
+        CHECK(failed.pushed == 1 && failed.popped == 0 && failed.dropped == 0);
+        timeout.close();
+        CHECK(timeout.pop() == 19 && !timeout.pop());
+    }
+    // Multiple retained LOSSLESS values drain exactly once, in FIFO order,
+    // through BOTH pop variants after close, without admitting new values.
+    BoundedQueue<int> retained(4, QueuePolicy::lossless);
+    for (int value : {13, 8, 21, 5})
+        CHECK(retained.push(value));
+    retained.close();
+    CHECK(!retained.push(99) && !retained.push_for(99, 0ms));
+    CHECK(retained.pop() == 13 && retained.try_pop() == 8);
+    CHECK(retained.pop() == 21 && retained.try_pop() == 5);
+    CHECK(!retained.pop() && !retained.try_pop());
+    CHECK(retained.metrics().pushed == 4 && retained.metrics().popped == 4);
+    CHECK(retained.metrics().dropped == 0 && retained.metrics().high_water == 4);
+
+    for (bool writer : {false, true})
+        test::assertion_unwinds("queue assertion unwind", [&] {
+            BoundedQueue<int> q(1, QueuePolicy::lossless);
+            if (writer)
+                CHECK(q.push(1));
+            std::stop_source stop;
+            test::ObservedWait wait;
+            test::Async pending(
+                [&] {
+                    stop.request_stop();
+                    q.close();
+                    wait.wake();
+                },
+                [&] {
+                    test::ObservedWait::Arm arm(wait);
+                    if (writer)
+                        return q.push(2, stop.get_token());
+                    return q.pop(stop.get_token()).has_value();
+                });
+            CHECK(wait.blocked());
+            CHECK(false && "queue assertion unwind");
+        });
+}
+void queue_stress(bool unwind) {
+    pipeline::BoundedQueue<int> stress(4, pipeline::QueuePolicy::lossless);
+    std::stop_source stop;
+    test::Async producer(
+        [&] {
+            stop.request_stop();
+            stress.close();
+        },
+        [&] {
+            test::OnExit close{[&] { stress.close(); }};
+            for (int i = 0; i < 2000; ++i)
+                if (!stress.push(i, stop.get_token()))
+                    throw std::runtime_error("Ordered queue producer rejected value " + std::to_string(i));
+        });
+    int expected = 0;
+    while (auto n = stress.pop()) {
+        CHECK(*n == expected++);
+        CHECK(!unwind && "queue stream unwind");
+    }
+    producer.future.get(); // Transport worker exceptions to the test thread.
+    CHECK(expected == 2000);
+    CHECK(stress.metrics().high_water <= 4 && stress.metrics().dropped == 0);
+}
+
 void queues() {
     using namespace pipeline;
-    for (auto policy : {QueuePolicy::block, QueuePolicy::lossless}) {
-        BoundedQueue<int> q(1, policy);
-        CHECK(q.push(1));
-        auto pending = std::async(std::launch::async, [&] { return q.push(2); });
-        CHECK(pending.wait_for(std::chrono::milliseconds(25)) == std::future_status::timeout);
-        CHECK(q.pop() == 1);
-        CHECK(pending.get());
-        CHECK(q.pop() == 2);
-        CHECK(q.metrics().dropped == 0);
-        q.close();
-        CHECK(!q.pop());
-        CHECK(!q.push(3));
-    }
+    queue_waits();
     BoundedQueue<int> oldest(2, QueuePolicy::drop_oldest);
     oldest.push(1);
     oldest.push(2);
@@ -73,24 +222,12 @@ void queues() {
     newest.push(2);
     CHECK(newest.pop() == 1);
     CHECK(newest.metrics().dropped == 1);
-    BoundedQueue<int> stopped(1, QueuePolicy::lossless);
-    stopped.push(1);
-    std::stop_source stop;
-    auto pending = std::async(std::launch::async, [&] { return stopped.push(2, stop.get_token()); });
-    stop.request_stop();
-    CHECK(!pending.get());
-    BoundedQueue<int> stress(4, QueuePolicy::lossless);
-    std::thread producer([&] {
-        for (int i = 0; i < 2000; ++i)
-            stress.push(i);
-        stress.close();
+    queue_stress(false);
+    test::assertion_unwinds("queue stream unwind", [&] { queue_stress(true); });
+    test::assertion_unwinds("false && \"primary diagnostic\" at line ", [] {
+        test::assertion_unwinds(
+            "primary diagnostic", [] { CHECK(false && "primary diagnostic"); }, std::chrono::seconds{0});
     });
-    int expected = 0;
-    while (auto n = stress.pop())
-        CHECK(*n == expected++);
-    producer.join();
-    CHECK(expected == 2000);
-    CHECK(stress.metrics().high_water <= 4);
     rejects([] { BoundedQueue<int> invalid(0, QueuePolicy::block); });
 }
 } // namespace
@@ -156,7 +293,8 @@ int main(int argc, char **argv) {
         right.header.metadata = {{"role", "right"}, {"identity", "sensor-b"}};
         set.frames = {data::publish(left), data::publish(right)};
         auto published_set = data::publish(set);
-        CHECK(published_set->frames[0]->attributes[0].buffer.identity() == input->attributes[0].buffer.identity());
+        CHECK(published_set->frames[0]->attributes[0].buffer.identity() ==
+              input->attributes[0].buffer.identity());
         data::write_packet(tmp / "set.packet", *published_set);
         auto decoded_set = data::read_packet(tmp / "set.packet");
         CHECK(decoded_set->type == schema::frameset);
@@ -167,14 +305,17 @@ int main(int argc, char **argv) {
         CHECK(decoded_set->frames[1]->header.sequence.value == 92);
         CHECK(decoded_set->frames[1]->header.received.nanoseconds == 102);
         CHECK(decoded_set->frames[0]->header.metadata == left.header.metadata);
-        CHECK(content_hash(*decoded_set->frames[1]->attributes[0].buffer.map_read()) == content_hash(*input->attributes[0].buffer.map_read()));
+        CHECK(content_hash(*decoded_set->frames[1]->attributes[0].buffer.map_read()) ==
+              content_hash(*input->attributes[0].buffer.map_read()));
         set.frames.clear();
         rejects([&] { (void)data::publish(set); });
-        MantisAcquisitionV1 table{sizeof(MantisAcquisitionV1), 1, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+        MantisAcquisitionV1 table{
+            sizeof(MantisAcquisitionV1), 1, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
         CHECK(sdk::compatible_table(&table));
         table.struct_size = 4;
         CHECK(!sdk::compatible_table(&table));
-        table.struct_size = sizeof(table); table.abi_version = 99;
+        table.struct_size = sizeof(table);
+        table.abi_version = 99;
         CHECK(!sdk::compatible_table(&table));
         // Host allocation ownership remains entirely on the host side of the C ABI.
         const auto *host_api = plugins::host_api();
