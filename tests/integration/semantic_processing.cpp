@@ -182,16 +182,25 @@ void processor_tests(const std::filesystem::path &library, const std::filesystem
     CHECK(!timed);
     CHECK(std::chrono::steady_clock::now() - begin < 3s);
     isolated.set_enabled("org.example.processor-contract", true);
-    CancellationToken token;
-    auto pending = std::async(std::launch::async, [&] { return instance->process(inputs, token); });
-    std::this_thread::sleep_for(50ms);
-    begin = std::chrono::steady_clock::now();
-    token.cancel();
-    CHECK(pending.wait_for(1s) == std::future_status::ready);
-    auto cancelled = pending.get();
-    CHECK(!cancelled && cancelled.error().code == Status::cancelled);
-    CHECK(std::chrono::steady_clock::now() - begin < 1s);
-    CHECK(std::filesystem::is_empty(tmp.path / "scratch"));
+    {
+        CancellationToken token;
+        const auto checkpoint = tmp.path / "inflight.started";
+        env("MANTIS_PROCESSOR_STARTED_FILE", checkpoint.string());
+        test::OnExit clear_marker{[] { env("MANTIS_PROCESSOR_STARTED_FILE", ""); }};
+        test::Async pending([&] { token.cancel(); }, [&] { return instance->process(inputs, token); });
+        const auto entry_deadline = std::chrono::steady_clock::now() + 1s;
+        while (!std::filesystem::exists(checkpoint) && std::chrono::steady_clock::now() < entry_deadline)
+            std::this_thread::sleep_for(1ms);
+        CHECK(std::filesystem::exists(checkpoint)); // Written inside the actual ProcessorV2 callback.
+        CHECK(pending.future.wait_for(0ms) == std::future_status::timeout);
+        begin = std::chrono::steady_clock::now();
+        token.cancel();
+        CHECK(pending.future.wait_for(1s) == std::future_status::ready);
+        auto cancelled = pending.future.get();
+        CHECK(!cancelled && cancelled.error().code == Status::cancelled);
+        CHECK(std::chrono::steady_clock::now() - begin < 1s);
+        CHECK(std::filesystem::is_empty(tmp.path / "scratch"));
+    }
     mode(0);
     CHECK(instance->process(inputs, {}));
     // Explicit flat bridge allows a V2/V1 graph without changing the legacy plugin's behavior.
