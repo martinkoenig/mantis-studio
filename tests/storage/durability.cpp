@@ -527,9 +527,15 @@ void retry() {
     }
 }
 } // namespace
+void x1_store_failure(const std::filesystem::path &, const std::filesystem::path &);
 int main(int argc, char **argv) {
     try {
         ::signal(SIGPIPE, SIG_IGN);
+        if (argc == 3 && std::string_view(argv[1]) == "--x1-post-commit-store-failure") {
+            Directory dir;
+            x1_store_failure(argv[2], dir.path);
+            return 0;
+        }
         if (argc > 1)
             return child(argc, argv);
         CHECK(record(0).size() < 4096 && record(0).size() + record(1).size() > 4096);
