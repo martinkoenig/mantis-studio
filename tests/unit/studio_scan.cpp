@@ -788,7 +788,80 @@ void orbitZoomReset(QQuickWindow *w, mantis::render::PointCloudView *cloud, cons
     check(cloud->yaw() == -35 && cloud->pitch() == 35 && cloud->zoom() == 1,
           "Reset did not update real renderer");
 }
+void surfaceDestruction() {
+    for (bool bridgeFirst : {false, true}) {
+        QQuickWindow window;
+        auto bridge = std::make_unique<Observed>();
+        auto owner = std::make_unique<LiveViews>(window.contentItem());
+        owner->setBridge(bridge.get());
+        QPointer<QQuickItem> cloud = owner->cloud(), left = owner->left(), right = owner->right();
+        auto host = std::make_unique<QQuickItem>(window.contentItem());
+        host->setSize({640, 480});
+        owner->setCloudHost(host.get());
+        owner->setLeftHost(host.get());
+        owner->setRightHost(host.get());
+        auto result = snapshot();
+        result.cloud = fixtureCloud();
+        std::weak_ptr retained = result.cloud;
+        result.cloud_id = "fixture-cloud";
+        bridge->applyResult(result);
+        bridge->applyPreview(fixturePreview(bridge->projectGeneration()));
+        auto *preview = qobject_cast<MeasurementView *>(left.data());
+        check(preview && preview->hasImage(), "Lifetime fixture did not reach production preview");
+        const auto oldPixels = preview->image();
+        auto replacement = fixturePreview(bridge->projectGeneration());
+        replacement.left.fill(73);
+        bridge->applyPreview(std::move(replacement));
+        check(preview->image().pixelColor(0, 0).red() == 73 && oldPixels.pixelColor(0, 0).red() == 40,
+              "Preview replacement mutated retained image ownership");
+        host.reset();
+        check(!owner->cloudHost() && !owner->leftHost() && !owner->rightHost(),
+              "Destroyed visual host retained a live QPointer");
+        check(cloud && left && right && cloud->QObject::parent() == owner.get(),
+              "Visual host destruction deleted a C++ owned surface");
+        auto next = std::make_unique<QQuickItem>(window.contentItem());
+        next->setSize({320, 240});
+        owner->setCloudHost(next.get());
+        owner->setLeftHost(next.get());
+        owner->setRightHost(next.get());
+        next->setWidth(480);
+        check(cloud->parentItem() == next.get() && cloud->width() == 480 && left->width() == 480,
+              "Destroyed host prevented production rehosting/resize");
+        bool delivered{};
+        check(QMetaObject::invokeMethod(
+                  owner.get(), [&] { delivered = true; }, Qt::QueuedConnection),
+              "Lifetime callback was not queued");
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        check(delivered, "Living surface owner did not receive queued delivery");
+        delivered = false;
+        check(QMetaObject::invokeMethod(
+                  owner.get(), [&] { delivered = true; }, Qt::QueuedConnection),
+              "Teardown callback was not queued");
+        cloud->update();
+        left->update();
+        right->update();
+        if (bridgeFirst) {
+            bridge.reset();
+            check(!owner->bridge(), "Destroyed bridge retained a live QPointer");
+        }
+        owner.reset();
+        check(cloud.isNull() && left.isNull() && right.isNull(),
+              "Canonical surfaces survived their C++ owner");
+        if (bridge) {
+            // Production bridge QPointers must reject delivery to the dead surfaces.
+            bridge->applyResult(result);
+            bridge->applyPreview(fixturePreview(bridge->projectGeneration()));
+            bridge.reset();
+        }
+        result.cloud.reset();
+        check(retained.expired(), "Destroyed bridge/surfaces retained published cloud ownership");
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        check(!delivered, "Destroyed surface owner received a queued callback");
+        QCoreApplication::processEvents();
+    }
+}
 void surfaces(QQuickWindow *w, Observed &b, const QString &out) {
+    surfaceDestruction();
     auto *owner = qobject_cast<LiveViews *>(item(w, "liveSurfaces"));
     check(owner, "Canonical owner unavailable");
     QPointer<QQuickItem> cloud = owner->cloud(), left = owner->left(), right = owner->right();
@@ -1570,6 +1643,13 @@ int main(int argc, char **argv) {
                 jobPresentation(window, observed, out);
             }
             check(observed.commands == 0, "Scan invoked runtime mutation/data request");
+            if (task == "surfaces") {
+                // Leave actual visible production items dirty immediately before
+                // engine/window destruction; no event pump retires these updates first.
+                canonical->cloud()->update();
+                canonical->left()->update();
+                canonical->right()->update();
+            }
         }
         check(finalOwner.isNull() && finalCloud.isNull() && finalLeft.isNull() && finalRight.isNull(),
               "Canonical objects survived final window/engine destruction");
