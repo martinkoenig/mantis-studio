@@ -2,6 +2,7 @@
 #define MANTIS_X1_PROJECTED_FIXTURE 1
 #include "../../../plugins/first-party/devices/x1/acquisition.hpp"
 #include "views.hpp"
+#include "wait.hpp"
 #include <condition_variable>
 #include <filesystem>
 #include <mantis/sdk.hpp>
@@ -143,6 +144,7 @@ struct Instance {
     uint32_t active{}, state = MANTIS_RUN_OPEN, first_reason = MANTIS_ACQUISITION_REASON_NONE;
     bool inhibited = true, dispatched{}, completed{}, close_refused{};
     bool camera_started{};
+    x1_fixture::Wait waiting = x1_fixture::Wait::none;
     std::array<uint32_t, 2> logical{};
     std::array<std::string, 2> requests;
     MantisRuntimeTimestampV1 dispatch_time{};
@@ -187,6 +189,27 @@ struct Instance {
         wake.notify_all();
     }
 };
+// The observer borrows the sole opened fixture instance while holding this lock.
+// It cannot race destruction; next/abort never need the observer lock.
+std::mutex observer_mutex;
+Instance *observed_instance{};
+x1_fixture::Wait blocked(uint32_t timeout) noexcept {
+    try {
+        std::lock_guard lifetime(observer_mutex);
+        if (!observed_instance || timeout > call_limit)
+            return x1_fixture::Wait::none;
+        auto &s = *observed_instance;
+        std::unique_lock lock(s.control);
+        // waiting is set under control immediately before wait_until. Acquiring
+        // that SAME mutex proves the real wait released it, not just next entry.
+        s.wake.wait_for(lock, std::chrono::milliseconds(timeout),
+                        [&] { return s.waiting != x1_fixture::Wait::none; });
+        return s.waiting;
+    } catch (...) {
+        return x1_fixture::Wait::none;
+    }
+}
+const x1_fixture::WaitObserver wait_observer{sizeof(wait_observer), 1, blocked};
 bool same(const char *a, const std::string &b) {
     return a && a == b;
 }
@@ -280,7 +303,10 @@ int open(const MantisHostV1 *h, const char *id, uint32_t t, void **out) {
     if (rc)
         return rc;
     std::unique_ptr<camera::Device> owned(static_cast<camera::Device *>(d));
-    *out = new Instance(std::move(owned));
+    auto instance = std::make_unique<Instance>(std::move(owned));
+    std::lock_guard lock(observer_mutex);
+    observed_instance = instance.get();
+    *out = instance.release();
     return MANTIS_PL_OK;
 }
 int validate(void *ptr, const MantisAcquisitionProgramV1 *p, uint32_t t, MantisProgramValidationEmitV1 emit,
@@ -628,7 +654,10 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
         if (s.state != MANTIS_RUN_STARTED || s.inhibited || s.completed)
             return MANTIS_PL_NOT_READY;
         if (s.fault == "block") {
+            s.waiting = x1_fixture::Wait::blocked_next;
+            s.wake.notify_all();
             s.wake.wait_until(lock, deadline, [&] { return s.inhibited; });
+            s.waiting = x1_fixture::Wait::none;
             return MANTIS_PL_NOT_READY;
         }
         if (!s.camera_started) {
@@ -717,8 +746,11 @@ int next(void *ptr, uint32_t t, MantisSemanticEmitV1 emit, void *ctx) {
                 return MANTIS_PL_NOT_READY;
             // Finite interruptible readiness yield, no busy polling and no bridge queue.
             std::unique_lock lock(s.control);
+            s.waiting = x1_fixture::Wait::camera_stall;
+            s.wake.notify_all();
             s.wake.wait_until(lock, std::min(deadline, std::chrono::steady_clock::now() + 1ms),
                               [&] { return s.inhibited; });
+            s.waiting = x1_fixture::Wait::none;
         } while (true);
         rc = context.result;
     } else
@@ -834,6 +866,8 @@ int destroy(void *ptr, uint32_t t) {
         s.close_refused = true;
         return MANTIS_PL_BUSY;
     }
+    std::lock_guard lock(observer_mutex);
+    observed_instance = nullptr;
     delete &s;
     return MANTIS_PL_OK;
 }
@@ -892,6 +926,8 @@ void shutdown() {}
 const void *query(const char *id) {
     if (!id)
         return nullptr;
+    if (!std::strcmp(id, x1_fixture::wait_interface))
+        return enabled() ? &wait_observer : nullptr;
     if (!std::strcmp(id, MANTIS_PROJECTED_LIGHT_V1))
         return enabled() ? &projected : nullptr;
     return !std::strcmp(id, MANTIS_ACQUISITION_V1) ? &acquisition : nullptr;
