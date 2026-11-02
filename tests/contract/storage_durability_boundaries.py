@@ -14,13 +14,14 @@ seam = (root/'src/artifact-store/persistence-test.hpp').read_text()
 assert '#define MANTIS_STORAGE_POINT(point, root, id) ((void)0)' in seam
 assert '#define MANTIS_STORAGE_COMMIT(point, root, id, db) ((void)0)' in seam
 assert 'using CaptureOutput = std::ofstream;' in seam
-for binary in sys.argv[2:-1]:
+for binary in sys.argv[2:-2]:
     symbols = subprocess.check_output(['nm', '-C', binary], text=True)
     assert 'artifact::storage_test::' not in symbols, binary
     strings = subprocess.check_output(['strings', binary], text=True)
     assert 'Storage checkpoint pipe deadline' not in strings, binary
-symbols = subprocess.check_output(['nm', '-C', sys.argv[-1]], text=True)
-assert 'artifact::storage_test::CommitGuard' in symbols
-assert 'artifact::storage_test::Output' in symbols
-assert '__wrap_fsync' in symbols
+for binary in sys.argv[-2:]:
+    symbols = subprocess.check_output(['nm', '-C', binary], text=True)
+    assert 'artifact::storage_test::CommitGuard' in symbols, binary
+    assert 'artifact::storage_test::Output' in symbols, binary
+    assert '__wrap_fsync' in symbols, binary
 print('Storage seams compile out of product; isolated fault Store/daemon only PASS')

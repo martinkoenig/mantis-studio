@@ -9,12 +9,17 @@ target_include_directories(mantis-storage-qualification PUBLIC ${PROJECT_SOURCE_
 target_compile_definitions(mantis-storage-qualification PRIVATE MANTIS_STORAGE_FAULT_TESTING)
 target_link_libraries(mantis-storage-qualification PUBLIC mantis-artifact-api mantis-platform
   PRIVATE SQLite::SQLite3 nlohmann_json::nlohmann_json mantis-options)
-add_executable(mantis-storage-durability-tests durability.cpp)
+add_executable(mantis-storage-durability-tests durability.cpp ../unit/x1_store_failure.cpp)
 target_link_libraries(mantis-storage-durability-tests PRIVATE
   "$<LINK_LIBRARY:WHOLE_ARCHIVE,mantis-storage-qualification>" mantis-device-runtime SQLite::SQLite3)
 target_link_options(mantis-storage-durability-tests PRIVATE "LINKER:--wrap=fsync")
 add_test(NAME projected-storage-durability COMMAND mantis-storage-durability-tests)
 set_tests_properties(projected-storage-durability PROPERTIES TIMEOUT 90)
+# Keep all 56 ordinary X1 scenarios on the product Store. Only this new case
+# uses the existing qualified Store binary and its private short-write control.
+add_test(NAME x1-pairing-stream-GREY-post-commit-store-failure-recorder
+  COMMAND mantis-storage-durability-tests --x1-post-commit-store-failure ${CMAKE_BINARY_DIR}/plugins)
+set_tests_properties(x1-pairing-stream-GREY-post-commit-store-failure-recorder PROPERTIES TIMEOUT 30)
 add_executable(mantis-storage-fault-mantisd daemon.cpp)
 target_link_libraries(mantis-storage-fault-mantisd PRIVATE
   "$<LINK_LIBRARY:WHOLE_ARCHIVE,mantis-storage-qualification>" mantis-service-adapter)
@@ -27,4 +32,5 @@ set_tests_properties(projected-storage-daemon PROPERTIES TIMEOUT 45)
 add_test(NAME projected-storage-boundaries COMMAND ${Python3_EXECUTABLE}
   ${PROJECT_SOURCE_DIR}/tests/contract/storage_durability_boundaries.py ${PROJECT_SOURCE_DIR}
   $<TARGET_FILE:mantis-artifact-store> $<TARGET_FILE:mantisd>
-  $<TARGET_FILE:mantis-storage-fault-client> $<TARGET_FILE:mantis-storage-fault-mantisd>)
+  $<TARGET_FILE:mantis-storage-fault-client> $<TARGET_FILE:mantis-x1-pairing-stream-tests>
+  $<TARGET_FILE:mantis-storage-fault-mantisd> $<TARGET_FILE:mantis-storage-durability-tests>)
