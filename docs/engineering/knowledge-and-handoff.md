@@ -67,6 +67,22 @@ Suggested AO worker assignment: **`Implement the explicitly authorized scope in 
 
 Use a small, orthogonal vocabulary rather than one label for every implementation step. **Type:** `type:process`, `type:quality`, `type:security`, `type:meta`; existing native `bug`, `enhancement`, `documentation`, `security` may coexist. **Priority:** `priority:P0` (urgent verified security/data-integrity incident), `priority:P1` (blocking/high), `priority:P2` (planned normal), `priority:P3` (deferred). **Workflow:** `status:planned`, `status:active`, `status:blocked`, `status:review`, `status:reference`; **never** use a status label as evidence of ACCEPT. Mutually exclusive priority/status labels must be replaced, not accumulated. Only assign `P0` based on evidenced severity, never to game the queue.
 
+### Mandatory issue-label lifecycle (per issue)
+
+Issue labels must reflect the verified current lifecycle whenever an authorized issue is created or materially updated. Assign the appropriate existing type and priority labels, a relevant existing milestone when applicable, and one workflow label for an open actionable issue; use `status:planned` until authorized execution actually starts. Reference-only issues such as the permanent hub may use `status:reference` instead. Do not infer authorization from labels.
+
+- **Actual worker start:** The AO orchestrator sets `status:active` on the **assigned issue only**, after the owner-authorized worker has actually started. A queued, proposed or failed dispatch is not an active start.
+- **Implementation handoff:** Change that issue's workflow label to `status:review` while independent review or required CI is outstanding; do not treat a submitted worker report or green CI as ACCEPT.
+- **Execution blocked:** Use `status:blocked` for a material evidenced blocker and explain it in the issue's maintained current state. Restore `status:active` only when authorized execution actually resumes, including a correction cycle.
+- **Issue closure:** The independent Planning & Review owner closes an issue only after its applicable acceptance/integration gates, and removes **all** `status:*` labels as part of the same verified lifecycle transition. GitHub's native closed state represents closure; no `status:closed` label is needed.
+- **Reopening:** Reassign the single workflow label that matches the verified reopened state; reopening alone does not authorize a worker.
+
+**Exclusivity applies only within each individual issue:** at most one `status:*` label per issue. Multiple independently authorized issues may simultaneously have `status:active` (or any other workflow label). Workflow labels describe progress; **they are not worker locks, concurrency controls, repository-wide exclusivity rules or permissions to dispatch work**.
+
+The AO orchestrator owns label transitions during authorized execution; the independent Planning & Review owner owns acceptance and closure. Implementation workers report evidence and may suggest label changes but do not self-ACCEPT, close issues or start unrelated work. On every material issue update, check type, priority, workflow label and milestone for consistency. Preserve all unrelated labels. **Read current labels immediately before writing**, apply only the intended status change, verify the resulting label set, and reconcile concurrent edits rather than replacing labels from a stale snapshot. If permissions or atomicity prevent a safe update, report it for owner correction instead of asserting success.
+
+Label changes never replace a significant chronological evidence comment, maintained current-state issue description, an independent review or required exact-SHA CI.
+
 GitHub **Milestones** represent a multi-issue deliverable or release gate, **not** every worker attempt. Initial proposed registry:
 
 | Milestone title (create once on GitHub) | Priority in the hub | Issues | Completion |
