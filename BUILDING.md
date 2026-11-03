@@ -55,6 +55,34 @@ ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
 
 The crash fixture deliberately aborts. It is successful only when the parent detects the failure and the other processes remain operational. Do not remove the fixture to make an error log appear clean.
 
+The existing sanitizer CI job also runs one isolated, Qt-free detector-effectiveness
+canary after CTest, without adding a job or duplicating the suite:
+
+```bash
+ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
+  python3 -B tests/qualification/headless-lsan/test_verifier.py \
+  build/sanitizers/bin/mantis-headless-lsan-canary /usr/bin/c++ \
+  build/sanitizers/headless-lsan-evidence
+```
+
+Only Linux/GCC headless Debug sanitizer builds with `BUILD_TESTING=ON` build this
+test executable. Normal, Studio, Release and non-testing target graphs exclude it;
+other configurations explicitly report `UNQUALIFIED` at configure time. It is
+never linked into a product executable. This narrow supported configuration uses
+GCC's dynamically linked ASan/UBSan runtimes and symbolized allocation stacks.
+Missing runtime/symbols, unsupported detector overrides and LSan sandbox failures
+fail qualification; they are never reported as a passing detector control.
+
+The verifier checks a fresh child PID/executable/runtime, random nonce and bounded
+allocation size against the complete LSan diagnostic and actual nonzero exit.
+It exercises disabled detection, real uninstrumented C++, unrelated failures,
+stale/fabricated output, malformed reports and bounded timeout/cancellation cleanup,
+including reaping a forked fixture. The Linux subreaper setting is scoped to the
+verifier process and restored after each invocation. Both output and runtime are
+bounded; local execution receipts go only to the ignored build directory. These
+checks detect realistic stale/substituted fixtures, not a compromised build host,
+and do not certify every product lifetime or long-running memory growth.
+
 ## Architecture CI compiler cache and events
 
 Architecture runs the full five configurations for every `pull_request` target,
