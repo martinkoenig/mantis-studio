@@ -24,6 +24,16 @@ else()
   target_link_options(mantis-options INTERFACE -fsanitize=address,undefined)
  endif()
 endif()
+# Deliberate leak is confined to the existing Linux/GCC headless Debug sanitizer qualification.
+# Normal, Release, Studio and BUILD_TESTING=OFF target graphs never contain this executable.
+if(BUILD_TESTING AND MANTIS_SANITIZE AND NOT MANTIS_BUILD_STUDIO
+   AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+   AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+ add_executable(mantis-headless-lsan-canary tests/qualification/headless-lsan/canary.cpp)
+ target_link_libraries(mantis-headless-lsan-canary PRIVATE mantis-options)
+else()
+ message(STATUS "Headless LSan canary UNQUALIFIED (requires Linux/GCC headless Debug, MANTIS_SANITIZE and BUILD_TESTING)")
+endif()
 # Private protocol modules compile without testing or a physical controller library.
 add_library(mantis-x1-f2-codec STATIC plugins/first-party/devices/x1/f2/codec.cpp)
 target_link_libraries(mantis-x1-f2-codec PRIVATE mantis-options)
