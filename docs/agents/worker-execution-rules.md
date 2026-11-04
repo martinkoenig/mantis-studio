@@ -6,6 +6,10 @@ independent review and separate activation authorization. It supplements
 [ADR-033](../adr/033-reliability-performance-release-gates.md); none of their
 validation, security, architecture, or publishing requirements are reduced.
 
+Repository adoption through AGENTS.md also requires the binding
+[test-quality contract](../engineering/test-quality.md "worker-instruction")
+before implementation and PR handoff. This does not activate live AO settings.
+
 - Inspect the assigned branch and relevant files once. Batch independent,
   authorized reads and deterministic metadata collection; revisit only when a
   change or unresolved question requires it. Sanitize private metadata before

@@ -33,6 +33,8 @@ These repository-wide instructions apply to Codex and other coding agents workin
 
 ## Efficient implementation and verification
 
+- Before implementation and PR handoff, follow the binding
+  [test-quality contract](docs/engineering/test-quality.md "worker-instruction").
 - Optimize **total agent work and token consumption**, not prompt brevity. Be precise; avoid redundant file reads, oversized output dumps, speculative changes, repetitive investigations and unnecessary test cycles.
 - Prefer narrow searches (`rg`), targeted inspection, minimal patches and existing build directories/caches where safe.
 - For nontrivial changes, establish acceptance criteria and a short implementation/check plan; work in bounded logical stages. Avoid unrelated scope expansion.
@@ -56,10 +58,16 @@ A successful agent exit is **not** independent acceptance. The planning/review c
 ## Implementation worker execution
 
 For implementation worker assignments, read and follow the
-[worker execution supplement](docs/agents/worker-execution-rules.md).
+[worker execution supplement](docs/agents/worker-execution-rules.md "worker-instruction").
 This adopts its execution guidance through repository instructions; its AO
 project-configuration proposal remains unactivated. Orchestrators and
 independent reviewers retain their assigned roles.
+
+The Markdown title `worker-instruction` marks explicit worker-instruction
+adoption for repository audits. Ordinary navigation/reference links do not adopt
+role-specific execution supplements transitively; normative architecture and
+engineering references retain their stated authority. This convention is not a
+Codex loader or proof of live AO configuration or fresh-session propagation.
 
 ## Issue-based engineering memory
 

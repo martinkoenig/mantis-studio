@@ -8,11 +8,15 @@
 #include "scan_model.hpp"
 #include "screenshot.hpp"
 #include <QAccessible>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
 #include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -22,15 +26,20 @@
 #include <QSet>
 #include <QSignalSpy>
 #include <QTest>
+#include <QThread>
 #include <QTimer>
 #include <QWheelEvent>
 #include <algorithm>
+#include <array>
 #include <cstring>
+#include <exception>
 #include <functional>
 #include <iostream>
 #include <mantis/data_io.hpp>
-#include <stdexcept>
+#include <optional>
 #include <source_location>
+#include <stdexcept>
+#include <thread>
 
 namespace w = mantis::wire::v1;
 class Probe : public QObject {
@@ -1253,6 +1262,354 @@ void wire(QQuickWindow *w, StudioBridge &b, const QString &out) {
           "Wire A/B/A recovery missing");
     capture(w, out, "wire-recovery");
 }
+
+// Failure evidence only: no polling history, event pumping or runtime requests.
+// snapshotReady precedes complete bridge/model publication; report each value.
+struct CaptureReadiness {
+    enum Flag {
+        Fresh,
+        Idle,
+        Enabled,
+        Visible,
+        Gui,
+        Bridge,
+        Connected,
+        Known,
+        Capturing,
+        Pending,
+        BridgeStart,
+        Model,
+        ModelStart,
+        Confirmed,
+        ModelBusy,
+        Workspace,
+        SourceAllowed,
+        Target,
+        Start,
+        StartEnabled,
+        StartVisible,
+        WorkspaceVisible,
+        WindowVisible,
+        Count
+    };
+    std::array<std::optional<bool>, Count> flags{};
+    quint64 attempt{};
+    int mode{}, received{};
+    std::optional<quint64> baseline, current, epoch;
+    std::optional<QString> control, selected, project, status, reason, modeName, source, route;
+    QJsonArray ancestors;
+    std::optional<bool> ancestorsTruncated;
+};
+constexpr qsizetype captureEvidenceLimit = 4096, captureAncestorLimit = 8;
+std::optional<QString> diagnosticText(const QVariant &value) {
+    return value.metaType() == QMetaType::fromType<QString>() ? std::optional{value.toString()}
+                                                              : std::nullopt;
+}
+std::optional<bool> diagnosticBool(const QVariant &value) {
+    return value.metaType() == QMetaType::fromType<bool>() ? std::optional{value.toBool()} : std::nullopt;
+}
+CaptureReadiness captureReadiness(const QPointer<StudioBridge> &bridge, const QPointer<ScanModel> &scan,
+                                  const QPointer<QQuickItem> &workspace, const QPointer<QQuickWindow> &window,
+                                  const QPointer<QQuickItem> &target, const QPointer<QQuickItem> &start,
+                                  CaptureReadiness state) {
+    using R = CaptureReadiness;
+    // Keep attempt/signal identity, never stale observations of missing objects.
+    for (size_t i = 1; i < R::Count; ++i)
+        state.flags[i].reset();
+    state.selected.reset();
+    state.project.reset();
+    state.status.reset();
+    state.reason.reset();
+    state.modeName.reset();
+    state.source.reset();
+    state.route.reset();
+    state.epoch.reset();
+    state.ancestors = {};
+    state.ancestorsTruncated.reset();
+    const bool gui =
+        QCoreApplication::instance() && QThread::currentThread() == QCoreApplication::instance()->thread();
+    state.flags[R::Gui] = gui;
+    if (!gui)
+        return state; // Never dereference GUI objects on another thread.
+    state.flags[R::Bridge] = bool(bridge);
+    state.flags[R::Model] = bool(scan);
+    state.flags[R::Workspace] = bool(workspace);
+    state.flags[R::Target] = bool(target);
+    state.flags[R::Start] = bool(start);
+    if (bridge) {
+        state.flags[R::Connected] = bridge->connected();
+        state.flags[R::Known] = bridge->captureStateKnown();
+        state.flags[R::Capturing] = bridge->capturing();
+        state.flags[R::Pending] = bridge->busy();
+        state.flags[R::Idle] = !bridge->busy();
+        state.flags[R::BridgeStart] = bridge->canStartCapture("stereo-parent");
+        state.project = bridge->project();
+    }
+    if (scan) {
+        const auto data = scan->data();
+        state.flags[R::ModelStart] = diagnosticBool(data.value("canStartCapture"));
+        state.flags[R::Confirmed] = diagnosticBool(data.value("confirmed"));
+        state.flags[R::ModelBusy] = diagnosticBool(data.value("busy"));
+        state.selected = scan->selectedDevice();
+        state.status = diagnosticText(data.value("captureStatus"));
+        state.reason = diagnosticText(data.value("captureControlReason"));
+        if (data.value("projectEpoch").metaType() == QMetaType::fromType<quint64>())
+            state.epoch = data.value("projectEpoch").toULongLong();
+    }
+    if (workspace) {
+        state.modeName = diagnosticText(workspace->property("mode"));
+        state.source = diagnosticText(workspace->property("activeSource"));
+        state.flags[R::SourceAllowed] = diagnosticBool(workspace->property("captureSourceAllowed"));
+        state.flags[R::WorkspaceVisible] = workspace->isVisible();
+    }
+    if (window) {
+        state.route = diagnosticText(window->property("workspace"));
+        state.flags[R::WindowVisible] = window->isVisible();
+    }
+    if (start) {
+        state.flags[R::StartEnabled] = start->isEnabled();
+        state.flags[R::StartVisible] = start->isVisible();
+    }
+    if (target) {
+        state.flags[R::Enabled] = target->isEnabled();
+        state.flags[R::Visible] = target->isVisible();
+        auto *ancestor = target.data();
+        for (qsizetype i = 0; ancestor && i < captureAncestorLimit; ++i, ancestor = ancestor->parentItem())
+            state.ancestors.append(
+                QJsonObject{{"enabled", ancestor->isEnabled()}, {"visible", ancestor->isVisible()}});
+        state.ancestorsTruncated = ancestor != nullptr;
+    }
+    return state;
+}
+QByteArray formatCaptureReadiness(const CaptureReadiness &s) {
+    static constexpr const char *keys[] = {"fresh_confirmation",
+                                           "bridge_idle",
+                                           "control_enabled",
+                                           "control_visible",
+                                           "gui_thread",
+                                           "bridge_exists",
+                                           "connected",
+                                           "capture_known",
+                                           "capturing",
+                                           "operation_pending",
+                                           "bridge_can_start",
+                                           "model_exists",
+                                           "model_can_start",
+                                           "model_confirmed",
+                                           "model_busy",
+                                           "workspace_exists",
+                                           "capture_source_allowed",
+                                           "control_exists",
+                                           "start_exists",
+                                           "start_enabled",
+                                           "start_visible",
+                                           "workspace_visible",
+                                           "window_visible"};
+    static_assert(std::size(keys) == CaptureReadiness::Count);
+    QJsonObject out{{"version", 1},
+                    {"attempt", QString::number(s.attempt)},
+                    {"fixture_mode", s.mode},
+                    {"confirmations", s.received},
+                    {"counter_scope", "captureWire.snapshotReady"}};
+    for (size_t i = 0; i < std::size(keys); ++i)
+        out[keys[i]] = s.flags[i] ? QJsonValue(*s.flags[i]) : QJsonValue::Null;
+    for (auto [key, value] : {std::pair{"snapshot_baseline", s.baseline},
+                              {"snapshot_current", s.current},
+                              {"project_epoch", s.epoch}})
+        out[key] = value ? QJsonValue(QString::number(*value)) : QJsonValue::Null;
+    bool truncated = false;
+    const auto safeEnum = [&](const std::optional<QString> &value, const QStringList &allowed) -> QJsonValue {
+        if (!value)
+            return QJsonValue::Null;
+        if (value->size() > 128) {
+            truncated = true;
+            return "[over-limit]";
+        }
+        return allowed.contains(*value) ? QJsonValue(*value) : QJsonValue("[unknown]");
+    };
+    const auto identity = [&](const std::optional<QString> &value) -> QJsonValue {
+        if (!value)
+            return QJsonValue::Null;
+        if (value->size() > 4096) {
+            truncated = true;
+            return "[over-limit]";
+        }
+        if (value->isEmpty())
+            return "";
+        return QString::fromLatin1(
+            QCryptographicHash::hash(value->toUtf8(), QCryptographicHash::Sha256).toHex());
+    };
+    out["control"] = safeEnum(s.control, {"scanStart", "scanStop"});
+    out["selected_device_sha256"] = identity(s.selected);
+    out["project_sha256"] = identity(s.project);
+    out["capture_status"] = safeEnum(s.status, {"Idle", "Active", "Unknown"});
+    out["mode"] = safeEnum(s.modeName, {"live", "mock", "hybrid"});
+    out["active_source"] = safeEnum(s.source, {"live", "mock"});
+    out["workspace"] =
+        safeEnum(s.route, {"scan", "acquisition", "home", "devices", "projects", "calibration"});
+    const QStringList reasons = {"Runtime unconfirmed · capture controls unavailable",
+                                 "Project identity invalid · capture controls unavailable",
+                                 "Capture state ambiguous or unavailable · controls disabled",
+                                 "Operation state unknown · capture controls unavailable",
+                                 "Runtime operation pending · await confirmed result",
+                                 "Single active capture confirmed · Stop requests daemon finalization",
+                                 "Choose a unique capture-capable descriptor · readiness unknown",
+                                 "Start available · discovered descriptor, readiness unknown"};
+    const QStringList classes = {"unconfirmed", "invalid-project", "unknown-capture",    "unknown-operation",
+                                 "busy",        "active",          "selection-required", "start-available"};
+    if (s.reason && s.reason->size() > 128)
+        truncated = true;
+    const auto reason = s.reason ? reasons.indexOf(*s.reason) : -1;
+    out["capture_reason_class"] = !s.reason    ? QJsonValue::Null
+                                  : reason < 0 ? QJsonValue("[unknown]")
+                                               : QJsonValue(classes[reason]);
+    QJsonArray ancestors;
+    for (qsizetype i = 0; i < std::min(s.ancestors.size(), captureAncestorLimit); ++i) {
+        // No unrestricted names or metadata, even in a malformed diagnostic input.
+        const auto a = s.ancestors[i].toObject();
+        QJsonObject row;
+        for (const auto *key : {"enabled", "visible"})
+            row[key] = a[key].isBool() ? a[key] : QJsonValue::Null;
+        ancestors.append(row);
+    }
+    out["ancestors"] = ancestors;
+    out["ancestor_chain_truncated"] =
+        s.ancestorsTruncated ? QJsonValue(*s.ancestorsTruncated || s.ancestors.size() > captureAncestorLimit)
+                             : QJsonValue::Null;
+    out["values_truncated"] = truncated;
+    const auto bytes = QJsonDocument(out).toJson(QJsonDocument::Compact);
+    return bytes.size() <= captureEvidenceLimit
+               ? bytes
+               : QByteArray{"{\"version\":1,\"format_overflow\":true,\"values_truncated\":true}"};
+}
+template <class Capture, class Format, class Write>
+void bestEffortCaptureEvidence(Capture capture, Format format, Write write) noexcept {
+    try {
+        write(format(capture()));
+    } catch (...) {
+    } // Preserve the caller's active primary exception.
+}
+void captureDiagnosticTests() {
+    using R = CaptureReadiness;
+    CaptureReadiness good;
+    good.attempt = 7;
+    good.mode = 18;
+    good.control = "scanStart";
+    good.received = 1;
+    good.baseline = 12;
+    good.current = 13;
+    for (auto flag : {R::Fresh, R::Idle, R::Enabled, R::Visible})
+        good.flags[flag] = true;
+    const char *keys[] = {"fresh_confirmation", "bridge_idle", "control_enabled", "control_visible"};
+    for (int missing = 0; missing < 4; ++missing) {
+        auto bad = good;
+        bad.flags[missing] = false;
+        if (missing == 0) {
+            bad.received = 0;
+            bad.current = 12;
+        }
+        const auto json = QJsonDocument::fromJson(formatCaptureReadiness(bad)).object();
+        for (int bit = 0; bit < 4; ++bit)
+            check(json[keys[bit]].isBool() && json[keys[bit]].toBool() == (bit != missing),
+                  "Capture readiness false-conjunct diagnostic lost");
+        check(json["attempt"] == "7" && json["fixture_mode"] == 18 && json["snapshot_baseline"] == "12" &&
+                  json["snapshot_current"] == (missing == 0 ? "12" : "13"),
+              "Capture readiness attempt identity lost");
+    }
+    QQuickItem target;
+    target.setEnabled(false);
+    target.setVisible(false);
+    QPointer<QQuickItem> live = &target, gone = new QQuickItem;
+    delete gone.data();
+    auto captured = captureReadiness({}, {}, {}, {}, live, gone, good);
+    check(captured.flags[R::Enabled] == false && captured.flags[R::Visible] == false &&
+              captured.flags[R::Start] == false && !captured.flags[R::StartEnabled].has_value(),
+          "Capture readiness destroyed/disabled object confused with unavailable");
+    auto absent = captureReadiness({}, {}, {}, {}, gone, gone, good);
+    check(absent.flags[R::Target] == false && !absent.flags[R::Enabled],
+          "Capture readiness absent object not explicit");
+    const auto absentJson = QJsonDocument::fromJson(formatCaptureReadiness(absent)).object();
+    check(absentJson["control_enabled"].isNull() && absentJson["control_exists"] == false,
+          "Capture readiness unavailable value serialized as false");
+    Observed bridge;
+    bridge.applyResult(snapshot("/fixture/diagnostic-project", false));
+    ScanModel scan;
+    scan.setBridge(&bridge);
+    scan.setSelectedDevice("stereo-parent");
+    const auto projected = captureReadiness(&bridge, &scan, {}, {}, live, gone, good);
+    check(projected.selected == "stereo-parent" && projected.flags[R::ModelStart] == true &&
+              projected.flags[R::Confirmed] == true && projected.status == "Idle" &&
+              projected.epoch.has_value(),
+          "Capture readiness model/bridge fields not observed");
+    std::array<QQuickItem, 10> chain;
+    for (size_t i = 1; i < chain.size(); ++i)
+        chain[i].setParentItem(&chain[i - 1]);
+    const auto deep = captureReadiness({}, {}, {}, {}, &chain.back(), {}, good);
+    check(deep.ancestors.size() == captureAncestorLimit && deep.ancestorsTruncated == true,
+          "Capture readiness ancestor chain not bounded");
+    CaptureReadiness other;
+    {
+        std::jthread worker([&] { other = captureReadiness({}, {}, {}, {}, live, gone, {}); });
+    }
+    check(other.flags[R::Gui] == false && !other.flags[R::Target],
+          "Capture readiness read GUI state off thread");
+    auto hostile = good;
+    const QString secret = "PRIVATE_DIAGNOSTIC_SENTINEL";
+    hostile.selected = secret;
+    hostile.project = "/private/" + QString(5000, 'p') + secret;
+    hostile.status = secret;
+    hostile.reason = secret;
+    hostile.modeName = QString(10000, 'x') + secret;
+    hostile.source = secret;
+    hostile.route = secret;
+    hostile.control = secret;
+    for (int i = 0; i < 20; ++i)
+        hostile.ancestors.append(QJsonObject{{"visible", true}, {"enabled", secret}, {"metadata", secret}});
+    hostile.ancestorsTruncated = false;
+    const auto bytes = formatCaptureReadiness(hostile);
+    const auto json = QJsonDocument::fromJson(bytes).object();
+    check(bytes.size() <= captureEvidenceLimit && !bytes.contains(secret.toUtf8()) &&
+              !bytes.contains("/private/") && !bytes.contains("metadata"),
+          "Capture readiness private text escaped");
+    check(json["values_truncated"].toBool() && json["ancestor_chain_truncated"].toBool() &&
+              json["ancestors"].toArray().size() == 8 && json["capture_status"] == "[unknown]" &&
+              json["project_sha256"] == "[over-limit]",
+          "Capture readiness bounds or enum rejection lost");
+    for (int fault = 0; fault < 3; ++fault) {
+        std::exception_ptr primary;
+        try {
+            try {
+                throw std::runtime_error("primary readiness failure");
+            } catch (...) {
+                primary = std::current_exception();
+                bestEffortCaptureEvidence(
+                    [&] {
+                        if (fault == 0)
+                            throw std::runtime_error("collector");
+                        return good;
+                    },
+                    [&](const auto &state) {
+                        if (fault == 1)
+                            throw std::runtime_error("formatter");
+                        return formatCaptureReadiness(state);
+                    },
+                    [&](const auto &) { throw std::runtime_error("output"); });
+                throw;
+            }
+        } catch (const std::runtime_error &error) {
+            check(primary == std::current_exception() &&
+                      std::string(error.what()) == "primary readiness failure",
+                  "Capture readiness evidence replaced primary error");
+        }
+    }
+    bool written = false;
+    bestEffortCaptureEvidence([&] { return good; }, formatCaptureReadiness,
+                              [&](const auto &output) { written = !output.isEmpty(); });
+    check(written, "Capture readiness diagnostic was not written");
+    std::cout << "PASS: readiness diagnostic false fresh/busy/disabled/invisible, destroyed/absent GUI "
+                 "objects, privacy/bounds and primary precedence\n";
+}
+
 void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
     mantis::client::Client client;
     auto *r = item(w, "scanWorkspace");
@@ -1262,6 +1619,15 @@ void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
     auto *right = qobject_cast<MeasurementView *>(owner->right());
     int fixtureMode = 10;
     QString intent;
+    quint64 readinessAttempt = 0, snapshotSerial = 0;
+    QObject readinessObserver; // Destroy/disconnect before counters and the enclosing bridge.
+    const auto serialConnection =
+        QObject::connect(&b, &StudioBridge::snapshotReady, &readinessObserver, [&] { ++snapshotSerial; });
+    const QPointer<StudioBridge> readinessBridge = &b;
+    const QPointer<ScanModel> readinessModel = model(w);
+    const QPointer<QQuickItem> readinessWorkspace = r,
+                               readinessStart = w->findChild<QQuickItem *>("scanStart");
+    const QPointer<QQuickWindow> readinessWindow = w;
     const auto await = [&](auto predicate, int deadline = 6000,
                            std::source_location where = std::source_location::current()) {
         if (!QTest::qWaitFor(predicate, deadline))
@@ -1285,10 +1651,36 @@ void captureWire(QQuickWindow *w, StudioBridge &b, const QString &out) {
         // busy lease can correctly disable/cancel a button between key press/release.
         // Send one intent only; preserve the authoritative post-click assertions.
         QSignalSpy confirmations(&b, &StudioBridge::snapshotReady);
-        await([&] {
-            return !confirmations.empty() && !b.busy() && item(w, name)->isEnabled() &&
-                   item(w, name)->isVisible();
-        });
+        const auto attempt = ++readinessAttempt;
+        const auto baseline = snapshotSerial;
+        const QPointer<QQuickItem> target = w->findChild<QQuickItem *>(name);
+        try {
+            await([&] {
+                return !confirmations.empty() && !b.busy() && item(w, name)->isEnabled() &&
+                       item(w, name)->isVisible();
+            });
+        } catch (...) {
+            bestEffortCaptureEvidence(
+                [&] {
+                    CaptureReadiness state;
+                    state.attempt = attempt;
+                    state.mode = fixtureMode;
+                    state.control = name;
+                    state.received = int(confirmations.size());
+                    state.flags[CaptureReadiness::Fresh] = !confirmations.empty();
+                    if (serialConnection) {
+                        state.baseline = baseline;
+                        state.current = snapshotSerial;
+                    }
+                    return captureReadiness(readinessBridge, readinessModel, readinessWorkspace,
+                                            readinessWindow, target, readinessStart, state);
+                },
+                formatCaptureReadiness,
+                [](const QByteArray &bytes) {
+                    std::cerr << "CAPTURE_READINESS_DIAGNOSTIC " << bytes.constData() << '\n';
+                });
+            throw;
+        }
         auto *button = item(w, name);
         button->forceActiveFocus(Qt::TabFocusReason);
         check(w->activeFocusItem() == button, "Capture control did not acquire input focus");
@@ -1588,7 +1980,7 @@ int main(int argc, char **argv) {
             mantis::data::write_packet((out + "/cloud.packet").toStdString(), *fixtureCloud());
             mantis::data::write_packet((out + "/frames.packet").toStdString(), *fixtureFrames());
         } else if (task == "model")
-            modelTests(), captureModelTests();
+            modelTests(), captureModelTests(), captureDiagnosticTests();
         else {
             Observed observed;
             std::unique_ptr<StudioBridge> publicBridge;
