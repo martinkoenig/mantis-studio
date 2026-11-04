@@ -13,7 +13,7 @@ build = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(build / "python"))
 import mantis
 from mantis import mantis_pb2 as wire
-from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, emit_failure, initial_capture, require_capture, retain_failure
+from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, initial_capture, require_capture, report_failure
 
 with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
     root = Path(directory)
@@ -149,16 +149,11 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         print("PASS: Python, CLI, " + ("Studio/viewport/UI restart, " if studio_bin.exists() else "headless client reconnect, ") + "deterministic replay, isolated crash, capture continuity, daemon crash recovery")
     except BaseException:
         # TemporaryDirectory would otherwise erase the only daemon-side cause.
-        # Retain test-process logs and allowlisted capture state, never credentials.
-        try:
-            evidence = build / "test-diagnostics" / "acceptance" / root.name
-            log.flush()
-            retain_failure(root, evidence, observations, [process.poll() for process in daemons],
-                           [process.poll() for process in studios])
-            print(f"Acceptance failure evidence: {evidence}", file=sys.stderr)
-            emit_failure(evidence, sys.stderr, secret=env["MANTIS_TOKEN"])
-        except OSError as evidence_error:
-            print(f"Acceptance evidence could not be retained: {evidence_error}", file=sys.stderr)
+        # Persist only bounded summaries. Secondary evidence errors cannot mask
+        # this failure; process ownership/retirement below remains unchanged.
+        evidence = build / "test-diagnostics" / "acceptance" / root.name
+        report_failure(root, evidence, observations, daemons, studios, sys.stderr,
+                       secret=env["MANTIS_TOKEN"])
         raise
     finally:
         studios.close()

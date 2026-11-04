@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="acceptance-output-runner-") as director
 assert not runner.exists()
 records = [json.loads(line.strip()[len(prefix):]) for line in output.splitlines()
            if line.strip().startswith(prefix)]
-assert {row["file"] for row in records} == {"daemon.log", "studio.log", "capture-state.json"}, \
+assert {row["file"] for row in records} == {"daemon.log", "studio.log", "capture-state.json", "project-diagnostics.json"}, \
     "Acceptance diagnostics did not reach the failed CTest output"
 by_name = {row["file"]: row for row in records}
 assert "tail" in by_name["daemon.log"]
@@ -50,6 +50,16 @@ state = json.loads(state_record["tail"])
 assert state["observations"]
 assert any(c["id"] and c["raw_artifact"] and c["active"]
            for c in state["observations"][-1])
+capture = next(c for c in state["observations"][-1] if c["active"])
+assert isinstance(capture["framesets_produced"], int) and isinstance(capture["framesets_committed"], int)
+# Counters are live observations; do not assert ordering between separate reads.
+assert capture["queue_capacity"] == 32
+assert "recorder_first_append_ns" in capture["diagnostics"]
+assert "recorder_writer_started_ns" in capture["diagnostics"]
+assert "recorder_producer_started_ns" in capture["diagnostics"]
+project = json.loads(by_name["project-diagnostics.json"]["tail"])
+assert any(event["kind"] == "capture.started" for event in project["events"])
+assert "Project opened:" not in output  # No project paths or arbitrary log messages.
 if (build / "bin/mantis-studio").exists():
     assert "STUDIO_ACCEPTANCE_READY" in by_name["studio.log"]["tail"]
 else:
