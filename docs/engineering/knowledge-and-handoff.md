@@ -117,7 +117,10 @@ GitHub Milestones **do not have a native priority field**: the hub's priority/de
 - **KNOW-1D** In a **genuinely fresh chat/session**, perform the cold-start read-only check (evidence, source, priority, uncertainty), record discrepancies and practical token/exploration overhead; refine the procedure only if it actually helps. A same-session readback is a structural check, not an independent cold-start test.
 - Final acceptance requires independent check of links and current GitHub status. No required CI or security scan may be represented as passed without actual run evidence.
 
-**Related future qualifications:** [CI-STAB-2 issue #11](https://github.com/martinkoenig/mantis-studio/issues/11), [SEC-EVENT-1 issue #13](https://github.com/martinkoenig/mantis-studio/issues/13), [ADR-033](../adr/033-reliability-performance-release-gates.md), [AO orchestrator guidance](../agents/orchestrator-execution-rules.md).
+**Related future qualifications:** [CI-STAB-2 issue #11](https://github.com/martinkoenig/mantis-studio/issues/11), [SEC-EVENT-1 issue #13](https://github.com/martinkoenig/mantis-studio/issues/13), [ADR-033](../adr/033-reliability-performance-release-gates.md).
+
+Role-specific orchestration guidance remains separate from this shared memory
+contract; it is not part of the implementation-worker instruction reference chain.
 
 ## 9. AO activation and new-chat confidentiality checks (2026-10-31)
 
