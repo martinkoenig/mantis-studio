@@ -9,11 +9,13 @@ import shutil
 import json
 import io
 import hashlib
+import traceback
 from unittest.mock import patch
 from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "integration"))
 from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, emit_failure, initial_capture, require_capture, retain_failure, report_failure, log_summary
+from capture_lifecycle import RECORDER_FIELDS, CI_RECORD_LIMIT, STATE_READ_LIMIT, identity_summary
 
 
 def capture(**changes):
@@ -28,6 +30,206 @@ def snapshot(*captures):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_max_history_ci_summary_is_complete_bounded_and_keeps_terminal_state(self):
+        secret = "PRIVATE_HISTORY_SENTINEL"
+        critical = {"recorder_queue_capacity": "32", "recorder_queue_occupancy": "32",
+                    "recorder_queue_high_water": "32", "recorder_queue_full_ns": "50000000",
+                    "recorder_failed_enqueue_wait_ns": "50000000",
+                    "recorder_first_append_ns": "200000000", "recorder_max_append_ns": "250000000",
+                    "recorder_produced": "999", "recorder_committed": "967"}
+        history = []
+        for i in range(32):
+            row = []
+            for j in range(16):
+                diagnostics = dict.fromkeys(RECORDER_FIELDS, "18446744073709551615") | critical
+                diagnostics["recorder_observed_frames_per_second"] = "120.000000"
+                diagnostics["unexpected_metadata"] = secret
+                terminal = i == 31 and j == 15
+                error = ("LOSSLESS writer queue saturated; capture failed explicitly " + secret if terminal
+                         else secret if (i, j) == (0, 0) else "")
+                value = self.WireCapture(id=f"/{secret}/capture-{j}", raw_artifact=f"/{secret}/raw-{j}",
+                                         active=j == 14, frames=967, framesets_produced=999,
+                                         framesets_committed=967, queue_depth=32, queue_capacity=32,
+                                         queue_high_water=32, queue_saturation=int(terminal), error=error,
+                                         diagnostics=diagnostics)
+                row.extend(capture_evidence(snapshot(value)))
+            history.append(row)
+        with tempfile.TemporaryDirectory() as directory:
+            root, evidence = Path(directory)/"project", Path(directory)/"evidence"
+            root.mkdir()
+            retain_failure(root, evidence, history, [-9], [])
+            local = (evidence/"capture-state.json").read_bytes()
+            self.assertGreater(len(local), 90000)
+            output = io.StringIO()
+            emit_failure(evidence, output, secret=secret)
+            self.assertEqual((evidence/"capture-state.json").read_bytes(), local)
+        lines = output.getvalue().splitlines(keepends=True)
+        records = [json.loads(line.removeprefix("ACCEPTANCE_FAILURE_EVIDENCE ")) for line in lines]
+        record = next(row for row in records if row["file"] == "capture-state.json")
+        try:
+            state = record.get("summary")
+            if state is None:
+                state = json.loads(record["tail"])  # Old byte-tail behavior must fail here.
+        except (ValueError, KeyError):
+            self.fail("CI state is not complete parseable JSON")
+        self.assertLessEqual(len(output.getvalue().encode()), 4*CI_RECORD_LIMIT)
+        self.assertTrue(all(len(line.encode()) <= CI_RECORD_LIMIT for line in lines))
+        self.assertIn("summary", record, "CI state must use a separately serialized structured summary")
+        self.assertNotIn("omitted_prefix_bytes", record)
+        self.assertTrue(state["truncated"])
+        self.assertGreater(state["omitted_observations"], 0)
+        self.assertGreater(state["omitted_captures"], 0)
+        self.assertGreater(state["omitted_fields"], 0)
+        self.assertEqual(state["total_observations"], 32)
+        self.assertEqual(state["total_captures"], 32*16)
+        self.assertEqual(state["latest_observation"], 31)
+        self.assertEqual(state["terminal_errors"], 2)
+        self.assertEqual(state["omitted_terminal_errors"], 0)
+        latest = next(row for row in state["observations"] if row["index"] == 31)
+        terminal = next(row for row in latest["captures"] if row["queue_saturation"] == 1)
+        self.assertEqual(terminal["id"], identity_summary(f"/{secret}/capture-15"))
+        self.assertEqual(terminal["raw_artifact"], identity_summary(f"/{secret}/raw-15"))
+        self.assertEqual(terminal["error"], "LOSSLESS writer queue saturated; capture failed explicitly")
+        self.assertFalse(terminal["active"])
+        self.assertEqual((terminal["framesets_produced"], terminal["framesets_committed"]), (999, 967))
+        for key, value in critical.items():
+            self.assertEqual(terminal["diagnostics"][key], value)
+        self.assertEqual(set(terminal["diagnostics"]), set(RECORDER_FIELDS))
+        self.assertEqual(terminal["unavailable_diagnostics"], 0)
+        self.assertNotIn(secret, output.getvalue())
+        self.assertEqual(len(json.loads(local)["observations"]), 32)
+
+    def test_ci_state_empty_malformed_oversize_and_escaped_text_are_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            path = evidence/"capture-state.json"
+            for observations in ([], [[]]):
+                path.write_text(json.dumps(dict(observations=observations)))
+                output = io.StringIO()
+                emit_failure(evidence, output)
+                record = json.loads(output.getvalue().splitlines()[2].removeprefix("ACCEPTANCE_FAILURE_EVIDENCE "))
+                state = record["summary"]
+                self.assertFalse(state["truncated"])
+                self.assertIsNone(state["daemon_exits"])  # Unavailable, not an observed empty exit list.
+                self.assertEqual(state["latest_observation"], 0 if observations else None)
+            for data in (b'{"observations":["PRIVATE_MALFORMED_SENTINEL"',
+                         json.dumps(dict(observations=[[vars(capture(frames="PRIVATE_FIELD_SENTINEL"))]])).encode(),
+                         b"PRIVATE_OVERSIZE_SENTINEL" + b" "*STATE_READ_LIMIT):
+                path.write_bytes(data)
+                output = io.StringIO()
+                emit_failure(evidence, output)
+                record = json.loads(output.getvalue().splitlines()[2].removeprefix("ACCEPTANCE_FAILURE_EVIDENCE "))
+                self.assertEqual(record["summary_error"], "ValueError")
+                self.assertNotIn("PRIVATE_", output.getvalue())
+                self.assertNotIn("tail", record)
+            row = capture_evidence(snapshot(capture(diagnostics={"recorder_max_append_ns": "PRIVATE_"*10000,
+                                                                  "unexpected": "PRIVATE_"})))
+            path.write_text(json.dumps(dict(observations=[row])))
+            (evidence/"daemon.log").write_text('\U0001f9ea"\\\n'*20000)
+            output = io.StringIO()
+            emit_failure(evidence, output)
+            self.assertTrue(all(len(line.encode()) <= CI_RECORD_LIMIT for line in output.getvalue().splitlines(keepends=True)))
+            record = json.loads(output.getvalue().splitlines()[2].removeprefix("ACCEPTANCE_FAILURE_EVIDENCE "))
+            actual = record["summary"]["observations"][0]["captures"][0]
+            self.assertEqual(actual["diagnostics"], {"recorder_max_append_ns": "[INVALID]"})
+            self.assertEqual(actual["unavailable_diagnostics"], len(RECORDER_FIELDS)-1)
+            self.assertNotIn("PRIVATE_", output.getvalue())
+
+    def test_actual_assertion_paths_keep_invariants_without_private_text(self):
+        secret = "PRIVATE_ASSERTION_SENTINEL"
+        expected = capture(id="/"+secret+"/expected", raw_artifact="/"+secret+"/raw")
+        other = capture(id="/"+secret+"/other", raw_artifact=expected.raw_artifact)
+        same = lambda **changes: capture(id=expected.id, raw_artifact=expected.raw_artifact, **changes)
+        cases = [
+            (lambda: require_capture(snapshot(other), expected, "after crash"), "expected exactly one original capture"),
+            (lambda: require_capture(snapshot(), expected, "after crash"), "expected exactly one original capture"),
+            (lambda: require_capture(snapshot(same(), same()), expected, "after crash"), "expected exactly one original capture"),
+            (lambda: require_capture(snapshot(capture(id=expected.id, raw_artifact=secret)), expected, "after crash"), "original RawCapture identity changed"),
+            (lambda: require_capture(snapshot(same(active=False)), expected, "after crash"), "original capture became inactive"),
+            (lambda: require_capture(snapshot(same(error=secret*10000)), expected, "after crash"), "capture reported an error"),
+            (lambda: initial_capture(snapshot(same(active=False)), "after crash"), "expected exactly one daemon-owned active capture"),
+            (lambda: initial_capture(snapshot(same(), other), "after crash"), "expected exactly one daemon-owned active capture"),
+            (lambda: initial_capture(snapshot(same(error=secret)), "after crash"), "capture reported an error"),
+            (lambda: await_progress(lambda: snapshot(same(active=False)), expected, "after crash"), "original capture became inactive"),
+            (lambda: await_progress(lambda: snapshot(same(frames=6)), expected, "after crash"), "frame counter reversed"),
+            (lambda: await_progress(lambda: snapshot(same()), expected, "after crash", timeout=0, now=lambda: 0), "frame progress deadline"),
+        ]
+        for call, invariant in cases:
+            with self.subTest(invariant=invariant):
+                try:
+                    call()
+                except AssertionError as error:
+                    text = ''.join(traceback.format_exception(error))
+                    self.assertNotIn(secret, text, "Private text escaped actual capture assertion")
+                    self.assertLessEqual(len(str(error).encode()), 4096)
+                    self.assertIn(invariant, str(error))
+                    self.assertIn("after crash", str(error))
+                    payload = json.loads(str(error))
+                    if "expected_capture" in payload:
+                        self.assertEqual(payload["expected_capture"], identity_summary(expected.id))
+                        self.assertEqual(payload["expected_raw"], identity_summary(expected.raw_artifact))
+                else:
+                    self.fail("Incorrect capture state passed its actual invariant")
+        with self.assertRaisesRegex(AssertionError, "LOSSLESS writer queue saturated; capture failed explicitly") as failure:
+            require_capture(snapshot(same(error="LOSSLESS writer queue saturated; capture failed explicitly " + secret)), expected, secret)
+        self.assertNotIn(secret, str(failure.exception))
+        self.assertIn('"phase": "unclassified"', str(failure.exception))
+        with patch("capture_lifecycle.identity_summary", return_value="same-pseudonym"):
+            with self.assertRaisesRegex(AssertionError, "expected exactly one original capture",
+                                        msg="Exact raw identity predicate was bypassed"):
+                require_capture(snapshot(other), expected, "after crash")  # Exact raw IDs, never pseudonym equality.
+
+    def test_assertion_and_evidence_formatter_failures_preserve_safe_primary(self):
+        secret = "PRIVATE_SECONDARY_SENTINEL"
+        for target in ("capture_lifecycle.identity_summary", "capture_lifecycle.json.dumps"):
+            with patch(target, side_effect=KeyboardInterrupt(secret)):
+                try:
+                    require_capture(snapshot(capture(id=secret)), capture(), "after crash")
+                except AssertionError as error:
+                    text = ''.join(traceback.format_exception(error))
+                    self.assertIn("expected exactly one original capture", text)
+                    self.assertNotIn(secret, text)
+                else:
+                    self.fail("Formatter fault suppressed capture assertion")
+        for target in ("capture_lifecycle.retain_failure", "capture_lifecycle.ci_state_summary"):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory);output = io.StringIO()
+                try:
+                    require_capture(snapshot(capture(id=secret)), capture(), "after crash")
+                except AssertionError as primary:
+                    original = primary
+                    try:
+                        with patch(target, side_effect=KeyboardInterrupt(secret)):
+                            report_failure(root, root/"out", [capture_evidence(snapshot(capture()))], [], [], output)
+                        raise
+                    except AssertionError as observed:
+                        self.assertIs(observed, original)
+                    self.assertNotIn(secret, output.getvalue())
+        hostile_type = type(secret, (Exception,), {})
+        with patch("capture_lifecycle.retain_failure", side_effect=hostile_type(secret)):
+            output = io.StringIO()
+            report_failure(None, None, [], [], [], output)
+        self.assertIn("Exception", output.getvalue())
+        self.assertNotIn(secret, output.getvalue())
+
+    def test_actual_assertion_traceback_in_child_output_is_sanitized(self):
+        code = '''import sys
+from types import SimpleNamespace as State
+sys.path.insert(0, INTEGRATION)
+from capture_lifecycle import require_capture
+secret = "PRIVATE_CHILD_SENTINEL"
+def capture(identity):
+    return State(id=identity, raw_artifact=secret, active=True, frames=7, error=secret,
+                 framesets_produced=7, framesets_committed=7, queue_depth=0,
+                 queue_capacity=32, queue_high_water=1, queue_saturation=0,
+                 finalization_job_id="", diagnostics={})
+require_capture(State(captures=[capture(secret)]), capture("expected-"+secret), "after crash")
+'''.replace("INTEGRATION", repr(str(Path(__file__).resolve().parents[1]/"integration")))
+        result = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("expected exactly one original capture", result.stderr)
+        self.assertNotIn("PRIVATE_CHILD_SENTINEL", result.stdout+result.stderr)
+
     @classmethod
     def setUpClass(cls):
         # Compile the checked-in protocol, rather than duplicating a fake schema.
@@ -196,7 +398,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotIn("fixture-secret", output.getvalue())
         self.assertIn("disk failure; token=[REDACTED]", records[0]["tail"])
         self.assertEqual(records[1]["tail"], "Studio ready\n")
-        self.assertEqual(json.loads(records[2]["tail"])["observations"][0][0]["id"], "original")
+        self.assertEqual(records[2]["summary"]["observations"][0]["captures"][0]["id"],
+                         identity_summary("original"))
 
     def test_output_is_bounded_escaped_and_redacts_a_token_crossing_tail_boundary(self):
         output = io.StringIO()
@@ -316,8 +519,10 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(waits, [.05])
 
     def test_missing_original_never_substitutes_another_capture(self):
-        with self.assertRaisesRegex(AssertionError, 'original.*raw-original'):
+        with self.assertRaisesRegex(AssertionError, 'expected exactly one original capture') as failure:
             require_capture(snapshot(capture(id="replacement", frames=100)), capture(), "disconnect")
+        self.assertIn(identity_summary("original"), str(failure.exception))
+        self.assertIn(identity_summary("raw-original"), str(failure.exception))
 
     def test_duplicate_or_changed_raw_identity_fails(self):
         for state in (snapshot(capture(), capture()), snapshot(capture(raw_artifact="new"))):
@@ -334,8 +539,10 @@ class LifecycleTests(unittest.TestCase):
     def test_error_diagnostic_preserves_phase_identity_and_cause(self):
         with self.assertRaises(AssertionError) as result:
             require_capture(snapshot(capture(error="Injected disk failure")), capture(), "UI exited")
-        for value in ("UI exited", "original", "raw-original", "Injected disk failure"):
+        for value in ("UI exited", identity_summary("original"), identity_summary("raw-original"),
+                      "capture error (text withheld)"):
             self.assertIn(value, str(result.exception))
+        self.assertNotIn("Injected disk failure", str(result.exception))
 
     def test_counter_reversal_fails(self):
         with self.assertRaisesRegex(AssertionError, 'reversed'):

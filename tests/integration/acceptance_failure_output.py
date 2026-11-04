@@ -45,12 +45,15 @@ assert {row["file"] for row in records} == {"daemon.log", "studio.log", "capture
 by_name = {row["file"]: row for row in records}
 assert "tail" in by_name["daemon.log"]
 state_record = by_name["capture-state.json"]
-assert state_record["omitted_prefix_bytes"] == 0, "Probe capture-state unexpectedly exceeds output bound"
-state = json.loads(state_record["tail"])
+assert "tail" not in state_record and "omitted_prefix_bytes" not in state_record
+assert all(len((prefix + json.dumps(row, separators=(",", ":")) + "\n").encode()) <= 16384
+           for row in records), "Evidence record exceeds encoded output bound"
+state = state_record["summary"]
+assert not state["truncated"] and state["omitted_observations"] == state["omitted_captures"] == 0
 assert state["observations"]
 assert any(c["id"] and c["raw_artifact"] and c["active"]
-           for c in state["observations"][-1])
-capture = next(c for c in state["observations"][-1] if c["active"])
+           for c in state["observations"][-1]["captures"])
+capture = next(c for c in state["observations"][-1]["captures"] if c["active"])
 assert isinstance(capture["framesets_produced"], int) and isinstance(capture["framesets_committed"], int)
 # Counters are live observations; do not assert ordering between separate reads.
 assert capture["queue_capacity"] == 32

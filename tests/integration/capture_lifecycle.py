@@ -28,6 +28,101 @@ CAPTURE_FIELDS = ("id", "raw_artifact", "active", "frames", "error",
 LOG_READ_LIMIT = 65536
 MAX_OBSERVATIONS = 32
 MAX_CAPTURES = 16
+CI_RECORD_LIMIT = 16384  # Complete UTF-8 line, including prefix/envelope/newline.
+CI_PREFIX = "ACCEPTANCE_FAILURE_EVIDENCE "
+STATE_READ_LIMIT = 4 * 1024 * 1024  # Complete 32x16 schema-sized local history, not a log dump.
+
+
+def exception_class(error):
+    # Never export an exception's text or an untrusted subclass name.
+    for kind in (FileNotFoundError, PermissionError, FileExistsError, UnicodeError,
+                 TypeError, ValueError, OSError):
+        if isinstance(error, kind):
+            return kind.__name__
+    return "Exception"
+
+
+def ci_line(record):
+    return CI_PREFIX + json.dumps(record, ensure_ascii=True, separators=(",", ":")) + "\n"
+
+
+def redact_strings(value, secret):
+    if isinstance(value, str):
+        return "[REDACTED]" if secret and secret in value else value
+    if isinstance(value, list):
+        return [redact_strings(item, secret) for item in value]
+    if isinstance(value, dict):
+        return {key: redact_strings(item, secret) for key, item in value.items()}
+    return value
+
+
+def ci_state_summary(state, size, secret=""):
+    """Select complete records; never slice serialized state at a byte offset.
+
+    Capture/field omission counts refer to observation records, not unique IDs.
+    Prioritize the latest relevant state and first/last observed terminal errors.
+    Full local evidence is not modified. Missing optional diagnostics stay absent.
+    """
+    observations = state["observations"]
+    if not isinstance(observations, list) or len(observations) > MAX_OBSERVATIONS:
+        raise ValueError("Invalid observation count")
+    rows = []
+    for observation in observations:
+        if not isinstance(observation, list) or len(observation) > MAX_CAPTURES:
+            raise ValueError("Invalid capture count")
+        row = []
+        for capture in observation:
+            clean = exported_capture(capture)
+            for key in ("id", "raw_artifact", "finalization_job_id"):
+                value = capture[key]
+                if re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+                    clean[key] = value  # Keep local pseudonyms stable in CI.
+            for key in CAPTURE_FIELDS:
+                if type(clean[key]) is int and not 0 <= clean[key] < 2**64:
+                    raise ValueError("Invalid capture scalar")
+            clean["unavailable_diagnostics"] = len(RECORDER_FIELDS) - len(clean["diagnostics"])
+            row.append(clean)
+        rows.append(row)
+    exits = {}
+    for key in ("daemon_exits", "studio_exits"):
+        value = state.get(key)
+        if value is not None and (not isinstance(value, list) or len(value) > 8 or
+                                  any(code is not None and (type(code) is not int or
+                                      not -2**31 <= code < 2**31) for code in value)):
+            raise ValueError("Invalid exit evidence")
+        exits[key] = value
+    all_records = [(i, j) for i, row in enumerate(rows) for j in range(len(row))]
+    errors = [(i, j) for i, j in all_records if rows[i][j]["error"]]
+    latest = len(rows) - 1 if rows else None
+    recent = sorted(((latest, j) for j in range(len(rows[-1]))) if rows else (),
+                    key=lambda key: (not bool(rows[key[0]][key[1]]["error"]),
+                                     not rows[key[0]][key[1]]["active"]))
+    priority = recent[:1] + errors[:1] + errors[-1:] + recent[1:] + list(reversed(all_records))
+    selected = []
+
+    def record(keys):
+        included = {i for i, _ in keys}
+        if rows and not rows[-1]:
+            included.add(latest)  # An observed empty latest row is not unavailable.
+        count_fields = lambda capture: len(CAPTURE_FIELDS) + len(capture["diagnostics"])
+        omitted_fields = sum(count_fields(rows[i][j]) for i, j in all_records if (i, j) not in keys)
+        summary = dict(version=1, latest_observation=latest,
+                       observations=[dict(index=i, captures=[rows[i][j] for k, j in keys if k == i],
+                                          omitted_captures=len(rows[i]) - sum(k == i for k, _ in keys))
+                                     for i in sorted(included)],
+                       total_observations=len(rows), omitted_observations=len(rows) - len(included),
+                       total_captures=len(all_records), omitted_captures=len(all_records) - len(keys),
+                       omitted_fields=omitted_fields, terminal_errors=len(errors),
+                       omitted_terminal_errors=sum(key not in keys for key in errors),
+                       truncated=len(keys) != len(all_records) or len(included) != len(rows), **exits)
+        return redact_strings(dict(file="capture-state.json", size_bytes=size, summary=summary), secret)
+
+    for key in priority:
+        if key not in selected:
+            candidate = record(selected + [key])
+            if len(ci_line(candidate).encode("utf-8")) <= CI_RECORD_LIMIT:
+                selected.append(key)
+    return record(selected)
 
 
 def scalar_diagnostics(metadata):
@@ -164,16 +259,16 @@ def retain_failure(root, evidence, observations, daemon_exits, studio_exits):
         except FileNotFoundError:
             continue
         except OSError as error:
-            summary = {"read_error": type(error).__name__}
+            summary = {"read_error": exception_class(error)}
         (evidence / name).write_text(json.dumps(summary) + "\n")
 
 
 def emit_failure(evidence, stream, *, secret="", limit=16384):
-    """Export bounded log/state tails to CI output without exposing the fixture token.
+    """Emit four complete escaped records, each at most 16 KiB including envelope.
 
-    Each record is one escaped JSON line, so log control characters and runner
-    commands cannot become output directives. Retained files contain only the
-    allowlisted summaries produced by retain_failure, not original project logs.
+    `limit` retains its text-tail read bound; structured state is independently
+    selected/serialized. Total output is at most 4*CI_RECORD_LIMIT UTF-8 bytes.
+    Local complete evidence is never rewritten. Logs remain bounded text tails.
     """
     if not 0 < limit <= 16384:
         raise ValueError("Evidence output limit must be in 1..16384")
@@ -181,30 +276,55 @@ def emit_failure(evidence, stream, *, secret="", limit=16384):
     for name in ("daemon.log", "studio.log", "capture-state.json", "project-diagnostics.json"):
         record = {"file": name}
         try:
-            with (evidence / name).open("rb") as source:
-                size = source.seek(0, 2)
-                start = max(0, size - limit)
-                # Include overlap so a token crossing the tail boundary can be
-                # redacted in full rather than leaking its suffix.
-                read_start = max(0, start - max(0, len(token) - 1))
-                source.seek(read_start)
-                data = source.read(size - read_start)
-            cut = start - read_start
-            if token:
-                position = data.find(token)
-                while position != -1 and position < cut:
-                    if position + len(token) > cut:
-                        cut = position
-                        break
-                    position = data.find(token, position + 1)
-            tail = data[cut:]
-            if token:
-                tail = tail.replace(token, b"[REDACTED]")
-            record.update(size_bytes=size, omitted_prefix_bytes=read_start + cut,
-                          tail=tail.decode("utf-8", errors="backslashreplace"))
+            if name == "capture-state.json":
+                with (evidence / name).open("rb") as source:
+                    size = source.seek(0, 2)
+                    if size > STATE_READ_LIMIT:
+                        raise ValueError("State read bound exceeded")
+                    source.seek(0)
+                    data = source.read(STATE_READ_LIMIT + 1)
+                record = ci_state_summary(json.loads(data), size, secret)
+            else:
+                record = text_evidence(evidence / name, name, token, limit)
         except OSError as error:
-            record["read_error"] = type(error).__name__
-        print("ACCEPTANCE_FAILURE_EVIDENCE " + json.dumps(record), file=stream, flush=True)
+            record = dict(file=name, read_error=exception_class(error))
+        except Exception as error:
+            record = dict(file=name, summary_error=exception_class(error))
+        # Escaping can expand text. Trim only text at character boundaries;
+        # state above is selected at structure boundaries, never tail-sliced.
+        removed = 0
+        while len(ci_line(record).encode("utf-8")) > CI_RECORD_LIMIT:
+            tail = record["tail"]
+            cut = max(1, len(tail) // 2)
+            removed += cut
+            record["tail"] = tail[cut:]
+            record["additional_output_prefix_characters_omitted"] = removed
+        stream.write(ci_line(record))
+        stream.flush()
+
+
+def text_evidence(path, name, token, limit):
+    with path.open("rb") as source:
+        size = source.seek(0, 2)
+        start = max(0, size - limit)
+        # Include overlap so a token crossing the tail boundary can be
+        # redacted in full rather than leaking its suffix.
+        read_start = max(0, start - max(0, len(token) - 1))
+        source.seek(read_start)
+        data = source.read(size - read_start)
+    cut = start - read_start
+    if token:
+        position = data.find(token)
+        while position != -1 and position < cut:
+            if position + len(token) > cut:
+                cut = position
+                break
+            position = data.find(token, position + 1)
+    tail = data[cut:]
+    if token:
+        tail = tail.replace(token, b"[REDACTED]")
+    return dict(file=name, size_bytes=size, omitted_prefix_bytes=read_start + cut,
+                tail=tail.decode("utf-8", errors="backslashreplace"))
 
 
 def report_failure(root, evidence, observations, daemons, studios, stream, *, secret=""):
@@ -213,10 +333,10 @@ def report_failure(root, evidence, observations, daemons, studios, stream, *, se
         retain_failure(root, evidence, observations, [process.poll() for process in daemons],
                        [process.poll() for process in studios])
         emit_failure(evidence, stream, secret=secret)
-    except Exception as error:
+    except BaseException as error:
         try:
-            print(f"Acceptance evidence could not be retained: {type(error).__name__}", file=stream)
-        except Exception:
+            print(f"Acceptance evidence could not be retained: {exception_class(error)}", file=stream)
+        except BaseException:
             pass  # Broken evidence output must not replace the initiating error.
 
 
@@ -244,6 +364,51 @@ def capture_evidence(snapshot):
     return records
 
 
+CAPTURE_PHASES = frozenset((
+    "Studio acceptance ready", "headless capture started", "after isolated plugin crash",
+    "before Studio termination", "after Studio termination", "after Studio restart/exit",
+    "after UI termination", "disconnect", "restart", "after crash", "UI exited", "Studio ready"))
+CAPTURE_INVARIANTS = frozenset((
+    "expected exactly one original capture", "original RawCapture identity changed",
+    "capture reported an error", "original capture became inactive",
+    "expected exactly one daemon-owned active capture", "frame counter reversed", "frame progress deadline"))
+
+
+def capture_assertion(reason, phase, records, expected=None):
+    """Only diagnostics change: callers retain exact raw identity predicates.
+
+    Even a failing sanitizer/formatter must produce a safe primary assertion,
+    without exposing its own exception or an untrusted chained exception.
+    """
+    reason = reason if type(reason) is str and reason in CAPTURE_INVARIANTS else "capture invariant"
+    try:
+        details = dict(reason=reason, phase=phase if phase in CAPTURE_PHASES else "unclassified",
+                       phase_identity=identity_summary(phase))
+        if expected is not None:
+            details.update(expected_capture=identity_summary(expected.id),
+                           expected_raw=identity_summary(expected.raw_artifact))
+            if type(expected.frames) is int and 0 <= expected.frames < 2**64:
+                details["expected_frames"] = expected.frames
+        relevant = sorted(records, key=lambda record: expected is None or record["id"] != expected.id)
+        captures = []
+        for record in relevant[:4]:
+            clean = exported_capture(record)
+            captures.append({key: clean[key] for key in
+                             ("id", "raw_artifact", "active", "frames", "error", "queue_saturation")})
+            for key in ("frames", "queue_saturation"):
+                if type(captures[-1][key]) is not int or not 0 <= captures[-1][key] < 2**64:
+                    raise ValueError("Invalid assertion scalar")
+        details.update(captures=captures, omitted_captures=max(0, len(records) - len(captures)))
+        message = json.dumps(details, sort_keys=True)
+        if len(message.encode("utf-8")) > 4096:
+            raise ValueError("Assertion output bound")
+    except BaseException:
+        # reason is a caller-owned invariant literal, never capture/user text.
+        message = ('{"reason":"' + reason +
+                   '","phase":"unavailable","diagnostic":"unavailable"}')
+    return AssertionError(message)
+
+
 def require_capture(snapshot, expected, phase):
     records = capture_evidence(snapshot)
     matches = [capture for capture in snapshot.captures if capture.id == expected.id]
@@ -257,18 +422,15 @@ def require_capture(snapshot, expected, phase):
     elif not matches[0].active:
         reason = "original capture became inactive"
     if reason:
-        raise AssertionError(json.dumps({"phase": phase, "reason": reason,
-            "expected_capture": expected.id, "expected_raw": expected.raw_artifact,
-            "captures": records}, sort_keys=True))
+        raise capture_assertion(reason, phase, records, expected) from None
     return matches[0]
 
 
 def initial_capture(snapshot, phase):
     active = [capture for capture in snapshot.captures if capture.active]
     if len(active) != 1:
-        raise AssertionError(json.dumps({"phase": phase,
-            "reason": "expected exactly one daemon-owned active capture",
-            "captures": capture_evidence(snapshot)}, sort_keys=True))
+        raise capture_assertion("expected exactly one daemon-owned active capture", phase,
+                                capture_evidence(snapshot)) from None
     return require_capture(snapshot, active[0], phase)
 
 
@@ -282,15 +444,17 @@ def await_progress(snapshot, expected, phase, timeout=10, *,
     """
     deadline = now() + timeout
     while True:
-        current = require_capture(snapshot(), expected, phase)
+        observed = snapshot()
+        current = require_capture(observed, expected, phase)
         if current.frames < expected.frames:
-            raise AssertionError(f"{phase}: {expected.id}: frame counter reversed "
-                                 f"{expected.frames} -> {current.frames}")
+            raise capture_assertion("frame counter reversed", phase,
+                                    capture_evidence(observed),
+                                    expected) from None
         if current.frames > expected.frames:
             return current
         remaining = deadline - now()
         if remaining <= 0:
-            raise AssertionError(json.dumps({"phase": phase, "reason": "frame progress deadline",
-                "expected_capture": expected.id, "expected_raw": expected.raw_artifact,
-                "frames": current.frames, "error": current.error}, sort_keys=True))
+            raise capture_assertion("frame progress deadline", phase,
+                                    capture_evidence(observed),
+                                    expected) from None
         wait(min(.05, remaining))

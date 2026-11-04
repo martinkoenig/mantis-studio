@@ -48,6 +48,14 @@ check plan is sufficient; a documentation edit must not silently weaken an R1 ga
   resource exhaustion. Verify explicit contained failure or deterministic recovery,
   retained provenance and bounded resources; never fabricate continuity or loss.
 
+For consequential asynchronous, multiprocess, storage/recovery, Qt and concurrency
+tests, expose where feasible the specific failed predicate and phase with the
+smallest bounded, safe, actionable state/metrics needed to distinguish likely
+causes. Preserve the initiating error when evidence or cleanup fails. An ordinary
+deterministic unit test generally needs only an expressive assertion and source
+location. This is a proportionate design/review criterion, not blanket logging,
+success-path tracing, a mass retrofit, a new framework or an additional CI gate.
+
 Inspect production and test code independently when a test fails. Distinguish a
 source defect, fixture/oracle defect, unclear contract and environment limitation.
 Retain the original failure and investigate it; a later green run is no causal
