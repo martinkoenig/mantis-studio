@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "id": "community-stereo",
+  "mode": "free",
+  "seed": 17,
+  "width": 640,
+  "height": 480,
+  "format": "GREY",
+  "stride": 640,
+  "capacity": 8,
+  "tolerance_ns": 20000000,
+  "calibration_id": "org.mantis.virtual-rig.pinhole-640x480.v1",
+  "calibration_revision": 1,
+  "cameras": [
+    {
+      "id": "left-camera",
+      "role": "left",
+      "stream": "left-image",
+      "clock": "org.mantis.virtual-rig.left",
+      "rate_num": 30,
+      "rate_den": 1,
+      "phase_ns": 0,
+      "latency_ns": 0,
+      "offset_ns": 0,
+      "drift_ppm": 0,
+      "jitter_ns": 0,
+      "delivery_ns": 0,
+      "comparable": true
+    },
+    {
+      "id": "right-camera",
+      "role": "right",
+      "stream": "right-image",
+      "clock": "org.mantis.virtual-rig.right",
+      "rate_num": 2997,
+      "rate_den": 100,
+      "phase_ns": 0,
+      "latency_ns": 0,
+      "offset_ns": 0,
+      "drift_ppm": 0,
+      "jitter_ns": 0,
+      "delivery_ns": 0,
+      "comparable": true
+    }
+  ],
+  "faults": []
+}
