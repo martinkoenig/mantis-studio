@@ -1,4 +1,5 @@
 #include "../../plugins/first-party/devices/virtual-rig/control.hpp"
+#include "portable_environment.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -38,7 +39,7 @@ struct Workspace {
         out << j.dump();
         out.close();
         CHECK(out.good());
-        CHECK(setenv("MANTIS_VIRTUAL_RIG_PROFILE", (root / "rig.json").c_str(), 1) == 0);
+        CHECK(test::environment("MANTIS_VIRTUAL_RIG_PROFILE", (root / "rig.json").string().c_str()) == 0);
     }
 };
 Json profile(size_t cameras = 2, std::string format = "GREY", uint32_t width = 64, uint32_t height = 48) {
@@ -342,7 +343,7 @@ void contract(const std::filesystem::path &library) {
     CHECK(api->struct_size == sizeof(MantisAcquisitionV1) && api->abi_version == 1);
     CHECK(!loaded->api()->query_interface(MANTIS_DEVICE_V1));
     CHECK(!loaded->api()->query_interface(MANTIS_HARDWARE_TRIGGER_V1));
-    unsetenv("MANTIS_VIRTUAL_RIG_PROFILE");
+    CHECK(test::environment("MANTIS_VIRTUAL_RIG_PROFILE", nullptr) == 0);
     unsigned count{};
     sdk::enumerate(api, [&](const auto &) { ++count; });
     CHECK(count == 0);
@@ -399,11 +400,33 @@ void contract(const std::filesystem::path &library) {
             CHECK(later->frames[0].bytes() != original);
             CHECK(first->frames[0].bytes() == original);
             const auto gen = first->frames[0].meta.at("generation");
+            std::vector<std::string> clocks;
+            for (size_t i = 0; i < cameras; ++i) {
+                clocks.push_back(first->frames[i].clock);
+                CHECK(!clocks[i].empty() && later->frames[i].clock == clocks[i]);
+                CHECK(first->frames[i].native == 0 && later->frames[i].native == 33333333);
+                CHECK(first->frames[i].meta.at("native_clock_id") == p.at("cameras")[i].at("clock"));
+                CHECK(clocks[i] != first->frames[i].meta.at("capture_event_clock").get<std::string>());
+                CHECK(clocks[i] != first->frames[i].meta.at("host_receive_clock").get<std::string>());
+            }
             r.stop();
             accounting(r.diagnostics(), cameras);
             CHECK(api->start(r.instance.value) == 0);
             auto restarted = r.take();
             CHECK(restarted && restarted->sequence == 0 && restarted->frames[0].sequence == 0);
+            for (size_t i = 0; i < cameras; ++i) {
+                CHECK(restarted->frames[i].clock != clocks[i]);
+                CHECK(restarted->frames[i].native == 0);
+                CHECK(restarted->frames[i].meta.at("native_clock_id") == p.at("cameras")[i].at("clock"));
+                CHECK(restarted->frames[i].meta.at("component_id") ==
+                      first->frames[i].meta.at("component_id"));
+                CHECK(restarted->frames[i].meta.at("stream_id") == first->frames[i].meta.at("stream_id"));
+                CHECK(restarted->frames[i].meta.at("host_receive_clock") !=
+                      first->frames[i].meta.at("host_receive_clock"));
+                CHECK(first->frames[i].clock == clocks[i] && later->frames[i].clock == clocks[i]);
+                CHECK(first->frames[i].native == 0 && later->frames[i].native == 33333333);
+            }
+            CHECK(first->frames[0].bytes() == original);
             CHECK(restarted->frames[0].meta.at("generation") != gen);
             CHECK(restarted->frames[0].trigger == 0);
         }
@@ -442,6 +465,8 @@ void contract(const std::filesystem::path &library) {
         Rig reopened(*loaded, w, p);
         auto s = reopened.take();
         CHECK(s && s->frames[0].meta.at("generation") != old_generation);
+        CHECK(s->frames[0].clock != retained->frames[0].clock);
+        CHECK(s->frames[0].native == 0 && retained->frames[0].native == 0);
     }
     retained.reset();
     failed_emit.reset();
@@ -524,7 +549,9 @@ void timing(const std::filesystem::path &library) {
             const int64_t exposure = int64_t(n * 1000000000 / 30) + 1000000;
             CHECK(s->frames[0].sequence == n && s->frames[1].sequence == n);
             CHECK(s->frames[1].native == exposure + 1000000 + exposure * 50000 / 1000000);
-            CHECK(s->frames[0].clock == "org.test.left" && s->frames[1].clock == "org.test.right");
+            CHECK(s->frames[0].meta.at("native_clock_id") == "org.test.left" &&
+                  s->frames[1].meta.at("native_clock_id") == "org.test.right");
+            CHECK(s->frames[0].clock != s->frames[1].clock);
             CHECK(s->frames[0].group.empty() && s->frames[1].group.empty());
             CHECK(!s->frames[0].meta.contains("simulated_trigger_id"));
             CHECK(s->meta.at("modeled_exposure_delta_ns") == "1000000");
@@ -686,19 +713,23 @@ void timing(const std::filesystem::path &library) {
 void generation_reload(const std::filesystem::path &library) {
     Workspace w;
     std::unique_ptr<Snapshot> retained;
-    for (const char *name : {"first.so", "reopened.so"})
-        std::filesystem::copy_file(library, w.root / name);
+    const auto first_library = w.root / ("first" + library.extension().string());
+    const auto reopened_library = w.root / ("reopened" + library.extension().string());
+    for (const auto &copy : {first_library, reopened_library})
+        std::filesystem::copy_file(library, copy);
     {
-        plugins::Loaded first(w.root / "first.so");
+        plugins::Loaded first(first_library);
         Rig r(first, w, profile());
         retained = r.take();
         CHECK(retained);
     }
     {
-        plugins::Loaded reopened(w.root / "reopened.so");
+        plugins::Loaded reopened(reopened_library);
         Rig r(reopened, w, profile());
         auto fresh = r.take();
         CHECK(fresh && fresh->frames[0].meta.at("generation") != retained->frames[0].meta.at("generation"));
+        CHECK(fresh->frames[0].clock != retained->frames[0].clock);
+        CHECK(fresh->frames[0].native == 0 && retained->frames[0].native == 0);
         CHECK(fresh->frames[0].group != retained->frames[0].group);
         CHECK(fresh->frames[0].meta.at("capture_event_clock") !=
               retained->frames[0].meta.at("capture_event_clock"));
@@ -711,7 +742,7 @@ void negatives(const std::filesystem::path &library) {
     const auto *api = loaded.query<MantisAcquisitionV1>(MANTIS_ACQUISITION_V1);
     auto rejection = [&](const std::string &text) {
         std::ofstream(w.root / "rig.json") << text;
-        setenv("MANTIS_VIRTUAL_RIG_PROFILE", (w.root / "rig.json").c_str(), 1);
+        CHECK(test::environment("MANTIS_VIRTUAL_RIG_PROFILE", (w.root / "rig.json").string().c_str()) == 0);
         unsigned count{};
         auto emit = [](void *ctx, const MantisDiscoveredDeviceV1 *) noexcept {
             ++*static_cast<unsigned *>(ctx);
@@ -959,6 +990,8 @@ void negatives(const std::filesystem::path &library) {
         CHECK(receiver.result->frames[0].received >=
               std::stoll(receiver.result->frames[0].meta.at("reference_origin_host_ns").get<std::string>()) +
                   1000000);
+        CHECK(receiver.result->frames[0].meta.at("host_receive_clock") == "std.chrono.steady_clock");
+        CHECK(r.diagnostics().at("host_receive_clock") == "std.chrono.steady_clock");
     }
     // Observe real wait entry before cancellation; cleanup always releases it.
     {
@@ -1056,38 +1089,80 @@ void runtime(const std::filesystem::path &library) {
                 CHECK(layout.row_stride == p.at("stride").get<uint32_t>());
                 CHECK(f.header.calibration.id.value == p.at("calibration_id").get<std::string>());
                 CHECK(f.header.metadata.at("component_id") == streams[0]->components()[i].id.value);
+                CHECK(f.header.timestamp.domain.id == live.front()->frames[i]->header.timestamp.domain.id);
+                CHECK(f.header.metadata.at("native_clock_id") ==
+                      p.at("cameras")[i].at("clock").get<std::string>());
+                CHECK(f.header.metadata.at("host_receive_clock") == "std.chrono.steady_clock");
                 CHECK(f.header.timestamp.nanoseconds == std::stoll(f.header.metadata.at("capture_event_ns")));
                 CHECK(f.header.received.nanoseconds >=
                       std::stoll(f.header.metadata.at("reference_origin_host_ns")) +
                           std::stoll(f.header.metadata.at("availability_ns")));
             }
         }
-        // Deliberately abandon the unfinished schema-2 writer, execute recovery,
-        // then replay exactly twice; no process-kill durability claim is made.
-        store->abandon(raw);
-        CHECK(store->recover(raw).state == artifact::ArtifactState::finalized);
-        unsetenv("MANTIS_VIRTUAL_RIG_PROFILE");
-        for (unsigned pass = 0; pass < 2; ++pass) {
-            auto replay = device::recorded_source(store, raw, false);
-            CHECK(replay->start());
-            for (const auto &original : live) {
-                auto value = replay->next();
-                CHECK(value && *value);
-                CHECK(canonical(**value) == canonical(*original));
-            }
-            auto end = replay->next();
-            CHECK(end && !*end && replay->stop());
-        }
-        w.profile(p);
+        // A restart is a new capture: its sequence resets, so RawCapture requires
+        // a separate schema-2 artifact. Retained history keeps its old clock ID.
+        const auto historical = canonical(*live.front());
+        const auto old_clock = live.front()->frames[0]->header.timestamp.domain.id;
+        const auto old_native = live.front()->frames[0]->header.timestamp.nanoseconds;
         CHECK(streams[0]->start());
         auto restarted = streams[0]->next();
+        const auto stopped = streams[0]->stop();
+        CHECK(stopped);
         CHECK(restarted && *restarted && (*restarted)->header.sequence.value == 0);
-        CHECK((*restarted)->frames[0]->header.metadata.at("generation") !=
-              live[0]->frames[0]->header.metadata.at("generation"));
-        CHECK(streams[0]->stop());
+        for (size_t i = 0; i < 2; ++i) {
+            const auto &fresh = (*restarted)->frames[i]->header;
+            const auto &original = live.front()->frames[i]->header;
+            CHECK(fresh.timestamp.domain.id != original.timestamp.domain.id);
+            CHECK(fresh.timestamp.nanoseconds == 0);
+            CHECK(fresh.metadata.at("native_clock_id") == original.metadata.at("native_clock_id"));
+            CHECK(fresh.metadata.at("component_id") == original.metadata.at("component_id"));
+            CHECK(fresh.metadata.at("stream_id") == original.metadata.at("stream_id"));
+        }
+        CHECK(canonical(*live.front()) == historical);
+        CHECK(live.front()->frames[0]->header.timestamp.domain.id == old_clock);
+        CHECK(live.front()->frames[0]->header.timestamp.nanoseconds == old_native);
+        auto recordings = std::vector{std::pair{raw, live}};
+        if (!writer_fault) {
+            CHECK(live.back()->frames[0]->header.timestamp.nanoseconds >
+                  (*restarted)->frames[0]->header.timestamp.nanoseconds);
+            auto second_raw = store->begin({"org.mantis.RawCapture", 2}, {});
+            store->append(second_raw, **restarted);
+            recordings.emplace_back(second_raw, std::vector<data::Published>{*restarted});
+        }
+        // Deliberately abandon unfinished schema-2 writers, execute recovery,
+        // then replay each exactly twice; no process-kill durability claim.
+        for (const auto &[artifact, packets] : recordings) {
+            store->abandon(artifact);
+            CHECK(store->recover(artifact).state == artifact::ArtifactState::finalized);
+        }
+        CHECK(test::environment("MANTIS_VIRTUAL_RIG_PROFILE", nullptr) == 0);
+        for (unsigned pass = 0; pass < 2; ++pass) {
+            for (const auto &[artifact, packets] : recordings) {
+                auto replay = device::recorded_source(store, artifact, false);
+                CHECK(replay->start());
+                for (const auto &original : packets) {
+                    auto value = replay->next();
+                    CHECK(value && *value);
+                    for (size_t i = 0; i < 2; ++i) {
+                        const auto &actual = (*value)->frames[i]->header.timestamp;
+                        const auto &expected = original->frames[i]->header.timestamp;
+                        CHECK(actual.domain.id == expected.domain.id &&
+                              actual.nanoseconds == expected.nanoseconds);
+                    }
+                    CHECK(canonical(**value) == canonical(*original));
+                }
+                auto end = replay->next();
+                CHECK(end && !*end && replay->stop());
+            }
+        }
+        if (!writer_fault) {
+            CHECK(recordings.size() == 2);
+            CHECK(recordings[0].second.front()->frames[0]->header.timestamp.domain.id !=
+                  recordings[1].second.front()->frames[0]->header.timestamp.domain.id);
+        }
         std::cout << (packed ? "1280x720 Y10P" : "640x480 GREY")
                   << (writer_fault ? " writer failure" : " recording") << ": " << live.size()
-                  << " FrameSets; recovery and two byte-exact replays passed\n";
+                  << " FrameSets; native epoch restart, recovery and two byte-exact replays passed\n";
     }
 }
 } // namespace
@@ -1107,7 +1182,7 @@ int main(int argc, char **argv) {
             runtime(argv[2]);
         }
         CHECK(references.empty());
-        unsetenv("MANTIS_VIRTUAL_RIG_PROFILE");
+        CHECK(test::environment("MANTIS_VIRTUAL_RIG_PROFILE", nullptr) == 0);
         return 0;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

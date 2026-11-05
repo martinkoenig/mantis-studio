@@ -104,6 +104,10 @@ struct Device {
     int64_t host_now() const {
         return virtual_time ? model->now : monotonic_ns();
     }
+    std::string host_clock() const {
+        return virtual_time ? profile.id + "/host/" + std::to_string(model ? model->generation : 0)
+                            : "std.chrono.steady_clock";
+    }
     void produce(std::stop_token token) noexcept {
         std::unique_lock lock(mutex);
         try {
@@ -136,7 +140,7 @@ struct Device {
             {"next_waits", std::to_string(waits)},
             {"error", error.data()},
             {"pairing_mode", profile.triggered ? "simulated-trigger-association" : "timestamp-nearest"},
-            {"host_receive_clock", virtual_time ? "org.mantis.virtual-rig.host" : "linux.monotonic"}};
+            {"host_receive_clock", host_clock()}};
         if (!model)
             return m;
         m["generation"] = std::to_string(model->generation);
@@ -409,7 +413,7 @@ int next(void *value, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) no
         std::array<std::optional<mantis::sdk::Buffer>, 2> buffers;
         std::array<MantisAttributeV1, 2> attributes{};
         std::array<MantisObservationV1, 2> frames{};
-        std::array<std::string, 2> metadata, coordinates;
+        std::array<std::string, 2> metadata, coordinates, native_clocks;
         auto group =
             d.profile.triggered ? d.profile.id + "/simulated-trigger/" + std::to_string(generation) : "";
         for (size_t i = 0; i < d.profile.cameras.size(); ++i) {
@@ -445,6 +449,7 @@ int next(void *value, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) no
                 {"stream_id", d.profile.id + "/" + c.stream},
                 {"role", c.role},
                 {"fourcc", d.profile.format},
+                {"native_clock_id", c.clock},
                 {"generation", std::to_string(e.generation)},
                 {"capture_event_ns", std::to_string(e.exposure)},
                 {"availability_ns", std::to_string(e.available)},
@@ -452,7 +457,7 @@ int next(void *value, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) no
                 {"availability_clock", reference_clock},
                 {"reference_origin_host_ns", std::to_string(reference_origin)},
                 {"processing_ns", std::to_string(processing)},
-                {"host_receive_clock", d.virtual_time ? "org.mantis.virtual-rig.host" : "linux.monotonic"},
+                {"host_receive_clock", d.host_clock()},
                 {"timestamp_valid", e.timestamp_valid ? "true" : "false"},
                 {"native_offset_ns", std::to_string(c.offset)},
                 {"native_drift_ppm", std::to_string(c.drift_ppm)},
@@ -471,13 +476,16 @@ int next(void *value, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) no
                              {"org.mantis.image.bits_per_sample", "10"}});
             metadata[i] = Json(info).dump();
             coordinates[i] = d.profile.id + "/" + c.id + "/optical";
+            // Native timestamps restart with the acquisition model. The configured
+            // clock is provenance; only this epoch-scoped identity is continuous.
+            native_clocks[i] = c.clock + "/epoch/" + std::to_string(e.generation);
             MantisPacketV1 packet{sizeof(packet),
                                   1,
                                   MANTIS_IMAGE,
                                   1,
                                   e.native_sequence,
                                   e.timestamp_valid ? e.native : 0,
-                                  e.timestamp_valid ? c.clock.c_str() : "",
+                                  e.timestamp_valid ? native_clocks[i].c_str() : "",
                                   d.profile.calibration.c_str(),
                                   1,
                                   coordinates[i].c_str(),

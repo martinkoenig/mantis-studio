@@ -64,10 +64,22 @@ Counter/clock/trigger-generation violations fail rather than fabricate continuit
 Each event retains its requested trigger time (trigger mode only), modeled
 exposure time, native camera time, availability time, generation and exact
 trigger association. Native time is exposure + offset + exposure × drift/1e6,
-with integer truncation. Capture and availability name a generation-scoped
+with integer truncation. Each start resets this native timeline to its configured
+offset/phase/latency; it does not continue the preceding run's native clock.
+The profile's stable `clock` remains discovery provenance and is also emitted as
+`native_clock_id` metadata. The packet's effective native `clock_id` is
+`<configured-clock>/epoch/<generation>`: stable within one acquisition generation
+and distinct after restart, reopen or DSO reload. Stable parent, component and
+stream identities do not change with the epoch. Retained packets and schema-2
+RawCapture/replay keep their original effective clock IDs and timestamps.
+
+Capture and availability name a generation-scoped
 simulation reference clock; host origin, receipt clock and processing time are
-separate fields. No host receipt is substituted for camera time. Free-running
-pairing uses the explicitly known analytic mapping into the simulation reference;
+separate fields. Real host receipt/processing uses `std::chrono::steady_clock`,
+identified as `std.chrono.steady_clock`, without asserting a platform-specific
+clock implementation. Injected host time uses `<rig-id>/host/<generation>`
+because it also resets at start. No host receipt is substituted for camera time.
+Free-running pairing uses the explicitly known analytic mapping into the simulation reference;
 unknown/missing mappings or timestamps cannot establish stereo correspondence.
 
 A source thread advances the same model with steady time independently of

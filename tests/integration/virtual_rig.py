@@ -11,6 +11,7 @@ import time
 from capture_lifecycle import OwnedProcesses
 
 build = Path(sys.argv[1]).resolve()
+daemon_executable = Path(sys.argv[2]).resolve()
 source = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(build / "python"))
 import mantis
@@ -49,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-virtual-rig-") as directory:
                         return None
                 wait_until(observe, "daemon readiness")
             return processes.start_ready(
-                [str(build / "bin/mantisd"), "--project", str(root / "Project.mantis")],
+                [str(daemon_executable), "--project", str(root / "Project.mantis")],
                 ready=ready, env=env, stdout=log, stderr=log)
         try:
             daemon = start()
