@@ -1,9 +1,11 @@
 #include "faults.hpp"
 #include "../../src/artifact-store/persistence-test.hpp"
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <climits>
 #include <cstring>
+#include <fstream>
 #include <mantis/base.hpp>
 #include <mutex>
 #include <optional>
@@ -21,6 +23,11 @@ struct Slot {
 };
 std::mutex mutex;
 std::array<std::optional<Slot>, 8> slots;
+std::atomic_uint write_controls{};
+bool write_point(std::string_view point) {
+    return point == "record-write" || point == "header-write" || point == "outcome-write";
+}
+Trace *trace{};
 using Clock = std::chrono::steady_clock;
 void io(bool ok, const char *text) {
     if (!ok)
@@ -83,13 +90,10 @@ struct Allowance {
     bool failed{};
     std::optional<Plan> pause;
 };
-Allowance allowance(const std::filesystem::path &path, size_t count) {
-    auto name = path.filename().string();
-    auto point = name.ends_with(".segment.part") ? "record-write"
-                 : name == "run.outcome.part"    ? "outcome-write"
-                                                 : "header-write";
-    auto id = path.parent_path().filename().string();
-    auto root = path.parent_path().parent_path().parent_path();
+Allowance allowance(const std::filesystem::path &root, const std::string &id, const std::string &point,
+                    size_t count) {
+    if (!write_controls.load())
+        return {count, false, {}};
     std::lock_guard lock(mutex);
     for (auto &s : slots)
         if (s && !s->consumed && s->plan.point == point && s->plan.root == root &&
@@ -111,6 +115,16 @@ Allowance allowance(const std::filesystem::path &path, size_t count) {
     return {count, false, {}};
 }
 } // namespace
+Trace::Trace(std::filesystem::path path, std::string artifact)
+    : root(std::filesystem::absolute(path).lexically_normal()), id(std::move(artifact)) {
+    std::lock_guard lock(mutex);
+    io(!trace, "Only one passive storage trace is allowed");
+    trace = this;
+}
+Trace::~Trace() {
+    std::lock_guard lock(mutex);
+    trace = nullptr;
+}
 Arm::Arm(Plan p) {
     p.root = std::filesystem::absolute(p.root).lexically_normal();
     io(p.root.string().size() <= 4096 && p.id.size() <= 256 && p.point.size() < 64, "Storage plan bound");
@@ -119,6 +133,8 @@ Arm::Arm(Plan p) {
         if (!slots[i]) {
             auto n = p.bytes;
             slots[i] = Slot{std::move(p), {}, false, n};
+            if (write_point(slots[i]->plan.point))
+                ++write_controls;
             slot_ = i;
             return;
         }
@@ -126,6 +142,8 @@ Arm::Arm(Plan p) {
 }
 Arm::~Arm() {
     std::lock_guard lock(mutex);
+    if (write_point(slots[slot_]->plan.point))
+        --write_controls;
     slots[slot_].reset();
 }
 Metrics Arm::metrics() const {
@@ -141,7 +159,56 @@ void release_gate(int fd) {
     char value = 1;
     transfer(fd, &value, 1, true, Clock::now() + std::chrono::seconds(10));
 }
+StreamCost stream_cost(const std::filesystem::path &directory,
+                       const std::function<void(std::ostream &)> &encode) {
+    StreamCost result;
+    const auto ordinary = directory / "ordinary-probe.segment.part";
+    const auto qualified = directory / "qualified-probe.segment.part";
+    auto ns = [] {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count();
+    };
+    {
+        std::ofstream out(ordinary, std::ios::binary);
+        auto began = ns();
+        encode(out);
+        out.flush();
+        result.ordinary_ns = ns() - began;
+        io(out.good(), "Ordinary stream probe failed");
+    }
+    {
+        Output out(qualified, std::ios::binary);
+        auto began = ns();
+        encode(out);
+        out.flush();
+        result.qualified_ns = ns() - began;
+        io(out.good(), "Qualified stream probe failed");
+    }
+    std::ifstream a(ordinary, std::ios::binary), b(qualified, std::ios::binary);
+    std::string left{std::istreambuf_iterator<char>(a), {}}, right{std::istreambuf_iterator<char>(b), {}};
+    io(a.is_open() && b.is_open() && left == right && left.size() == std::filesystem::file_size(ordinary) &&
+           right.size() == std::filesystem::file_size(qualified),
+       "Stream probe bytes differ");
+    result.bytes = left.size();
+    a.close();
+    b.close();
+    std::filesystem::remove(ordinary);
+    std::filesystem::remove(qualified);
+    return result;
+}
 void checkpoint(std::string_view point, const std::filesystem::path &root, std::string_view id) {
+    {
+        std::lock_guard lock(mutex);
+        if (trace && trace->root == root && trace->id == id) {
+            if (trace->count < trace->samples.size()) {
+                auto &sample = trace->samples[trace->count++];
+                std::memcpy(sample.point, point.data(), std::min(point.size(), sizeof sample.point - 1));
+                sample.ns =
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch())
+                        .count();
+            } else
+                ++trace->overflow;
+        }
+    }
     if (auto p = hit(point, root, id)) {
         if (p->action == Action::pause)
             gate(*p, id);
@@ -190,20 +257,21 @@ CommitGuard::~CommitGuard() {
 }
 class Output::Buffer final : public std::streambuf {
     std::filebuf file_;
-    std::filesystem::path path_;
+    std::filesystem::path root_;
+    std::string id_, point_;
     bool failed_{};
 
   protected:
     std::streamsize xsputn(const char *bytes, std::streamsize count) override {
         if (failed_ || count < 0)
             return 0;
-        auto allowed = allowance(path_, static_cast<size_t>(count));
+        auto allowed = allowance(root_, id_, point_, static_cast<size_t>(count));
         auto n = file_.sputn(bytes, static_cast<std::streamsize>(allowed.bytes));
         if (allowed.failed) {
             failed_ = true;
             io(file_.pubsync() == 0, "Injected partial bytes could not be flushed");
             if (allowed.pause)
-                gate(*allowed.pause, path_.parent_path().filename().string());
+                gate(*allowed.pause, id_);
         }
         return n;
     }
@@ -225,7 +293,12 @@ class Output::Buffer final : public std::streambuf {
 
   public:
     bool open(const std::filesystem::path &p, std::ios::openmode mode) {
-        path_ = p;
+        const auto name = p.filename().string();
+        point_ = name.ends_with(".segment.part") ? "record-write"
+                 : name == "run.outcome.part"    ? "outcome-write"
+                                                 : "header-write";
+        id_ = p.parent_path().filename().string();
+        root_ = p.parent_path().parent_path().parent_path();
         failed_ = false;
         return file_.open(p, mode | std::ios::out) != nullptr;
     }
@@ -268,7 +341,7 @@ extern "C" int __wrap_fsync(int fd) {
         auto n = ::readlink(descriptor.data(), name.data(), name.size() - 1);
         if (n > 0 && static_cast<size_t>(n) < name.size() - 1) {
             std::filesystem::path path(std::string(name.data(), static_cast<size_t>(n)));
-            struct stat info{};
+            struct stat info {};
             if (::fstat(fd, &info) == 0) {
                 bool directory = S_ISDIR(info.st_mode);
                 auto id = (directory ? path : path.parent_path()).filename().string();
