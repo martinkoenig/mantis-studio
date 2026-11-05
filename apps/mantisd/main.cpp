@@ -8,12 +8,13 @@ int main(int argc, char **argv) {
         std::signal(SIGPIPE, SIG_IGN);
 #endif
         auto binary = std::filesystem::absolute(argv[0]).parent_path();
-        mantis::services::Configuration config{
-            binary.parent_path() / "plugins",
-            binary / "mantis-plugin-host",
-            std::filesystem::current_path() / "Example.mantis",
-            binary.parent_path() / "recipes",
-            {"org.mantis.virtual-scanner", "org.mantis.example-points", "org.mantis.ply", "org.mantis.x1"}};
+        mantis::services::Configuration config{binary.parent_path() / "plugins",
+                                               binary / "mantis-plugin-host",
+                                               std::filesystem::current_path() / "Example.mantis",
+                                               binary.parent_path() / "recipes",
+                                               {"org.mantis.virtual-scanner", "org.mantis.virtual-rig",
+                                                "org.mantis.example-points", "org.mantis.ply",
+                                                "org.mantis.x1"}};
 #ifdef _WIN32
         config.plugin_host += ".exe";
 #endif
