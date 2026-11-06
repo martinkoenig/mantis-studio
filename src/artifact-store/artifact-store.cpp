@@ -263,6 +263,7 @@ struct Store::Impl {
                 RawStage stage(trace, 4);
                 if (initial)
                     MANTIS_STORAGE_POINT("raw-first-record-before", root, id.value);
+                MANTIS_STORAGE_POINT("raw-record-before", root, id.value);
                 segments::append(writer.output, packet);
             }
             writer.last_sequence = packet.header.sequence.value;

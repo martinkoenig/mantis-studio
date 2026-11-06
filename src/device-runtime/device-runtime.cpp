@@ -1,3 +1,4 @@
+#include "qualification-test.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <exception>
@@ -16,7 +17,8 @@ std::vector<Descriptor> Runtime::list() const {
     std::vector<Descriptor> out;
     for (auto &p : streams_) {
         out.push_back(p->descriptor());
-        for (auto &child : p->components()) out.push_back(child);
+        for (auto &child : p->components())
+            out.push_back(child);
     }
     return out;
 }
@@ -261,7 +263,15 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                         preview_.push(*frame);
                         // Finish recording an observation already acquired when stop
                         // arrives: cancelling it would silently lose the last FrameSet.
-                        if (!recorder_.push_for(*frame, std::chrono::milliseconds(50))) {
+#ifdef MANTIS_SESSION_QUALIFICATION
+                        const auto admission_began = time::MonotonicTimestamp::now().nanoseconds;
+#endif
+                        const auto accepted = recorder_.push_for(*frame, std::chrono::milliseconds(50));
+#ifdef MANTIS_SESSION_QUALIFICATION
+                        qualification_test::admission(admission_began,
+                                                      time::MonotonicTimestamp::now().nanoseconds, accepted);
+#endif
+                        if (!accepted) {
                             {
                                 std::lock_guard lock(mutex_);
                                 if (!error_.empty())
