@@ -18,6 +18,7 @@ for binary in sys.argv[2:-3]:
     symbols = subprocess.check_output(['nm', '-C', binary], text=True)
     assert 'artifact::storage_test::' not in symbols, binary
     assert 'device::qualification_test::' not in symbols, binary
+    assert 'plugins::qualification_test::' not in symbols, binary
     strings = subprocess.check_output(['strings', binary], text=True)
     assert 'Storage checkpoint pipe deadline' not in strings, binary
 for binary in sys.argv[-3:]:
@@ -27,4 +28,5 @@ for binary in sys.argv[-3:]:
     assert '__wrap_fsync' in symbols, binary
 symbols = subprocess.check_output(['nm', '-C', sys.argv[-1]], text=True)
 assert 'device::qualification_test::admission' in symbols
+assert 'plugins::qualification_test::opened' in symbols
 print('Storage/Session seams compile out of product; isolated fault Store/daemon only PASS')

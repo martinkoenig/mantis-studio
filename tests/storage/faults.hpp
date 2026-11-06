@@ -40,7 +40,7 @@ class Trace {
   public:
     std::filesystem::path root;
     std::string id;
-    std::array<StageSample, 4096> samples{};
+    std::array<StageSample, 8192> samples{};
     size_t count{}, overflow{};
     Trace(std::filesystem::path, std::string);
     ~Trace();

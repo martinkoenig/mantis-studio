@@ -1,16 +1,18 @@
 # Virtual rig Recorder and storage qualification (SIM-01B)
 
-This Linux-only qualification uses the compiled `virtual-rig` acquisition plugin,
-its public `MantisAcquisitionV1` adapter, production `device::Session`, unchanged
-32-entry LOSSLESS queue and 50 ms failed-admission policy, and the actual schema-2
-segmented Store and replay source. The isolated qualification executable compiles
-Session with a private admission sampler and links the existing fault-enabled
-Store. Product targets, SDK ABI, artifact encodings, fsyncs and runtime ownership
-are unchanged. `virtual-rig-daemon` separately exercises the real daemon and public
-SDK. The new service-startup case exercises `services::Runtime` and its retained
-public failure evidence without a client owning capture.
+This Linux-only utility uses the compiled `virtual-rig` acquisition plugin,
+public `MantisAcquisitionV1` adapter, production `device::Session`, unchanged
+32-entry LOSSLESS queue and 50 ms failed-admission policy, actual schema-2
+segmented Store, explicit recovery and recorded replay. The isolated executable
+compiles Session and the acquisition adapter with private observers and links
+the existing fault-enabled Store. Symbol contracts prove these observers and
+fault controls absent from product archives/executables. Public SDK layouts,
+source timing/ownership, artifact schemas and durability operations are unchanged.
+The existing `virtual-rig-daemon` and storage daemon tests retain public-client
+coverage; the integrated startup case additionally checks `services::Runtime`'s
+retained failure evidence and absence of a successful capture handle.
 
-## Registered regression
+## Deterministic registered functional regression
 
 ```sh
 cmake --preset headless -DPython3_EXECUTABLE=/usr/bin/python3
@@ -18,78 +20,128 @@ cmake --build --preset headless --parallel 4
 ctest --test-dir build/headless -R '^virtual-rig-storage$' --output-on-failure
 ```
 
-One registration covers 2×640×480 GREY and bounded 2×1280×720 Y10P at 30 FPS
-for real-size integrity, plus 2×64×48 GREY stereo at 30 FPS for the healthy,
-transient, prolonged and public-service startup latency-policy controls. The
-latency fixtures use the same compiled plugin, production Session, actual Store
-I/O and complete byte/provenance/replay assertions. Their small payload isolates
-latency policy from the sustained writer-service deficit that unoptimized
-sanitizer encoding/hashing/filesystem work can introduce. It does not qualify
-real-size sustained throughput; the real-size matrix and full-reference opt-in
-workloads provide their separately stated evidence. Nominal uncompressed
-payloads are 18.432 and 69.12 MB/s; configured rates are not measured throughput. The legacy 1×64×48 GREY8 at 30 FPS (0.09216 MB/s)
-and schema-1 acceptance remain in their existing registrations. Existing
-`virtual-rig-contract`, `virtual-rig-runtime`, `virtual-rig-daemon`, `raw-capture`,
-`storage-legacy-golden`, `projected-storage-durability` and the actual X1
-post-commit Store-failure case retain their separate contracts. This test does
-not replace or duplicate the complete syscall-fault, crash, corrupt-tail or
-recovery-cancel/retry families in `tests/storage`.
+There is still one registration, with its existing 40-second external guard.
+It covers community 2×640×480 GREY and intermediate 2×1280×720 Y10P integrity,
+plus small 2×64×48 stereo healthy/transient/prolonged policy cases and public
+Runtime startup failure. Configured 30 FPS defines **logical exposure cadence**,
+not measured wall-clock throughput. Nominal image payloads remain 18.432 and
+69.12 MB/s. Legacy single-camera 64×48 GREY8×30 (0.09216 MB/s), schema-1
+acceptance and schema-2/3 compatibility retain their existing tests.
 
-The transient/prolonged gates acknowledge entry immediately before a real
-schema-2 record append, using the private Store checkpoint mechanism. The added
-`raw-record-before` point compiles out of product targets; first-append and
-segment-sync checkpoints retain their meanings. The transient case observes four additional source publications and positive queue
-growth, then releases while the measured remaining queue budget is positive.
-The prolonged case observes 32 queued entries, the refused admission, retained
-first error, inactive producer and still-running writer. Release always precedes
-stop/join, including assertion unwind. No assertion requires stop to cancel
-synchronous storage. Subsequent drain must account for exactly one explicitly
-refused FrameSet; it must never count that FrameSet as callback success.
+The qualification-only adapter observer selects the existing plugin-private
+`ClockV1` on the **same instance** that Registry opens. It parks before `next()`;
+the coordinator observes that state, advances exactly one exposure, and waits
+for actual Session admission or Store callback progress. Source capacity, pending
+queues, real 50 ms `push_for`, synchronous Recorder callback and actual Store
+operations are unchanged. Clock credits grant acquisition calls, not fabricated
+packets. Every packet still traverses the compiled renderer, SDK buffer adapter,
+Session queue and segmented writer. All gates are released before thread/future
+joins on success and exception unwind.
 
-The existing `virtual-rig-contract` callback-held and finite-buffer tests remain
-responsible for source backpressure/descheduling independently of Store pressure.
-They observe actual compiled-plugin callback entry, then advance the modeled
-exposure clock and assert exact overruns/inflight ownership before release.
+A deliberate coordinator suspension lasts `(source_capacity + 1) / logical_FPS`
+(300 ms for the small reference), exceeding the old eight-event wall-clock
+buffering budget. Source-park entry is observed first. After this injected wall
+interval, logical time, exposure/publication counts and source overruns must be
+unchanged; subsequent exact capture/replay still passes. The interval specifies
+the descheduling fault, not scheduler ordering or a product FPS oracle. No CPU
+quota, affinity, global clock or infrastructure settings are changed.
 
-The independent pixel oracle builds the analytic raster without calling the
-producer renderer/model/packer; RAW10 quartets use an explicit four-sample
-formula. Every retained image and both replay passes compare all bytes,
-dimensions/strides, source sequence, child identity/order, generation, trigger,
-calibration and clock/receipt provenance. Canonical packet bytes are compared
-against retained originals in both replays. Segment scanning independently
-checks ordered record membership and boundaries. Restart must change generation
-without changing retained history. Failed capture stays OPEN until the
-daemon/fixture explicitly abandons it;
-`Store::abandon` sets RECOVERABLE synchronously. Explicit recovery finalizes its
-verified prefix; reopening also preserves its RECOVERABLE state.
-A recoverable prefix is not a cleanly completed failed scan.
+Transient/prolonged cases enter the actual `raw-record-before` Store checkpoint.
+Transient delivery fills four real queue entries, releases with 28 slots still
+available, drains and continues. The prolonged case fills 32, attempts one more
+admission and observes its real 50 ms refusal, first cause, inactive producer and
+still-blocked writer. Storage is released **before** stop/join; stop is not
+asserted to preempt synchronous I/O. A callback success is not a per-frame fsync.
+Failed capture is OPEN until explicit abandon makes it RECOVERABLE; explicit
+recovery finalizes its verified prefix, not a successful failed scan.
 
-Source exposure, delivery, pairing and Recorder refusal are separate counters.
-The current stop order retires the Session producer and drains/joins its writer
-before stopping the underlying source. Source exposures can therefore continue
-through that drain. The fixture asserts no source overruns before stop in healthy
-cases, checks every committed native sequence without gaps, and reports both
-pre-stop and final source counters. For a prolonged failure it additionally
-requires zero overruns at gate release. Source overruns/shutdown-unmatched
-observations after acquisition retirement are explicitly accounted and are not
-invented historical exposures or silently conflated with the refused FrameSet.
-No physical emitter/interlock, Studio response-time or shutdown-deadline claim is
-made.
+Five-second observation guards prevent infrastructure hangs and contain no
+nominal-FPS oracle. An expired guard without an established capture cause is
+UNQUALIFIED (exit 2, never a silent PASS/skip); product and runner require
+investigation. An already retained acquisition/Recorder/Store cause keeps FAILURE
+precedence. Corruption or a failed invariant is FAILURE, including under load.
+The ordinary CTest's exit 0 means its functional and expected negative assertions
+passed, **not** that controlled source time establishes performance qualification.
 
-## Opt-in measured full reference and bandwidth collapse
+The existing virtual-rig held-callback/finite-buffer controls separately test
+source backpressure and overruns. Existing storage durability tests retain
+ENOSPC/EIO, partial-write, flush/sync, publication/rename, SQLite, process-kill,
+incomplete/corrupt-tail and recovery cancellation/retry coverage. This utility
+does not duplicate those families or modify their fault semantics.
 
-Use Release for capacity measurements; ordinary Debug/sanitizer runs remain
-functional/data-integrity evidence. These modes are not CTest registrations and
-add no workflow or runner. They support the existing Linux x86_64/ARM64 build
-architectures; actual execution on each architecture must be reported separately.
+## Integrity and bounded history
+
+An independent analytic raster/explicit RAW10 quartet oracle checks every pixel,
+length, packing, dimension/stride, child identity/order, native sequence,
+generation, calibration, coordinate, trigger and clock provenance. A restart must
+change generation without changing retained history. Every committed packet has
+an exact canonical **structure** snapshot: all headers, metadata, schemas and
+attribute descriptors, with pixel spans normalized to readable zero-length views.
+Actual pixel lengths and every pixel byte are checked independently both at
+capture and on **each** replay. This decomposition compares all serialized content;
+it is not a digest/count-only check. The first 128 complete source packets remain
+retained, immutable and compared through the original full canonical byte oracle
+on both passes as well. Segment scans independently verify membership, order,
+boundaries and recovery. All retained/weak packet owners must retire on cleanup.
+
+Structure snapshots are capped at 32 KiB each, at most 64 MiB for 2,048 packets.
+Full payload retention stays at 128 FrameSets / 294,912,000 image bytes. Later
+benchmark payloads are validated before release; bounded structure/scalar history
+supports both replay passes without retaining gigabytes of images. Validation
+latency is measured separately after actual Store append; callback-success rate
+includes that work. Callback/append latency distributions identify their scope
+and sample counts. Stage arrays remain bounded and overflow is a failure.
+
+Ordinary native sequences remain strictly contiguous. Only real-time opt-in
+runs with explicitly reported source loss can verify a selected native prefix:
+each gap must be covered by persisted overrun counters; every selected identity,
+timestamp, trigger, pixel and structural byte still agrees. Such loss prevents
+QUALIFIED. Source exposure/pairing/overrun counters and Recorder refusal are
+separate, conserved quantities. Source exposures can continue while the current
+Session stop order joins/drains its writer; pre-stop and final counters are
+reported separately. Replay never invents or re-pairs historical observations.
+
+## Four qualification outcomes and negative sensitivity
+
+| Outcome | Meaning | Exit |
+| --- | --- | ---: |
+| QUALIFIED | Integrity/recovery pass, no unexpected source/Recorder loss/error, and both measured windows meet both reference rates | 0 |
+| UNQUALIFIED | Insufficient/sub-target measurement, controlled-source functional case, source/host limitation or inconclusive observation guard; no reference-rate acceptance | 2 |
+| FAILURE | Unexpected acquisition/Recorder/Store error, corruption or invariant failure; recoverable prefix does not change this verdict | 1 |
+| EXPECTED_SATURATION_POLICY_PASS | Deliberate overload proves explicit LOSSLESS refusal, accounting, exact recoverable prefix and cleanup; no performance qualification | 0 |
+
+The regression exercises actual verdict paths: an overrun-free four-frame capture
+with a held actual append remains short/sub-target and UNQUALIFIED; a real Store
+EIO checkpoint after two successes remains FAILURE after exact prefix recovery;
+the prolonged overload remains EXPECTED_SATURATION_POLICY_PASS. Standalone modes
+also expose their actual CLI exits (expected 2 and 1 respectively):
+
+```sh
+build/headless/bin/mantis-rig-storage-qualification control-short \
+  build/headless/plugins/virtual-rig.so profiles/virtual-rig-trigger.json
+build/headless/bin/mantis-rig-storage-qualification control-writer-error \
+  build/headless/plugins/virtual-rig.so profiles/virtual-rig-trigger.json
+```
+
+Raw first-cause diagnostics stay in private execution evidence; inspect/redact
+JSON before sharing. Public verdict descriptions are bounded and must not turn
+unexpected I/O failure into a CPU/source limitation. Secondary inspection or
+cleanup diagnostics do not replace an established first cause.
+
+## Opt-in measured reference and bandwidth collapse
+
+Release capacity measurements use real source time; ordinary Debug/sanitizer
+functional tests do not. No new CI job, runner or heavy CTest matrix is added.
+Supported build architectures are Linux x86_64/ARM64; actual execution evidence
+must identify its architecture independently.
 
 ```sh
 cmake -S . -B build/rig-release -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DMANTIS_BUILD_STUDIO=OFF -DPython3_EXECUTABLE=/usr/bin/python3
 cmake --build build/rig-release --parallel 4 --target mantis-rig-storage-qualification
 mkdir -p /tmp/mantis-rig-qualification
-# Choose a disposable parent on the filesystem being measured; default is TMPDIR.
-timeout 60s build/rig-release/bin/mantis-rig-storage-qualification benchmark \
+# Select a disposable parent on the filesystem being measured.
+timeout 180s build/rig-release/bin/mantis-rig-storage-qualification benchmark \
   build/rig-release/plugins/virtual-rig.so profiles/virtual-rig-trigger.json \
   /tmp/mantis-rig-qualification > /tmp/rig-throughput.json
 timeout 60s build/rig-release/bin/mantis-rig-storage-qualification collapse \
@@ -97,84 +149,84 @@ timeout 60s build/rig-release/bin/mantis-rig-storage-qualification collapse \
   /tmp/mantis-rig-qualification > /tmp/rig-collapse.json
 ```
 
-The reference profile is 2×1280×720 Y10P at 120 FPS: **276.48 MB/s nominal image
-payload**, excluding record headers, metadata, checksums and filesystem/SQLite
-work. Each run retains at most 128 source packets (294,912,000 image bytes), uses
-fixed admission/callback/stage arrays, limits output below 512 MiB and checks at
-least 1 GiB free space before starting (512 MiB for regression). Mapped replay
-storage is bounded per segment; canonical comparisons temporarily allocate two
-packet-sized strings. Expect additional allocator, Qt-free service, plugin,
-metadata and sanitizer overhead; payload bounds are not an RSS guarantee.
-Do not run concurrent build/test campaigns during a capacity measurement.
-CPU scope is the whole process, with one logical core equal to 100%.
+Reference: 2×1280×720 Y10P×120 = **120 FrameSets/s / 276.48 MB/s actual image
+payload**, excluding container/metadata/checksum/filesystem overhead. After one
+second of warmup, benchmark uses two consecutive fixed five-second steady-clock
+windows. Each must contain at least **600 successful callbacks AND 1,382,400,000
+actual image bytes**. Counts are independently accumulated from successful
+callback timestamps and actual buffer sizes. Warmup and post-window drain are
+excluded from qualification; summary phases and durable publication are separate.
 
-The healthy run stops after 80 callback successes or an explicit acquisition
-failure. The first eight callbacks are warmup. JSON identifies the actual
-steady-clock measurement boundaries, sample counts, recorded image bytes,
-callback FPS/MB/s, per-camera observed delivery FPS, acquisition diagnostics,
-callback/admission latency p50/p95/p99/max, queue trajectory, Store stage times,
-CPU, sampled RSS/FD/thread peaks, retained buffers, observed mapped-packet backing,
-output bytes and cleanup. Independent stat samples at held checkpoints or after
-joins measure visible segment bytes (OS-visible writes, not durable bytes).
-Indexed durable segment bytes/chunks before finalization are reported separately.
-Degraded callback service ends at the first failed admission; subsequent drain
-bytes are a separate phase.
-Store encoding/write/hash/sync work is included in callback wall time; this is
-actual Store service throughput, not a claim of exclusive kernel/device I/O time.
-Directory bytes include metadata and are distinct from image payload bytes.
-The fixture uses **8 MiB segment targets** for the opt-in modes (1 MiB for real-size
-integrity and 64 KiB for latency controls in the short regression), increasing
-publication frequency relative to the production 64 MiB default; this overhead must accompany every reported result.
+There is **zero allowed measured rate deficit**, not a guessed runner tolerance.
+One boundary frame gives 0.2 FPS / 0.4608 MB/s resolution per window (about 0.167%
+of nominal); this is reported uncertainty, not a relaxed threshold. Five seconds
+contains 600 nominal frame periods, over thirteen conservative recording-buffer
+budgets (8 source + 2 pairing + 1 plugin inflight + 32 Recorder + 1 producer +
+1 writer = 45 FrameSet opportunities, some overlapping). Thus a short no-overrun
+capture or a finite-buffer burst cannot replace the measured rate requirement.
+Two windows show only that bounded interval; they are correlated observations,
+not a statistical confidence interval, long-soak guarantee, or proof of SSD cache
+exhaustion/physical scanner performance. An otherwise correct nominal runner can
+be UNQUALIFIED at a boundary or under contention; there is no retry-until-green.
 
-Collapse starts with healthy service, then gates successive actual segment-sync
-operations on a monotonic 150 ms service schedule (~61.44 MB/s image payload for
-four FrameSets per segment, below the 276.48 MB/s requested source payload).
-The healthy boundary and degraded windows are explicit. This models a sustained
-service deficit after healthy operation, not merely a constant slow writer or
-real SSD pseudo-SLC exhaustion/thermal throttling. It preserves source rate,
-timestamps, queue capacity/deadline and durability. The required outcome is
-explicit accounted saturation and prefix recovery, never successful full-fidelity
-recording under an intentionally insufficient bandwidth budget.
+The benchmark caps 2,048 packets, artifact output below 5 GiB and requires 6 GiB
+free before starting. Collapse/functional cases cap 128 packets and 512 MiB output;
+free-space preflight is 1 GiB/512 MiB respectively. Full pixel history is capped
+at 294,912,000 bytes in every mode; add the actual bounded queue/inflight images,
+up to 64 MiB structure history, metadata, replay mapping, allocator and code/stack
+cost. Payload bounds are not an RSS guarantee: report measured steady/peak RSS
+and provision memory headroom (especially for sanitizers). Per-packet replay
+backing and temporary canonical comparisons remain bounded. The 180-second
+benchmark guard covers the larger recording/replay workload; timeout invalidates
+the run. No product enqueue/queue/deadline/durability bound is increased.
 
-Admission samples time the real `push_for` call; they include call/lock/scheduling
-cost and the queue's wait, not an inferred delay from callback duration. Callback
-success is distinct from `segment-synced`, publication/SQLite `chunk-committed`
-and finalization/recovery. Store stage timestamps, fixture samples and source
-`std.chrono.steady_clock` receipt/origin metadata share the same documented host
-clock. Native/reference epochs and Session-relative diagnostic fields are kept
-separate. Live counters are sampled separately and are not an atomic snapshot.
-Resource sampling is rate-limited to 50 ms on coordinator progress checks, outside
-the callback. JSON reports its elapsed cost/sample count and a 10,000-call
-admission-sampler microprobe and a 1,000-checkpoint passive Store-trace microprobe.
-Each case also serializes one identical retained packet to ordinary and qualified
-streams in the same owned directory, compares the complete bytes and reports both
-elapsed times. This probe excludes fsync and capture concurrency; it measures
-stream-wrapper overhead, not whole-capture capacity. The wrapper caches file
-identity at open and bypasses fault lookup when no write fault is armed. Existing
-partial-write/fault controls still exercise the armed path. These measurements are
-not zero-overhead claims or substitutes for a controlled whole-capture baseline.
+Opt-in segments target 8 MiB versus the production 64 MiB default (ordinary
+real-size 1 MiB / latency 64 KiB). All publication/sync overhead remains included.
+Collapse starts with ordinary service, then gates successive actual segment syncs
+on a 150 ms service schedule (~61.44 MB/s nominal payload for four frames per
+segment). It measures actual pre/post service, queue trajectory, first refusal,
+source loss, drain, artifact state and cleanup. It models a service deficit, not
+real SSD pseudo-SLC exhaustion or thermal behavior. Its healthy phase may already
+be source-limited; never call that full-rate baseline success. Unexpected I/O is
+FAILURE, not an expected saturation pass.
 
-Exit 0 means the requested assertions passed (a deliberate collapse is a negative
-policy test, not sustained-rate success). Benchmark exit 2 reports an explicitly
-unqualified host/rate limitation with metrics. Only this opt-in limitation path
-may verify a noncontiguous native camera prefix: every selected native identity,
-exposure timestamp, trigger and byte must agree, native order must increase, and
-each observed gap must be covered by persisted source-overrun counters. FrameSet
-publication order and both replay byte comparisons remain exact. Such a result
-never claims a full-fidelity recording. Ordinary regression native sequences
-remain strictly contiguous. Exit 2 is not a performance PASS; exit 1 is a failed invariant,
-preflight or bounded scheduling observation. Timeout is a failed/incomplete run,
-never PASS. Slow storage/CPU must be reported as a limitation rather than changing
-source rates or weakening assertions. Internal observation/checkpoint deadlines
-bound test hangs; they do not certify physical timing or uninterruptible-I/O
-shutdown. The outer 60-second process budget is a last-resort operational bound;
-its use invalidates the run.
+## Metrics, clocks, environment and cleanup
 
-Each run creates a fresh random child directory under the selected parent and
-removes only that child through RAII after releasing gates and retiring callbacks.
-No user data, hardware, GPU, proprietary Qt or cloud service is accessed. JSON
-redirection is explicit retention controlled by the caller; inspect/redact it
-before any public upload. A killed run may leave its uniquely named test child;
-inspect that exact directory before manual removal. Do not use broad cleanup.
-Results qualify only the measured host/build/filesystem and measurement window.
-Historical Recorder incidents in #12 remain causally OPEN.
+JSON version 2 records actual bytes/FPS and fixed window boundaries, append and
+admission p50/p95/p99/max/counts, per-frame validation overhead, source/Session
+accounting, queue trajectory/high-water, Store stages, visible segment writes,
+indexed durable bytes/chunks, finalization/recovery, retained/mapped buffers,
+CPU, sampled RSS/FD/thread peaks and restored cleanup baselines. Whole-process
+CPU uses one logical core = 100%; capture RSS includes validation history and
+full-process high-water includes replay. FD probes include temporary probe FDs.
+Store service includes encoding/hash/write/sync, not exclusive device I/O time.
+
+Bounded before/after runner snapshots include affinity, visible cgroup CPU quota
+and throttling, CPU/memory/I/O pressure, memory limits/current use and OOM events.
+Unavailable own-cgroup mappings/probes are explicit; snapshots are not atomic or
+proof another process caused a failure. Rate/source/service evidence must remain
+separate from environment hypotheses. Run capacity measurements serially without
+competing builds/tests. No global scheduler/cgroup/security changes are needed.
+
+Fixture/admission/callback/Store wall-clock stamps share steady-clock origin.
+Controlled-source receipt/reference/native clocks are separate and never treated
+as measured wall-clock FPS. Live counters are separately sampled, not an atomic
+cross-layer snapshot. Callback success is distinct from segment sync, SQLite
+publication, finalization and power-loss durability. Source clocks/epochs remain
+unchanged through persistence/replay. A stalled synchronous operation need not be
+preempted by the 50 ms admission budget; no Studio response or emitter/interlock
+claim follows from this software fixture.
+
+Instrumentation uses bounded arrays, coordinator resource sampling at most 20 Hz,
+a 10,000-call admission microprobe, 1,000 passive Store checkpoints and one identical
+packet through ordinary/qualified streams. The stream probe compares every byte;
+it excludes fsync/capture concurrency and is not a whole-product baseline.
+The wrapper caches identity and bypasses lookup only without armed write controls;
+existing partial-write/fault tests retain their assertions.
+
+Each run creates/removes only its fresh random child directory under the selected
+parent. Gate release and callback/thread retirement precede deletion. JSON files
+redirected by the caller are explicit retention; a killed run may leave its exact
+owned child for inspection. Never use broad cleanup. No user data, hardware, GPU,
+proprietary Qt, cloud or paused work is accessed. Hardware/long-soak/native-platform
+claims need separate matching evidence. Historical #12 causes remain OPEN.

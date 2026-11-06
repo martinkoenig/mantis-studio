@@ -1,3 +1,4 @@
+#include "../../plugins/first-party/devices/virtual-rig/control.hpp"
 #include "../../src/artifact-store/segments.hpp"
 #include "../integration/portable_environment.hpp"
 #include "faults.hpp"
@@ -17,6 +18,7 @@
 #include <mantis/replay.hpp>
 #include <mantis/services.hpp>
 #include <nlohmann/json.hpp>
+#include <sched.h>
 #include <set>
 #include <sstream>
 #include <sys/resource.h>
@@ -35,7 +37,31 @@ namespace {
 int64_t now() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count();
 }
-constexpr size_t bound = 128;
+constexpr size_t retained_bound = 128;
+// 120 FPS * (1 s warmup + 10 s measurement + 5 s watchdog) + queue headroom.
+constexpr size_t bound = 2048;
+constexpr int64_t rate_window_ns = 5000000000ll;
+constexpr uint64_t reference_fps = 120, reference_payload = 2304000;
+std::string private_first_cause; // Main-thread evidence; never replaces the first capture cause.
+struct CaseCause {
+    CaseCause() {
+        private_first_cause.clear();
+    }
+    ~CaseCause() {
+        if (!std::uncaught_exceptions())
+            private_first_cause.clear();
+    }
+};
+struct EnvironmentUnqualified : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+struct ObservationTimeout : EnvironmentUnqualified {
+    using EnvironmentUnqualified::EnvironmentUnqualified;
+};
+struct Observation {
+    uint64_t native{};
+    int64_t left_received{}, right_received{}, exposure{}, origin{}, processing{};
+};
 struct Admission {
     int64_t began{}, ended{};
     bool accepted{};
@@ -43,15 +69,23 @@ struct Admission {
 struct Callback {
     int64_t began{}, ended{};
     uint64_t payload{};
+    int64_t success{}, validation_ns{};
 };
 struct State {
     std::mutex mutex;
     std::condition_variable changed;
     uint64_t epoch{};
+    bool manual{}, released{}, parked{};
+    uint64_t credits{1};
+    const virtual_rig::ClockV1 *clock{};
+    void *instance{};
     std::array<Admission, bound + 2> admissions{};
     size_t admitted{}, admission_overflow{};
     std::array<Callback, bound> callbacks{};
-    std::array<data::Published, bound> packets{};
+    std::array<data::Published, retained_bound> packets{};
+    std::array<std::weak_ptr<const data::Packet>, bound> owners{};
+    std::array<std::string, bound> structures{};
+    std::array<Observation, bound> observations{};
     size_t committed{};
     std::vector<LogRecord> errors;
     void signal() {
@@ -113,6 +147,81 @@ std::string canonical(const data::Packet &p) {
     data::write_packet(bytes, p);
     return bytes.str();
 }
+data::Packet structure_packet(const data::Packet &p) {
+    data::Packet out = p;
+    for (auto &a : out.attributes)
+        a.buffer = a.buffer.slice(0, 0);
+    out.frames.clear();
+    for (const auto &child : p.frames)
+        out.frames.push_back(std::make_shared<const data::Packet>(structure_packet(*child)));
+    return out;
+}
+std::string structure(const data::Packet &p) {
+    return canonical(structure_packet(p));
+}
+// Read only this process's Linux resource domain. Bounded snapshots are evidence,
+// not atomic attribution of another process's contention/OOM to this capture.
+Json runner() {
+    auto read = [](const std::filesystem::path &path) {
+        std::ifstream in(path);
+        if (!in)
+            return std::string("unavailable");
+        std::array<char, 4097> bytes{};
+        in.read(bytes.data(), 4096);
+        return std::string(bytes.data(), size_t(in.gcount()));
+    };
+    cpu_set_t affinity;
+    CPU_ZERO(&affinity);
+    const auto affinity_rc = ::sched_getaffinity(0, sizeof affinity, &affinity);
+    Json result{{"affinity_cpu_count", affinity_rc == 0 ? CPU_COUNT(&affinity) : -1}};
+    result["affinity_cpus"] = Json::array();
+    if (affinity_rc == 0)
+        for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu)
+            if (CPU_ISSET(cpu, &affinity))
+                result["affinity_cpus"].push_back(cpu);
+    const auto mount = std::filesystem::path("/sys/fs/cgroup");
+    bool own_mapping{};
+    auto cgroup = std::filesystem::path("/sys/fs/cgroup");
+    const auto membership = read("/proc/self/cgroup");
+    const auto marker = membership.find("0::/");
+    if (marker != std::string::npos) {
+        const auto begin = marker + 4;
+        const auto relative = membership.substr(begin, membership.find('\n', begin) - begin);
+        const auto candidate = (cgroup / relative).lexically_normal();
+        std::error_code mapping_error;
+        if ((candidate == mount || candidate.string().starts_with("/sys/fs/cgroup/")) &&
+            std::filesystem::exists(candidate / "cpu.max", mapping_error) && !mapping_error) {
+            cgroup = candidate;
+            own_mapping = true;
+        }
+    }
+    result["cgroup_counter_scope"] =
+        own_mapping ? "mapped own cgroup" : "mount root; own mapping unavailable";
+    result["visible_cpu_limits"] = Json::array();
+    double effective = affinity_rc == 0 ? double(CPU_COUNT(&affinity)) : -1;
+    for (auto level = cgroup;
+         level.string().starts_with(mount.string()) && result["visible_cpu_limits"].size() < 16;
+         level = level.parent_path()) {
+        const auto text = read(level / "cpu.max");
+        result["visible_cpu_limits"].push_back(text);
+        std::istringstream fields(text);
+        std::string quota;
+        uint64_t period{};
+        if (fields >> quota >> period && quota != "max" && quota != "unavailable" && period) {
+            const auto cpus = double(std::stoull(quota)) / double(period);
+            effective = effective < 0 ? cpus : std::min(effective, cpus);
+        }
+        if (level == mount)
+            break;
+    }
+    result["effective_visible_cpu_limit"] = effective < 0 ? Json() : Json(effective);
+    for (const auto *name : {"cpu.max", "cpu.stat", "cpuset.cpus.effective", "memory.max", "memory.current",
+                             "memory.events", "cpu.pressure", "memory.pressure", "io.pressure"})
+        result[name] = read(cgroup / name);
+    for (const auto *name : {"cpu", "memory", "io"})
+        result[std::string("host_pressure_") + name] = read(std::filesystem::path("/proc/pressure") / name);
+    return result;
+}
 uint64_t number(const data::Metadata &m, const std::string &key) {
     return std::stoull(m.at(key));
 }
@@ -162,7 +271,7 @@ struct PixelOracle {
 // Decode each RAW10 sample independently and verify the analytic scene and four
 // exposure-counter pixels, including every padding byte and low packing bits.
 void exact(const data::Packet &p, const Json &profile, size_t index, const std::string &generation,
-           const PixelOracle &oracle, bool source_limited = false) {
+           const PixelOracle &oracle, bool source_limited = false, bool manual = false) {
     const uint32_t width = profile.at("width"), height = profile.at("height"), stride = profile.at("stride");
     const bool packed = profile.at("format") == "Y10P";
     const uint64_t fps = profile.at("cameras")[0].at("rate_num");
@@ -201,7 +310,8 @@ void exact(const data::Packet &p, const Json &profile, size_t index, const std::
         CHECK(m.at("capture_event_clock") == id + "/reference/" + generation);
         CHECK(m.at("availability_clock") == m.at("capture_event_clock"));
         CHECK(number(m, "availability_ns") == number(m, "capture_event_ns"));
-        CHECK(m.at("host_receive_clock") == "std.chrono.steady_clock");
+        CHECK(m.at("host_receive_clock") ==
+              (manual ? id + "/host/" + generation : "std.chrono.steady_clock"));
         CHECK(h.received.nanoseconds >=
               int64_t(number(m, "reference_origin_host_ns") + number(m, "availability_ns")));
         CHECK(number(m, "processing_ns") >= uint64_t(h.received.nanoseconds));
@@ -290,23 +400,71 @@ struct Run {
     size_t monitor_count{};
     Resources before{resources()}, peak{before};
     Json queue = Json::array();
-    Run() {
+    explicit Run(bool manual = false) {
+        state.manual = manual;
         CHECK(sampler.exchange(&state) == nullptr);
     }
     ~Run() {
         barrier.release_noexcept(); // Must precede Session's synchronous joins.
+        release_clock();
         if (session)
             session->stop();
         if (session && std::uncaught_exceptions()) {
             try {
                 const auto cause = session->error();
-                if (!cause.empty())
+                if (!cause.empty()) {
+                    if (private_first_cause.empty())
+                        private_first_cause = cause;
                     std::cerr << "retained capture cause: " << cause << '\n';
+                }
             } catch (...) {
                 // Failure evidence must not replace the initiating assertion.
             }
         }
         sampler = nullptr;
+    }
+    void release_clock() noexcept {
+        std::lock_guard lock(state.mutex);
+        state.released = true;
+        state.signal();
+    }
+    void advance_one(uint64_t fps) {
+        until(
+            [&] {
+                std::lock_guard lock(state.mutex);
+                return state.parked && !state.credits;
+            },
+            "controlled source parked before next");
+        size_t prior;
+        {
+            std::lock_guard lock(state.mutex);
+            CHECK(state.manual && !state.released && state.clock && state.instance);
+            prior = state.admitted;
+            CHECK(state.clock->advance(state.instance, int64_t(prior * 1000000000ull / fps)) == 0);
+            ++state.credits;
+            state.signal();
+        }
+        until(
+            [&] {
+                std::lock_guard lock(state.mutex);
+                return state.admitted > prior;
+            },
+            "controlled real Session admission");
+    }
+    void feed_to(size_t target, uint64_t fps, bool drain) {
+        for (;;) {
+            size_t admitted;
+            {
+                std::lock_guard lock(state.mutex);
+                admitted = state.admitted;
+            }
+            if (admitted >= target || (session && !session->active()))
+                return;
+            advance_one(fps);
+            if (drain)
+                until([&] { return !session->active() || session->committed() >= admitted + 1; },
+                      "controlled Store callback completion");
+        }
     }
     void sample() {
         const auto stamp = now();
@@ -342,7 +500,7 @@ struct Run {
             state.changed.wait_until(lock, std::min(deadline, Clock::now() + 2ms),
                                      [&] { return state.epoch != seen; });
             if (Clock::now() >= deadline)
-                throw std::runtime_error(std::string("Timed out observing ") + phase);
+                throw ObservationTimeout(std::string("Observation watchdog expired: ") + phase);
         }
     }
     void gate(const std::filesystem::path &root, const Id &id, uint64_t skip,
@@ -371,6 +529,7 @@ Json accounting(const data::Metadata &m) {
 }
 Json exercise(const std::filesystem::path &library, Json profile, const std::string &mode,
               const std::filesystem::path &parent) {
+    CaseCause cause_scope;
     std::cerr << "rig-storage phase " << mode << ' ' << profile.at("format") << '\n';
     const PixelOracle oracle(profile);
     const auto outside = resources();
@@ -400,7 +559,11 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
         CHECK(streams.size() == 1 && streams[0]->source_paced() && streams[0]->components().size() == 2);
         const bool transient = mode == "transient", prolonged = mode == "prolonged",
                    collapse = mode == "collapse";
-        const bool heavy = collapse || mode == "benchmark";
+        const bool benchmark = mode == "benchmark", short_control = mode == "control-short",
+                   writer_control = mode == "control-writer-error";
+        const bool heavy = collapse || benchmark;
+        const auto runner_before = runner();
+        int64_t measurement_start{}, measurement_end{};
         const Id capture = Id::random();
         artifact::Provenance provenance;
         provenance.producer = "org.mantis.virtual-rig";
@@ -429,9 +592,15 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
                                                                                  : "1048576";
         auto raw = store->begin({"org.mantis.RawCapture", 2}, provenance);
         st::Trace stages(store->root(), raw.value);
-        Run run;
-        if (transient || prolonged)
+        const bool manual = !heavy;
+        std::string capture_generation;
+        Run run(manual);
+        const uint64_t fps = profile.at("cameras")[0].at("rate_num");
+        if (transient || prolonged || short_control)
             run.gate(store->root(), raw, 1, "raw-record-before");
+        if (writer_control)
+            run.arm = std::make_unique<st::Arm>(
+                st::Plan{store->root(), raw.value, "raw-record-before", st::Action::fail, 2, 0, EIO});
         if (collapse)
             run.gate(store->root(), raw, 5); // Explicit healthy phase: 6 x ~4 records.
         run.session = std::make_unique<device::Session>(
@@ -441,11 +610,32 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
                 const auto began = now();
                 store->append(raw, *packet);
                 const auto ended = now();
+                const auto index = run.state.committed; // Single writer; main only reads under mutex.
+                CHECK(index < (benchmark ? bound : retained_bound));
+                if (capture_generation.empty())
+                    capture_generation = packet->header.metadata.at("generation");
+                // Validate before discarding any later payload. Full image history
+                // stays bounded; canonical structure retains every other byte.
+                exact(*packet, profile, index, capture_generation, oracle, heavy, manual);
+                auto bytes = structure(*packet);
+                CHECK(bytes.size() <= 32768); // Controlled profile: bounded metadata history, <=64 MiB total.
+                const auto &left = packet->frames[0]->header;
+                const auto &right = packet->frames[1]->header;
+                const Observation observation{left.sequence.value,
+                                              left.received.nanoseconds,
+                                              right.received.nanoseconds,
+                                              int64_t(number(left.metadata, "capture_event_ns")),
+                                              int64_t(number(left.metadata, "reference_origin_host_ns")),
+                                              int64_t(number(left.metadata, "processing_ns"))};
                 std::lock_guard lock(run.state.mutex);
-                CHECK(run.state.committed < bound);
-                auto &slot = run.state.callbacks[run.state.committed];
-                slot = {began, ended, payload(*packet)};
-                run.state.packets[run.state.committed++] = std::move(packet);
+                auto &slot = run.state.callbacks[index];
+                slot = {began, ended, payload(*packet), now(), now() - ended};
+                run.state.structures[index] = std::move(bytes);
+                run.state.observations[index] = observation;
+                run.state.owners[index] = packet;
+                if (index < retained_bound)
+                    run.state.packets[index] = std::move(packet);
+                ++run.state.committed;
                 run.state.signal();
             },
             [&](const LogRecord &record) {
@@ -455,7 +645,9 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
                 run.state.signal();
             });
         Json fault;
-        if (transient || prolonged || collapse) {
+        if (manual && (transient || prolonged || short_control))
+            run.advance_one(fps); // First callback already succeeded; gate the actual second append.
+        if (transient || prolonged || collapse || short_control) {
             const auto entered = st::await_event(run.barrier.entered[0], Clock::now() + 5s);
             CHECK(std::string(entered.point) == (collapse ? "segment-sync-before" : "raw-record-before") &&
                   std::string(entered.id) == raw.value);
@@ -463,17 +655,29 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
             const auto initial_produced = run.session->produced();
             const auto entered_ns = now();
             CHECK(run.session->active() && run.session->diagnostics().at("recorder_writer_running") == "1");
-            if (!collapse) {
-                run.until(
-                    [&] {
-                        return !run.session->active() ||
-                               run.session->produced() >= initial_produced + (prolonged ? 33 : 4);
-                    },
-                    "source delivery while storage blocked");
-                if (prolonged)
+            if (short_control) {
+                // Hold an actual append for more nominal periods than this
+                // entire four-frame run. Zero overruns cannot make it qualify.
+                const auto hold = std::chrono::nanoseconds(5 * 1000000000ll / int64_t(fps));
+                std::unique_lock lock(run.state.mutex);
+                run.state.changed.wait_until(lock, Clock::now() + hold, [] { return false; });
+                lock.unlock();
+                run.barrier.release();
+                run.feed_to(4, fps, true);
+                fault = {{"overrun_free_short_subtarget_control", true}};
+            } else if (!collapse) {
+                // Only explicit clock advances create exposures. Fill the real
+                // queue, then let the unchanged push_for wait its real 50 ms.
+                run.feed_to(initial_produced + (prolonged ? 33 : 4), fps, false);
+                if (prolonged) {
+                    {
+                        std::lock_guard lock(run.state.mutex);
+                        CHECK(!run.state.admissions[run.state.admitted - 1].accepted);
+                    }
                     run.until(
                         [&] { return run.session->diagnostics().at("recorder_producer_running") == "0"; },
                         "explicit saturation and producer retirement");
+                }
                 fault = {{"entered_ns", entered_ns},
                          {"observed_ns", now()},
                          {"initial_occupancy", initial},
@@ -499,15 +703,22 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
                     CHECK(run.session->active() && run.session->saturation() == 0);
                     CHECK(run.session->metrics().occupancy > initial &&
                           run.session->metrics().occupancy < 32);
-                    CHECK(double(now() - entered_ns) <
-                          fault["remaining_queue_budget_estimate_ns"].get<double>());
+                    fault["controlled_remaining_slots"] = 32 - run.session->metrics().occupancy;
+                    CHECK(fault["controlled_remaining_slots"].get<size_t>() > 0);
                 }
                 const auto source_at_release = streams[0]->diagnostics();
                 fault["source_overruns_at_release_left"] = number(source_at_release, "left.source_overruns");
                 fault["source_overruns_at_release_right"] =
                     number(source_at_release, "right.source_overruns");
                 run.barrier.release(); // No claim that stop can cancel the synchronous Store operation.
-                if (transient)
+                if (transient) {
+                    run.until(
+                        [&] {
+                            return run.session->metrics().occupancy == 0 &&
+                                   run.session->committed() == run.session->produced();
+                        },
+                        "controlled transient backlog drained");
+                    run.feed_to(16, fps, true);
                     run.until(
                         [&] {
                             return !run.session->active() ||
@@ -515,6 +726,7 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
                                     run.session->committed() >= std::max(initial_produced + 6, uint64_t{16}));
                         },
                         "drained transient queue");
+                }
             } else {
                 // Rate-limit actual segment sync service after a measured healthy
                 // phase. This is a bandwidth-deficit model, not SSD thermal proof.
@@ -563,18 +775,53 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
                 fault["degraded_gate_count"] = gates;
                 fault["degraded_end_ns"] = now();
             }
+        } else if (manual) {
+            if (mode == "latency-control") {
+                run.until(
+                    [&] {
+                        std::lock_guard lock(run.state.mutex);
+                        return run.state.parked;
+                    },
+                    "source parked for coordinator suspension");
+                const auto before = streams[0]->diagnostics();
+                // A deliberate coordinator suspension exceeds the old finite
+                // source budget. Entry is observed; time controls the fault only.
+                const auto held_ns =
+                    int64_t((profile.at("capacity").get<uint64_t>() + 1) * 1000000000ull / fps);
+                const auto began = Clock::now();
+                std::mutex mutex;
+                std::condition_variable suspended;
+                std::unique_lock lock(mutex);
+                suspended.wait_until(lock, began + std::chrono::nanoseconds(held_ns), [] { return false; });
+                const auto after = streams[0]->diagnostics();
+                CHECK(before.at("model_time_ns") == after.at("model_time_ns"));
+                CHECK(before.at("publications") == after.at("publications"));
+                CHECK(after.at("left.source_overruns") == "0" && after.at("right.source_overruns") == "0");
+                fault = {
+                    {"coordinator_suspension_ns", held_ns},
+                    {"observed_suspension_ns",
+                     now() - std::chrono::duration_cast<std::chrono::nanoseconds>(began.time_since_epoch())
+                                 .count()},
+                    {"logical_time_and_publications_unchanged", true}};
+            }
+            run.feed_to(writer_control                   ? 3
+                        : profile.at("format") == "Y10P" ? 4
+                        : profile.at("width") == 64      ? 16
+                                                         : 8,
+                        fps, true);
         } else {
-            run.until(
-                [&] {
-                    return !run.session->active() ||
-                           run.session->committed() >= (heavy                            ? 80u
-                                                        : profile.at("format") == "Y10P" ? 4u
-                                                        : profile.at("width") == 64      ? 16u
-                                                                                         : 8u);
-                },
-                "bounded capture");
+            CHECK(benchmark);
+            const auto warmup_end = Clock::now() + 1s;
+            run.until([&] { return !run.session->active() || Clock::now() >= warmup_end; },
+                      "benchmark warmup", warmup_end + 5s);
+            measurement_start = now();
+            measurement_end = measurement_start + 2 * rate_window_ns;
+            const auto deadline = Clock::time_point(std::chrono::nanoseconds(measurement_end));
+            run.until([&] { return !run.session->active() || now() >= measurement_end; },
+                      "two fixed benchmark rate windows", deadline + 5s);
         }
         run.barrier.release_noexcept();
+        run.release_clock();
         const auto source_at_stop_request = streams[0]->diagnostics();
         const auto stop_began = now();
         run.session->stop();
@@ -587,6 +834,10 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
         const auto d = run.session->diagnostics();
         const auto source = streams[0]->diagnostics();
         const auto counts = accounting(source);
+        const auto runner_after = runner();
+        const auto error = run.session->error();
+        if (!error.empty())
+            private_first_cause = error;
         CHECK(run.state.committed > 0);
         const auto cost = st::stream_cost(
             dir.path, [&](std::ostream &out) { artifact::segments::append(out, *run.state.packets[0]); });
@@ -599,18 +850,22 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
                       << Json{{"at_stop", counts}, {"at_release", fault}}.dump() << '\n';
         const auto count = run.state.committed;
         CHECK(run.session->committed() == count && count > 0);
-        CHECK(run.session->metrics().occupancy == 0 && run.session->metrics().dropped == 0);
+        CHECK(run.session->metrics().dropped == 0);
+        if (error.empty() || run.session->saturation())
+            CHECK(run.session->metrics().occupancy == 0);
+        else
+            CHECK(run.session->metrics().occupancy <= 32);
         CHECK(d.at("recorder_writer_running") == "0" && d.at("recorder_producer_running") == "0");
         CHECK(d.at("recorder_secondary_error").empty() && d.at("recorder_cleanup_errors") == "0");
         CHECK(run.state.admission_overflow == 0 && stages.overflow == 0);
         const bool saturated = run.session->saturation() != 0;
-        if (prolonged || collapse) {
+        if (prolonged || (collapse && saturated)) {
             CHECK(saturated &&
                   run.session->error().find("LOSSLESS writer queue saturated") != std::string::npos);
             CHECK(run.session->produced() == count + 1); // Exactly one explicitly refused publication.
             CHECK(!run.state.errors.empty() && run.state.errors.front().message.find(
                                                    "LOSSLESS writer queue saturated") != std::string::npos);
-        } else if (!heavy) {
+        } else if (!heavy && !writer_control) {
             CHECK(run.session->error().empty() && !saturated && run.session->produced() == count);
         }
         for (const auto role : {"left", "right"}) {
@@ -623,6 +878,10 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
             else if (!heavy)
                 CHECK(number(source_at_stop_request, std::string(role) + ".source_overruns") == 0);
         }
+        if (writer_control) {
+            CHECK(error.find("Injected raw-record-before") != std::string::npos);
+            CHECK(run.state.committed == 2 && run.session->produced() == 3);
+        }
         const auto generation = run.state.packets[0]->header.metadata.at("generation");
         const auto historical = canonical(*run.state.packets[0]);
         // Restart the real instance; historical buffers/epochs must stay immutable.
@@ -631,19 +890,24 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
         CHECK(streams[0]->stop() && restarted && *restarted);
         CHECK((*restarted)->header.sequence.value == 0);
         CHECK((*restarted)->header.metadata.at("generation") != generation);
-        exact(**restarted, profile, 0, (*restarted)->header.metadata.at("generation"), oracle);
+        exact(**restarted, profile, 0, (*restarted)->header.metadata.at("generation"), oracle, false, manual);
         CHECK(canonical(*run.state.packets[0]) == historical);
         std::set<const void *> buffers;
+        uint64_t retained_bytes{}, structural_bytes{};
         for (size_t n = 0; n < count; ++n) {
-            exact(*run.state.packets[n], profile, n, generation, oracle, heavy && source_loss);
+            if (!source_loss)
+                CHECK(run.state.observations[n].native == n);
             if (n)
-                CHECK(run.state.packets[n]->frames[0]->header.sequence.value >
-                      run.state.packets[n - 1]->frames[0]->header.sequence.value);
-            retired.push_back(run.state.packets[n]);
-            for (const auto &child : run.state.packets[n]->frames)
-                CHECK(buffers.insert(child->attributes[0].buffer.identity()).second);
+                CHECK(run.state.observations[n].native > run.state.observations[n - 1].native);
+            retired.push_back(run.state.owners[n]);
+            structural_bytes += run.state.structures[n].size();
+            if (n < retained_bound) {
+                exact(*run.state.packets[n], profile, n, generation, oracle, heavy && source_loss, manual);
+                retained_bytes += payload(*run.state.packets[n]);
+                for (const auto &child : run.state.packets[n]->frames)
+                    CHECK(buffers.insert(child->attributes[0].buffer.identity()).second);
+            }
         }
-        const auto error = run.session->error();
         const auto raw_before = store->get(raw);
         CHECK(raw_before.state == artifact::ArtifactState::open);
         std::string initial_state;
@@ -698,8 +962,10 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
             for (size_t n = 0; n < count; ++n) {
                 const auto value = replay->next();
                 CHECK(value && *value);
-                exact(**value, profile, n, generation, oracle, heavy && source_loss);
-                CHECK(canonical(**value) == canonical(*run.state.packets[n]));
+                exact(**value, profile, n, generation, oracle, heavy && source_loss, manual);
+                CHECK(structure(**value) == run.state.structures[n]);
+                if (n < retained_bound)
+                    CHECK(canonical(**value) == canonical(*run.state.packets[n]));
                 std::set<const void *> mapped_backings;
                 uint64_t mapped_bytes{};
                 for (const auto &frame : (*value)->frames)
@@ -714,7 +980,7 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
             auto end = replay->next();
             CHECK(end && !*end && replay->stop());
         }
-        std::vector<int64_t> callback_times, wait_times;
+        std::vector<int64_t> callback_times, wait_times, validation_times;
         size_t failed{};
         int64_t first_failed_admission_ns{-1}, failed_admission_duration_ns{};
         for (size_t i = 0; i < run.state.admitted; ++i) {
@@ -728,9 +994,17 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
         }
         CHECK(failed == (saturated ? 1u : 0u));
         uint64_t recorded_bytes{}, window_bytes{}, before_bytes{}, after_bytes{}, drain_bytes{};
-        const size_t warmup = heavy ? 8 : 2;
-        const auto window_start = run.state.callbacks[std::min(warmup, count - 1)].began;
-        const auto window_end = run.state.callbacks[count - 1].ended;
+        size_t warmup = short_control || writer_control ? 0 : heavy ? 8 : 2;
+        if (benchmark) {
+            warmup = 0;
+            while (warmup < count && run.state.callbacks[warmup].success < measurement_start)
+                ++warmup;
+        }
+        const auto window_start =
+            benchmark ? measurement_start : run.state.callbacks[std::min(warmup, count - 1)].began;
+        const auto window_end =
+            benchmark ? std::min(stop_began, measurement_end) : run.state.callbacks[count - 1].ended;
+        size_t window_samples{};
         const auto split = collapse ? fault.at("healthy_boundary_ns").get<int64_t>() : window_end;
         const auto degraded_end =
             collapse ? (first_failed_admission_ns >= 0 ? first_failed_admission_ns
@@ -739,8 +1013,14 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
         for (size_t i = 0; i < count; ++i) {
             const auto &c = run.state.callbacks[i];
             callback_times.push_back(c.ended - c.began);
+            validation_times.push_back(c.validation_ns);
             recorded_bytes += c.payload;
+            if (benchmark && c.success >= window_end) {
+                drain_bytes += c.payload;
+                continue;
+            }
             if (i >= warmup) {
+                ++window_samples;
                 window_bytes += c.payload;
                 if (c.ended <= split)
                     before_bytes += c.payload;
@@ -754,31 +1034,32 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
         for (size_t i = 0; i < count; ++i) {
             const auto &a = run.state.admissions[i];
             const auto &c = run.state.callbacks[i];
-            const auto &left = run.state.packets[i]->frames[0]->header;
-            const auto &right = run.state.packets[i]->frames[1]->header;
+            const auto &event = run.state.observations[i];
             CHECK(a.accepted && a.ended >= a.began && c.began >= a.began && c.ended >= c.began);
-            CHECK(a.began >= left.received.nanoseconds && a.began >= right.received.nanoseconds);
+            if (!manual)
+                CHECK(a.began >= event.left_received && a.began >= event.right_received);
             if (i < 4 || i + 4 >= count)
                 event_samples.push_back(
                     {{"publication_sequence", i},
-                     {"left_native_sequence", left.sequence.value},
-                     {"right_native_sequence", right.sequence.value},
-                     {"exposure_reference_ns", number(left.metadata, "capture_event_ns")},
-                     {"reference_clock", left.metadata.at("capture_event_clock")},
-                     {"reference_origin_host_ns", number(left.metadata, "reference_origin_host_ns")},
-                     {"left_received_steady_ns", left.received.nanoseconds},
-                     {"right_received_steady_ns", right.received.nanoseconds},
-                     {"source_processing_started_steady_ns", number(left.metadata, "processing_ns")},
+                     {"native_sequence", event.native},
+                     {"exposure_reference_ns", event.exposure},
+                     {"reference_origin_host_ns", event.origin},
+                     {"source_receipt_clock",
+                      run.state.packets[0]->frames[0]->header.metadata.at("host_receive_clock")},
+                     {"left_received_ns", event.left_received},
+                     {"right_received_ns", event.right_received},
+                     {"source_processing_started_ns", event.processing},
                      {"session_admission_begin_steady_ns", a.began},
                      {"session_admission_end_steady_ns", a.ended},
                      {"callback_begin_steady_ns", c.began},
-                     {"callback_end_steady_ns", c.ended}});
+                     {"store_append_end_steady_ns", c.ended},
+                     {"callback_success_steady_ns", c.success}});
         }
         Json delivery_fps;
         for (size_t camera = 0; camera < 2; ++camera) {
-            const auto elapsed_delivery =
-                run.state.packets[count - 1]->frames[camera]->header.received.nanoseconds -
-                run.state.packets[0]->frames[camera]->header.received.nanoseconds;
+            const auto &last = run.state.observations[count - 1], &first = run.state.observations[0];
+            const auto elapsed_delivery = camera ? last.right_received - first.right_received
+                                                 : last.left_received - first.left_received;
             delivery_fps[camera ? "right" : "left"] =
                 elapsed_delivery > 0 ? double(count - 1) * 1e9 / double(elapsed_delivery) : 0;
         }
@@ -786,7 +1067,7 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
         for (const auto &entry : std::filesystem::recursive_directory_iterator(store->root()))
             if (entry.is_regular_file())
                 directory_bytes += entry.file_size();
-        CHECK(directory_bytes < 512ull * 1024 * 1024);
+        CHECK(directory_bytes < (benchmark ? 5ull * 1024 * 1024 * 1024 : 512ull * 1024 * 1024));
         Json stage_report = Json::array();
         size_t durable_publications{};
         for (size_t i = 0; i < stages.count; ++i) {
@@ -797,16 +1078,77 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
         const auto elapsed = stop_ended - run.began;
         const auto window_ns = window_end - window_start;
 
+        Json rate_windows = Json::array();
+        const bool rate_candidate = benchmark || short_control;
+        if (short_control) {
+            measurement_start = run.state.callbacks[0].began;
+            measurement_end = measurement_start + 2 * rate_window_ns;
+        }
+        bool sustained = rate_candidate && measurement_start > 0 && stop_began >= measurement_end;
+        for (int window = 0; window < 2; ++window) {
+            const auto begin = measurement_start + window * rate_window_ns;
+            const auto end = begin + rate_window_ns;
+            uint64_t frames{}, bytes{};
+            for (size_t i = 0; i < count; ++i) {
+                const auto &callback = run.state.callbacks[i];
+                if (callback.success >= begin && callback.success < end) {
+                    ++frames;
+                    bytes += callback.payload;
+                }
+            }
+            // Exact integer comparisons: no allowed rate deficit or guessed
+            // runner margin. One boundary frame is reported as resolution only.
+            const auto observed_ns = std::max(int64_t{0}, std::min(stop_began, end) - begin);
+            const bool meets =
+                observed_ns > 0 && frames * 1000000000ull >= reference_fps * uint64_t(observed_ns) &&
+                bytes * 1000000000ull >= reference_fps * reference_payload * uint64_t(observed_ns);
+            const bool complete = observed_ns == rate_window_ns;
+            sustained = sustained && complete && meets;
+            rate_windows.push_back(
+                {{"begin_steady_ns", begin},
+                 {"end_steady_ns", end},
+                 {"frames", frames},
+                 {"payload_bytes", bytes},
+                 {"observed_duration_ns", observed_ns},
+                 {"actual_fps", observed_ns > 0 ? Json(double(frames) * 1e9 / double(observed_ns)) : Json()},
+                 {"actual_payload_MB_s",
+                  observed_ns > 0 ? Json(double(bytes) * 1e3 / double(observed_ns)) : Json()},
+                 {"complete", complete},
+                 {"meets_observed_reference", meets}});
+        }
+        const bool expected_saturation = (prolonged || collapse) && saturated &&
+                                         error.find("LOSSLESS writer queue saturated") != std::string::npos;
+        const std::string verdict = !error.empty() && !expected_saturation ? "FAILURE"
+                                    : expected_saturation                  ? "EXPECTED_SATURATION_POLICY_PASS"
+                                    : sustained && !source_loss            ? "QUALIFIED"
+                                                                           : "UNQUALIFIED";
+        const int exit_code = verdict == "FAILURE" ? 1 : verdict == "UNQUALIFIED" ? 2 : 0;
         report = {
             {"mode", mode},
             {"format", profile.at("format")},
             {"width", profile.at("width")},
             {"height", profile.at("height")},
             {"requested_fps_per_camera", profile.at("cameras")[0].at("rate_num")},
-            {"verdict", error.empty() && !source_loss ? "RECORDED"
-                        : saturated                   ? "EXPLICIT_RECOVERED_SATURATION"
-                                                      : "HOST_SOURCE_LIMITATION"},
-            {"full_fidelity_success", error.empty() && !source_loss},
+            {"source_clock_controlled", manual},
+            {"verdict", verdict},
+            {"exit_code", exit_code},
+            {"lossless_capture_integrity", error.empty() && !source_loss},
+            {"reference_rate_qualified", verdict == "QUALIFIED"},
+            {"qualification",
+             {{"requested_fps", reference_fps},
+              {"requested_payload_MB_s", 276.48},
+              {"window_count", 2},
+              {"window_duration_ns", rate_window_ns},
+              {"warmup_ns", 1000000000},
+              {"allowed_rate_deficit", 0},
+              {"one_frame_boundary_resolution_fps", 0.2},
+              {"complete_measured_windows", rate_candidate && stop_began >= measurement_end},
+              {"rate_windows", rate_candidate ? rate_windows : Json::array()},
+              {"limitation", manual ? "controlled source: functional proof, no sustained performance claim"
+                                    : "two five-second software windows only; no long-soak, SSD-cache or "
+                                      "physical guarantee"}}},
+            {"runner_before", runner_before},
+            {"runner_after", runner_after},
             {"primary_error", error},
             {"event_samples", event_samples},
             {"clock", "steady_clock absolute ns for fixture/admission/callback/Store; device/reference "
@@ -826,21 +1168,22 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
             {"mapped_replay_views_verified", mapped_views},
             {"observed_mapped_packet_backing_max_bytes", mapped_packet_backing_max},
             {"segment_max_bytes", provenance.parameters.at("segment_max_bytes")},
-            {"per_camera_observed_delivery_fps", delivery_fps},
+            {"per_camera_observed_delivery_fps", manual ? Json() : delivery_fps},
+            {"per_camera_controlled_reference_fps", manual ? delivery_fps : Json()},
             {"callback_success_samples", count},
             {"finalize_or_abandon_ns", finalize_or_abandon_ended - stop_ended},
             {"retained_packet_buffers", buffers.size()},
-            {"retained_payload_bytes", recorded_bytes},
+            {"retained_payload_bytes", retained_bytes},
+            {"canonical_structure_history_bytes", structural_bytes},
             {"host_pixel_allocations", number(source, "host_pixel_allocations")},
             {"materialized_pixel_bytes", number(source, "materialized_pixel_bytes")},
             {"window",
              {{"warmup_callbacks", warmup},
               {"start_ns", window_start},
               {"end_ns", window_end},
-              {"callback_samples", count > warmup ? count - warmup : 0},
+              {"callback_samples", window_samples},
               {"actual_payload_MB_s", window_ns > 0 ? double(window_bytes) * 1e3 / double(window_ns) : 0},
-              {"callback_success_fps",
-               window_ns > 0 ? double(count > warmup ? count - warmup : 0) * 1e9 / double(window_ns) : 0},
+              {"callback_success_fps", window_ns > 0 ? double(window_samples) * 1e9 / double(window_ns) : 0},
               {"healthy_payload_bytes", before_bytes},
               {"degraded_payload_bytes", after_bytes},
               {"post_failure_drain_payload_bytes", drain_bytes},
@@ -855,7 +1198,9 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
             {"stop_after_release_ns", stop_ended - stop_began},
             {"reopen_recovery_ns", recovery_ended - reopen_began},
             {"same_packet_stream_microprobe", stream_probe},
+            {"callback_latency_scope", "all successful callbacks; qualification uses the fixed rate windows"},
             {"callback_latency", distribution(callback_times)},
+            {"callback_validation_overhead", distribution(validation_times)},
             {"admission_wait", distribution(wait_times)},
             {"first_failed_admission_steady_ns", first_failed_admission_ns},
             {"failed_admission_duration_ns", failed_admission_duration_ns},
@@ -891,6 +1236,7 @@ Json exercise(const std::filesystem::path &library, Json profile, const std::str
 // inside the real first append; the async call remains blocked until release.
 Json startup_failure(const std::filesystem::path &library, Json profile,
                      const std::filesystem::path &parent) {
+    CaseCause cause_scope;
     const auto before = resources();
     const PixelOracle oracle(profile);
     Directory dir(parent);
@@ -911,7 +1257,7 @@ Json startup_failure(const std::filesystem::path &library, Json profile,
     size_t accepted{};
     Json evidence;
     {
-        Run run;
+        Run run(true);
         services::Runtime runtime({plugin_dir, {}, root, {}, {"org.mantis.virtual-rig"}, {}});
         const auto devices = runtime.devices();
         const auto parent_device = std::find_if(devices.begin(), devices.end(), [](const auto &d) {
@@ -929,11 +1275,12 @@ Json startup_failure(const std::filesystem::path &library, Json profile,
                                                      run.barrier.released[0]});
         std::future<std::string> attempt;
         struct Release {
-            Barrier &barrier;
+            Run &run;
             ~Release() {
-                barrier.release_noexcept();
+                run.barrier.release_noexcept();
+                run.release_clock();
             }
-        } release{run.barrier}; // Releases before future or Runtime destruction on every exception.
+        } release{run}; // Releases before future or Runtime destruction on every exception.
         attempt = std::async(std::launch::async, [&] {
             try {
                 runtime.start_capture({parent_device->id});
@@ -944,14 +1291,14 @@ Json startup_failure(const std::filesystem::path &library, Json profile,
         });
         const auto event = st::await_event(run.barrier.entered[0], Clock::now() + 5s);
         CHECK(std::string(event.point) == "raw-first-record-before");
-        run.until(
-            [&] {
-                std::lock_guard lock(run.state.mutex);
-                return run.state.admitted && !run.state.admissions[run.state.admitted - 1].accepted;
-            },
-            "service startup failed admission");
+        run.feed_to(34, profile.at("cameras")[0].at("rate_num"), false);
+        {
+            std::lock_guard lock(run.state.mutex);
+            CHECK(run.state.admitted == 34 && !run.state.admissions[33].accepted);
+        }
         CHECK(attempt.wait_for(0ms) != std::future_status::ready);
         run.barrier.release();
+        run.release_clock();
         CHECK(attempt.wait_for(5s) == std::future_status::ready);
         const auto error = attempt.get();
         CHECK(error.find("LOSSLESS writer queue saturated") != std::string::npos);
@@ -990,7 +1337,7 @@ Json startup_failure(const std::filesystem::path &library, Json profile,
             CHECK(next && *next);
             if (generation.empty())
                 generation = (*next)->header.metadata.at("generation");
-            exact(**next, profile, i, generation, oracle);
+            exact(**next, profile, i, generation, oracle, false, true);
             if (!pass)
                 reference.push_back(canonical(**next));
             else
@@ -1011,6 +1358,39 @@ Json startup_failure(const std::filesystem::path &library, Json profile,
             {"two_byte_exact_replays", true}};
 }
 } // namespace
+namespace mantis::plugins::qualification_test {
+void opened(const Loaded &loaded, void *instance) {
+    if (auto *s = sampler.load(); s && s->manual) {
+        const auto *clock = loaded.query<virtual_rig::ClockV1>(virtual_rig::clock_interface);
+        CHECK(clock->use_virtual_time(instance) == 0);
+        std::lock_guard lock(s->mutex);
+        s->clock = clock;
+        s->instance = instance;
+        s->credits = 1;
+        s->released = s->parked = false;
+        s->signal();
+    }
+}
+void before_next() {
+    if (auto *s = sampler.load(); s && s->manual) {
+        std::unique_lock lock(s->mutex);
+        s->parked = true;
+        s->signal();
+        s->changed.wait(lock, [&] { return s->released || s->credits || !s->errors.empty(); });
+        s->parked = false;
+        if (s->credits)
+            --s->credits;
+    }
+}
+void after_next(int status) {
+    if (auto *s = sampler.load(); s && s->manual && status == 2) {
+        std::lock_guard lock(s->mutex);
+        if (!s->released)
+            ++s->credits; // Finish the same granted exposure if next needed another read.
+        s->signal();
+    }
+}
+} // namespace mantis::plugins::qualification_test
 namespace mantis::device::qualification_test {
 void admission(int64_t began, int64_t ended, bool accepted) noexcept {
     if (auto *s = sampler.load()) {
@@ -1027,7 +1407,8 @@ int main(int argc, char **argv) {
     try {
         CHECK(argc == 4 || argc == 5);
         const std::string mode = argv[1];
-        CHECK(mode == "regression" || mode == "benchmark" || mode == "collapse");
+        CHECK(mode == "regression" || mode == "benchmark" || mode == "collapse" || mode == "control-short" ||
+              mode == "control-writer-error");
         std::ifstream input(argv[3]);
         Json p = Json::parse(input);
         CHECK(p.at("width") == 1280 && p.at("height") == 720 && p.at("stride") == 1600);
@@ -1044,8 +1425,10 @@ int main(int argc, char **argv) {
                                                                 : std::filesystem::temp_directory_path())
                                 .lexically_normal();
         CHECK(std::filesystem::is_directory(parent));
-        CHECK(std::filesystem::space(parent).available >=
-              (mode == "regression" ? 512ull : 1024ull) * 1024 * 1024);
+        CHECK(std::filesystem::space(parent).available >= (mode == "benchmark"  ? 6144ull
+                                                           : mode == "collapse" ? 1024ull
+                                                                                : 512ull) *
+                                                              1024 * 1024);
         const auto cpu = resources();
         const auto overhead_start = now();
         State overhead;
@@ -1067,14 +1450,17 @@ int main(int argc, char **argv) {
             storage_trace_ns = double(now() - began) / 1000;
             CHECK(trace.count == 1000 && trace.overflow == 0);
         }
-        Json result{{"version", 1},
+        Json result{{"version", 2},
                     {"sampler_microprobe_iterations", 10000},
                     {"sampler_ns_per_call", sampler_ns},
                     {"store_trace_microprobe_samples", 1000},
                     {"store_trace_ns_per_checkpoint", storage_trace_ns},
+                    {"purpose", mode == "regression" ? "functional and negative verdict controls"
+                                                     : "opt-in qualification"},
                     {"cpu_scope", "whole process; one logical core=100%, no physical-device claim"},
-                    {"frame_bound_per_run", bound},
-                    {"payload_bound_per_run_bytes", bound * 2304000ull},
+                    {"frame_bound_per_run", mode == "benchmark" ? bound : retained_bound},
+                    {"retained_payload_bound_bytes", retained_bound * reference_payload},
+                    {"benchmark_output_bound_bytes", 5ull * 1024 * 1024 * 1024},
                     {"cases", Json::array()}};
         if (mode == "regression") {
             for (auto &camera : p["cameras"])
@@ -1102,15 +1488,64 @@ int main(int argc, char **argv) {
                     result["cases"].push_back(startup_failure(argv[2], latency, parent));
             }
             result["cases"].push_back(exercise(argv[2], p, "healthy", parent));
+            auto reference = p;
+            for (auto &camera : reference["cameras"])
+                camera["rate_num"] = 120;
+            auto short_run = exercise(argv[2], reference, "control-short", parent);
+            CHECK(short_run.at("verdict") == "UNQUALIFIED" && short_run.at("exit_code") == 2);
+            CHECK(short_run.at("lossless_capture_integrity") == true);
+            CHECK(short_run.at("window").at("callback_success_fps").get<double>() < 120);
+            CHECK(short_run.at("qualification").at("rate_windows")[0].at("meets_observed_reference") ==
+                  false);
+            CHECK(short_run.at("qualification").at("rate_windows")[0].at("complete") == false);
+            result["cases"].push_back(std::move(short_run));
+            auto writer_error = exercise(argv[2], reference, "control-writer-error", parent);
+            private_first_cause = writer_error.at("primary_error").get<std::string>();
+            CHECK(writer_error.at("verdict") == "FAILURE" && writer_error.at("exit_code") == 1);
+            CHECK(writer_error.at("primary_error").get<std::string>().find("Injected raw-record-before") !=
+                  std::string::npos);
+            CHECK(writer_error.at("two_byte_exact_replays") == true);
+            result["cases"].push_back(std::move(writer_error));
+            private_first_cause.clear(); // The expected negative has been verified.
+            CHECK(result["cases"][3].at("verdict") == "EXPECTED_SATURATION_POLICY_PASS" &&
+                  result["cases"][3].at("exit_code") == 0);
         } else
             result["cases"].push_back(exercise(argv[2], p, mode, parent));
         result["process_cpu_ns"] = resources().cpu_ns - cpu.cpu_ns;
-        std::cout << result.dump(2) << '\n';
-        if (mode == "benchmark" && !result["cases"][0].at("full_fidelity_success").get<bool>())
-            return 2;
+        std::cout << result.dump(2) << '\n' << std::flush;
+        if (mode != "regression") {
+            const auto code = result["cases"][0].at("exit_code").get<int>();
+            if (code == 1)
+                std::cerr << result["cases"][0].at("primary_error").get<std::string>() << '\n';
+            return code;
+        }
         return 0;
+    } catch (const EnvironmentUnqualified &e) {
+        const bool known_failure = !private_first_cause.empty();
+        const auto verdict = known_failure ? "FAILURE" : "UNQUALIFIED";
+        const auto code = known_failure ? 1 : 2;
+        std::cout << Json{{"verdict", verdict},
+                          {"exit_code", code},
+                          {"primary_error", private_first_cause},
+                          {"unqualified_reason", e.what()},
+                          {"runner", runner()},
+                          {"limitation",
+                           "no conclusion from missing observation; investigate product and runner"}}
+                         .dump()
+                  << '\n'
+                  << std::flush;
+        std::cerr << (known_failure ? private_first_cause : std::string(e.what())) << '\n';
+        return code;
     } catch (const std::exception &e) {
-        std::cerr << e.what() << '\n';
+        const auto primary = private_first_cause.empty() ? std::string(e.what()) : private_first_cause;
+        std::cout << Json{{"verdict", "FAILURE"},
+                          {"exit_code", 1},
+                          {"primary_error", primary},
+                          {"secondary_diagnostic", primary == e.what() ? "" : e.what()}}
+                         .dump()
+                  << '\n'
+                  << std::flush;
+        std::cerr << primary << '\n';
         return 1;
     }
 }

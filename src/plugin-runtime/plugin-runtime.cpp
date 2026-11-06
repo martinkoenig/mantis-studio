@@ -1,4 +1,5 @@
 #include "buffer_handle.hpp"
+#include "qualification-test.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -241,16 +242,25 @@ class Acquisition final : public device::ImageStream {
     std::vector<device::Descriptor> components() const override { return children_; }
     bool source_paced() const override { return true; }
     Result<void> start() override {
-        if (instance_) { api_->stop(instance_); api_->destroy(instance_); instance_ = nullptr; }
+        if (instance_) {
+            api_->stop(instance_);
+            api_->destroy(instance_);
+            instance_ = nullptr;
+        }
         if (api_->open(&host, descriptor_.id.value.c_str(), &instance_) || !instance_)
-            return std::unexpected(Error{Status::plugin_failed, "Acquisition open failed: " + diagnostics()["error"], "device"});
+            return std::unexpected(
+                Error{Status::plugin_failed, "Acquisition open failed: " + diagnostics()["error"], "device"});
+#ifdef MANTIS_ACQUISITION_QUALIFICATION
+        qualification_test::opened(*loaded_, instance_);
+#endif
         if (api_->start(instance_))
             return std::unexpected(Error{Status::plugin_failed, diagnostics()["error"], "device"});
         return {};
     }
     Result<void> stop() override {
         if (instance_ && api_->stop(instance_))
-            return std::unexpected(Error{Status::plugin_failed, "Acquisition stop failed: " + diagnostics()["error"], "device"});
+            return std::unexpected(
+                Error{Status::plugin_failed, "Acquisition stop failed: " + diagnostics()["error"], "device"});
         return {};
     }
     data::Metadata diagnostics() const override {
@@ -258,16 +268,25 @@ class Acquisition final : public device::ImageStream {
         auto emit = [](void *ctx, const char *json) noexcept {
             return sdk::boundary([&] { *static_cast<data::Metadata *>(ctx) = metadata(json); });
         };
-        if (api_->diagnostics(instance_, emit, &result)) result["error"] = "Cannot read acquisition diagnostics";
+        if (api_->diagnostics(instance_, emit, &result))
+            result["error"] = "Cannot read acquisition diagnostics";
         return result;
     }
     Result<data::Published> next() override {
         Receiver receiver;
+#ifdef MANTIS_ACQUISITION_QUALIFICATION
+        qualification_test::before_next();
+#endif
         auto status = api_->next(instance_, 100, receive_set, &receiver);
-        if (status == 2 && !receiver.result) return data::Published{};
+#ifdef MANTIS_ACQUISITION_QUALIFICATION
+        qualification_test::after_next(status);
+#endif
+        if (status == 2 && !receiver.result)
+            return data::Published{};
         if (status || !receiver.result)
-            return std::unexpected(Error{Status::plugin_failed,
-                "Acquisition failed: " + diagnostics()["error"] + " " + receiver.error, "device"});
+            return std::unexpected(
+                Error{Status::plugin_failed,
+                      "Acquisition failed: " + diagnostics()["error"] + " " + receiver.error, "device"});
         return receiver.result;
     }
 };

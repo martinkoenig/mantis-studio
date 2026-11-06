@@ -18,8 +18,9 @@ set_tests_properties(projected-storage-durability PROPERTIES TIMEOUT 90)
 # Compile the unchanged Session path with a private admission sampler. It and
 # the existing fault Store are absent from product targets and installed SDKs.
 add_executable(mantis-rig-storage-qualification rig.cpp
-  ${PROJECT_SOURCE_DIR}/src/device-runtime/device-runtime.cpp)
-target_compile_definitions(mantis-rig-storage-qualification PRIVATE MANTIS_SESSION_QUALIFICATION)
+  ${PROJECT_SOURCE_DIR}/src/device-runtime/device-runtime.cpp
+  ${PROJECT_SOURCE_DIR}/src/plugin-runtime/plugin-runtime.cpp)
+target_compile_definitions(mantis-rig-storage-qualification PRIVATE MANTIS_SESSION_QUALIFICATION MANTIS_ACQUISITION_QUALIFICATION)
 target_link_libraries(mantis-rig-storage-qualification PRIVATE
   "$<LINK_LIBRARY:WHOLE_ARCHIVE,mantis-storage-qualification>" mantis-services
   nlohmann_json::nlohmann_json)
@@ -47,6 +48,6 @@ add_test(NAME projected-storage-boundaries COMMAND ${Python3_EXECUTABLE}
   ${PROJECT_SOURCE_DIR}/tests/contract/storage_durability_boundaries.py ${PROJECT_SOURCE_DIR}
   $<TARGET_FILE:mantis-artifact-store> $<TARGET_FILE:mantisd>
   $<TARGET_FILE:mantis-storage-fault-client> $<TARGET_FILE:mantis-x1-pairing-stream-tests>
-  $<TARGET_FILE:mantis-device-runtime>
+  $<TARGET_FILE:mantis-device-runtime> $<TARGET_FILE:mantis-plugin-runtime>
   $<TARGET_FILE:mantis-storage-fault-mantisd> $<TARGET_FILE:mantis-storage-durability-tests>
   $<TARGET_FILE:mantis-rig-storage-qualification>)
