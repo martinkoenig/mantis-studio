@@ -1,6 +1,8 @@
 #pragma once
+#include "scene.hpp"
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 namespace virtual_rig {
@@ -20,7 +22,8 @@ struct Fault {
 struct Profile {
     std::string id, format, calibration, json;
     uint32_t width{}, height{}, stride{}, capacity{};
-    uint64_t seed{}, bytes{}, tolerance{};
+    uint64_t seed{}, bytes{}, tolerance{}, revision{1};
+    std::optional<Scene> scene;
     bool triggered{};
     std::vector<Camera> cameras;
     std::vector<Fault> faults;
