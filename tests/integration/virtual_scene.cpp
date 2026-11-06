@@ -53,7 +53,7 @@ struct Workspace {
         out << j.dump();
         out.close();
         CHECK(out.good());
-        CHECK(test::environment("MANTIS_VIRTUAL_RIG_PROFILE", (root / "profile.json").c_str()) == 0);
+        CHECK(test::environment("MANTIS_VIRTUAL_RIG_PROFILE", (root / "profile.json").string().c_str()) == 0);
     }
 };
 Json profile(uint32_t width = 64, uint32_t height = 48, bool packed = false) {
