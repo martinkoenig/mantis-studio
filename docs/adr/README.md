@@ -1,5 +1,16 @@
 # Architecture Decision Records
 
+## Draft proposals — not accepted
+
+- [Draft CAL-01: Live calibration observation sources](draft-cal-01-live-observation-source-contract.md)
+
+This entry is proposed decision text only. It does not amend accepted ADRs,
+allocate protocol fields, authorize implementation or replace physical M8
+evidence. Owner decisions, independent review and separately authorized merge
+and integration review remain required before normative adoption.
+
+## Accepted records
+
 - [ADR-043: Projected-light recording uses opt-in RawCapture schema 3 and evidence-preserving replay](043-versioned-projected-light-recording-and-replay.md)
 - [ADR-042: Projected-light device and processing contracts use additive queried interfaces](042-additive-projected-light-plugin-contract.md)
 - [ADR-041: Laser observations and acquisition evidence are typed semantic boundaries](041-laser-observations-and-acquisition-evidence.md)
