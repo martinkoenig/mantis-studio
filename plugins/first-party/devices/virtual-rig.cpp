@@ -176,6 +176,13 @@ struct Device {
     }
 };
 Metadata scene(const Profile &p) {
+    if (p.scene)
+        return {{"calibration_id", p.calibration},
+                {"calibration_revision", std::to_string(p.revision)},
+                {"org.mantis.virtual-rig.scene", p.scene->snapshot},
+                {"org.mantis.virtual-rig.projection", "calibrated-ray-scene-v1"},
+                {"org.mantis.virtual-rig.scene_frame", p.id + "/body"},
+                {"provenance", "simulation-only"}};
     return {{"calibration_id", p.calibration},
             {"calibration_revision", "1"},
             {"calibration_model", "immutable-analytic-pinhole-v1"},
@@ -280,6 +287,8 @@ int start(void *value) noexcept {
 // One shared planar texture and point: fx=width, B=40 mm, Z=10*width mm,
 // X=40 mm => u_left=cx+4, u_right=cx. All output samples derive from this scene.
 uint16_t intensity(const Profile &p, const Event &event, size_t camera, uint32_t x, uint32_t y) {
+    if (p.scene)
+        return scene_intensity(*p.scene, p.seed, event.index, event.exposure, camera, x, y);
     // Four diagnostic pixels witness the captured exposure identity. They are
     // outside the analytic scene correspondence, and change on later captures.
     if (y == 0 && x < 4)
@@ -466,6 +475,17 @@ int next(void *value, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) no
                 {"org.mantis.image.width", std::to_string(d.profile.width)},
                 {"org.mantis.image.height", std::to_string(d.profile.height)},
                 {"org.mantis.image.row_stride_bytes", std::to_string(d.profile.stride)}};
+            if (d.profile.scene) {
+                const auto &o = d.profile.scene->cameras[i];
+                info.insert({{"org.mantis.virtual-rig.scene", d.profile.scene->snapshot},
+                             {"org.mantis.virtual-rig.projection", "calibrated-ray-scene-v1"},
+                             {"org.mantis.virtual-rig.camera_index", std::to_string(i)},
+                             {"org.mantis.virtual-rig.scene_frame", d.profile.id + "/body"},
+                             {"org.mantis.virtual-rig.intensity", "synthetic-linear-dn-midpoint-v1"},
+                             {"org.mantis.virtual-rig.row_time_ns", std::to_string(o.row_time_ns)},
+                             {"org.mantis.virtual-rig.integration_ns", std::to_string(o.integration_ns)},
+                             {"org.mantis.virtual-rig.seed", std::to_string(d.profile.seed)}});
+            }
             if (d.profile.triggered)
                 info.insert({{"simulated_trigger_id", std::to_string(e.trigger)},
                              {"simulated_trigger_generation", std::to_string(e.trigger_generation)},
@@ -487,7 +507,7 @@ int next(void *value, uint32_t timeout, MantisFrameSetEmitV1 emit, void *ctx) no
                                   e.timestamp_valid ? e.native : 0,
                                   e.timestamp_valid ? native_clocks[i].c_str() : "",
                                   d.profile.calibration.c_str(),
-                                  1,
+                                  d.profile.revision,
                                   coordinates[i].c_str(),
                                   &a,
                                   1};

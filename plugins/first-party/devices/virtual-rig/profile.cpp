@@ -62,8 +62,9 @@ Profile load_profile() {
         return true;
     });
     keys(j, {"version", "id", "mode", "seed", "width", "height", "format", "stride", "capacity",
-             "tolerance_ns", "calibration_id", "calibration_revision", "cameras", "faults"});
-    require(integer(j, "version", 1, 1) == 1, "Unsupported profile version");
+             "tolerance_ns", "calibration_id", "calibration_revision", "cameras", "faults", "scene"});
+    const auto version = integer(j, "version", 1, 2);
+    require(version == 2 || !j.contains("scene"), "Scene requires profile version 2");
     Profile p;
     p.id = "org.mantis.virtual-rig:" + identity(j, "id");
     auto mode = j.at("mode").get<std::string>();
@@ -81,10 +82,15 @@ Profile load_profile() {
     p.capacity = uint32_t(integer(j, "capacity", 2, 16));
     p.tolerance = uint64_t(integer(j, "tolerance_ns", 0, 10000000000));
     p.calibration = j.at("calibration_id").get<std::string>();
-    require(p.calibration == "org.mantis.virtual-rig.pinhole-" + std::to_string(p.width) + "x" +
-                                 std::to_string(p.height) + ".v1" &&
-                integer(j, "calibration_revision", 1, 1) == 1,
-            "Unknown immutable test calibration");
+    if (version == 1) {
+        require(p.calibration == "org.mantis.virtual-rig.pinhole-" + std::to_string(p.width) + "x" +
+                                     std::to_string(p.height) + ".v1" &&
+                    integer(j, "calibration_revision", 1, 1) == 1,
+                "Unknown immutable test calibration");
+    } else {
+        require(p.calibration == "org.mantis.virtual-rig.scene-v1", "Unknown scene calibration namespace");
+        p.revision = uint64_t(integer(j, "calibration_revision", 1, 1000000));
+    }
     const auto &cameras = j.at("cameras");
     require(cameras.is_array() && !cameras.empty() && cameras.size() <= 2, "Expected one or two cameras");
     std::set<std::string> ids, clocks;
@@ -156,6 +162,22 @@ Profile load_profile() {
         require((v.kind != "delay" && v.kind != "stall") || v.delay > 0, "Fault requires a positive delay");
         require(positions.emplace(v.camera, v.at).second, "Multiple faults at one camera event");
         p.faults.push_back(std::move(v));
+    }
+    if (version == 2) {
+        p.scene = parse_scene(j.at("scene"), p.width, p.height, p.cameras.size());
+        p.calibration += "." + p.scene->content_tag;
+        // Integration/row scan cannot cross the next nominal exposure event.
+        for (size_t i = 0; i < p.cameras.size(); ++i) {
+            const auto &c = p.cameras[i];
+            const auto &o = p.scene->cameras[i];
+            require(j.at("scene").at("cameras")[i].at("camera_id") == p.id + "/" + c.id,
+                    "Calibration camera identity mismatch");
+            require(o.integration_ns + (p.height - 1) * o.row_time_ns <=
+                        1000000000ull * c.rate_den / c.rate_num - uint64_t(c.jitter),
+                    "Integration/row scan exceeds shortest camera period");
+            require(uint64_t(c.delivery) >= o.integration_ns + (p.height - 1) * o.row_time_ns,
+                    "Delivery precedes completed integration/row scan");
+        }
     }
     p.json = j.dump();
     return p;

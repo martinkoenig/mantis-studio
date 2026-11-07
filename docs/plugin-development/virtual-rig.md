@@ -159,3 +159,11 @@ scene correspondence. Their GREY values encode successive low-order bytes of
 the captured exposure index; Y10P stores those values multiplied by four. This
 witness detects stale/wrong-frame bytes and makes retention tests sensitive to
 later image writes while leaving the independently projected target unchanged.
+
+## Opt-in calibrated scene v2
+
+[SIM-01C scene model](virtual-rig-scene.md) documents the additive version-2
+profile, shared finite 3D surfaces, explicit calibrated rays, bounded optical
+controls and independent recorded-image oracle. Select
+`profiles/virtual-rig-scene.json` explicitly; the version-1 profiles and image
+contract described above retain their original meaning.
