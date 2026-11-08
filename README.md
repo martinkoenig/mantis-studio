@@ -1,117 +1,155 @@
-[![Build & test](https://github.com/martinkoenig/mantis-studio/actions/workflows/build.yml/badge.svg)](https://github.com/martinkoenig/mantis-studio/actions/workflows/build.yml)
+<div align="center">
+
+<h1>Mantis Studio</h1>
+<p><strong>An open-source platform for 3D acquisition, processing and visualization.</strong></p>
+
+[![Architecture CI](https://github.com/martinkoenig/mantis-studio/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/martinkoenig/mantis-studio/actions/workflows/build.yml?query=branch%3Adevelop)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://isocpp.org/)
+[![Qt 6](https://img.shields.io/badge/Qt-6-41cd52.svg)](https://www.qt.io/development/qt-framework)
 
-# Mantis Studio
+[Get started](#getting-started) · [Development status](#development-status) · [Documentation](#architecture-and-documentation) · [Support development](#support-development)
 
-**An open-source, modular 3D-scanning software platform, developed alongside the Mantis X1 handheld laser-scanner project.**
+</div>
 
-Mantis Studio is a C++23/Qt 6 application and runtime for hardware acquisition, calibration, reproducible data processing and 3D visualization. It is designed around a device-owning daemon, extensible plugins and independent desktop, CLI and SDK clients. Linux/ARM64 acquisition on the Radxa Q6A is a first-class development target.
+Mantis Studio brings device acquisition, recorded data and reproducible processing into a C++23 / Qt 6 platform. It is developed alongside the Mantis X1 handheld laser-scanner project, with an extensible architecture for other devices and custom integrations.
 
-> **Development status:** This is an engineering project, **not a finished or accuracy-certified 3D scanner**. [`develop`](https://github.com/martinkoenig/mantis-studio/tree/develop) is the CUT-0C shared development line based on the independently accepted CUT-0B Core/UI integration (`e0a8652f`). `main` remains the previous public baseline. v0.3 M0–M7 calibration is implemented; M8 physical acceptance remains pending. v0.4 software acceptance is package-specific; physical projected-light operation remains blocked.
+![Mantis Studio Home workspace in the running Qt application, showing illustrative Demo / Mock projects and activity](docs/images/studio.png)
 
-The [release roadmap](ROADMAP.md), [CUT-0C development and review policy](docs/architecture/cut-0c-development-baseline.md) and [v0.4 package map](docs/architecture/v0.4-laser-acquisition.md) distinguish accepted software, implemented work awaiting review, and planned or hardware-pending work. L8a-1a remains **IMPLEMENTED / AWAITING INDEPENDENT REVIEW**. UI-M3c and its latest correction retain their independent exact-revision review gate; consolidation is not acceptance.
+*Actual Qt application capture in **Demo / Mock** mode. Sample projects, scanner artwork, utilization and jobs are illustrative.*
 
-## Mantis Studio — UI preview
+> **In development.** Mantis Studio is not a finished or accuracy-certified scanner. These screenshots show demo content and synthetic fixtures; they are not evidence of a functioning physical laser-scanning workflow, scanner accuracy or production readiness. See [development status](#development-status) for the delivered scope and outstanding gates.
 
-![Mantis Studio Home workspace — actual Qt screenshot with illustrative demo content](docs/images/studio.png)
+## Platform capabilities
 
-*Home workspace, captured from the running Qt application in explicitly labelled **Demo / Mock** mode. The scanner artwork, sample projects, utilization and jobs are illustrative; they are not hardware measurements.*
+- **Explore and inspect:** Qt Quick workspaces for projects, devices, stereo previews and point-cloud visualization, with explicit mock/live data boundaries and unavailable controls kept disabled.
+- **Acquire and replay:** Linux dual-camera acquisition, bounded recording, recoverable segments and deterministic replay. Physical capabilities are qualified separately for the documented hardware and test conditions.
+- **Process reproducibly:** typed, immutable artifacts, versioned pipeline recipes, asynchronous jobs, cancellation and traceable calibration/capture provenance.
+- **Extend and automate:** device and processing plugins through a versioned C ABI, plus desktop, CLI and C++ / Python SDK clients of the device-owning `mantisd` runtime.
 
-| Projects | Scan |
-| :---: | :---: |
-| ![Mantis Studio Projects — actual Qt screenshot with illustrative project gallery](docs/images/studio-projects.png) | ![Mantis Studio Scan — actual Qt screenshot with synthetic point-cloud and stereo preview data provided by a test fixture](docs/images/studio-scan.png) |
-| Project gallery and inspector (**Demo / Mock**) | Scan workspace with two grayscale previews and a rendered test point cloud (**authenticated fixture**, no physical scanner) |
+## A closer look
+
+### Projects
+
+![Mantis Studio Projects workspace with an illustrative Demo / Mock project gallery and inspector](docs/images/studio-projects.png)
+
+*Demo / Mock project gallery and inspector. The sample studies do not represent completed physical scans.*
+
+### Scan
+
+![Mantis Studio Scan workspace displaying synthetic stereo previews and a deterministic fixture point cloud](docs/images/studio-scan.png)
+
+*Actual Qt capture using a deterministic, authenticated client/daemon test fixture. Camera frames, geometry and capture state are synthetic test data, not real-world laser-scanning results.*
 
 <details>
-<summary>Additional screenshot — Devices</summary>
+<summary>Devices workspace and screenshot provenance</summary>
 
-![Mantis Studio Devices — actual Qt screenshot with illustrative devices](docs/images/studio-devices.png)
+![Mantis Studio Devices workspace showing explicitly labelled illustrative device descriptors](docs/images/studio-devices.png)
 
-*Devices workspace with explicitly labelled illustrative device descriptors. No physical hardware or laser state is shown.*
+*Demo / Mock device descriptors; no physical hardware or laser state is shown.*
+
+All four screenshots are real Qt window captures from [the original UI capture revision](https://github.com/martinkoenig/mantis-studio/commit/f5fefe759f1cfb892604e6e3147656058f7ef2ec). See the [UI implementation and validation notes](docs/ui/README.md) for workflow limits. Mock content is illustrative; fixture data is software-test evidence only.
 
 </details>
 
-All four images are **actual Qt window captures**, not conceptual UI renders, from [`feature/ui-m3-scan`](https://github.com/martinkoenig/mantis-studio/tree/feature/ui-m3-scan) at [revision `f5fefe7`](https://github.com/martinkoenig/mantis-studio/commit/f5fefe759f1cfb892604e6e3147656058f7ef2ec). The Scan image uses a deterministic authenticated client/daemon test fixture; its geometry, camera frames and capture state are **not real-world scanning results**. The separate [UI implementation and validation notes](https://github.com/martinkoenig/mantis-studio/blob/feature/ui-m3-scan/docs/ui/README.md) document which controls and workflows are implemented.
+## Getting started
 
-## Architecture and engineering focus
+This is a developer source build. The reference environment is **Ubuntu 24.04 x86_64 with GCC 13.3 and Qt 6.4.2**; Linux ARM64 also has native CI coverage. Windows x86_64 and macOS ARM64 are architectural targets, **not supported releases**.
 
-| Area | Design |
-| --- | --- |
-| **Runtime & clients** | `mantisd` owns devices, captures, plugins, artifacts and jobs. Qt Quick Studio, the C++ CLI and Python SDK interact through public client/protocol boundaries. |
-| **Acquisition** | Linux media/V4L2 dual-camera integration for OV9281 sensors on the X1/Q6A, explicit device profiles, bounded frame correspondence and traceable FrameSets. |
-| **Data integrity** | Immutable typed artifacts, bounded queues with separate lossless recording and latest-only preview policies, recoverable segmented recording and deterministic replay/verification. |
-| **Processing & extensibility** | Versioned pipeline recipes, plugin interfaces, asynchronous jobs and cancellable operations; scanner-specific hardware stays behind runtime contracts. |
-| **UI & visualization** | Dark Qt Quick workspace with device/project inspection, stereo previews and point-cloud visualization. Home, Projects, Devices, Scan and Classic Acquisition share the public client boundary; unsupported controls remain unavailable. |
-| **Verification** | Automated native Linux x86_64/ARM64 CI, process and protocol tests, deterministic hardware-free fixtures and separately documented physical-hardware acceptance. |
+### Build and test
 
-The guiding principle is to **separate acquisition, processing, presentation and hardware control**. A desktop client closing must not implicitly terminate an active daemon capture. Runtime failures and incomplete evidence should be reported rather than converted into misleading UI success states.
+You need a C++23 compiler, CMake **3.25+** for the supplied version-6 presets, Ninja, Qt 6 (Base, Declarative and QML runtime modules), Protobuf, SQLite, nlohmann-json, OpenCV **4.6+** (core, imgproc, calib3d and aruco), and Python 3 with `google.protobuf`. CMake 3.24 is sufficient for a manual configuration without presets. See [BUILDING.md](BUILDING.md) for the reference package list and headless/sanitizer instructions; on Ubuntu, also install `libopencv-dev` for calibration.
 
-## Development tracks
+From the repository root:
 
-These source histories are consolidated on this candidate branch; `main` remains unchanged. Integration does **not** imply independent package acceptance or physical validation.
+```bash
+cmake --preset linux-debug -DPython3_EXECUTABLE=/usr/bin/python3
+cmake --build --preset linux-debug --parallel 4
+ctest --preset linux-debug
+```
 
-| Track | Current boundary | Source |
-| --- | --- | --- |
-| **v0.2 — acquisition foundation** | Accepted and merged into `main`: Q6A dual-camera capture, bounded recording and deterministic replay, including documented real-hardware validation. | [`main`](https://github.com/martinkoenig/mantis-studio/tree/main) |
-| **v0.3 — geometric calibration** | Geometric calibration foundations and Studio workflow; physical acceptance remains a separate gate. | [Calibration branch](https://github.com/martinkoenig/mantis-studio/tree/feature/v0.3-geometric-calibration) |
-| **v0.4 — projected-light acquisition** | Package-qualified projected-light semantics, evidence, recording/replay and hardware-free F2/PTY infrastructure. L8a remains unaccepted; physical enablement is blocked. | [Laser-acquisition branch](https://github.com/martinkoenig/mantis-studio/tree/feature/v0.4-laser-acquisition) |
-| **Desktop UI** | Home, Projects, Devices, Scan and Classic Acquisition implementation with explicit mock/live authority and shared camera/geometry surfaces; integrated qualification is pending. | [UI branch](https://github.com/martinkoenig/mantis-studio/tree/feature/ui-m3-scan) |
+Keep the executables in `build/debug/bin` alongside their matching `build/debug/plugins` and `build/debug/recipes` directories.
 
-**Not yet delivered as a complete scanner workflow:** production laser-line extraction, metric laser triangulation, moving-scan registration/fusion, meshing and independently verified dimensional accuracy. See the [active roadmap](https://github.com/martinkoenig/mantis-studio/blob/feature/v0.4-laser-acquisition/ROADMAP.md) for planned milestones, accepted packages and outstanding hardware validation.
+### Explore offline
 
-## Build and run the integration candidate
+Launch the illustrative UI without a daemon, token or physical device:
 
-See [BUILDING.md](BUILDING.md) for dependencies, platforms and build instructions. After building into `build/debug`, start the daemon and Studio **with the same endpoint and token**:
+```bash
+./build/debug/bin/mantis-studio --ui-mode=mock --workspace=home
+```
+
+Mock mode does not connect to `mantisd` or issue capture commands. It is for exploring the interface. See the [UI guide](docs/ui/README.md) for other workspaces and offscreen screenshot options.
+
+### Connect to a local daemon
+
+Run these commands in the **same shell** so the daemon and desktop inherit the same token and port:
 
 ```bash
 export MANTIS_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
 export MANTIS_PORT=47321
 ./build/debug/bin/mantisd --project "$PWD/Demo.mantis" &
-./build/debug/bin/mantis-studio
+# Wait for "mantisd ready" before launching the client.
+./build/debug/bin/mantis-studio --ui-mode=live --workspace=acquisition
 ```
 
-The CLI and Python examples use the same runtime:
+The daemon listens on loopback and requires a token of at least 16 characters. This connects to a real runtime; it does not configure physical scanner hardware. The Virtual Scanner provides a synthetic frame-zero recipe/point-cloud/export demonstration; full-capture reconstruction remains a later milestone. The separately integrated [virtual acquisition rig](docs/plugin-development/virtual-rig.md) supports explicit profiles for deterministic camera/clock/fault simulation and recording/replay tests. It is software simulation, not physical scanning or sustained-throughput qualification.
+
+Closing Studio does not stop the daemon or an active capture. After stopping any capture, shut down from the same shell:
 
 ```bash
 ./build/debug/bin/mantis-cli devices list
-./build/debug/bin/mantis-cli workflow "$PWD/example.ply"
-PYTHONPATH=build/debug/python /usr/bin/python3 examples/python/workflow.py python-example.ply
 ./build/debug/bin/mantis-cli shutdown
 ```
 
-Closing the desktop window does **not** stop `mantisd` or an active capture. Stop capture before issuing `mantis-cli shutdown`. Export paths must be new and outside the `.mantis` project directory.
+For physical acquisition, review the camera/bus assignments and set an explicit `MANTIS_X1_PROFILE` in the daemon environment **before** starting `mantisd`. Follow the [X1/Q6A acquisition procedure](docs/hardware/x1-q6a-acquisition-validation.md) and [acquisition review](docs/architecture/v0.2-acquisition-review.md); requested frame rate, observed rate and physical exposure synchronization are separate claims. [ADR-026](docs/adr/026-bounded-software-observation-pairing.md) defines the bounded software correspondence policy. Test-only fake modes do not qualify hardware.
 
-### X1 camera-only acquisition foundation
+For currently implemented automation and extension interfaces, start with the [C++ / Python Client SDK](docs/client-sdk/README.md) and [plugin guide](docs/plugin-development/README.md). The [custom sensor guide](docs/plugin-development/custom-sensors.md) describes accepted future architecture; its example APIs are not yet available.
 
-The v0.2 plugin uses explicit LEFT/RIGHT roles and a versioned Q6A profile. It supports packed Y10P/RAW10 and optional RAW8 capture with recoverable RawCapture v2 segments, bounded FrameSet recording, latest-only preview and replay verification. The accepted Q6A reference profile uses **1280×720 Y10P**, Y10_1X10 upstream and VBLANK=196, with a requested **120 FPS** target; requested rate, measured rate and physical exposure synchronization are distinct claims. Native scoped acquisition performs one image copy; independent camera counters do not establish exposure association. The accepted 5 ms software correspondence policy is specified in [ADR-026](docs/adr/026-bounded-software-observation-pairing.md).
+## Development status
 
-```bash
-# Configure the profile in the daemon environment BEFORE starting mantisd.
-export MANTIS_X1_PROFILE="$PWD/profiles/x1-q6a.json"
-./build/debug/bin/mantis-cli devices list
-./build/debug/bin/mantis-cli devices info DEVICE_ID
-./build/debug/bin/mantis-cli capture start DEVICE_ID
-./build/debug/bin/mantis-cli capture status CAPTURE_ID
-./build/debug/bin/mantis-cli capture stop CAPTURE_ID
-./build/debug/bin/mantis-cli captures list
-./build/debug/bin/mantis-cli replay verify RAW_ARTIFACT_ID
-```
+The [`develop`](https://github.com/martinkoenig/mantis-studio/tree/develop) branch is the shared development line; `main` is the separate public baseline. Integration acceptance does not automatically accept every source package or qualify physical hardware. The [roadmap](ROADMAP.md) and release documents distinguish independently accepted software, implemented work awaiting review, planned work and hardware-pending capabilities.
 
-Review the real camera/bus/entity assignments in the profile before use. Without an explicit profile there is no assumed physical camera role. `MANTIS_X1_FAKE=normal` is **test-only**; its fixture data is never hardware acceptance evidence. The accepted Q6A harness validated a 5 ms software correspondence policy and deterministic replay; hardware synchronization, optical exposure skew, sustained external-storage throughput and some crash-recovery scenarios require separate evidence. See the [real acquisition validation procedure](docs/hardware/x1-q6a-acquisition-validation.md) and [v0.2 review](docs/architecture/v0.2-acquisition-review.md).
+| Area | Delivered scope and remaining gates |
+| --- | --- |
+| Runtime foundation | Daemon, plugins, typed artifacts, jobs, clients and Studio foundation are implemented and independently accepted within their documented scope. |
+| Linux acquisition | Dual-OV9281 recording/replay has documented Q6A hardware acceptance. Synchronization, optical exposure skew, sustained external-storage throughput and other physical claims require their own evidence. Full-rate 120 FrameSets/s / 276.48 MB/s recording is not qualified. |
+| Geometric calibration | Camera/stereo calibration and Studio workflow are implemented; real-hardware calibration acceptance remains pending. |
+| Projected-light acquisition | Software semantics, evidence/storage and hardware-free fixtures have package-specific acceptance. Further qualification is incomplete and physical projected-light enablement remains blocked. |
+| Desktop workspaces | Home, Projects, Devices, Scan and Classic Acquisition are implemented. Latest UI corrections retain independent review gates; illustrative content and unsupported actions remain explicitly identified. |
 
-The existing Virtual Scanner remains available for the frame-zero recipe/point-cloud/export demonstration. It records all acquired frames; full-capture reconstruction is a later milestone. Unpublished Virtual Scanner changes in another worktree are not part of this candidate.
+The reference Qt 6.4.2 runtime has a [known leak and release-qualification blocker](https://github.com/martinkoenig/mantis-studio/issues/39); a qualified migration/security fix has not been delivered. The opt-in [virtual-rig scene v2](docs/plugin-development/virtual-rig-scene.md) is integrated, with a shared synthetic scene and bounded optical controls. These software fixtures do not qualify physical optics or full-rate recording; production laser-line extraction and metric geometry remain separate roadmap work.
 
-## Technical documentation
+**Not yet delivered as a complete workflow:** production laser-line extraction, metric laser triangulation, moving-scan registration/fusion, meshing and independently validated dimensional accuracy. These remain future roadmap work. Software tests and low calibration residuals do not establish physical scanner accuracy or production readiness.
 
-- [Architecture specification](MANTIS_STUDIO_ARCHITECTURE.md) and [implementation map](docs/architecture/implementation.md)
-- [Plugin development](docs/plugin-development/README.md) and [C++ / Python client SDK](docs/client-sdk/README.md)
-- [Protocol / local data plane](docs/protocol/README.md) and [storage / recovery](docs/architecture/storage.md)
-- [Release roadmap](ROADMAP.md), [v0.3 calibration](docs/architecture/v0.3-geometric-calibration.md) and [v0.4 package map](docs/architecture/v0.4-laser-acquisition.md)
-- [Reliability and evidence standard](docs/architecture/reliability-performance-and-validation.md)
-- [Free / Pro boundary](docs/product/editions.md) and [commercial-module architecture](docs/architecture/commercial-modules-and-licensing.md)
-- [Architecture Decision Records](docs/adr/README.md)
-- [Milestone coverage](docs/architecture/milestone.md) and [validation evidence](docs/architecture/validation.md)
-- [Contributing](CONTRIBUTING.md), [security](SECURITY.md) and [Apache-2.0 license](LICENSE)
+## Architecture and documentation
 
-**Platform scope:** Linux x86_64 and ARM64 have validated foundation builds/tests; Q6A-specific hardware claims are limited to their recorded acceptance evidence. Windows x86_64 and macOS ARM64 are architectural targets, **not supported releases** of this development snapshot.
+`mantisd` owns devices, capture, projects, artifacts, plugins and jobs. The desktop, CLI and SDKs use public client/protocol boundaries. Capture ownership stays with the daemon when a client closes. Plugin SDK and Client SDK responsibilities remain distinct.
+
+| Start here | Reference |
+| --- | --- |
+| Build, run and contribute | [Build guide](BUILDING.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) |
+| Architecture and implementation | [Architecture authority](ARCHITECTURE.md) · [Frozen v1 specification](MANTIS_STUDIO_ARCHITECTURE.md) · [Implementation map](docs/architecture/implementation.md) · [ADRs](docs/adr/README.md) |
+| Release scope and acceptance | [Roadmap](ROADMAP.md) · [Development/review policy](docs/architecture/cut-0c-development-baseline.md) · [Milestone coverage](docs/architecture/milestone.md) · [Validation evidence](docs/architecture/validation.md) |
+| Calibration and projected light | [Calibration baseline](docs/architecture/v0.3-geometric-calibration.md) · [Physical calibration validation](docs/hardware/x1-geometric-calibration-validation.md) · [Projected-light package map](docs/architecture/v0.4-laser-acquisition.md) |
+| Data and reliability | [Protocol / local data plane](docs/protocol/README.md) · [Storage / recovery](docs/architecture/storage.md) · [Reliability and evidence standard](docs/architecture/reliability-performance-and-validation.md) |
+| Product boundaries | [Free / Pro editions](docs/product/editions.md) · [Commercial-module architecture](docs/architecture/commercial-modules-and-licensing.md) |
+
+## Contributing
+
+Contributions to documentation, reproducible bug reports, tests and device integrations are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for architectural boundaries and required validation, and use [GitHub Issues](https://github.com/martinkoenig/mantis-studio/issues) for bugs and feature discussions.
+
+Read [SECURITY.md](SECURITY.md) for the security model. Private vulnerability reporting is enabled: open this repository's **Security and quality** tab and select **Report a vulnerability**. Follow [GitHub's private-reporting instructions](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/report-privately). Do not disclose sensitive vulnerability details, secrets or exploit payloads in public issues.
+
+## Support development
+
+If you find the project useful, you can voluntarily help fund its development:
+
+[![Support Mantis Studio on Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-Support_development-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/martinkoenig)
+
+Prefer another option? [Support via PayPal](https://paypal.me/MartinKoenigDev).
+
+Support is optional. Contributions, testing and feedback are also valuable, and donations do not change the [license](LICENSE) or [Free / Pro boundaries](docs/product/editions.md).
+
+## License
+
+Mantis Studio is licensed under the [Apache License 2.0](LICENSE), which permits commercial use under its terms. The [Free / Pro policy](docs/product/editions.md) preserves full supported core capability in Free as features are implemented; future Pro modules are planned as separately distributed additions, not artificial limits on Free.

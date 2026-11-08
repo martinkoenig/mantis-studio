@@ -11,4 +11,4 @@ This milestone is intended for a local developer workstation. It is not a harden
 - Export refuses an existing destination and lexically rejects destinations inside the project store. It is designed for trusted local paths, not adversarial symlink races.
 - Cancellation of native in-process plugin code is cooperative at node boundaries. An uncooperative trusted plugin can block its job; use isolated execution for uncertain code.
 
-Report a suspected security issue privately to the repository owner once a private reporting channel is configured. Do not publish secrets or exploit payloads in public issue reports. No email address or external reporting endpoint is invented by this template.
+Private vulnerability reporting is enabled for this repository. Open the **Security and quality** tab, select **Report a vulnerability**, and follow [GitHub's private-reporting instructions](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/report-privately). Do not publish secrets, sensitive vulnerability details or exploit payloads in public issues.
