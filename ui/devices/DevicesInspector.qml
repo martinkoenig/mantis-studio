@@ -62,6 +62,13 @@ Panel {
                     DevicesText { width: parent.width; text: "Geometric calibration"; color: Theme.text; font.bold: true; font.pixelSize: 16 }
                     DevicesText { width: parent.width; text: root.workspace.illustrative ? "Demo descriptors cannot enter device-bound calibration." : root.workspace.liveData.selected.calibrationReason }
                     StudioButton { objectName: "devicesCalibrate"; width: parent.width; text: "Open Calibration"; primary: true; enabled: !root.workspace.illustrative && root.workspace.liveData.selected.canCalibrate === true; Accessible.description: root.workspace.liveData.selected.calibrationReason; onClicked: root.workspace.calibrateSelected() }
+                    StudioButton {
+                        objectName: "devicesX1Roles"; width: parent.width; text: "Configure physical X1 roles"
+                        visible: !root.workspace.illustrative && (root.device.capabilities || []).indexOf("org.mantis.x1.role-config.v1") >= 0
+                        enabled: root.workspace.liveData.selected.canCalibrate === true
+                        Accessible.description: "Open Device setup for exact sensor, bus and route assignment. Does not apply or clear configuration."
+                        onClicked: if (enabled) root.workspace.calibrateSelected()
+                    }
                     DevicesText { width: parent.width; text: "Active binding: Not inspected\nOpen Calibration to inspect the exact selected device. Absence of inspection does not mean uncalibrated." }
                     DevicesText { width: parent.width; text: "Device → Target → Captures → Dataset → Cameras → Rig → Review & Activate"; font.pixelSize: 12 }
                     DevicesText { width: parent.width; text: "Opening this workflow starts no capture, solve, activation or clearing of a binding."; font.pixelSize: 12 }
