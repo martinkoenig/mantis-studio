@@ -377,5 +377,5 @@ configuration blocks admission and requires explicit reconciliation/restart;
 unknown data is never treated as a successful empty mapping. The private
 transaction temporary is not automatically removed after a crash. See
 [ADR-045](docs/adr/045-x1-role-override-ownership.md) for the ownership, rollback,
-closed-project and external-device authority limits. Studio setup UI remains a
-separate later integration; this backend does not qualify physical X1 roles.
+closed-project and external-device authority limits. The [Studio Device-stage role setup](docs/ui/cal03-role-setup.md) uses this public
+API; its native UI qualification is pending. Neither path qualifies physical X1 roles.

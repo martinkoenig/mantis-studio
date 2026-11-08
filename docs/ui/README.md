@@ -169,6 +169,8 @@ remains labelled stale. This frontend invalidation does not fix daemon replay is
 capture/stop/replay/verify, artifact selection, recipe execution, PLY export,
 plugin recovery, jobs/cancellation and diagnostics. At small widths its original
 three-column layout scrolls horizontally rather than hiding working controls.
+The [CAL-03 physical role setup](cal03-role-setup.md) adds Device-stage
+configuration through the accepted daemon API; native qualification is pending.
 Calibration logic and stage workflows remain unchanged; its capture-stage hosts
 share the same canonical live preview pair. The revision rail uses a constrained
 scroll width to keep text wrapped. Controller visibility is

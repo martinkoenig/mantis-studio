@@ -7,6 +7,7 @@
 #include "projects_scroll.hpp"
 #include "scan_model.hpp"
 #include "screenshot.hpp"
+#include "x1_role_controller.hpp"
 #include <QCommandLineParser>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -95,9 +96,22 @@ int main(int argc, char **argv) {
     CalibrationController calibration(calibrationClient);
     QObject::connect(&bridge, &StudioBridge::snapshotReady, &calibration,
                      &CalibrationController::observeSnapshot);
+    auto roleClient =
+        mode == "mock"
+            ? std::make_shared<PublicX1RoleClient>(mantis::client::Client{mantis::client::Endpoint{}})
+            : std::make_shared<PublicX1RoleClient>();
+    X1RoleController roles(roleClient);
+    QObject::connect(&bridge, &StudioBridge::snapshotReady, &roles, &X1RoleController::observeSnapshot);
+    QObject::connect(&bridge, &StudioBridge::changed, &roles,
+                     [&] { roles.setConnected(bridge.connected()); });
+    QObject::connect(&roles, &X1RoleController::applied, &calibration, [&](const QString &parent) {
+        calibration.selectDevice(parent);
+        bridge.refresh();
+    });
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("studio", &bridge);
     engine.rootContext()->setContextProperty("calibration", &calibration);
+    engine.rootContext()->setContextProperty("x1Roles", &roles);
     engine.setInitialProperties(
         {{"uiMode", mode}, {"workspace", workspace}, {"width", width}, {"height", height}});
     engine.load(QUrl("qrc:/ui/shell/Main.qml"));

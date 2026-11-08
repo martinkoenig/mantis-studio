@@ -10,6 +10,7 @@ ApplicationWindow {
     id: window
     property string workspace: "acquisition"
     property string uiMode: "live"
+    property var roleController: typeof x1Roles === "undefined" ? null : x1Roles
     property var studioBridge: studio
     readonly property alias appUiState: state
     readonly property string activeRoute: workspace === "acquisition" ? "scan" : workspace === "calibration" ? "devices" : workspace
@@ -37,12 +38,17 @@ ApplicationWindow {
     AppUiState { id: state; bridge: window.studioBridge; calibrationProvider: calibration; mode: window.uiMode }
     function updateCalibrationVisibility() {
         calibration.visible = uiMode !== "mock" && (workspace === "devices" || workspace === "calibration")
+        if (roleController) {
+            roleController.deviceId = calibration.state.deviceId
+            roleController.visible = uiMode !== "mock" && workspace === "calibration" && calibration.stage === 0
+        }
     }
     function openCalibration(deviceId) {
         if (uiMode !== "mock") calibration.selectDevice(deviceId)
         calibration.stage = 0
         workspace = "calibration"
     }
+    Connections { target: calibration; function onChanged() { window.updateCalibrationVisibility() } }
     onWorkspaceChanged: updateCalibrationVisibility()
     onUiModeChanged: updateCalibrationVisibility()
     Component.onCompleted: updateCalibrationVisibility()
@@ -137,7 +143,7 @@ ApplicationWindow {
                 CalibrationWorkspace {
                     id: calibrationPage
                     Layout.fillWidth: true; Layout.fillHeight: true; visible: window.workspace === "calibration"
-                    controller: calibration; studio: window.studioBridge; enabled: window.uiMode !== "mock"
+                    controller: calibration; roleController: window.roleController; studio: window.studioBridge; enabled: window.uiMode !== "mock"
                 }
                 HomeWorkspace {
                     objectName: "homeWorkspace"

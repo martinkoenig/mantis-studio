@@ -5,6 +5,7 @@ import "../calibration"
 Item {
     id: root
     required property var controller
+    property var roleController: null
     required property var studio
     readonly property alias leftHost: captures.leftHost
     readonly property alias rightHost: captures.rightHost
@@ -63,6 +64,10 @@ Item {
                             Label { text: root.controller.state.deviceId; Layout.fillWidth: true; wrapMode: Text.Wrap }
                             Label { text: root.controller.state.device.capabilities.join("\n"); Layout.fillWidth: true; wrapMode: Text.Wrap; opacity: 0.7 }
                             Label { text: "Current active binding is shown above. Activation requires a selected logical device."; Layout.fillWidth: true; wrapMode: Text.Wrap; opacity: 0.7 }
+                            X1RolesPanel {
+                                controller: root.roleController
+                                onReviewActiveRig: root.controller.stage = 6
+                            }
                         }
                         TargetStage { controller: root.controller; visible: root.controller.stage === 1 }
                         CapturesStage { id: captures; controller: root.controller; studio: root.studio; visible: root.controller.stage === 2 }
