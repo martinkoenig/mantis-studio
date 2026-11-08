@@ -2,9 +2,9 @@
 
 - [ADR-044: Versioned live calibration observation sources](044-live-calibration-observation-sources.md)
 
-ADR-044 records the owner-approved CAL-01 choices. Its adoption is effective only
-after independent review, separately authorized merge and exact-integration
-acceptance; PR #104 remains DRAFT until review. It adds live-source versions
+ADR-044 records the owner-approved CAL-01 choices, independently accepted through
+[CAL-01 integration](https://github.com/martinkoenig/mantis-studio/issues/65#issuecomment-6716171040).
+It adds live-source versions
 without reinterpreting legacy RawCapture/calibration bytes or replacing physical
 M8 evidence. Implementation and hardware qualification remain separate.
 

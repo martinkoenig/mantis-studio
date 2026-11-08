@@ -1,14 +1,40 @@
 # Building Mantis Studio
 
+For demo, SDK, hardware and contributor routes, see the [documentation home](docs/README.md).
+
+Build the daemon, CLI and plugins first, then start Studio as a client of the daemon.
+The default Virtual Scanner provides a hardware-free starting point; building or
+running it does not establish physical scanner accuracy or timing.
+
+- **First Linux build:** [prerequisites and Debug build](#linux-reference-environment), then [run the daemon and Studio](#running).
+- **Without Qt:** use the [headless preset](#qt-free-headless-build).
+- **Contributor checks:** see [CONTRIBUTING.md](CONTRIBUTING.md), [sanitizers](#sanitizers) and [Architecture CI](#architecture-ci-compiler-cache-and-events).
+- **Application or plugin development:** start with the [Client SDK](docs/client-sdk/README.md) or [native Plugin SDK guide](docs/plugin-development/README.md).
+- **Physical X1 setup:** see [native acquisition](#v02-native-acquisition) and the separate [calibration procedure](#m8a-geometric-calibration-characterization).
+
 ## Linux reference environment
 
-Tested in this delivery: Ubuntu 24.04 x86_64, GCC 13.3, CMake 3.28, Qt 6.4.2, Protobuf 3.21.12, SQLite 3.45.1 and Python 3.12.
-The native ARM64 CI definition installs the same packages and runs the same tests. Native ARM64 CI and user-reported Q6A build/tests have passed; see the dated validation record for current evidence.
+The [Architecture workflow](.github/workflows/build.yml) targets Ubuntu 24.04
+x86_64 and native ARM64, with Studio enabled and disabled. Its package list and
+[CMakeLists.txt](CMakeLists.txt) are the build prerequisites; dated validation
+records describe what was actually run. This guide does not qualify a new build
+or extend platform support.
+
+| Requirement | Current source requirement |
+| --- | --- |
+| C/C++ toolchain | C++23 with `std::expected`; CI installs Ubuntu's `g++`. |
+| CMake and generator | CMake 3.25+ for the version-6 [presets](CMakePresets.json), with Ninja. Manual configuration has a CMake 3.24 project minimum. |
+| Core dependencies | Protobuf 3.15+ and `protoc`, SQLite, nlohmann-json 3.10+, and Python 3 with `google.protobuf`. |
+| Calibration dependencies | OpenCV 4.6+ with `core`, `imgproc`, `calib3d` and `aruco`, including for headless builds. |
+| Studio dependencies | Qt 6.4+ Core, Gui, Quick, QuickControls2 and Concurrent; Qt Test when testing is enabled; the QML runtime modules below. |
+
+Install the build and Studio runtime packages on Ubuntu 24.04:
 
 ```bash
 sudo apt update
 sudo apt install build-essential cmake ninja-build libsqlite3-dev \
-  protobuf-compiler libprotobuf-dev nlohmann-json3-dev python3-protobuf \
+  protobuf-compiler libprotobuf-dev nlohmann-json3-dev python3 python3-protobuf \
+  libopencv-dev libopencv-contrib-dev \
   qt6-base-dev qt6-declarative-dev \
   qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
   qml6-module-qtquick-templates qml6-module-qtquick-window \
@@ -16,6 +42,7 @@ sudo apt install build-essential cmake ninja-build libsqlite3-dev \
 ```
 
 Review the package manager's confirmation prompt. The Python interpreter used for tests must have `google.protobuf` installed; the Ubuntu package supplies it to `/usr/bin/python3`.
+Run the build and test commands from the repository root.
 
 ```bash
 cmake --preset linux-debug -DPython3_EXECUTABLE=/usr/bin/python3
@@ -23,7 +50,7 @@ cmake --build --preset linux-debug --parallel 4
 ctest --preset linux-debug
 ```
 
-A normal configure command also works:
+For manual configuration instead of a preset:
 
 ```bash
 cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug \
@@ -33,6 +60,39 @@ cmake --build build/debug --parallel 4
 
 Outputs are in `build/debug/bin`, plugins/manifests in `build/debug/plugins`, recipes in `build/debug/recipes`, and the generated Python package in `build/debug/python/mantis`.
 Do not copy only an executable away from its matching plugin/recipe directories.
+
+## Running
+
+After the Debug build and tests, start both processes from the repository root.
+For the headless preset, use `build/headless/bin` for the daemon and CLI and omit
+Studio. Keep this shell open for the client commands below. For offline Studio modes, see
+the [UI launch guide](docs/ui/README.md#launch-and-data-sources).
+
+```bash
+export MANTIS_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+export MANTIS_PORT=47321
+./build/debug/bin/mantisd --project "$PWD/Demo.mantis" &
+./build/debug/bin/mantis-studio
+```
+
+Use the same token in all client processes. The daemon binds only loopback and requires a token of at least 16 characters. The token is not written to project files or printed in logs. `--project`, `--plugins`, `--plugin-host`, `--recipes`, and `--port` override defaults.
+
+Studio has capture start/stop, recipe selection, jobs/cancellation, plugin failure/re-enable controls, artifact selection, point-cloud orbit/zoom, PLY export and diagnostics. The viewport uses a deliberately small CPU painting renderer.
+
+```bash
+./build/debug/bin/mantis-cli --help
+./build/debug/bin/mantis-cli workflow "$PWD/cli-output.ply"
+./build/debug/bin/mantis-cli shutdown
+```
+
+For an unattended UI smoke run:
+
+```bash
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+  ./build/debug/bin/mantis-studio --quit-after 5000 --screenshot /tmp/mantis.png
+```
+
+The acceptance runner automatically starts its own daemon on a free port and uses a temporary project. It does not require an existing daemon or physical scanner.
 
 ## Qt-free headless build
 
@@ -145,37 +205,11 @@ Run the focused helper/event regressions with ccache, GCC/G++, and `python3-yaml
 installed: `python3 -B tests/ci/compiler_cache_test.py`. They supplement the full
 project tests; they do not replace them.
 
-## Running
-
-```bash
-export MANTIS_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
-export MANTIS_PORT=47321
-./build/debug/bin/mantisd --project "$PWD/Demo.mantis" &
-./build/debug/bin/mantis-studio
-```
-
-Use the same token in all client processes. The daemon binds only loopback and requires a token of at least 16 characters. The token is not written to project files or printed in logs. `--project`, `--plugins`, `--plugin-host`, `--recipes`, and `--port` override defaults.
-
-Studio has capture start/stop, recipe selection, jobs/cancellation, plugin failure/re-enable controls, artifact selection, point-cloud orbit/zoom, PLY export and diagnostics. The viewport uses a deliberately small CPU painting renderer.
-
-```bash
-./build/debug/bin/mantis-cli --help
-./build/debug/bin/mantis-cli workflow "$PWD/cli-output.ply"
-./build/debug/bin/mantis-cli shutdown
-```
-
-For an unattended UI smoke run:
-
-```bash
-QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-  ./build/debug/bin/mantis-studio --quit-after 5000 --screenshot /tmp/mantis.png
-```
-
-The acceptance runner automatically starts its own daemon on a free port and uses a temporary project. It does not require an existing daemon or physical scanner.
-
 ## Python packaging
 
-For development, use `PYTHONPATH=build/debug/python`. To install a wheel/package, first generate the wire module in the package source:
+For development, use `PYTHONPATH=build/debug/python`. The install example also
+requires Ubuntu's `python3-venv` package. To install a wheel/package, first
+generate the wire module in the package source:
 
 ```bash
 protoc -I protocol/protobuf --python_out=sdk/python/mantis protocol/protobuf/mantis.proto

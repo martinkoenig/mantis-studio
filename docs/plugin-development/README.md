@@ -1,5 +1,40 @@
 # Developing a native plugin
 
+Use the Plugin SDK to add a device, processing algorithm or exporter that the
+runtime can load. If your application only needs to control capture, run jobs or
+export results, use the [Client SDK](../client-sdk/README.md) to talk to `mantisd`.
+The daemon owns capture and runtime state in either case.
+
+## Start with an existing example
+
+1. [Build the repository](../../BUILDING.md#linux-reference-environment), or use
+   its [headless preset](../../BUILDING.md#qt-free-headless-build) without Qt.
+   The normal build includes the example plugin libraries and their generated
+   manifests in the build tree's `plugins` directory.
+2. Choose an example from [Examples and tests](#examples-and-tests): the Virtual
+   Scanner for a simple device, example geometry for a processor, or the PLY
+   exporter. The [virtual rig guide](virtual-rig.md) covers synthetic FrameSet
+   acquisition. These software examples do not establish physical scanner
+   accuracy, synchronization or sustained recording throughput.
+3. Read [Entry and interfaces](#entry-and-interfaces),
+   [Buffer and packet lifetime](#buffer-and-packet-lifetime) and
+   [Manifest](#manifest) before adapting an example. The existing
+   [CMake plugin helper](../../CMakeLists.txt) shows how shipped examples link
+   the public SDK and generate matching manifests.
+4. [Run the matching daemon](../../BUILDING.md#running) and use
+   `./build/debug/bin/mantis-cli plugins list` to inspect discovery (use
+   `build/headless/bin` for the headless preset). Keep the library and manifest
+   together; follow the diagnostics and isolation rules below.
+
+Current extension interfaces include devices, enumerated acquisition, processors
+and exporters. For FrameSet acquisition see [v0.2 enumerated acquisition](#v02-enumerated-acquisition);
+for semantic processors see [v0.4 full semantic processing](#v04-full-semantic-processing).
+The generic custom-sensor measurement API and host-side device bridge are
+**planned interfaces**: their accepted designs below are not APIs available to
+implement against today.
+
+## Public SDK boundary
+
 The stable boundary is [`sdk/c/include/mantis/plugin.h`](../../sdk/c/include/mantis/plugin.h). The header is compiled by a C-only contract test. [`sdk/cpp/include/mantis/sdk.hpp`](../../sdk/cpp/include/mantis/sdk.hpp) provides RAII buffer ownership and exception containment without exporting C++ objects.
 
 ## Entry and interfaces

@@ -8,7 +8,7 @@
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://isocpp.org/)
 [![Qt 6](https://img.shields.io/badge/Qt-6-41cd52.svg)](https://www.qt.io/development/qt-framework)
 
-[Get started](#getting-started) · [Development status](#development-status) · [Documentation](#architecture-and-documentation) · [Support development](#support-development)
+[Get started](#getting-started) · [Development status](#development-status) · [Documentation](docs/README.md) · [Support development](#support-development)
 
 </div>
 
