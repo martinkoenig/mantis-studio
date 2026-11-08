@@ -68,3 +68,12 @@ reserved revision can remain incomplete/recoverable and still consumes its numbe
 Services/protocol, CLI/SDK calibration operations and Studio workflows remain M6/M7.
 
 The exact implementation contract is [calibration-artifacts](../architecture/calibration-artifacts.md).
+
+## CAL-01 versioned applicability
+
+The schema1 freeze, existing metadata migration and historical-binding rules
+above remain binding for legacy objects. Once effective,
+[ADR-044](044-live-calibration-observation-sources.md) governs new Source1/Document2,
+Dataset/Camera/Rig2, schema-aware series/activation and postseal publication;
+Target1 and old bytes/defaults/references stay unchanged. Any necessary new
+metadata migration requires separate review.

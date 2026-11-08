@@ -57,3 +57,12 @@ operations add no frame-thread processing, database lookup or pixel copy.
 
 See [Calibration API](../architecture/calibration-api.md) for concrete contracts,
 wire bounds, error behavior and examples.
+
+## CAL-01 versioned applicability
+
+Existing M6 DTOs, tags and RawCapture-only operations above keep their meaning.
+Once effective, [ADR-044](044-live-calibration-observation-sources.md) governs
+explicit live/v2 controls, readiness and shared Job cancellation. The
+no-frame-processing/lookup/copy consequence retains its existing legacy M6 scope;
+new live analysis uses the explicit bounded consumer/helper seam. Entered Store
+persistence remains non-preemptive; candidate tags allocate no fields.
