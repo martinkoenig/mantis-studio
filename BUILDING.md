@@ -349,3 +349,33 @@ Use `./scripts/validate-x1-calibration.sh --prepare` and follow the
 [real Q6A operator procedure](docs/hardware/x1-geometric-calibration-validation.md).
 M8a tooling/CI PASS is software validation only. M8 hardware acceptance remains
 pending; real characterization and evidence-based threshold review are required.
+
+## Opt-in X1 role configuration (CAL-03 backend)
+
+The base `MANTIS_X1_PROFILE` remains read-only input. The daemon enables persistent
+whole-device role overrides only with `--x1-role-state-dir PROVISIONED_ABSOLUTE_DIR`.
+The deployment owner must provision a private daemon-owned leaf (mode 0700), such
+as `/var/lib/mantis/device-overrides`, under trusted non-symlink ancestry and
+establish a single X1 configuration authority. No directory is implicitly created.
+An inherited `MANTIS_X1_ROLE_STATE_DIR` alone does not enable the daemon feature.
+
+Use `Client::x1_roles()` / Python `client.x1_roles.query()` to inspect support and
+exact physical identities. Validate/apply are asynchronous Jobs: Python
+`client.x1_roles.validate(state, swapped=True)` and
+`client.x1_roles.apply(state, swapped=True)` select the desired order relative to
+the base; `False` selects the original order. Pass the fresh queried state, wait
+for the returned Job and query the result; never retry by blindly toggling.
+The C++ equivalents accept the explicit version-1 request and return a Job ID.
+The existing daemon token authenticates every operation. A capability string
+advertises support and grants no separate authority.
+
+Stop and retire acquisition/calibration/recording work first. Clear the current
+active rig explicitly through the existing calibration API before changing its
+role assignment. The operation changes neither calibration artifacts nor old
+recordings. An incompatible prospective binding is refused. Invalid or uncertain
+configuration blocks admission and requires explicit reconciliation/restart;
+unknown data is never treated as a successful empty mapping. The private
+transaction temporary is not automatically removed after a crash. See
+[ADR-045](docs/adr/045-x1-role-override-ownership.md) for the ownership, rollback,
+closed-project and external-device authority limits. Studio setup UI remains a
+separate later integration; this backend does not qualify physical X1 roles.

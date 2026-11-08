@@ -39,6 +39,30 @@ wire::v1::Response Client::snapshot() const {
     r.mutable_snapshot();
     return call(r);
 }
+wire::v1::X1RoleInfo Client::x1_roles() const {
+    wire::v1::Request r;
+    r.mutable_x1_role_query()->set_schema_version(1);
+    auto result = call(r);
+    if (!result.has_x1_roles() || result.x1_roles().schema_version() != 1)
+        fail(Status::incompatible, "Peer does not provide X1 role configuration v1");
+    return result.x1_roles();
+}
+std::string Client::validate_x1_roles(const wire::v1::X1RoleRequest &request) const {
+    wire::v1::Request r;
+    *r.mutable_x1_role_validate() = request;
+    auto id = call(r).result_id();
+    if (id.empty())
+        fail(Status::incompatible, "Peer omitted X1 role validation Job");
+    return id;
+}
+std::string Client::apply_x1_roles(const wire::v1::X1RoleRequest &request) const {
+    wire::v1::Request r;
+    *r.mutable_x1_role_apply() = request;
+    auto id = call(r).result_id();
+    if (id.empty())
+        fail(Status::incompatible, "Peer omitted X1 role apply Job");
+    return id;
+}
 std::vector<wire::v1::Device> Client::devices() const {
     wire::v1::Request r;
     r.mutable_devices_list();

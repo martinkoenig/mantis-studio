@@ -155,6 +155,9 @@ message Request {
   Empty projected_captures_list = 45;
   ProjectedStopRequest projected_stop = 46;
   Id projected_bundle = 47;
+  X1RoleQuery x1_role_query = 80;
+  X1RoleRequest x1_role_validate = 81;
+  X1RoleRequest x1_role_apply = 82;
  }
 }
 message Response {
@@ -167,6 +170,7 @@ message Response {
  repeated ProjectedDevice projected_devices = 16;
  ProjectedValidation projected_validation = 17;
  repeated ProjectedCapture projected_captures = 18;
+ X1RoleInfo x1_roles = 31;
 }
 
 // v0.4 L5: compact projected-light control. Bulk MANTIS03 remains on the data plane.
@@ -516,4 +520,25 @@ message ProjectedCapture {
     Error close_error = 23;
     ProjectedAbortSummary abort_outcome = 24;
     ProjectedEvidenceSummary evidence = 25;
+}
+
+// CAL-03: opt-in whole-device role configuration; no client paths or bulk data.
+message X1RoleQuery { uint32 schema_version = 1; }
+message X1RoleRequest {
+ uint32 schema_version = 1;
+ optional uint64 expected_generation = 2;
+ string discovery_token = 3;
+ string parent_id = 4;
+ optional bool swapped = 5;
+}
+message X1RoleCamera {
+ string role = 1; string sensor = 2; string bus = 3; string identity = 4;
+ string video_node = 5; repeated string route = 6;
+}
+message X1RoleInfo {
+ uint32 schema_version = 1;
+ bool supported = 2; bool busy = 3; bool blocked = 4; bool swapped = 5;
+ uint64 generation = 6; string discovery_token = 7; string parent_id = 8;
+ string base_digest = 9; string diagnostic = 10; string job_id = 11;
+ repeated X1RoleCamera cameras = 12;
 }

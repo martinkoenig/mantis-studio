@@ -91,6 +91,49 @@ wire::v1::Response dispatch(services::Runtime &runtime, const wire::v1::Request 
             fail(Status::incompatible, "Unsupported control protocol version");
         using R = wire::v1::Request;
         switch (request.command_case()) {
+        case R::kX1RoleQuery: {
+            if (request.x1_role_query().schema_version() != 1)
+                fail(Status::incompatible, "Unsupported X1 role query version");
+            const auto info = runtime.x1_roles();
+            auto *o = out.mutable_x1_roles();
+            o->set_schema_version(info.schema_version);
+            o->set_supported(info.supported);
+            o->set_busy(info.busy);
+            o->set_blocked(info.blocked);
+            o->set_swapped(info.swapped);
+            o->set_generation(info.generation);
+            o->set_discovery_token(info.discovery_token);
+            o->set_parent_id(info.parent_id);
+            o->set_base_digest(info.base_digest);
+            o->set_diagnostic(info.diagnostic);
+            o->set_job_id(info.job.value);
+            if (info.supported)
+                for (const auto &camera : info.cameras) {
+                    auto *c = o->add_cameras();
+                    c->set_role(camera.role);
+                    c->set_sensor(camera.sensor);
+                    c->set_bus(camera.bus);
+                    c->set_identity(camera.identity);
+                    c->set_video_node(camera.video_node);
+                    for (const auto &entity : camera.route)
+                        c->add_route(entity);
+                }
+            break;
+        }
+        case R::kX1RoleValidate:
+        case R::kX1RoleApply: {
+            const auto &q =
+                request.has_x1_role_apply() ? request.x1_role_apply() : request.x1_role_validate();
+            if (!q.has_swapped() || !q.has_expected_generation())
+                fail(Status::invalid_argument,
+                     "X1 role request requires desired mapping and expected generation");
+            services::X1RoleRequest value{q.schema_version(), q.expected_generation(), q.discovery_token(),
+                                          q.parent_id(), q.swapped()};
+            out.set_result_id((request.has_x1_role_apply() ? runtime.apply_x1_roles(value)
+                                                           : runtime.validate_x1_roles(value))
+                                  .value);
+            break;
+        }
         case R::kSnapshot:
             out.set_project_path(runtime.project());
             for (auto &d : runtime.devices())

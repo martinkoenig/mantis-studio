@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+- [ADR-045: Opt-in daemon ownership of whole-X1 role overrides](045-x1-role-override-ownership.md) — owner-approved direction; implementation/integration pending.
+
 - [ADR-044: Versioned live calibration observation sources](044-live-calibration-observation-sources.md)
 
 ADR-044 records the owner-approved CAL-01 choices, independently accepted through

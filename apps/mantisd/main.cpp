@@ -28,7 +28,8 @@ int main(int argc, char **argv) {
             std::string arg = argv[i];
             if (arg == "--help") {
                 std::cout << "mantisd [--project PATH] [--plugins DIR] [--plugin-host PATH] [--port "
-                             "PORT]\nSet MANTIS_TOKEN (at least 16 characters). Loopback only.\n";
+                             "PORT] [--x1-role-state-dir PROVISIONED_DIR]\nSet MANTIS_TOKEN (at least 16 "
+                             "characters). Loopback only.\n";
                 return 0;
             }
             if (i + 1 >= argc)
@@ -40,6 +41,8 @@ int main(int argc, char **argv) {
                 config.plugins = value;
             else if (arg == "--recipes")
                 config.recipes = value;
+            else if (arg == "--x1-role-state-dir")
+                config.x1_role_state_dir = value;
             else if (arg == "--plugin-host")
                 config.plugin_host = value;
             else if (arg == "--port") {
@@ -52,6 +55,16 @@ int main(int argc, char **argv) {
         }
         if (token.size() < 16)
             throw std::runtime_error("MANTIS_TOKEN must contain at least 16 characters");
+#ifdef __linux__
+        // Only the explicit startup option grants authority. Inherited locator alone cannot opt in.
+        if (config.x1_role_state_dir.empty())
+            unsetenv("MANTIS_X1_ROLE_STATE_DIR");
+        else if (setenv("MANTIS_X1_ROLE_STATE_DIR", config.x1_role_state_dir.c_str(), 1))
+            throw std::runtime_error("Cannot establish X1 role startup locator");
+#else
+        if (!config.x1_role_state_dir.empty())
+            throw std::runtime_error("X1 role configuration is supported only on Linux");
+#endif
         mantis::services::Runtime runtime(std::move(config));
         auto server = mantis::platform::Socket::listen(port);
         std::cout << "mantisd ready on 127.0.0.1:" << port << std::endl;

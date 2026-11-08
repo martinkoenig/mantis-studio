@@ -32,6 +32,7 @@ struct Snapshot {
 struct Context {
     CancellationToken cancellation;
     std::function<void(double, std::string)> update;
+    Id id{}; // Exact owning Job; permits excluding only itself from admission checks.
 };
 using Task = std::function<std::optional<artifact::ArtifactReference>(Context &)>;
 class Manager {
