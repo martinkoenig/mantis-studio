@@ -15,6 +15,18 @@ target_link_libraries(mantis-storage-durability-tests PRIVATE
 target_link_options(mantis-storage-durability-tests PRIVATE "LINKER:--wrap=fsync")
 add_test(NAME projected-storage-durability COMMAND mantis-storage-durability-tests)
 set_tests_properties(projected-storage-durability PROPERTIES TIMEOUT 90)
+add_executable(mantis-journal-recovery-tests journal.cpp)
+target_link_libraries(mantis-journal-recovery-tests PRIVATE
+  "$<LINK_LIBRARY:WHOLE_ARCHIVE,mantis-storage-qualification>" SQLite::SQLite3)
+target_link_options(mantis-journal-recovery-tests PRIVATE "LINKER:--wrap=fsync")
+add_test(NAME journal-recovery COMMAND mantis-journal-recovery-tests)
+set_tests_properties(journal-recovery PROPERTIES TIMEOUT 30)
+add_executable(mantis-session-startup-tests startup.cpp
+  ${PROJECT_SOURCE_DIR}/src/device-runtime/device-runtime.cpp)
+target_compile_definitions(mantis-session-startup-tests PRIVATE MANTIS_SESSION_STARTUP_TESTING)
+target_link_libraries(mantis-session-startup-tests PRIVATE mantis-device-runtime nlohmann_json::nlohmann_json)
+add_test(NAME session-startup-precedence COMMAND mantis-session-startup-tests)
+set_tests_properties(session-startup-precedence PROPERTIES TIMEOUT 40)
 # Compile the unchanged Session path with a private admission sampler. It and
 # the existing fault Store are absent from product targets and installed SDKs.
 add_executable(mantis-rig-storage-qualification rig.cpp
