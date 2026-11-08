@@ -362,7 +362,7 @@ runpy.run_path(sys.argv[0], run_name="__main__")
         self.assertEqual(json.loads(result.stdout)["sessions"][0]["accounting"]["total_tokens"], 14)
 
 
-def instruction_references(source, root):
+def instruction_references(source, root, adopted_only=False):
     """Audit this repository's simple inline Markdown links; not a Codex loader.
 
     Resolve real paths before reading a linked document. Links never execute
@@ -373,13 +373,20 @@ def instruction_references(source, root):
     if not source.is_relative_to(root):
         raise ValueError("instruction source outside repository")
     targets = []
-    for link in re.findall(r"\[[^\]\n]+\]\(([^()\n]+)\)", source.read_text()):
+    links = re.findall(r'\[[^\]\n]+\]\(([^()\s]+)(?:\s+"([^"\n]*)")?\)', source.read_text())
+    for link, title in links:
+        if adopted_only and title != "worker-instruction":
+            continue
         parsed = urlsplit(link)
         if parsed.scheme or parsed.netloc or not parsed.path:
+            if adopted_only:
+                raise ValueError("worker adoption must name a local repository document")
             continue
         target = (source.parent / unquote(parsed.path)).resolve(strict=True)
         if not target.is_relative_to(root) or not target.is_file():
             raise ValueError("instruction reference is not a repository file")
+        if adopted_only and target.suffix != ".md":
+            raise ValueError("worker adoption must name a Markdown document")
         targets.append(target)
     return targets
 
@@ -396,6 +403,27 @@ def instruction_closure(source, root):
     return visited
 
 
+def worker_instruction_closure(source, root):
+    """Audit explicit adoption, not runtime loading or ordinary link reachability.
+
+    An adopted worker source must not directly reference the orchestrator-only
+    supplement. General reference documents may retain navigation to other roles.
+    All reference links are validated separately by instruction_closure.
+    """
+    forbidden = (root / "docs/agents/orchestrator-execution-rules.md").resolve()
+    pending = [source.resolve()]
+    visited = set()
+    while pending:
+        current = pending.pop()
+        if current in visited:
+            continue
+        if current == forbidden or forbidden in instruction_references(current, root):
+            raise ValueError("orchestrator supplement in worker instruction adoption")
+        visited.add(current)
+        pending.extend(instruction_references(current, root, adopted_only=True))
+    return visited
+
+
 class RepositoryInstructionTests(unittest.TestCase):
     def test_root_worker_reference_is_scoped_and_resolves(self):
         root = SCRIPT.parents[1]
@@ -408,13 +436,79 @@ class RepositoryInstructionTests(unittest.TestCase):
         self.assertIn(worker, instruction_references(root / "AGENTS.md", root))
         # The new mandatory reference is confined to its worker section. No
         # orchestrator proposal or live-configuration file is bootstrapped.
-        self.assertNotIn("(docs/agents/worker-execution-rules.md)", before)
+        self.assertNotIn("docs/agents/worker-execution-rules.md", before)
         self.assertEqual(re.findall(r"\]\(([^)]+)\)", section),
-                         ["docs/agents/worker-execution-rules.md"])
+                         ['docs/agents/worker-execution-rules.md "worker-instruction"'])
         closure = instruction_closure(root / "AGENTS.md", root)
         self.assertTrue({worker, root / "CONTRIBUTING.md",
                          root / "docs/adr/033-reliability-performance-release-gates.md"} <= closure)
-        self.assertNotIn(root / "docs/agents/orchestrator-execution-rules.md", closure)
+        # Knowledge/handoff legitimately links to the other role's proposal.
+        # Markdown reachability validates references; it is not adoption evidence.
+        self.assertIn(root / "docs/agents/orchestrator-execution-rules.md", closure)
+        quality = root / "docs/engineering/test-quality.md"
+        self.assertEqual(worker_instruction_closure(root / "AGENTS.md", root),
+                         {root / "AGENTS.md", worker, quality})
+        self.assertIn(quality, instruction_references(root / "CONTRIBUTING.md", root))
+
+    def test_reference_navigation_does_not_adopt_other_role(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "AGENTS.md"
+            knowledge = root / "knowledge.md"
+            other = root / "docs/agents/orchestrator-execution-rules.md"
+            other.parent.mkdir(parents=True)
+            other.write_text("Orchestrator-only fixture")
+            source.write_text('[reference](knowledge.md)')
+            knowledge.write_text('[other role](docs/agents/orchestrator-execution-rules.md)')
+            self.assertEqual(instruction_closure(source, root), {source, knowledge, other})
+            self.assertEqual(worker_instruction_closure(source, root), {source})
+            # Promoting that reference to adopted instructions is a real violation.
+            source.write_text('[adopt](knowledge.md "worker-instruction")')
+            with self.assertRaisesRegex(ValueError, "orchestrator supplement"):
+                worker_instruction_closure(source, root)
+
+    def test_direct_and_transitive_orchestrator_adoption_fail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "AGENTS.md"
+            worker = root / "worker.md"
+            other = root / "docs/agents/orchestrator-execution-rules.md"
+            other.parent.mkdir(parents=True)
+            other.write_text("Orchestrator-only fixture")
+            for title in ('', ' "worker-instruction"'):
+                with self.subTest(title=title):
+                    link = '[other](docs/agents/orchestrator-execution-rules.md' + title + ')'
+                    source.write_text(link)
+                    with self.assertRaisesRegex(ValueError, "orchestrator supplement"):
+                        worker_instruction_closure(source, root)
+                    source.write_text('[worker](worker.md "worker-instruction")')
+                    worker.write_text(link)
+                    with self.assertRaisesRegex(ValueError, "orchestrator supplement"):
+                        worker_instruction_closure(source, root)
+
+    def test_adoption_resolves_local_markdown_and_handles_cycles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outer = Path(directory)
+            root = outer / "repo"
+            root.mkdir()
+            source = root / "AGENTS.md"
+            worker = root / "worker.md"
+            source.write_text('[worker](worker.md#section "worker-instruction")')
+            worker.write_text('[root](AGENTS.md "worker-instruction")')
+            self.assertEqual(worker_instruction_closure(source, root), {source, worker})
+            (root / "LICENSE").write_text("fixture")
+            outside = outer / "outside-adoption.md"
+            outside.write_text("outside fixture")
+            (root / "escape.md").symlink_to(outside)
+            for target, error in (("missing.md", FileNotFoundError),
+                                  ("escape.md", ValueError),
+                                  ("../outside-adoption.md", ValueError),
+                                  ("LICENSE", ValueError),
+                                  ("https://example.invalid/worker.md", ValueError)):
+                with self.subTest(target=target):
+                    source.write_text('[adopt](' + target + ' "worker-instruction")')
+                    with self.assertRaises(error):
+                        worker_instruction_closure(source, root)
 
     def test_root_reference_fits_default_native_discovery_preconditions(self):
         root = SCRIPT.parents[1]

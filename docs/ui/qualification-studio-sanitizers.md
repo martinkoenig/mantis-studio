@@ -1,5 +1,14 @@
 # Complete Studio Qt sanitizer qualification (UI-QT-SAN-1B)
 
+> **Historical evidence; superseded for current runtime selection.** This report
+> retains the 2026-10-30 CUT-0C/private-candidate results and original evidence
+> anchors. It does not qualify current product sources or recommend Qt 6.9.2
+> for a supported release. [Issue #39](https://github.com/martinkoenig/mantis-studio/issues/39)
+> remains the current Qt migration/release gate; historical clean runs do not
+> waive its leak, security, maintenance, licensing or current-source requirements.
+> The complete original archive, including omitted image evidence, remains an
+> independent-review gate; the bounded text derivative alone is insufficient.
+
 Local assessment: **QUALIFIED for the two recorded source snapshots, this VM/toolchain, the existing instrumentation graph and the required offscreen/software workloads. All mandatory local gates passed.**
 Independent review and required exact-commit remote CI remain separate acceptance
 requirements. This package changes qualification tooling and documentation only.
@@ -23,6 +32,16 @@ and filenames recorded inside the immutable original archive describe the
 original run; renaming the entry point does not relabel those runs or replace
 their tested-input hashes. Existing native-suite evidence is preserved; this
 compatibility-only resolution adds no product-source change or new native run.
+
+On 2026-11-08 the existing published PR branch normally merged reviewed M4
+`e3aee2d9ec6bf1a76727b6eae38b88db78353e0c` and targets `develop`. All current
+base files, including the eight PR #4 additions, are preserved exactly. The only
+authored additions relative to M4 are this historical report and the distinct
+historical verifier/test pair. Their policy bytes are unchanged by this merge.
+Product/build/registered-test inputs are identical to M4; no native or historical
+Qt campaign was repeated for these unregistered historical files. PR #4 final
+integration acceptance and all five required exact-new-head CI jobs remain
+independent acceptance gates. Original evidence is retained without rewriting.
 
 Set `QUALIFIED_QT_PREFIX` to the retained isolated Qt 6.9.2 installation and
 `PRIVATE_QUALIFICATION_ROOT` to the private local qualification workspace.

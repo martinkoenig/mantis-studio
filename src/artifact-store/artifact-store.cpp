@@ -1,17 +1,21 @@
 #include "bundle_state.hpp"
 #include "persistence-test.hpp"
 #include "segments.hpp"
+#include <algorithm>
+#include <charconv>
 #include <fstream>
 #include <iomanip>
 #include <limits>
 #include <mantis/artifact_store.hpp>
 #include <mantis/data_io.hpp>
 #include <mantis/platform.hpp>
+#include <map>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <sqlite3.h>
 #include <sstream>
+#include <tuple>
 namespace mantis::artifact {
 namespace {
 using Json = nlohmann::json;
@@ -100,6 +104,35 @@ Hash file_hash(const std::filesystem::path &p) {
     auto m = platform::map_read(p);
     return content_hash({m.data, m.size});
 }
+// Only evidence validation uses this classification. Metadata conflicts and
+// operational failures must retain the original journal for explicit retry.
+struct InvalidJournal : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+struct JournalName {
+    std::string id;
+    uint64_t index{};
+    bool invalid{};
+};
+JournalName journal_name(const std::filesystem::path &path) {
+    auto name = path.filename().string();
+    const bool invalid = name.ends_with(".json.invalid");
+    if (invalid)
+        name.resize(name.size() - 8);
+    name.resize(name.size() - 5); // Caller selects .json[.invalid] only.
+    const auto split = name.rfind('_');
+    if (split == std::string::npos)
+        fail(Status::corrupt, "Unattributable journal filename");
+    auto id = name.substr(0, split);
+    const auto number = std::string_view(name).substr(split + 1);
+    uint64_t index{};
+    auto [end, ec] = std::from_chars(number.data(), number.data() + number.size(), index);
+    if (id.empty() || id == "." || id == ".." || id.find_first_of("/\\") != std::string::npos ||
+        id.find('\0') != std::string::npos || ec != std::errc{} || end != number.data() + number.size() ||
+        index > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) || number != std::to_string(index))
+        fail(Status::corrupt, "Invalid journal filename identity");
+    return {std::move(id), index, invalid};
+}
 } // namespace
 struct Store::Impl {
     std::filesystem::path root;
@@ -108,7 +141,33 @@ struct Store::Impl {
     mutable std::recursive_mutex mutex;
     Store::ObservationWriteCheckpoint observation_checkpoint;
     std::set<Id> observation_operations;
+    std::map<Id, uint64_t> journal_operations;
+    uint64_t next_journal_generation{};
+    [[noreturn]] void recovery_failed(const Id &id, std::exception_ptr primary) {
+        try {
+            Statement update(db, "UPDATE artifacts SET state=3 WHERE id=? AND state IN (0,1)");
+            update.text(1, id.value);
+            update.row();
+        } catch (...) {
+            // A failed cleanup transaction must not replace the initiating cause.
+            try {
+                std::rethrow_exception(primary);
+            } catch (const Failure &error) {
+                fail(error.error.code,
+                     error.error.message + "; recovery-state update also failed; reopen required",
+                     error.error.component);
+            }
+        }
+        std::rethrow_exception(primary);
+    }
+    void journal_owner(const Id &id, uint64_t generation) const {
+        auto current = journal_operations.find(id);
+        if (current == journal_operations.end() || current->second != generation)
+            fail(Status::busy, "Journal publication ownership changed");
+    }
     void observation_idle(const Id &id) const {
+        if (journal_operations.contains(id))
+            fail(Status::busy, "Journal publication operation in progress");
         if (observation_operations.contains(id))
             fail(Status::busy, "Observation artifact operation in progress");
     }
@@ -124,6 +183,39 @@ struct Store::Impl {
             impl.observation_operations.erase(id);
         }
         ObservationReservation(const ObservationReservation &) = delete;
+    };
+    // Caller holds mutex. The reservation spans unlocked I/O; no same-artifact
+    // writer/finalizer/recovery may take ownership until the owner has retired.
+    struct JournalReservation {
+        Impl &impl;
+        Id id;
+        uint64_t generation;
+        JournalReservation(Impl &owner, const Id &value) : impl(owner), id(value) {
+            impl.observation_idle(id);
+            if (impl.next_journal_generation == std::numeric_limits<uint64_t>::max())
+                fail(Status::busy, "Journal operation generation exhausted");
+            generation = ++impl.next_journal_generation;
+            impl.journal_operations.emplace(id, generation);
+        }
+        ~JournalReservation() {
+            std::lock_guard guard(impl.mutex);
+            auto current = impl.journal_operations.find(id);
+            if (current != impl.journal_operations.end() && current->second == generation)
+                impl.journal_operations.erase(current);
+        }
+        JournalReservation(const JournalReservation &) = delete;
+    };
+    struct JournalIO {
+        std::unique_lock<std::recursive_mutex> *guard;
+        explicit JournalIO(std::unique_lock<std::recursive_mutex> *lock) : guard(lock) {
+            if (guard)
+                guard->unlock();
+        }
+        ~JournalIO() {
+            if (guard)
+                guard->lock();
+        }
+        JournalIO(const JournalIO &) = delete;
     };
     struct RawTrace {
         std::array<int64_t, 6> stages{-1, -1, -1, -1, -1, -1};
@@ -263,6 +355,7 @@ struct Store::Impl {
                 RawStage stage(trace, 4);
                 if (initial)
                     MANTIS_STORAGE_POINT("raw-first-record-before", root, id.value);
+                MANTIS_STORAGE_POINT("raw-record-before", root, id.value);
                 segments::append(writer.output, packet);
             }
             writer.last_sequence = packet.header.sequence.value;
@@ -661,8 +754,12 @@ struct Store::Impl {
         return path;
     }
     void commit_chunk(const std::string &id, uint64_t index, const std::string &path, const std::string &hash,
-                      uint64_t bytes) {
+                      uint64_t bytes, const ArtifactDescriptor *journal_expected = nullptr) {
         Transaction txn(db);
+        // Close the check/BEGIN gap even against a competing SQLite writer.
+        // Ordinary segment writers keep their existing publication path.
+        if (journal_expected && journal_indexed(*journal_expected, index, path, hash, bytes))
+            fail(Status::corrupt, "Journal registration changed before commit");
         Statement add(db, "INSERT OR IGNORE INTO chunks(artifact,idx,path,hash,bytes) VALUES(?,?,?,?,?)");
         add.text(1, id);
         add.integer(2, index);
@@ -681,49 +778,205 @@ struct Store::Impl {
         txn.commit();
         MANTIS_STORAGE_POINT("chunk-committed", root, id);
     }
-    void replay_journal() {
-        for (auto &item : std::filesystem::directory_iterator(root / "journal")) {
-            if (item.path().extension() != ".json")
-                continue;
-            try {
-                std::ifstream in(item.path());
-                auto j = Json::parse(in);
-                auto id = j.at("id").get<std::string>();
-                auto artifact = get({id});
-                if (artifact.state == ArtifactState::finalized) {
-                    std::filesystem::remove(item.path());
+    bool journal_indexed(const ArtifactDescriptor &expected, uint64_t index, const std::string &path,
+                         const std::string &hash, uint64_t bytes) const {
+        const auto current = get(expected.id);
+        if (current.type.name != expected.type.name ||
+            current.type.schema_version != expected.type.schema_version || current.state != expected.state ||
+            current.chunks != expected.chunks || current.bytes != expected.bytes ||
+            current.hash != expected.hash ||
+            provenance_json(current.provenance) != provenance_json(expected.provenance))
+            fail(Status::corrupt, "Artifact metadata changed during journal publication");
+        Statement counts(
+            db, "SELECT COUNT(*),COALESCE(SUM(bytes),0),MIN(idx),MAX(idx) FROM chunks WHERE artifact=?");
+        counts.text(1, expected.id.value);
+        counts.row();
+        if (counts.integer(0) != current.chunks || counts.integer(1) != current.bytes ||
+            (current.chunks && (counts.integer(2) != 0 || counts.integer(3) != current.chunks - 1)))
+            fail(Status::corrupt, "Journal conflicts with committed prefix counters/order");
+        Statement indexed(db, "SELECT path,hash,bytes FROM chunks WHERE artifact=? AND idx=?");
+        indexed.text(1, expected.id.value);
+        indexed.integer(2, index);
+        const bool committed = indexed.row();
+        if (committed) {
+            if (indexed.text(0) != path || indexed.text(1) != hash || indexed.integer(2) != bytes ||
+                index >= current.chunks)
+                fail(Status::corrupt, "Journal conflicts with committed chunk metadata");
+        } else if (current.state == ArtifactState::finalized || index != current.chunks)
+            fail(Status::corrupt, "Journal would violate immutable contiguous chunk order");
+        return committed;
+    }
+    void replay_journal(std::optional<Id> only = {}, std::unique_lock<std::recursive_mutex> *guard = nullptr,
+                        const CancellationToken &token = {}, uint64_t generation = 0) {
+        try {
+            if (guard) {
+                if (!only || !guard->owns_lock() || !generation)
+                    fail(Status::invalid_argument, "Live journal replay requires locked artifact ownership");
+                journal_owner(*only, generation);
+            }
+            // Startup is unpublished and exclusively project-locked. Live
+            // callers additionally reserve this artifact while dropping mutex.
+            replay_journal_entries(only, guard, token, generation);
+        } catch (const Failure &error) {
+            if (error.error.code == Status::io || error.error.code == Status::busy)
+                fail(error.error.code, "Journal recovery incomplete; retry required: " + error.error.message,
+                     "store");
+            throw;
+        } catch (const std::filesystem::filesystem_error &error) {
+            fail(Status::io, "Journal recovery incomplete; retry required: " + error.code().message(),
+                 "store");
+        }
+    }
+    void replay_journal_entries(const std::optional<Id> &only, std::unique_lock<std::recursive_mutex> *guard,
+                                const CancellationToken &token, uint64_t generation) {
+        std::vector<std::pair<JournalName, std::filesystem::path>> journals;
+        {
+            JournalIO io(guard);
+            for (const auto &item : std::filesystem::directory_iterator(root / "journal")) {
+                const auto filename = item.path().filename().string();
+                if (!filename.ends_with(".json") && !filename.ends_with(".json.invalid"))
                     continue;
+                auto name = journal_name(item.path());
+                if (only && only->value == name.id && name.invalid)
+                    fail(Status::corrupt, "Recovery blocked by quarantined journal evidence");
+                if (!only || only->value == name.id)
+                    journals.emplace_back(std::move(name), item.path());
+            }
+            // Numeric order matters when more than one durable tail needs replay.
+            std::sort(journals.begin(), journals.end(), [](const auto &a, const auto &b) {
+                return std::tie(a.first.id, a.first.index, a.first.invalid) <
+                       std::tie(b.first.id, b.first.index, b.first.invalid);
+            });
+        }
+        for (const auto &[name, journal] : journals) {
+            token.check();
+            if (name.invalid) {
+                if (only)
+                    fail(Status::corrupt, "Recovery blocked by quarantined journal evidence");
+                continue;
+            }
+            const auto artifact = get({name.id});
+            std::string rel, hash;
+            uint64_t bytes{};
+            std::filesystem::path file, candidate;
+            bool invalid_evidence{};
+            {
+                JournalIO io(guard);
+                try {
+                    try {
+                        if (std::filesystem::is_symlink(std::filesystem::symlink_status(journal)))
+                            throw InvalidJournal("Journal must not be a symlink");
+                        std::ifstream in(journal, std::ios::binary);
+                        if (!in)
+                            fail(Status::io, "Cannot read journal; recovery incomplete, retry required");
+                        const auto size = std::filesystem::file_size(journal);
+                        // Read the immutable identity record exactly. Iterator EOF
+                        // can hide an operational read error as malformed JSON.
+                        if (size > 65536)
+                            throw InvalidJournal("Journal exceeds identity record bound");
+                        std::string text(static_cast<size_t>(size), '\0');
+                        in.read(text.data(), static_cast<std::streamsize>(text.size()));
+                        if (!in)
+                            fail(Status::io, "Journal read failed; recovery incomplete, retry required");
+                        const auto j = Json::parse(text);
+                        auto integer = [&](const char *key) {
+                            const auto &v = j.at(key);
+                            if (!v.is_number_integer() || (!v.is_number_unsigned() && v.get<int64_t>() < 0) ||
+                                v.get<uint64_t>() >
+                                    static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+                                throw InvalidJournal("Invalid journal integer");
+                            return v.get<uint64_t>();
+                        };
+                        if (j.at("id").get<std::string>() != name.id || integer("index") != name.index)
+                            throw InvalidJournal("Journal identity does not match filename");
+                        rel = j.at("path").get<std::string>();
+                        hash = j.at("hash").get<std::string>();
+                        bytes = integer("bytes");
+                        const bool observation = artifact.type.name == "org.mantis.LaserObservation";
+                        const auto expected = "objects/" + name.id + "/" + std::to_string(name.index) +
+                                              (observation ? ".observation" : ".packet");
+                        if (rel != expected || !bytes || hash.size() != 16 ||
+                            !std::all_of(
+                                hash.begin(), hash.end(),
+                                [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); }) ||
+                            (observation && (artifact.type.schema_version != 1 || name.index != 0)) ||
+                            (artifact.type.name == "org.mantis.RawCapture" &&
+                             artifact.type.schema_version != 1))
+                            throw InvalidJournal("Invalid journal path or artifact representation");
+                        file = root / rel;
+                        auto part = file;
+                        part += ".part";
+                        for (const auto &path : {root / "objects", file.parent_path(), file, part})
+                            if (std::filesystem::is_symlink(std::filesystem::symlink_status(path)))
+                                throw InvalidJournal("Journal object must not traverse symlinks");
+                        candidate = std::filesystem::exists(file) ? file : part;
+                        if (!std::filesystem::is_regular_file(candidate))
+                            throw InvalidJournal("Journal object is missing or not a regular file");
+                        MANTIS_STORAGE_POINT("journal-validate-before", root, name.id);
+                        if (std::filesystem::file_size(candidate) != bytes ||
+                            file_hash(candidate).hex != hash)
+                            throw InvalidJournal("Journal object size/hash mismatch");
+                        try {
+                            if (observation)
+                                (void)data::read_laser_observation(candidate);
+                            else
+                                (void)data::read_packet(candidate);
+                        } catch (const Failure &error) {
+                            if (error.error.code == Status::corrupt ||
+                                error.error.code == Status::invalid_argument ||
+                                error.error.code == Status::incompatible)
+                                throw InvalidJournal("Invalid journal object contents");
+                            throw;
+                        }
+                    } catch (const Json::exception &) {
+                        throw InvalidJournal("Malformed journal JSON/fields");
+                    }
+                } catch (const InvalidJournal &) {
+                    auto invalid = journal;
+                    invalid += ".invalid";
+                    if (std::filesystem::exists(invalid))
+                        fail(Status::corrupt, "Conflicting quarantined journal evidence");
+                    std::filesystem::rename(journal, invalid);
+                    platform::durable_directory(invalid.parent_path());
+                    if (only)
+                        fail(Status::corrupt, "Recovery blocked by invalid journal evidence");
+                    invalid_evidence = true;
                 }
-                auto rel = j.at("path").get<std::string>();
-                auto expected =
-                    "objects/" + id + "/" + std::to_string(j.at("index").get<uint64_t>()) +
-                    (artifact.type.name == "org.mantis.LaserObservation" ? ".observation" : ".packet");
-                if (rel != expected)
-                    fail(Status::corrupt, "Invalid journal path");
-                auto file = root / rel;
-                auto part = file;
-                part += ".part";
-                if (!std::filesystem::exists(file) && std::filesystem::exists(part) &&
-                    file_hash(part).hex == j.at("hash").get<std::string>()) {
-                    std::filesystem::rename(part, file);
-                    platform::durable_directory(file.parent_path());
+            }
+            if (invalid_evidence)
+                continue;
+            if (guard)
+                journal_owner({name.id}, generation);
+            token.check();
+            // Identical stale entries are cleanup-only. Conflicting metadata is
+            // not proof that the journal is corrupt: preserve both for diagnosis.
+            const bool committed = journal_indexed(artifact, name.index, rel, hash, bytes);
+            {
+                JournalIO io(guard);
+                if (candidate != file) {
+                    MANTIS_STORAGE_POINT("journal-rename-before", root, name.id);
+                    std::filesystem::rename(candidate, file);
+                    MANTIS_STORAGE_POINT("journal-renamed", root, name.id);
                 }
-                if (std::filesystem::exists(file) && file_hash(file).hex == j.at("hash").get<std::string>()) {
-                    if (artifact.type.name == "org.mantis.LaserObservation") {
-                        if (artifact.type.schema_version != 1 || j.at("index") != 0 ||
-                            j.at("bytes").get<uint64_t>() != std::filesystem::file_size(file))
-                            fail(Status::corrupt, "Invalid observation artifact journal");
-                        (void)data::read_laser_observation(file);
-                    } else
-                        (void)data::read_packet(file);
-                    commit_chunk(id, j.at("index"), rel, j.at("hash"), j.at("bytes"));
-                } else if (std::filesystem::exists(part))
-                    std::filesystem::remove(part);
-                std::filesystem::remove(item.path());
-            } catch (const std::exception &) {
-                auto bad = item.path();
-                bad += ".invalid";
-                std::filesystem::rename(item.path(), bad);
+                // Complete an interrupted rename/sync outside metadata ownership.
+                MANTIS_STORAGE_POINT("journal-sync-before", root, name.id);
+                platform::durable_directory(file.parent_path());
+            }
+            if (guard)
+                journal_owner({name.id}, generation);
+            // Cancellation cannot preempt an in-flight filesystem call. Its
+            // last pre-commit check linearizes before the SQLite transaction;
+            // a later cancellation may leave this one verified entry committed.
+            token.check();
+            if (journal_indexed(artifact, name.index, rel, hash, bytes) != committed)
+                fail(Status::corrupt, "Journal registration changed during file publication");
+            if (!committed)
+                commit_chunk(name.id, name.index, rel, hash, bytes, &artifact);
+            {
+                JournalIO io(guard);
+                token.check();
+                std::filesystem::remove(journal);
+                platform::durable_directory(journal.parent_path());
             }
         }
     }
@@ -810,6 +1063,7 @@ data::ProjectedCaptureHeader Store::capture_header(const Id &id) const {
 }
 void Store::append_bundle(const Id &id, const data::AcquisitionBundle &bundle) {
     std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
     auto it = impl_->writers.find(id);
     if (it == impl_->writers.end() || !it->second->bundles) {
         auto a = impl_->get(id);
@@ -853,6 +1107,7 @@ void Store::record_run_outcome(const Id &id, const data::ProjectedCaptureOutcome
     const auto &outcome = record.outcome;
     data::validate_run_outcome(outcome);
     std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
     auto a = impl_->get(id);
     if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3)
         fail(Status::incompatible, "Daemon outcome requires RawCapture 3");
@@ -1030,6 +1285,7 @@ void Store::initialize_provenance(const ArtifactId &id, Provenance provenance) {
 }
 void Store::initialize_projected_source_provenance(const ArtifactId &id, data::Metadata fields) {
     std::lock_guard guard(impl_->mutex);
+    impl_->observation_idle(id);
     auto a = impl_->get(id);
     auto writer = impl_->writers.find(id);
     if (a.type.name != "org.mantis.RawCapture" || a.type.schema_version != 3 ||
@@ -1105,6 +1361,9 @@ void Store::append(const Id &id, const data::Packet &packet) {
         return;
     }
     auto index = a.chunks;
+    const auto pending = impl_->root / "journal" / (id.value + "_" + std::to_string(index) + ".json");
+    if (std::filesystem::exists(pending) || std::filesystem::exists(pending.string() + ".invalid"))
+        fail(Status::busy, "Pending journal requires recovery before another append");
     auto rel = "objects/" + id.value + "/" + std::to_string(index) + ".packet";
     auto file = impl_->root / rel;
     auto part = file;
@@ -1237,19 +1496,35 @@ data::LaserObservation Store::laser_observation(const Id &id) const {
 ArtifactDescriptor Store::finalize(const Id &id, const CancellationToken &token) {
     return finalize_impl(id, token, false);
 }
-ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &token, bool recovery) {
+ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &token, bool recovery,
+                                        uint64_t journal_generation) {
     auto impl = impl_;
     std::unique_lock guard(impl->mutex);
-    impl->observation_idle(id);
+    std::optional<Impl::JournalReservation> operation;
+    if (journal_generation)
+        impl->journal_owner(id, journal_generation);
+    else {
+        operation.emplace(*impl, id);
+        journal_generation = operation->generation;
+    }
+    // A failed append may leave a durable, unindexed journal in this same Store.
+    // Never publish just its indexed prefix, including after an earlier quarantine.
+    try {
+        impl->replay_journal(id, &guard, token, journal_generation);
+    } catch (const Failure &primary) {
+        if (primary.error.code == Status::io || primary.error.code == Status::corrupt ||
+            primary.error.code == Status::cancelled) {
+            impl->writers.erase(id);
+            impl->recovery_failed(id, std::current_exception());
+        }
+        throw;
+    }
     auto a = impl->get(id);
     if (a.state == ArtifactState::finalized)
         fail(Status::invalid_argument, "Finalized artifacts are immutable");
     if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version != 1 && a.type.schema_version != 2 &&
         a.type.schema_version != 3)
         fail(Status::incompatible, "Unknown RawCapture schema");
-    std::unique_ptr<Impl::ObservationReservation> reservation;
-    if (a.type.name == "org.mantis.LaserObservation")
-        reservation = std::make_unique<Impl::ObservationReservation>(*impl, id);
     const bool projected = a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3;
     if (a.type.name == "org.mantis.LaserObservation" && (a.type.schema_version != 1 || a.chunks != 1))
         fail(Status::incompatible, "Observation artifacts require exactly one schema-1 observation");
@@ -1349,10 +1624,7 @@ ArtifactDescriptor Store::finalize_impl(const Id &id, const CancellationToken &t
             guard.lock();
         if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3)
             impl->writers.erase(id);
-        Statement update(impl->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
-        update.text(1, id.value);
-        update.row();
-        throw;
+        impl->recovery_failed(id, std::current_exception());
     }
 }
 ArtifactDescriptor Store::get(const Id &id) const {
@@ -1399,9 +1671,13 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
     impl_->observation_idle(id);
     const auto a = impl_->get(id);
     if (a.state != ArtifactState::recoverable) fail(Status::invalid_argument, "Artifact is not recoverable");
+    Impl::JournalReservation operation(*impl_, id);
+    // Retry journal publication while still RECOVERABLE. An operational replay
+    // failure must not require a second, potentially failing state transaction.
+    impl_->replay_journal(id, &guard, token, operation.generation);
     if (a.type.name == "org.mantis.LaserObservation") {
         guard.unlock();
-        return finalize_impl(id, token, true);
+        return finalize_impl(id, token, true, operation.generation);
     }
     {
         Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
@@ -1414,7 +1690,7 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
             else if (a.type.schema_version != 1)
                 fail(Status::incompatible, "Unknown RawCapture schema");
         }
-        auto finalized = finalize_impl(id, token, true);
+        auto finalized = finalize_impl(id, token, true, operation.generation);
         if (a.type.name == "org.mantis.RawCapture" && a.type.schema_version == 3) {
             const auto part = impl_->root / "objects" / id.value / "run.outcome.part";
             // A structurally incomplete provisional outcome was deliberately excluded from identity.
@@ -1427,10 +1703,7 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
         return finalized;
     } catch (...) {
         guard.lock();
-        Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=? AND state<>2");
-        update.text(1, id.value);
-        update.row();
-        throw;
+        impl_->recovery_failed(id, std::current_exception());
     }
 }
 void Store::prepare_finalize(const Id &id) {

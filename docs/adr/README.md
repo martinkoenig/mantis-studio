@@ -1,5 +1,13 @@
 # Architecture Decision Records
 
+- [ADR-044: Versioned live calibration observation sources](044-live-calibration-observation-sources.md)
+
+ADR-044 records the owner-approved CAL-01 choices. Its adoption is effective only
+after independent review, separately authorized merge and exact-integration
+acceptance; PR #104 remains DRAFT until review. It adds live-source versions
+without reinterpreting legacy RawCapture/calibration bytes or replacing physical
+M8 evidence. Implementation and hardware qualification remain separate.
+
 - [ADR-043: Projected-light recording uses opt-in RawCapture schema 3 and evidence-preserving replay](043-versioned-projected-light-recording-and-replay.md)
 - [ADR-042: Projected-light device and processing contracts use additive queried interfaces](042-additive-projected-light-plugin-contract.md)
 - [ADR-041: Laser observations and acquisition evidence are typed semantic boundaries](041-laser-observations-and-acquisition-evidence.md)

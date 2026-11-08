@@ -54,3 +54,12 @@ restores exact upstream references without recomputation.
 Focused controller tests, a real-daemon integration and an offscreen QML smoke
 exercise these boundaries. Studio OFF retains Qt-free daemon/client/calibration
 builds. See [Calibration workspace](../architecture/calibration-workspace.md).
+
+## CAL-01 versioned applicability
+
+The public-client-only, seven-stage, asynchronous and explicit-activation
+boundaries above remain unchanged. Once effective,
+[ADR-044](044-live-calibration-observation-sources.md) adds finalized live-source
+resume and explicit live-mode presentation; unsealed volatile work cannot be
+invented as durable restart evidence. Studio gains no capture/CV/Store ownership
+or workflow database.

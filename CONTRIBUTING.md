@@ -8,6 +8,11 @@ Measurement-critical and hot-path code is not accepted on happy-path functionali
 alone: failure semantics, bounded resources, diagnostics and relevant performance
 evidence are part of the feature contract.
 
+Before implementation and PR handoff, follow the binding
+[test-quality contract](docs/engineering/test-quality.md). It defines
+risk-proportionate test design and adversarial implementer self-review;
+the required checks below remain applicable.
+
 ## Required checks
 
 1. Build Studio and run `ctest --preset linux-debug`.
