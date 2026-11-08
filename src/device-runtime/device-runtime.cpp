@@ -296,11 +296,15 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
             first_ready_.notify_all();
         });
         std::unique_lock lock(mutex_);
-        if (!first_ready_.wait_for(lock, std::chrono::seconds(5),
-                                   [this] { return first_ || !error_.empty(); })) {
+        if (!MANTIS_SESSION_WAIT(first_ready_, lock, std::chrono::seconds(5),
+                                 [this] { return first_ || !error_.empty(); })) {
             lock.unlock();
+            MANTIS_SESSION_STARTUP_POINT("timeout-before-fail", *this);
             failed("Device did not provide an initial frame");
-            fail(Status::io, "Device did not provide an initial frame");
+            // All failures linearize at latch_error under mutex_. A worker
+            // accepted in the unlock boundary remains primary; if timeout won,
+            // a later worker/cleanup failure cannot replace it.
+            fail(Status::io, error());
         }
         if (!error_.empty())
             fail(Status::io, error_);
@@ -319,6 +323,7 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
         } catch (...) {
             // Failure-state evidence allocation cannot replace the exception.
         }
+        MANTIS_SESSION_STARTUP_POINT("startup-catch", *this);
         stop();
         std::rethrow_exception(original);
     }

@@ -92,7 +92,7 @@ export MANTIS_PORT=47321
 ./build/debug/bin/mantis-studio --ui-mode=live --workspace=acquisition
 ```
 
-The daemon listens on loopback and requires a token of at least 16 characters. This connects to a real runtime; it does not configure physical scanner hardware. The Virtual Scanner provides a synthetic frame-zero recipe/point-cloud/export demonstration; full-capture reconstruction remains a later milestone.
+The daemon listens on loopback and requires a token of at least 16 characters. This connects to a real runtime; it does not configure physical scanner hardware. The Virtual Scanner provides a synthetic frame-zero recipe/point-cloud/export demonstration; full-capture reconstruction remains a later milestone. The separately integrated [virtual acquisition rig](docs/plugin-development/virtual-rig.md) supports explicit profiles for deterministic camera/clock/fault simulation and recording/replay tests. It is software simulation, not physical scanning or sustained-throughput qualification.
 
 Closing Studio does not stop the daemon or an active capture. After stopping any capture, shut down from the same shell:
 
@@ -103,7 +103,7 @@ Closing Studio does not stop the daemon or an active capture. After stopping any
 
 For physical acquisition, review the camera/bus assignments and set an explicit `MANTIS_X1_PROFILE` in the daemon environment **before** starting `mantisd`. Follow the [X1/Q6A acquisition procedure](docs/hardware/x1-q6a-acquisition-validation.md) and [acquisition review](docs/architecture/v0.2-acquisition-review.md); requested frame rate, observed rate and physical exposure synchronization are separate claims. [ADR-026](docs/adr/026-bounded-software-observation-pairing.md) defines the bounded software correspondence policy. Test-only fake modes do not qualify hardware.
 
-For automation and extensions, start with the [C++ / Python Client SDK](docs/client-sdk/README.md), [plugin guide](docs/plugin-development/README.md) and [custom sensor guide](docs/plugin-development/custom-sensors.md).
+For currently implemented automation and extension interfaces, start with the [C++ / Python Client SDK](docs/client-sdk/README.md) and [plugin guide](docs/plugin-development/README.md). The [custom sensor guide](docs/plugin-development/custom-sensors.md) describes accepted future architecture; its example APIs are not yet available.
 
 ## Development status
 
@@ -112,10 +112,12 @@ The [`develop`](https://github.com/martinkoenig/mantis-studio/tree/develop) bran
 | Area | Delivered scope and remaining gates |
 | --- | --- |
 | Runtime foundation | Daemon, plugins, typed artifacts, jobs, clients and Studio foundation are implemented and independently accepted within their documented scope. |
-| Linux acquisition | Dual-OV9281 recording/replay has documented Q6A hardware acceptance. Synchronization, optical exposure skew, sustained external-storage throughput and other physical claims require their own evidence. |
+| Linux acquisition | Dual-OV9281 recording/replay has documented Q6A hardware acceptance. Synchronization, optical exposure skew, sustained external-storage throughput and other physical claims require their own evidence. Full-rate 120 FrameSets/s / 276.48 MB/s recording is not qualified. |
 | Geometric calibration | Camera/stereo calibration and Studio workflow are implemented; real-hardware calibration acceptance remains pending. |
 | Projected-light acquisition | Software semantics, evidence/storage and hardware-free fixtures have package-specific acceptance. Further qualification is incomplete and physical projected-light enablement remains blocked. |
 | Desktop workspaces | Home, Projects, Devices, Scan and Classic Acquisition are implemented. Latest UI corrections retain independent review gates; illustrative content and unsupported actions remain explicitly identified. |
+
+The reference Qt 6.4.2 runtime has a [known leak and release-qualification blocker](https://github.com/martinkoenig/mantis-studio/issues/39); a qualified migration/security fix has not been delivered. The opt-in [virtual-rig scene v2](docs/plugin-development/virtual-rig-scene.md) is integrated, with a shared synthetic scene and bounded optical controls. These software fixtures do not qualify physical optics or full-rate recording; production laser-line extraction and metric geometry remain separate roadmap work.
 
 **Not yet delivered as a complete workflow:** production laser-line extraction, metric laser triangulation, moving-scan registration/fusion, meshing and independently validated dimensional accuracy. These remain future roadmap work. Software tests and low calibration residuals do not establish physical scanner accuracy or production readiness.
 
@@ -134,7 +136,9 @@ The [`develop`](https://github.com/martinkoenig/mantis-studio/tree/develop) bran
 
 ## Contributing
 
-Contributions to documentation, reproducible bug reports, tests and device integrations are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for architectural boundaries and required validation, and use [GitHub Issues](https://github.com/martinkoenig/mantis-studio/issues) for bugs and feature discussions. Report security concerns through [SECURITY.md](SECURITY.md).
+Contributions to documentation, reproducible bug reports, tests and device integrations are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for architectural boundaries and required validation, and use [GitHub Issues](https://github.com/martinkoenig/mantis-studio/issues) for bugs and feature discussions.
+
+Read [SECURITY.md](SECURITY.md) for the security model. Private vulnerability reporting is enabled: open this repository's **Security and quality** tab and select **Report a vulnerability**. Follow [GitHub's private-reporting instructions](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/report-privately). Do not disclose sensitive vulnerability details, secrets or exploit payloads in public issues.
 
 ## Support development
 
@@ -148,4 +152,4 @@ Support is optional. Contributions, testing and feedback are also valuable, and 
 
 ## License
 
-Mantis Studio is licensed under the [Apache License 2.0](LICENSE).
+Mantis Studio is licensed under the [Apache License 2.0](LICENSE), which permits commercial use under its terms. The [Free / Pro policy](docs/product/editions.md) preserves full supported core capability in Free as features are implemented; future Pro modules are planned as separately distributed additions, not artificial limits on Free.

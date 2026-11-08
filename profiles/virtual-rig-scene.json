@@ -1,0 +1,183 @@
+{
+  "version": 2,
+  "id": "calibrated-stereo",
+  "mode": "trigger",
+  "seed": 17,
+  "width": 64,
+  "height": 48,
+  "format": "GREY",
+  "stride": 64,
+  "capacity": 4,
+  "tolerance_ns": 5000000,
+  "calibration_id": "org.mantis.virtual-rig.scene-v1",
+  "calibration_revision": 1,
+  "cameras": [
+    {
+      "id": "left-camera",
+      "role": "left",
+      "stream": "left-image",
+      "clock": "org.mantis.virtual-rig.left",
+      "rate_num": 30,
+      "rate_den": 1,
+      "phase_ns": 0,
+      "latency_ns": 0,
+      "offset_ns": 0,
+      "drift_ppm": 0,
+      "jitter_ns": 0,
+      "delivery_ns": 1000000,
+      "comparable": true
+    },
+    {
+      "id": "right-camera",
+      "role": "right",
+      "stream": "right-image",
+      "clock": "org.mantis.virtual-rig.right",
+      "rate_num": 30,
+      "rate_den": 1,
+      "phase_ns": 0,
+      "latency_ns": 0,
+      "offset_ns": 0,
+      "drift_ppm": 0,
+      "jitter_ns": 0,
+      "delivery_ns": 1000000,
+      "comparable": true
+    }
+  ],
+  "faults": [],
+  "scene": {
+    "version": 1,
+    "frame": "rig-body",
+    "near_mm": 1,
+    "far_mm": 1920,
+    "motion": {
+      "amplitude_mm": 0,
+      "period_ns": 1000000000
+    },
+    "surfaces": [
+      {
+        "center_mm": [
+          0,
+          640,
+          0
+        ],
+        "half_extent_mm": [
+          400,
+          300
+        ],
+        "level_dn": 101,
+        "feature_center_xz_mm": [
+          40,
+          0
+        ],
+        "feature_half_extent_mm": [
+          5,
+          5
+        ],
+        "feature_level_dn": 1001
+      },
+      {
+        "center_mm": [
+          -100,
+          320,
+          0
+        ],
+        "half_extent_mm": [
+          60,
+          80
+        ],
+        "level_dn": 403,
+        "feature_center_xz_mm": [
+          -100,
+          0
+        ],
+        "feature_half_extent_mm": [
+          5,
+          5
+        ],
+        "feature_level_dn": 803
+      }
+    ],
+    "cameras": [
+      {
+        "camera_id": "org.mantis.virtual-rig:calibrated-stereo/left-camera",
+        "width": 64,
+        "height": 48,
+        "fx": 64,
+        "fy": 64,
+        "cx": 32,
+        "cy": 24,
+        "lens": "pinhole",
+        "brown5": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "T_camera_from_scene": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -1,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        "integration_ns": 1000000,
+        "gain": 1,
+        "read_noise_dn": 0,
+        "shot_noise": 0,
+        "row_time_ns": 0
+      },
+      {
+        "camera_id": "org.mantis.virtual-rig:calibrated-stereo/right-camera",
+        "width": 64,
+        "height": 48,
+        "fx": 64,
+        "fy": 64,
+        "cx": 32,
+        "cy": 24,
+        "lens": "pinhole",
+        "brown5": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "T_camera_from_scene": [
+          1,
+          0,
+          0,
+          -40,
+          0,
+          0,
+          -1,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        "integration_ns": 1000000,
+        "gain": 1,
+        "read_noise_dn": 0,
+        "shot_noise": 0,
+        "row_time_ns": 0
+      }
+    ]
+  }
+}
