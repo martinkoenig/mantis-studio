@@ -25,9 +25,9 @@ Configuration configuration() {
     // This target has no Linux backend linked. Missing opt-in cannot fall back.
     if (!fake || !*fake)
         throw std::runtime_error("X1 fixture requires explicit MANTIS_X1_FAKE");
-    return {x1::load_profile(path), x1::fake_backend(fake)};
+    return {x1::load_profile(path, true), x1::fake_backend(fake)};
 #else
-    return {x1::load_profile(path), fake && *fake ? x1::fake_backend(fake) : x1::linux_backend()};
+    return {x1::load_profile(path, true), fake && *fake ? x1::fake_backend(fake) : x1::linux_backend()};
 #endif
 }
 std::string identity(const x1::CameraInfo &c) {
@@ -58,6 +58,11 @@ int enumerate(MantisDiscoverEmitV1 emit, void *ctx) noexcept {
                                                      ? "hardware sync configured"
                                                      : "hardware sync not configured"}};
         info["backend"] = std::getenv("MANTIS_X1_FAKE") ? "deterministic fixture" : "Linux V4L2";
+        if (!config.profile.role_base_digest.empty()) {
+            info["x1_role_base_digest"] = config.profile.role_base_digest;
+            info["x1_role_generation"] = std::to_string(config.profile.role_generation);
+            info["x1_role_swapped"] = config.profile.role_swapped ? "true" : "false";
+        }
         auto metadata = Json(info).dump();
         MantisDiscoveredDeviceV1 d{sizeof(d),   1, parent.c_str(),  "", "Mantis X1",
                                    parent_caps, 1, metadata.c_str()};
@@ -69,6 +74,8 @@ int enumerate(MantisDiscoverEmitV1 emit, void *ctx) noexcept {
                                           {"identity", identity(cameras[i])},
                                           {"video_node", cameras[i].video},
                                           {"sensor", cameras[i].sensor},
+                                          {"bus", cameras[i].bus},
+                                          {"route", Json(cameras[i].route).dump()},
                                           {"width", std::to_string(config.profile.mode.width)},
                                           {"height", std::to_string(config.profile.mode.height)},
                                           {"fourcc", config.profile.mode.fourcc},
@@ -210,12 +217,16 @@ int open_device(const MantisHostV1 *host, const char *id, void **out) noexcept {
         device->host = host;
         {
             std::lock_guard lock(ownership_mutex);
-            if (owned_parents.contains(id)) {
+            std::array<std::array<std::string, 2>, 2> physical{
+                {{cameras[0].bus, cameras[0].sensor}, {cameras[1].bus, cameras[1].sensor}}};
+            std::sort(physical.begin(), physical.end());
+            const auto key = Json(physical).dump();
+            if (owned_parents.contains(key)) {
                 result = 3;
                 return;
             }
-            device->owned_parent = id;
-            owned_parents.insert(id);
+            device->owned_parent = key;
+            owned_parents.insert(key);
         }
         device->config = std::move(config);
         device->cameras = std::move(cameras);

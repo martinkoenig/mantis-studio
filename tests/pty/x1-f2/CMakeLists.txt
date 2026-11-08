@@ -50,7 +50,7 @@ add_library(mantis-x1-f2-pty-fixture MODULE ../../fixtures/x1-f2/plugin.cpp
   ${PROJECT_SOURCE_DIR}/plugins/first-party/devices/x1/media.cpp
   ${PROJECT_SOURCE_DIR}/plugins/first-party/devices/x1/fake.cpp)
 target_compile_definitions(mantis-x1-f2-pty-fixture PRIVATE MANTIS_X1_F2_PTY_FIXTURE)
-target_link_libraries(mantis-x1-f2-pty-fixture PRIVATE mantis-x1-f2-pty-backend mantis-sdk-cpp
+target_link_libraries(mantis-x1-f2-pty-fixture PRIVATE mantis-x1-role-config mantis-x1-f2-pty-backend mantis-sdk-cpp
   mantis-options nlohmann_json::nlohmann_json Threads::Threads)
 set_target_properties(mantis-x1-f2-pty-fixture PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/x1-f2-pty-plugins)
 file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/x1-f2-pty-plugins/x1.json CONTENT

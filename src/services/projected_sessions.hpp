@@ -10,8 +10,12 @@ class ProjectedSessions {
 
   public:
     using EventSink = std::function<void(std::string, std::string, std::string)>;
-    ProjectedSessions(plugins::Registry &, jobs::Manager &, std::shared_ptr<artifact::Store>, EventSink);
+    ProjectedSessions(plugins::Registry &, jobs::Manager &, std::shared_ptr<artifact::Store>, EventSink,
+                      std::function<void(std::string_view)> checkpoint = {});
     ~ProjectedSessions();
+    // Close producer admission and stop/join recorders without destroying snapshots
+    // still referenced by retiring Jobs. The Manager must remain live for this phase.
+    void quiesce();
     std::vector<ProjectedDeviceInfo> devices() const;
     device::ProjectedValidation validate(const ProjectedCaptureRequest &);
     ProjectedCaptureInfo start(const ProjectedCaptureRequest &, const std::string &);

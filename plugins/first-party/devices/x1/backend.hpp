@@ -35,12 +35,15 @@ struct Profile {
     uint64_t calibration_revision{};
     std::string json;
     uint32_t format_version{1};
+    std::string role_base_digest;
+    uint64_t role_generation{};
+    bool role_swapped{};
     std::array<std::vector<std::string>, 2> routes;
     std::string media_bus_code;
     std::optional<int32_t> vertical_blanking;
     bool disable_conflicting_links{};
 };
-Profile load_profile(const std::string &path);
+Profile load_profile(const std::string &path, bool use_role_override = false);
 std::array<CameraInfo, 2> assign(const Profile &, const std::vector<CameraInfo> &);
 struct FrameView {
     std::span<const std::byte> bytes;

@@ -94,3 +94,13 @@ projected_fields = {
 }
 for name, expected in projected_fields.items():
     assert {f.name: f.number for f in wire.DESCRIPTOR.message_types_by_name[name].fields} == expected
+
+# CAL-03 role configuration remains additive and contains no arbitrary path command.
+for number, name in ((80, 'x1_role_query'), (81, 'x1_role_validate'), (82, 'x1_role_apply')):
+    assert wire.Request.DESCRIPTOR.fields_by_name[name].number == number
+assert wire.Response.DESCRIPTOR.fields_by_name['x1_roles'].number == 31
+assert wire.X1RoleRequest.DESCRIPTOR.fields_by_name['swapped'].has_presence
+assert wire.X1RoleRequest.DESCRIPTOR.fields_by_name['expected_generation'].has_presence
+assert set(wire.X1RoleRequest.DESCRIPTOR.fields_by_name) == {
+    'schema_version', 'expected_generation', 'discovery_token', 'parent_id', 'swapped'}
+print('CAL-03 Request 80..82 / Response 31 and explicit desired-state presence verified')

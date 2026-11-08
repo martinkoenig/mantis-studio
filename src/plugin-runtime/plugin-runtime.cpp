@@ -548,7 +548,13 @@ std::vector<PluginStatus> Registry::statuses() const {
 }
 std::vector<std::unique_ptr<device::ImageStream>> Registry::devices() {
     std::vector<std::unique_ptr<device::ImageStream>> out;
-    for (auto &[id, e] : entries_) {
+    std::vector<std::pair<std::string, std::shared_ptr<Entry>>> entries;
+    {
+        std::lock_guard lock(mutex_);
+        for (const auto &[id, e] : entries_)
+            entries.emplace_back(id, e);
+    }
+    for (auto &[id, e] : entries) {
         if (e->manifest.kind != "device" || !e->loaded || e->state != "registered") continue;
         try {
             if (!e->loaded->api()->query_interface(MANTIS_ACQUISITION_V1)) {
@@ -567,7 +573,10 @@ std::vector<std::unique_ptr<device::ImageStream>> Registry::devices() {
                 (void)api->diagnostics(nullptr, emit, &diagnostic);
                 fail(Status::plugin_failed, "Acquisition discovery failed: " + discovery.error + " " + diagnostic["error"]);
             }
-            e->diagnostic.clear();
+            {
+                std::lock_guard lock(mutex_);
+                e->diagnostic.clear();
+            }
             for (auto &d : discovery.devices) d.plugin_id = id;
             for (auto &d : discovery.devices) {
                 if (std::find(d.capabilities.begin(), d.capabilities.end(), device::frameset_stream) == d.capabilities.end()) continue;
@@ -578,7 +587,10 @@ std::vector<std::unique_ptr<device::ImageStream>> Registry::devices() {
                 out.push_back(std::make_unique<Acquisition>(e->loaded, d, std::move(children)));
             }
         } catch (const std::exception &ex) {
-            e->diagnostic = ex.what();
+            {
+                std::lock_guard lock(mutex_);
+                e->diagnostic = ex.what();
+            }
             if (logger_) logger_({"error", "discovery", id + ": " + ex.what()});
         }
     }
@@ -745,9 +757,9 @@ pipeline::SemanticNode Registry::semantic_node(const std::string &id, uint32_t m
                             }
                         } cleanup{dir};
                         data::write_semantic_packet(dir / "input.semantic", *inputs[0]);
-                        // Parent enforces a finite lifetime even if an isolated plugin violates its callback
-                        // deadline.
-                        auto seconds = std::chrono::seconds((ms + 999) / 1000 + 1);
+                            // Parent enforces a finite lifetime even if an isolated plugin violates its
+                            // callback deadline.
+                            auto seconds = std::chrono::seconds((ms + 999) / 1000 + 1);
                         plugin_invoked = true;
                         auto rc = platform::run_process(
                             context->host,

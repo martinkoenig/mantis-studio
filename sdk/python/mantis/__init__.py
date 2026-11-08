@@ -75,6 +75,30 @@ class _Replay:
         return Job(self.client, result.result_id)
     def verify(self, artifact, *, timeout=3600): return self.start(artifact, verify=True).wait_report(timeout)
 
+class _X1Roles:
+    """Explicit desired mapping against a queried generation; validate/apply return daemon Jobs."""
+    def __init__(self, client): self.client = client
+    def query(self):
+        response = self.client._call(x1_role_query=wire.X1RoleQuery(schema_version=1))
+        if not response.HasField('x1_roles') or response.x1_roles.schema_version != 1:
+            raise MantisError('Peer does not provide X1 role configuration v1', component='protocol')
+        return response.x1_roles
+    @staticmethod
+    def _request(state, swapped):
+        if not isinstance(swapped, bool) or state.schema_version != 1:
+            raise ValueError('Expected role state v1 and explicit desired swapped boolean')
+        return wire.X1RoleRequest(schema_version=1, expected_generation=state.generation,
+                                  discovery_token=state.discovery_token, parent_id=state.parent_id,
+                                  swapped=swapped)
+    def validate(self, state, *, swapped):
+        response = self.client._call(x1_role_validate=self._request(state, swapped))
+        if not response.result_id: raise MantisError('Peer omitted X1 validation Job', component='protocol')
+        return Job(self.client, response.result_id)
+    def apply(self, state, *, swapped):
+        response = self.client._call(x1_role_apply=self._request(state, swapped))
+        if not response.result_id: raise MantisError('Peer omitted X1 apply Job', component='protocol')
+        return Job(self.client, response.result_id)
+
 class _Devices:
     def __init__(self, client): self.client = client
     def list(self): return list(self.client._call(devices_list=wire.Empty()).devices)
@@ -122,6 +146,7 @@ class Client:
         self.devices, self.capture = _Devices(self), _Capture(self)
         self.pipeline, self.artifacts = _Pipeline(self), _Artifacts(self)
         self.replay = _Replay(self)
+        self.x1_roles = _X1Roles(self)
         self.calibration = Calibration(self)
     @staticmethod
     def _receive(sock, count):

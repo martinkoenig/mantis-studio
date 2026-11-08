@@ -5,6 +5,7 @@
 #include <mantis/device_api.hpp>
 #include <mantis/jobs.hpp>
 #include <mantis/projected_light_service.hpp>
+#include <mantis/x1_role_service.hpp>
 namespace mantis::artifact { class Store; }
 namespace mantis::services {
 struct CaptureInfo {
@@ -82,6 +83,9 @@ struct Configuration {
     std::vector<std::string> approved_in_process;
     // Injectable monotonic lease clock; default is steady_clock, with the same finite lease policy.
     std::function<std::chrono::steady_clock::time_point()> preview_clock{};
+    std::filesystem::path x1_role_state_dir{};
+    // Private deterministic I/O/lifetime qualification seam, never exposed over the protocol.
+    std::function<void(std::string_view)> x1_role_checkpoint{};
 };
 class Runtime final : public DeviceService,
                       public CaptureService,
@@ -102,6 +106,9 @@ class Runtime final : public DeviceService,
     // Internal persistence seam; intentionally absent from service/protocol/client APIs.
     std::shared_ptr<artifact::Store> project_store() const;
     std::vector<device::Descriptor> devices() const override;
+    X1RoleInfo x1_roles() const;
+    Id validate_x1_roles(const X1RoleRequest &);
+    Id apply_x1_roles(const X1RoleRequest &);
     CaptureInfo start_capture(const std::vector<Id> &) override;
     CaptureInfo stop_capture(const Id &) override;
     std::vector<CaptureInfo> captures() const override;

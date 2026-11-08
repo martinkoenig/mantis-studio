@@ -1,23 +1,38 @@
 #include "backend.hpp"
 #include "pairing.hpp"
+#include "role_config.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <stdexcept>
 #include <set>
+#include <stdexcept>
 namespace x1 {
 int64_t monotonic_ns() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
-Profile load_profile(const std::string &path) {
-    std::ifstream input(path);
-    if (!input) throw std::runtime_error("Cannot read X1 profile: " + path);
-    auto j = nlohmann::json::parse(input);
+Profile load_profile(const std::string &path, bool use_role_override) {
+    nlohmann::json j;
+    std::optional<roles::Resolved> override;
+    if (const auto root = std::getenv("MANTIS_X1_ROLE_STATE_DIR"); use_role_override && root && *root) {
+        override = roles::resolve(root, roles::read_profile(path));
+        j = override->profile;
+    } else {
+        std::ifstream input(path);
+        if (!input)
+            throw std::runtime_error("Cannot read X1 profile: " + path);
+        j = nlohmann::json::parse(input);
+    }
     if (j.at("format_version") != 1 && j.at("format_version") != 2)
         throw std::runtime_error("Unsupported X1 profile version");
     Profile p;
     p.format_version = j.at("format_version");
+    if (override) {
+        p.role_base_digest = override->base_digest;
+        p.role_generation = override->mapping.generation;
+        p.role_swapped = override->mapping.swapped;
+    }
     for (size_t i = 0; i < 2; ++i) {
         const auto &camera = j.at("measurement_cameras").at(i == 0 ? "left" : "right");
         p.sensors[i] = camera.at("sensor_identity");
@@ -67,7 +82,8 @@ Profile load_profile(const std::string &path) {
     if (p.stall_ms < 100 || p.stall_ms > 10000 || p.max_timestamp_delta_ns < 0)
         throw std::runtime_error("Invalid pairing limits");
     if (!p.hardware_sync_configured && static_cast<uint64_t>(p.max_timestamp_delta_ns) < nominal_half_period_ns(p.mode.fps))
-        throw std::runtime_error("Software pairing tolerance must cover half the requested frame period; review max_v4l2_delta_ns");
+        throw std::runtime_error("Software pairing tolerance must cover half the requested frame period; "
+                                 "review max_v4l2_delta_ns");
     p.calibration_id = j.value("calibration_id", "");
     p.calibration_revision = j.value("calibration_revision", uint64_t{});
     p.json = j.dump();

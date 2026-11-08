@@ -301,10 +301,12 @@ void source_error_survives_diagnostics() {
     CHECK(ready.wait_for(std::chrono::seconds(1)) == std::future_status::ready);
     stopping = std::async(std::launch::async, [&] { healthy.stop(); });
     CHECK(inactive(healthy));
+    CHECK(!healthy.retired());
     emit.open();
     CHECK(stopping.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
     stopping.get();
     CHECK(healthy.error().empty());
+    CHECK(healthy.retired());
     CHECK(healthy.produced() == 2 && healthy.committed() == 2);
     CHECK(!source.running && source.stops == 2);
 }
@@ -489,14 +491,17 @@ int main(int argc, char **argv) {
         while (session.active() && std::chrono::steady_clock::now() < stop_deadline)
             std::this_thread::yield();
         const bool stop_requested = !session.active();
+        const bool prematurely_retired = session.retired();
         writer.open();
         producer.open();
         CHECK(stop_requested);
+        CHECK(!prematurely_retired);
         CHECK(stopping.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
         stopping.get();
         CHECK(session.metrics().dropped == 0);
         CHECK(session.error().empty());
         CHECK(session.produced() == session.committed());
+        CHECK(session.retired());
         // Stop arrives while the next observation is inside acquisition. The
         // observation must be enqueued and drained, rather than cancelled away.
         Source finishing;

@@ -66,6 +66,10 @@ class Session {
     bool active() const {
         return active_.load();
     }
+    bool retired() const {
+        std::lock_guard lock(mutex_);
+        return timing_.cleanup_finished >= 0 && timing_.cleanup_errors == 0;
+    }
     std::string error() const;
     data::Metadata diagnostics() const;
     data::Published preview();

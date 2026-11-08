@@ -100,6 +100,8 @@ struct ProjectedSessions::Impl {
     jobs::Manager &jobs;
     std::shared_ptr<artifact::Store> store;
     EventSink event;
+    std::function<void(std::string_view)> checkpoint;
+    bool quiescing{}, quiesced{}; // Serialized control admission; snapshots remain readable.
     struct Session {
         mutable std::mutex mutex;
         ProjectedCaptureInfo info;
@@ -154,15 +156,42 @@ struct ProjectedSessions::Impl {
     std::map<Id, std::shared_ptr<Session>> sessions;
     std::map<Id, std::shared_ptr<Replay>> replays;
     std::vector<device::Descriptor> cameras;
-    Impl(plugins::Registry &r, jobs::Manager &j, std::shared_ptr<artifact::Store> s, EventSink e)
-        : registry(r), jobs(j), store(std::move(s)), event(std::move(e)) {}
-    ~Impl() {
+    Impl(plugins::Registry &r, jobs::Manager &j, std::shared_ptr<artifact::Store> s, EventSink e,
+         std::function<void(std::string_view)> observer)
+        : registry(r), jobs(j), store(std::move(s)), event(std::move(e)), checkpoint(std::move(observer)) {}
+    void observe(std::string_view phase) noexcept {
+        try {
+            if (checkpoint)
+                checkpoint(phase);
+        } catch (...) {
+            // A qualification observer must not replace a recorder's initiating error
+            // or prevent actual resource retirement.
+            try {
+                event("error", "projected-shutdown", "Lifetime checkpoint observer failed");
+            } catch (...) {
+            }
+        }
+    }
+    void admit() const {
+        if (quiescing)
+            fail(Status::busy, "Projected producer admission is closed for shutdown");
+    }
+    void quiesce() {
+        if (quiesced)
+            return;
+        quiescing = true;
+        observe("projected.quiesce");
         // Stop bypasses recorder I/O; join all public calls/recorders before releasing executors.
         for (auto &[id, s] : sessions)
             s->run->stop();
         for (auto &[id, s] : sessions)
             if (s->recorder.joinable())
                 s->recorder.join();
+        quiesced = true;
+        observe("projected.producers.retired");
+    }
+    ~Impl() {
+        quiesce();
     }
     std::shared_ptr<Session> find(const Id &id) const {
         auto it = sessions.find(id);
@@ -225,8 +254,12 @@ struct ProjectedSessions::Impl {
     void record(const std::shared_ptr<Session> &s) {
         struct Done {
             Session &s;
-            ~Done() { s.recorder_done = true; }
-        } done{*s};
+            Impl &owner;
+            ~Done() {
+                owner.observe("projected.recorder.body.retired");
+                s.recorder_done = true;
+            }
+        } done{*s, *this};
         bool healthy = true, terminal_reported = false;
         auto report_terminal = [&] {
             const auto final = s->run->snapshot();
@@ -287,6 +320,8 @@ struct ProjectedSessions::Impl {
                 s->info.storage_state = a.state;
             }
             event("projected.finalizing", "projected", s->info.id.value);
+            if (checkpoint)
+                checkpoint("projected.finalize.submit");
             auto lease = std::make_shared<FinalizationLease>(store, s, event);
             auto id = jobs.submit("Finalize projected RawCapture",
                                   [storage = store, raw, notify = event, s,
@@ -345,9 +380,13 @@ struct ProjectedSessions::Impl {
     }
 };
 ProjectedSessions::ProjectedSessions(plugins::Registry &r, jobs::Manager &j,
-                                     std::shared_ptr<artifact::Store> s, EventSink e)
-    : impl_(std::make_unique<Impl>(r, j, std::move(s), std::move(e))) {}
+                                     std::shared_ptr<artifact::Store> s, EventSink e,
+                                     std::function<void(std::string_view)> checkpoint)
+    : impl_(std::make_unique<Impl>(r, j, std::move(s), std::move(e), std::move(checkpoint))) {}
 ProjectedSessions::~ProjectedSessions() = default;
+void ProjectedSessions::quiesce() {
+    impl_->quiesce();
+}
 std::vector<ProjectedDeviceInfo> ProjectedSessions::devices() const { return impl_->devices(); }
 bool ProjectedSessions::active(const std::string &plugin) const {
     for (const auto &[id, s] : impl_->sessions)
@@ -366,6 +405,7 @@ void ProjectedSessions::check_camera(const std::vector<device::Descriptor> &reso
                     fail(Status::busy, "Camera resource belongs to projected run");
 }
 device::ProjectedValidation ProjectedSessions::validate(const ProjectedCaptureRequest &q) {
+    impl_->admit();
     auto g = impl_->graph(q);
     auto p = impl_->program(q);
     impl_->ownership(q.plugin_id, g);
@@ -382,6 +422,7 @@ device::ProjectedValidation ProjectedSessions::validate(const ProjectedCaptureRe
         impl_->registry.open_projected_light(q.plugin_id, q.parent, 100), std::move(p), q.config);
 }
 ProjectedCaptureInfo ProjectedSessions::start(const ProjectedCaptureRequest &q, const std::string &request) {
+    impl_->admit();
     bounded_id(request);
     auto p = impl_->program(q);
     std::optional<Id> source;
@@ -506,6 +547,7 @@ std::shared_ptr<const data::AcquisitionBundle> ProjectedSessions::latest(const I
     return s->latest;
 }
 Id ProjectedSessions::replay(const Id &id, bool paced, bool verify) {
+    impl_->admit();
     if (impl_->replays.size() >= 64)
         fail(Status::busy, "Projected replay history capacity reached");
     auto preview = std::make_shared<Impl::Replay>();

@@ -43,6 +43,9 @@ class Client {
     std::optional<wire::v1::ActiveCalibrationBinding> active_calibration(const std::string &device) const;
     void activate_calibration(const std::string &device, const std::string &rig) const;
     void clear_calibration(const std::string &device) const;
+    wire::v1::X1RoleInfo x1_roles() const;
+    std::string validate_x1_roles(const wire::v1::X1RoleRequest &) const;
+    std::string apply_x1_roles(const wire::v1::X1RoleRequest &) const;
     std::vector<wire::v1::Device> devices() const;
     std::string start_capture(const std::vector<std::string> &) const;
     wire::v1::Capture capture_status(const std::string &) const;

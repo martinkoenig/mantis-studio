@@ -22,7 +22,8 @@ Manager::Manager(LogSink logger) : logger_(std::move(logger)) {
                                 std::lock_guard lock(mutex_);
                                 job->snapshot.progress = std::clamp(progress, 0.0, 1.0);
                                 job->snapshot.status = std::move(status);
-                            }};
+                            },
+                            job->snapshot.id};
             try {
                 context.cancellation.check();
                 auto result = job->task(context);
@@ -40,30 +41,47 @@ Manager::Manager(LogSink logger) : logger_(std::move(logger)) {
                 job->snapshot.state = State::failed;
                 job->snapshot.diagnostics = e.what();
             }
+            Task retired;
+            LogRecord record;
             {
                 std::lock_guard lock(mutex_);
-                job->task = {};
-                if (logger_)
-                    logger_({job->snapshot.state == State::failed ? "error" : "info", "jobs",
+                retired = std::move(job->task);
+                record = {job->snapshot.state == State::failed ? "error" : "info", "jobs",
                              job->snapshot.id.value + ": " + state_name(job->snapshot.state) + " " +
-                                 job->snapshot.diagnostics});
+                                 job->snapshot.diagnostics};
+            }
+            // Diagnostics may perform I/O. Status/cancel must not wait for that I/O.
+            // Retain captured ownership permits until logging and actual task retirement.
+            if (logger_) {
+                try {
+                    logger_(record);
+                } catch (...) {
+                    std::lock_guard lock(mutex_);
+                    job->snapshot.diagnostics += " [completion diagnostic unavailable]";
+                }
             }
         }
     });
 }
 Manager::~Manager() {
+    close();
+    if (worker_.joinable())
+        worker_.join();
+}
+void Manager::close() {
     {
         std::lock_guard lock(mutex_);
+        accepting_ = false;
         for (auto &[id, j] : jobs_)
             j->cancel.cancel();
         worker_.request_stop();
         ready_.notify_all();
     }
-    if (worker_.joinable())
-        worker_.join();
 }
 Id Manager::submit(std::string name, Task task) {
     std::lock_guard lock(mutex_);
+    if (!accepting_)
+        fail(Status::busy, "Job admission is closed for shutdown");
     if (queue_.size() >= 64)
         fail(Status::busy, "Job queue capacity reached");
     if (jobs_.size() >= 256) {

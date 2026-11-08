@@ -1,4 +1,6 @@
 #include "projected_sessions.hpp"
+#include "x1_roles.hpp"
+#include <cstdlib>
 #include <fstream>
 #include <mantis/artifact_store.hpp>
 #include <mantis/calibration_artifacts.hpp>
@@ -38,9 +40,10 @@ class ReplayDigest : public std::streambuf {
         return offset == 0 && direction == std::ios_base::cur ? pos_type(position_) : pos_type(off_type(-1));
     }
 };
-}
+} // namespace
 struct Runtime::Impl {
     mutable std::mutex event_mutex;
+    std::mutex diagnostic_mutex;
     uint64_t event_sequence{};
     std::deque<Event> event_log;
     std::ofstream diagnostic_file;
@@ -50,6 +53,30 @@ struct Runtime::Impl {
     std::unique_ptr<device::Runtime> devices;
     std::unique_ptr<jobs::Manager> jobs;
     std::unique_ptr<ProjectedSessions> projected;
+    std::unique_ptr<X1Roles> roles;
+    std::function<void(std::string_view)> role_checkpoint;
+    void lifetime_checkpoint(std::string_view phase) noexcept {
+        try {
+            if (role_checkpoint)
+                role_checkpoint(phase);
+        } catch (...) {
+            try {
+                event("error", "runtime-shutdown", "Lifetime checkpoint observer failed");
+            } catch (...) {
+            }
+        }
+    }
+    void role_idle() const {
+        if (roles)
+            roles->guard();
+    }
+    void role_quiescent() const {
+        for (const auto &[id, capture] : captures)
+            if (!capture.session->retired())
+                fail(Status::busy, "Camera cleanup/recorder retirement is incomplete", "x1-role-config");
+        if (projected->active())
+            fail(Status::busy, "Projected cleanup/recorder retirement is incomplete", "x1-role-config");
+    }
     std::function<std::chrono::steady_clock::time_point()> preview_now;
     struct Capture {
         Id raw;
@@ -63,11 +90,15 @@ struct Runtime::Impl {
     struct Replay { pipeline::BoundedQueue<data::Published> preview{1, pipeline::QueuePolicy::latest_only}; };
     std::map<Id, std::shared_ptr<Replay>> replays;
     void event(std::string kind, std::string component, std::string message) {
-        std::lock_guard lock(event_mutex);
-        Event e{++event_sequence, std::move(kind), std::move(component), std::move(message)};
-        if (event_log.size() == 512)
-            event_log.pop_front();
-        event_log.push_back(e);
+        Event e;
+        {
+            std::lock_guard lock(event_mutex);
+            e = {++event_sequence, std::move(kind), std::move(component), std::move(message)};
+            if (event_log.size() == 512)
+                event_log.pop_front();
+            event_log.push_back(e);
+        }
+        std::lock_guard diagnostic_lock(diagnostic_mutex);
         if (diagnostic_file) {
             diagnostic_file << e.sequence << '\t' << e.kind << '\t' << e.component << '\t' << e.message
                             << '\n';
@@ -77,7 +108,7 @@ struct Runtime::Impl {
     LogSink logger() {
         return [this](const LogRecord &r) { event(r.level, r.component, r.message); };
     }
-    explicit Impl(const Configuration &c) {
+    explicit Impl(const Configuration &c) : role_checkpoint(c.x1_role_checkpoint) {
         preview_now = c.preview_clock ? c.preview_clock : [] { return std::chrono::steady_clock::now(); };
         recipes = c.recipes;
         store = std::make_shared<artifact::Store>(c.project);
@@ -93,12 +124,36 @@ struct Runtime::Impl {
         devices = std::make_unique<device::Runtime>(*registry);
         jobs = std::make_unique<jobs::Manager>(logger());
         projected = std::make_unique<ProjectedSessions>(
-            *registry, *jobs, store, [this](std::string k, std::string component, std::string m) {
+            *registry, *jobs, store,
+            [this](std::string k, std::string component, std::string m) {
                 event(std::move(k), std::move(component), std::move(m));
-            });
+            },
+            role_checkpoint);
+        if (!c.x1_role_state_dir.empty()) {
+            const auto profile = std::getenv("MANTIS_X1_PROFILE");
+            const auto root = std::getenv("MANTIS_X1_ROLE_STATE_DIR");
+            if (!profile || !root || c.x1_role_state_dir != std::filesystem::path(root))
+                fail(Status::invalid_argument, "X1 role startup locator/profile mismatch");
+            roles = std::make_unique<X1Roles>(c.x1_role_state_dir, profile, *registry, *jobs, devices,
+                                              c.x1_role_checkpoint);
+        }
         event("runtime.ready", "runtime", "Project opened: " + store->root().string());
     }
     ~Impl() {
+        // Recorders can submit finalization Jobs during shutdown. Retire those
+        // producers while Manager is live, without destroying ProjectedSessions:
+        // role Jobs still use its quiescence snapshots until their own retirement.
+        if (roles)
+            for (auto &[id, capture] : captures)
+                capture.session->stop();
+        projected->quiesce();
+        if (roles) {
+            jobs->close();
+            lifetime_checkpoint("shutdown.manager.before-retire");
+            jobs.reset();
+            lifetime_checkpoint("shutdown.manager.retired");
+        }
+        lifetime_checkpoint("shutdown.projected.before-destroy");
         projected.reset();
         for (auto &[id, c] : captures) {
             c.session->stop();
@@ -154,7 +209,26 @@ struct Runtime::Impl {
 Runtime::Runtime(Configuration c) : impl_(std::make_unique<Impl>(c)) {}
 Runtime::~Runtime() = default;
 std::shared_ptr<artifact::Store> Runtime::project_store() const { return impl_->store; }
+X1RoleInfo Runtime::x1_roles() const {
+    if (impl_->roles)
+        return impl_->roles->query();
+    X1RoleInfo info;
+    info.diagnostic = "X1 role configuration requires explicit daemon startup opt-in";
+    return info;
+}
+Id Runtime::validate_x1_roles(const X1RoleRequest &request) {
+    if (!impl_->roles)
+        fail(Status::unsupported, "X1 role configuration is not enabled");
+    return impl_->roles->submit(request, false, impl_->store, [this] { impl_->role_quiescent(); });
+}
+Id Runtime::apply_x1_roles(const X1RoleRequest &request) {
+    if (!impl_->roles)
+        fail(Status::unsupported, "X1 role configuration is not enabled");
+    return impl_->roles->submit(request, true, impl_->store, [this] { impl_->role_quiescent(); });
+}
 std::vector<device::Descriptor> Runtime::devices() const {
+    if (impl_->roles)
+        return impl_->roles->devices();
     bool active = false;
     for (auto &[id, capture] : impl_->captures) active |= capture.session->active();
     active |= impl_->projected->active();
@@ -167,6 +241,7 @@ std::vector<device::Descriptor> Runtime::devices() const {
     return impl_->devices->list();
 }
 CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
+    impl_->role_idle();
     for (auto &[previous_id, capture] : impl_->captures) if (!capture.session->active()) capture.session->stop();
     if (ids.empty())
         fail(Status::invalid_argument, "Capture requires at least one device");
@@ -299,6 +374,7 @@ CaptureInfo Runtime::start_capture(const std::vector<Id> &ids) {
     return impl_->info(id, it->second);
 }
 CaptureInfo Runtime::stop_capture(const Id &id) {
+    impl_->role_idle();
     auto it = impl_->captures.find(id);
     if (it == impl_->captures.end())
         fail(Status::not_found, "Capture not found");
@@ -376,16 +452,20 @@ std::vector<device::Descriptor> camera_resources(device::Runtime &devices,
     return result;
 }
 } // namespace
-std::vector<ProjectedDeviceInfo> Runtime::projected_devices() const { return impl_->projected->devices(); }
+std::vector<ProjectedDeviceInfo> Runtime::projected_devices() const {
+    impl_->role_idle();
+    return impl_->projected->devices(); }
 device::ProjectedValidation Runtime::validate_projected(const ProjectedCaptureRequest &q) {
+    impl_->role_idle();
     impl_->projected->set_camera_resources(camera_resources(*impl_->devices, captures()));
     return impl_->projected->validate(q);
 }
 ProjectedCaptureInfo Runtime::start_projected(const ProjectedCaptureRequest &q, const std::string &request) {
+    impl_->role_idle();
     for (auto &[id, c] : impl_->captures)
         if (!c.session->active())
             c.session->stop();
-    if (!impl_->projected->active() &&
+    if (!impl_->roles && !impl_->projected->active() &&
         std::none_of(impl_->captures.begin(), impl_->captures.end(),
                      [](const auto &entry) { return entry.second.session->active(); }))
         impl_->devices->refresh(*impl_->registry);
@@ -395,6 +475,7 @@ ProjectedCaptureInfo Runtime::start_projected(const ProjectedCaptureRequest &q, 
 ProjectedCaptureInfo Runtime::projected_status(const Id &id) const { return impl_->projected->status(id); }
 std::vector<ProjectedCaptureInfo> Runtime::projected_captures() const { return impl_->projected->list(); }
 ProjectedCaptureInfo Runtime::stop_projected(const ProjectedStopRequest &q) {
+    impl_->role_idle();
     return impl_->projected->stop(q);
 }
 PreviewReference Runtime::projected_bundle(const Id &id) {
@@ -433,6 +514,7 @@ PreviewReference Runtime::projected_bundle(const Id &id) {
     return {lease, path};
 }
 Id Runtime::replay_capture(const Id &id, bool real_time, bool verify) {
+    impl_->role_idle();
     auto a = impl_->store->get(id);
     if (a.state != artifact::ArtifactState::finalized || a.type.name != "org.mantis.RawCapture")
         fail(Status::incompatible, "Replay requires a finalized RawCapture");
@@ -484,6 +566,7 @@ Id Runtime::replay_capture(const Id &id, bool real_time, bool verify) {
     impl_->replays.emplace(job, std::move(preview)); return job;
 }
 Id Runtime::run_pipeline(const Id &capture, const std::string &recipe, const Id &artifact) {
+    impl_->role_idle();
     if (recipe.empty() || recipe.size() > 128 ||
         recipe.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") !=
             std::string::npos)
@@ -540,6 +623,7 @@ Id Runtime::run_pipeline(const Id &capture, const std::string &recipe, const Id 
         });
 }
 std::string Runtime::open_project(const std::filesystem::path &path, bool create) {
+    impl_->role_idle();
     if (impl_->projected->active())
         fail(Status::busy, "Stop projected runs before switching projects");
     if (impl_->jobs->busy())
@@ -560,7 +644,7 @@ std::string Runtime::open_project(const std::filesystem::path &path, bool create
             impl_->event(std::move(k), std::move(c), std::move(m));
         });
     {
-        std::lock_guard lock(impl_->event_mutex);
+        std::lock_guard lock(impl_->diagnostic_mutex);
         impl_->diagnostic_file.close();
         impl_->diagnostic_file.open(impl_->store->root() / "diagnostics.log", std::ios::app);
     }
@@ -582,6 +666,7 @@ std::filesystem::path Runtime::data_reference(const Id &id) const {
     return impl_->store->object_path(id);
 }
 Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
+    impl_->role_idle();
     auto store = impl_->store;
     auto a = store->get(id);
     if (a.state != artifact::ArtifactState::finalized)
@@ -618,12 +703,14 @@ Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
         });
 }
 artifact::ArtifactDescriptor Runtime::recover_artifact(const Id &id) {
+    impl_->role_idle();
     auto result = impl_->store->recover(id);
     impl_->projected->artifact_update(id)(result);
     impl_->event("artifact.recovered", "artifact", id.value);
     return result;
 }
 Id Runtime::recover_artifact_job(const Id &id) {
+    impl_->role_idle();
     auto store = impl_->store;
     if (store->get(id).state != artifact::ArtifactState::recoverable)
         fail(Status::invalid_argument, "Artifact is not recoverable");
@@ -653,6 +740,7 @@ std::vector<PluginInfo> Runtime::plugins() const {
     return out;
 }
 void Runtime::enable_plugin(const std::string &id, bool enabled) {
+    impl_->role_idle();
     for (const auto &[capture_id, c] : impl_->captures)
         if (c.session->active())
             for (const auto &resource : c.session->descriptor().devices)
@@ -767,6 +855,7 @@ CalibrationInfo inspect_calibration(const artifact::Store &store, const Id &id) 
 }
 } // namespace
 CalibrationInfo Runtime::create_calibration_target(const TargetCreate &request) {
+    impl_->role_idle();
     auto store = impl_->store;
     const auto &spec = request.target;
     if (const auto *c = std::get_if<calibration::CharucoDefinition>(&spec.pattern))
@@ -783,6 +872,7 @@ CalibrationInfo Runtime::create_calibration_target(const TargetCreate &request) 
     return {{created.descriptor, created.value.revision}, TargetInfo{target_specification(created.value.target)}};
 }
 Id Runtime::build_calibration_dataset(const DatasetBuild &request) {
+    impl_->role_idle();
     auto store = impl_->store;
     if (request.raw_capture_artifact_ids.size() > calibration_source_limit ||
         request.camera_roles.size() > calibration_role_limit)
@@ -811,6 +901,7 @@ Id Runtime::build_calibration_dataset(const DatasetBuild &request) {
         });
 }
 Id Runtime::solve_camera_calibration(const CameraSolve &request) {
+    impl_->role_idle();
     auto store = impl_->store;
     calibration_text(request.camera_role, "camera_role");
     auto series = calibration_series(*store, request.series_id, ca::camera_type);
@@ -840,6 +931,7 @@ Id Runtime::solve_camera_calibration(const CameraSolve &request) {
         });
 }
 Id Runtime::solve_rig_calibration(const RigSolve &request) {
+    impl_->role_idle();
     auto store = impl_->store;
     calibration_text(request.rig_frame.id.value, "rig_frame_id");
     calibration_text(request.rig_frame.name, "rig_frame_name");
@@ -898,6 +990,7 @@ std::optional<ActiveCalibrationInfo> Runtime::active_calibration(const Id &id) c
     return {};
 }
 void Runtime::activate_calibration(const Id &device_id, const Id &rig_id) {
+    impl_->role_idle();
     calibration_text(device_id.value, "logical_device_id");
     calibration_input(*impl_->store, rig_id, ca::rig_type);
     std::vector<ca::CameraComponent> components;
@@ -909,6 +1002,7 @@ void Runtime::activate_calibration(const Id &device_id, const Id &rig_id) {
     impl_->event("calibration.activated", "calibration", device_id.value + " " + rig_id.value);
 }
 void Runtime::clear_calibration(const Id &id) {
+    impl_->role_idle();
     calibration_text(id.value, "logical_device_id");
     impl_->store->clear_active_calibration(id);
     impl_->event("calibration.cleared", "calibration", id.value);
