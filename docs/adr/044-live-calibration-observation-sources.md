@@ -1,34 +1,40 @@
-# Draft ADR: CAL-01 live calibration observation sources
+# ADR-044: Versioned live calibration observation sources
 
-Status: **DRAFT / PROPOSED — NOT ACCEPTED.** No accepted ADR number is allocated.
-Tracks [CAL-01 #65](https://github.com/martinkoenig/mantis-studio/issues/65).
-Inspection baseline: `1f89ad04a341731da26f4ca4b0bb05690c02acb9`.
+Status: Accepted for CAL-01 architecture upon independent review, separately
+authorized merge and exact-integration acceptance; implementation pending.
 
-## Applicability and authority
+## Adoption and applicability
 
-This is an owner-authorized draft ADR transcription of the independently reviewed
-[R2 decision material](https://github.com/martinkoenig/mantis-studio/issues/65#issuecomment-6701796619),
-not a normative amendment, implementation, migration or CAL-02 dispatch. Every
-SHALL below is proposed text, applicable only if separately adopted through an
-explicit owner decision, independent architecture/source review and separately
-authorized merge with exact-SHA integration review. Creating, reviewing or merging
-a document that still has DRAFT status does not silently change that status.
+The owner individually approved choices A–E in
+[#65 decision6715591531](https://github.com/martinkoenig/mantis-studio/issues/65#issuecomment-6715591531).
+This is the normative applicability/adoption amendment prepared in existing
+[PR #104](https://github.com/martinkoenig/mantis-studio/pull/104). Its accepted
+status and normative effect begin only after independent review, a separately
+owner-authorized merge and exact-integration acceptance. Until those gates,
+PR #104 remains DRAFT and this branch is an adoption proposal, not worker
+self-acceptance, merge permission or CAL-02 dispatch.
 
-Accepted [ADR-028](028-target-observations-and-deterministic-calibration-datasets.md),
-[ADR-030](030-calibration-artifacts-revisioning-and-active-binding.md),
-[ADR-035](035-calibration-control-api-and-job-orchestration.md),
-[ADR-036](036-studio-calibration-workspace-uses-public-calibration-api.md) and
-[ADR-037](037-real-hardware-calibration-acceptance-is-evidence-driven.md) remain
-binding and byte-for-byte unchanged. In particular, the physical RawCapture M8
-route is retained; live-only no-pixel equivalence remains BLOCKED. #66 is not
-started or authorized by this draft.
+When effective, this record is the single source of truth for the explicitly
+versioned live-source contract below. Its L/P/C/U/M clauses preserve the reviewed
+R2 text without semantic changes. References to draft/proposed text retain that
+review provenance; applicability is governed here. Candidate wire numbers remain
+unallocated suggestions, and resource values remain provisional qualification
+targets, not measured Q6A guarantees. No product behavior is implemented by this
+architecture record.
 
-The integrated [PR #98 proposal](../architecture/cal-01-live-observation-proposal.md)
-is unchanged and remains a proposal. R2 supersedes earlier draft recommendations
-for pre-start persistent source reservation and a public selection1 extension:
-this candidate uses ephemeral collection, postseal publication and explicit
-selection2 with unchanged M3 numerical/descriptor1. It changes no historical
-schema1 interpretation or accepted numerical rule.
+The legacy RawCapture ingestion path, CalibrationDataset schema1, existing
+schema1 documents/defaults, historical bytes/references and replay retain their
+meaning. New live Source1/Document2/Dataset2/Camera2/Rig2 and version-aware public
+activation are additive; Target1 remains unchanged. An existing RawCapture-only
+request is never silently reinterpreted as a live request. The applicability
+mapping below extends specific older scopes without rewriting their history.
+[ADR-037](037-real-hardware-calibration-acceptance-is-evidence-driven.md)'s physical
+RawCapture M8 route remains binding; no-pixel live equivalence remains BLOCKED.
+
+The [PR #98 proposal](../architecture/cal-01-live-observation-proposal.md) and
+[R2 draft-head acceptance](https://github.com/martinkoenig/mantis-studio/issues/65#issuecomment-6707685983)
+remain historical design evidence, not alternative live-contract authorities.
+Current accepted source baseline: `bc885b9b341112c01c141a93e4210b1c2856be75`.
 
 ## Context and source-grounded extension seams
 
@@ -57,12 +63,13 @@ behavior below is not delivered merely by this document.
 [033](033-reliability-performance-release-gates.md),
 [frozen architecture](../../MANTIS_STUDIO_ARCHITECTURE.md) and the
 [binding test-quality contract](../engineering/test-quality.md) remain authoritative.
-The current #102 Store/Session candidate is not assumed accepted. Source defects
-and historical green runs do not establish the reported microSD freeze cause.
+The #102 Store/Session fixes are independently integrated in the accepted
+baseline; this does not implement live collection or establish the reported
+microSD freeze cause.
 
-## Proposed owner decisions — all remain unadopted
+## Owner-approved CAL-01 decisions
 
-| Choice | Recommended candidate / rationale | Alternatives and compatibility gate |
+| Choice | Owner-approved choice / rationale | Alternatives and compatibility gate |
 | --- | --- | --- |
 | A — durability | Bounded RAM and ephemeral acquisition identity; retire/drain/seal before ordinary source reservation and one publication | Pre-start durable attempt inventory and compact observation journals add recovery/startup surface without recovering RAM in the first case; defer both. Crash before publication honestly loses volatile evidence. Sparse forensic pixels require separate explicit consent/quota and never normal-mode fallback. |
 | B — graph/version/migration | Source1/Document2, Dataset2/Camera2/Rig2, Target1; schema-stable new result series, typed graph and explicit legacy-client guards | No old bytes/rows rewritten. Initial no-DDL is conditional on actual Store/import/list/cursor/activation proof; extra persistent indexes/history require a reviewed transactional migration. |
@@ -70,7 +77,7 @@ and historical green runs do not establish the reported microSD freeze cause.
 | D — ownership/containment | Existing daemon physical-camera lease plus bounded supervised helper, explicit IPC/lifetime/cancel/retirement and provisional resource ceilings | An in-process alternative requires explicitly weaker hung-call retirement claims. No zero-copy or finite arbitrary OS-I/O completion guarantee; budgets are future measured gates. |
 | E — physical M8 | Retain binding RawCapture evidence and three independent real acquisitions/restarts, six fixed-model cross evaluations, measured target and activation/history/replay | No-pixel source IDs/corners/hashes are not equivalent physical evidence. Any alternative needs separate owner/independent proof; M8b remains separate. |
 
-The following L/P/C/U/M clauses are transcribed verbatim from the reviewed
+The following 33 L/P/C/U/M clauses are preserved verbatim from the reviewed
 [R2 draft text](https://github.com/martinkoenig/mantis-studio/issues/65#issuecomment-6701603330).
 The [R2 report](https://github.com/martinkoenig/mantis-studio/issues/65#issuecomment-6701602554)
 and [evidence index](https://github.com/martinkoenig/mantis-studio/issues/65#issuecomment-6701631713)
@@ -238,18 +245,31 @@ CaptureStart candidate field2 is `repeated uint32 accepted_calibration_schemas`;
 
 **M04.** A future alternative needs separate owner/independent evidence and explicit adoption before replacing any RawCapture obligation; rejected/unproved equivalence retains the binding route and BLOCKED live gap. No automatic forensic retention, hardware action or quality threshold. M8a `final_m8_acceptance` remains NOT ESTABLISHED; M8b is a separate real-evidence decision. MicroSD freeze cause remains OPEN.
 
-## Amendment scope and approval gate
+## Versioned applicability and preserved legacy contracts
 
-Exact additions: L01–L10 extend ADR028 source/ingestion/keys/selection without changing legacy paragraphs; P01–P07 extend ADR030 decisions1–5/12 and P08–P09 decisions6–9/12; C01–C07 extend ADR035 decisions1–6/8/11–12/consequences; U01–U03 extend ADR036 decisions5–6/consequences; M01–M04 clarify ADR037 decisions4/6–8/11/13 while retaining its physical gate. No ADR number/status is allocated. ADR021/023/025/026/027/029/033 and frozen architecture remain binding.
+The live contract is defined only in this record. The older ADRs retain their
+existing text and history; their short applicability notes point here.
 
-Coordinate calibration detection/dataset/solve/artifacts/API/workspace and v0.3/M8 explanations if the owner later authorizes normative repository work. An unresolved incompatibility requires a decision, not code around the contract. Require decision report N01–N16 compatibility/resource/concurrency/storage/public-client oracles and representative R1 sensitivity in future implementation, plus all applicable source/CI/independent gates. #102 fixes remain unaccepted until their own review. This draft neither executes those checks nor adopts itself nor starts #66.
+| Earlier authority | Preserved scope | Additive scope governed by ADR-044 when effective |
+| --- | --- | --- |
+| [ADR-028](028-target-observations-and-deterministic-calibration-datasets.md), source/key/ingestion/selection paragraphs | Real finalized RawCapture2 ingestion, Dataset1/key1/selection1 and legacy numerical/physical-ID rules | L01–L10: explicit live identity/keys, admission2, complete population and selection2 with descriptor/arithmetic1 and exact legacy embedding; M4 numerical/split/stereo policy remains ADR-029 |
+| [ADR-030](030-calibration-artifacts-revisioning-and-active-binding.md), decisions1–5/12 and6–9 | Existing schema1 freeze/bytes/defaults/revisions, metadata migration history and immutable historical capture binding | P01–P09: Source1/Document2 and new Dataset/Camera/Rig2, postseal ordinary source publication, typed graph/schema-stable series and version-aware activation; no automatic metadata migration or old-object rewrite |
+| [ADR-035](035-calibration-control-api-and-job-orchestration.md), decisions1–6/8/11–12 and consequences | Existing M6 DTOs/tags/RawCapture-only requests and non-preemptive entered persistence | C01–C07: explicit live/v2 controls, source readiness, bounded helper/IPC and shared Job cancellation; the no-frame-processing/lookup/copy consequence retains its existing legacy M6 scope, while live analysis uses the explicit bounded consumer/helper seam |
+| [ADR-036](036-studio-calibration-workspace-uses-public-calibration-api.md), decisions5–6/consequences | Public-client-only UI, seven stages, asynchronous Jobs, explicit activation and no UI lineage store | U01–U03: finalized live-source resume, volatile-session loss semantics and explicit mode/counter presentation through the public API |
+| [ADR-037](037-real-hardware-calibration-acceptance-is-evidence-driven.md), decisions4/6–8/11/13 | All physical RawCapture M8 obligations, three independent acquisitions/restarts/disjoint hashes, six fixed-model cross evaluations, measured target, real activation/history/replay and separate M8b | M01–M04 clarify software-only live collection and unavailable pixel/detector reproduction; they supply no equivalent-source exemption |
 
-## Proposed lifecycle and Store/Job rationale
+ADR-021/023/025/026/027/029/033 and frozen architecture are unchanged. Any necessary
+metadata/index migration still requires separate review. Candidate protocol tags
+allocate nothing; actual implementation must recheck descriptors. Architecture
+adoption does not qualify helper budgets, physical timing or scanner accuracy,
+and does not authorize #66 or any other implementation session.
 
-The following explanation is transcribed from the reviewed R2 report. It describes
-candidate semantics, not runtime evidence. Earlier pending integration statements
-in historical artifacts are superseded by independent integration acceptance of
-the pinned baseline; #102 implementation acceptance remains a separate gate.
+## Lifecycle and Store/Job rationale
+
+The following explanation preserves the reviewed R2 lifecycle. It governs future
+live implementation when this adoption becomes effective; it is not runtime or
+crash-durability evidence. Historical pending integration statements do not undo
+the independently accepted current baseline.
 
 State sequence: `ACCEPTED → STARTING → COLLECTING → STOPPING/DRAINING → SEALED_RAM → QUEUED_PUBLICATION → PERSISTING → FINALIZED`, plus explicit cancelled/failed retirement states. The operational handle contains incarnation/project epoch/generation/acquisition identity, not a finalized artifact reference. Source-ready means first valid pair, not target detection or stored data.
 
@@ -268,7 +288,11 @@ Publication entry is one serialized cancel/entry decision immediately before the
 
 Generic source recovery must reject this type unless routed through its typed sealed-source gate. A typed recovery path needs exclusive artifact ownership, complete bytes and valid ledger before finalization. Zero chunks cannot be finalized at this baseline. Existing Store append holds its metadata mutex across file/journal I/O; new live status/cancel must therefore use independent in-memory snapshots/latches, not Store reads or an unbounded global control join. Do not promise all unrelated legacy metadata calls remain bounded during blocked Store I/O.
 
-#102 F2 concerns valid-journal operational failures misclassified as invalid at this HEAD; F1 concerns Session first-error/readiness exception consistency. Those defects are source-confirmed, not shown to cause the reported Q6A freeze. Its active candidate is not accepted. Future live implementation must reconcile accepted F1/F2 corrections or explicitly approved containment, without editing worker33's files or assuming its unreviewed candidate is fixed.
+The R2 source investigation described F1/F2 at its historical baseline. Their
+[accepted integration](https://github.com/martinkoenig/mantis-studio/issues/102#issuecomment-6715524165)
+is included in the current base. Future live implementation must preserve those
+corrections; their acceptance neither implements this live path nor establishes
+microSD causality or the new source-specific recovery contract.
 
 
 ## Additional source-derived proof obligations
@@ -288,7 +312,7 @@ cursor and activation proof. No new depth limit, migration or persistence index 
 silently chosen here; unresolved contract conflicts require CHANGES REQUIRED
 before adoption or conflicting implementation.
 
-## 9. Future positive/negative acceptance matrix
+## Future implementation acceptance matrix
 
 **Specifications, NOT executed tests.** Use actual daemon/Store/public-client seams, independent expected traces, bounded gates and release-before-join cleanup. Existing regression families should be extended only where they lack the decisive oracle.
 
@@ -318,13 +342,15 @@ Future R1 sensitivity must execute representative wrong-generation, source-gap r
 
 The matrix above specifies future implementation acceptance. It is not observed
 PASS, code-mutant evidence, measured Q6A timing/throughput, physical calibration or
-M8 equivalence. This PR changes only Markdown and the draft index. Applicable
+M8 equivalence. This adoption amendment changes only Markdown. Applicable
 local checks are links/applicability/faithful-transcription and architecture-policy
 checks, descriptor collision checks and negative document controls. No production
 build is claimed or substituted for required future implementation validation.
 
-Before any normative adoption, owner decisions A–E must be explicit, all affected
-contracts must be reconciled, and independent review must assess the exact PR
-head and all five required CI jobs. Merge requires separate owner authorization
-and exact-integration-SHA review. No automatic CAL-02, physical experiment,
-threshold freeze, successor dispatch or cleanup follows.
+Owner decisions A–E are explicitly approved. This amendment still requires root
+independent review of the exact PR head and all five required CI jobs, separately
+owner-authorized merge and exact-integration acceptance before its normative
+effect. PR #104 stays DRAFT until that review. No worker self-ACCEPT, automatic
+CAL-02, physical experiment, threshold freeze, successor dispatch or cleanup
+follows. Applicable implementation validation remains a later, separately
+authorized obligation.

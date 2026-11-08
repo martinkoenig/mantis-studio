@@ -111,3 +111,11 @@ Treating partial visibility as failure excludes valid ChArUco observations.
 Pairing array positions can mismatch physical points. Random sampling or taking
 every adjacent frame hides determinism and geometric diversity. A dataset limited
 to one recording would prevent independent collection and validation workflows.
+
+## CAL-01 versioned applicability
+
+The RawCapture-only ingestion, key1/selection1 and Dataset1 paragraphs above
+retain their legacy scope. Once effective, [ADR-044](044-live-calibration-observation-sources.md)
+governs the additive live-source/key2/Dataset2/selection2 path, preserving M3
+numerical arithmetic and ADR-029 physical-ID, stereo and held-out policy. No
+legacy request or artifact is reinterpreted.

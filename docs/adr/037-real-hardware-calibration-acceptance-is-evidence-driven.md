@@ -61,3 +61,12 @@ review evidence. Owned daemon/capture cleanup is bounded and preserves data.
 
 See the [operator procedure](../hardware/x1-geometric-calibration-validation.md)
 and [report schema](../validation/x1-calibration-report-schema.md).
+
+## CAL-01 versioned applicability
+
+[ADR-044](044-live-calibration-observation-sources.md) adds a software live-source
+contract only when its adoption is effective. It does not relax any physical M8
+requirement above, including three independent real RawCapture source sets and
+daemon restarts, disjoint authoritative hashes, six fixed-model cross evaluations,
+measured target and real activation/history/replay. No-pixel live evidence is not
+an accepted equivalent; M8b remains separate.
