@@ -1,4 +1,6 @@
 #include "../fixtures/x1-projected/program.hpp"
+#include "../fixtures/x1-projected/wait.hpp"
+#include "../support/async_scope.hpp"
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -81,6 +83,7 @@ int main(int argc, char **argv) {
         CHECK(!fixture->api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
         setenv("MANTIS_X1_PROJECTED_FIXTURE", "1", 1);
         CHECK(!real.api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
+        CHECK(!real.api()->query_interface(x1_fixture::wait_interface));
         unsetenv("MANTIS_X1_FAKE");
         CHECK(!fixture->api()->query_interface(MANTIS_PROJECTED_LIGHT_V1));
         setenv("MANTIS_X1_FAKE", "normal", 1);
@@ -187,13 +190,21 @@ int main(int argc, char **argv) {
         executor = open();
         take(executor->prepare(p, 100));
         take(executor->start({{"blocked"}}, {{"blocked-gen"}}, 100));
-        auto pending = std::async(std::launch::async, [&] { return executor->next(1000); });
-        std::this_thread::sleep_for(20ms);
-        auto begun = std::chrono::steady_clock::now();
-        auto off = take(executor->abort(d::AcquisitionReason::user_cancel, 100));
-        CHECK(std::chrono::steady_clock::now() - begun < 100ms);
-        CHECK(off.inhibited.get() && *off.inhibited.get() && off.emitters.size() == 2);
-        CHECK(take(pending.get()) == std::nullopt);
+        std::chrono::steady_clock::time_point begun;
+        device::AbortOutcome off;
+        auto observer = fixture->query<x1_fixture::WaitObserver>(x1_fixture::wait_interface);
+        {
+            test::Async pending([&] { (void)executor->abort(d::AcquisitionReason::user_cancel, 100); },
+                                [&] { return executor->next(1000); });
+            CHECK(observer->blocked(1000) == x1_fixture::Wait::blocked_next);
+            CHECK(pending.future.wait_for(0ms) == std::future_status::timeout);
+            begun = std::chrono::steady_clock::now();
+            off = take(executor->abort(d::AcquisitionReason::user_cancel, 100));
+            CHECK(std::chrono::steady_clock::now() - begun < 100ms);
+            CHECK(off.inhibited.get() && *off.inhibited.get() && off.emitters.size() == 2);
+            CHECK(pending.future.wait_for(100ms) == std::future_status::ready);
+            CHECK(take(pending.future.get()) == std::nullopt);
+        }
         for (const auto &e : off.emitters) {
             CHECK(e.commanded.get()->state == d::EmitterState::off);
             CHECK(!e.observed.get());
@@ -207,12 +218,17 @@ int main(int argc, char **argv) {
         executor = open();
         take(executor->prepare(p, 100));
         take(executor->start({{"camera-wait"}}, {{"camera-wait-gen"}}, 100));
-        pending = std::async(std::launch::async, [&] { return executor->next(1000); });
-        std::this_thread::sleep_for(20ms);
-        begun = std::chrono::steady_clock::now();
-        take(executor->abort(d::AcquisitionReason::device_failure, 100));
-        CHECK(std::chrono::steady_clock::now() - begun < 100ms);
-        CHECK(!take(pending.get()));
+        {
+            test::Async pending([&] { (void)executor->abort(d::AcquisitionReason::device_failure, 100); },
+                                [&] { return executor->next(1000); });
+            CHECK(observer->blocked(1000) == x1_fixture::Wait::camera_stall);
+            CHECK(pending.future.wait_for(0ms) == std::future_status::timeout);
+            begun = std::chrono::steady_clock::now();
+            take(executor->abort(d::AcquisitionReason::device_failure, 100));
+            CHECK(std::chrono::steady_clock::now() - begun < 100ms);
+            CHECK(pending.future.wait_for(100ms) == std::future_status::ready);
+            CHECK(!take(pending.future.get()));
+        }
         take(executor->close(100));
         executor.reset();
         setenv("MANTIS_X1_FAKE", "normal", 1);
@@ -221,6 +237,13 @@ int main(int argc, char **argv) {
         auto api = fixture->query<MantisProjectedLightV1>(MANTIS_PROJECTED_LIGHT_V1);
         void *raw{};
         CHECK(api->open(plugins::host_api(), graph.parent.value.c_str(), 100, &raw) == 0);
+        test::OnExit destroy_raw{[&] {
+            if (raw) {
+                const auto rc = api->destroy(raw, 100);
+                if (rc)
+                    std::cerr << "Fixture cleanup destroy refused: " << rc << '\n';
+            }
+        }};
         plugins::semantic::ProgramView program_view(p);
         auto validated = [](void *, const MantisProgramValidationV1 *v) { return v->accepted ? 0 : 1; };
         CHECK(api->prepare(raw, program_view.get(), 100, validated, nullptr) == 0);
@@ -229,20 +252,50 @@ int main(int argc, char **argv) {
             std::promise<void> entered, release;
             std::shared_future<void> gate = release.get_future().share();
             std::optional<d::AcquisitionBundle> bundle;
+            std::array<const std::byte *, 2> pixels{};
+            std::exception_ptr error;
+            unsigned calls{};
+            bool released{};
+            void unblock() {
+                if (!released) {
+                    release.set_value();
+                    released = true;
+                }
+            }
         } late;
         auto entered = late.entered.get_future();
         auto callback = [](void *v, const MantisSemanticPacketV1 *packet) noexcept {
             auto &state = *static_cast<Late *>(v);
-            return sdk::boundary([&] {
+            bool notified = false;
+            try {
+                CHECK(++state.calls == 1);
                 state.bundle =
                     std::get<d::AcquisitionBundle>(plugins::semantic::packet(packet, plugins::host_api()));
+                for (size_t i = 0; i < state.pixels.size(); ++i)
+                    state.pixels[i] =
+                        take(state.bundle->frameset->frames[i]->attributes[0].buffer.map_read()).data();
                 state.entered.set_value();
+                notified = true;
                 state.gate.wait();
                 CHECK(state.bundle->key.run_id.id.value == "late-run");
-            });
+                return 0;
+            } catch (...) {
+                state.error = std::current_exception();
+                if (!notified && state.calls == 1)
+                    state.entered.set_exception(state.error);
+                return 1;
+            }
         };
-        auto future = std::async(std::launch::async, [&] { return api->next(raw, 1000, callback, &late); });
+        auto discard_abort = [](void *, const MantisAbortOutcomeV1 *) noexcept { return 0; };
+        test::Async future(
+            [&] {
+                if (raw)
+                    api->abort(raw, MANTIS_ACQUISITION_REASON_USER_CANCEL, 100, discard_abort, nullptr);
+                late.unblock();
+            },
+            [&] { return api->next(raw, 1000, callback, &late); });
         CHECK(entered.wait_for(1s) == std::future_status::ready);
+        entered.get();
         device::AbortOutcome outcome;
         auto aborted = [](void *v, const MantisAbortOutcomeV1 *o) noexcept {
             return sdk::boundary(
@@ -253,9 +306,15 @@ int main(int argc, char **argv) {
         CHECK(std::chrono::steady_clock::now() - begun < 100ms &&
               outcome.fenced_generation.get()->id.value == "late-generation");
         CHECK(api->destroy(raw, 0) == MANTIS_PL_BUSY);
-        late.release.set_value();
-        CHECK(future.get() == 0);
+        late.unblock();
+        CHECK(future.future.wait_for(100ms) == std::future_status::ready);
+        const auto next_result = future.future.get();
+        if (late.error)
+            std::rethrow_exception(late.error);
+        CHECK(next_result == 0 && late.calls == 1);
+        images(*late.bundle, 0);
         CHECK(api->next(raw, 0, callback, &late) == MANTIS_PL_NOT_READY);
+        CHECK(late.calls == 1);
         CHECK(api->abort(raw, MANTIS_ACQUISITION_REASON_USER_CANCEL, 100, aborted, &outcome) == 0);
         std::string diagnostic;
         auto text = [](void *v, const char *s) noexcept {
@@ -264,6 +323,11 @@ int main(int argc, char **argv) {
         CHECK(api->diagnostics(raw, 100, text, &diagnostic) == 0);
         CHECK(nlohmann::json::parse(diagnostic)["first_abort_reason"] == "3");
         CHECK(api->destroy(raw, 100) == 0);
+        raw = nullptr;
+        images(*late.bundle, 0);
+        for (size_t i = 0; i < late.pixels.size(); ++i)
+            CHECK(take(late.bundle->frameset->frames[i]->attributes[0].buffer.map_read()).data() ==
+                  late.pixels[i]);
         executor = open();
         take(executor->prepare(p, 100));
         take(executor->start({{"new-run"}}, {{"new-generation"}}, 100));

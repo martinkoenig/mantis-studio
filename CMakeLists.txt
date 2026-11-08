@@ -24,6 +24,16 @@ else()
   target_link_options(mantis-options INTERFACE -fsanitize=address,undefined)
  endif()
 endif()
+# Deliberate leak is confined to the existing Linux/GCC headless Debug sanitizer qualification.
+# Normal, Release, Studio and BUILD_TESTING=OFF target graphs never contain this executable.
+if(BUILD_TESTING AND MANTIS_SANITIZE AND NOT MANTIS_BUILD_STUDIO
+   AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+   AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+ add_executable(mantis-headless-lsan-canary tests/qualification/headless-lsan/canary.cpp)
+ target_link_libraries(mantis-headless-lsan-canary PRIVATE mantis-options)
+else()
+ message(STATUS "Headless LSan canary UNQUALIFIED (requires Linux/GCC headless Debug, MANTIS_SANITIZE and BUILD_TESTING)")
+endif()
 # Private protocol modules compile without testing or a physical controller library.
 add_library(mantis-x1-f2-codec STATIC plugins/first-party/devices/x1/f2/codec.cpp)
 target_link_libraries(mantis-x1-f2-codec PRIVATE mantis-options)
@@ -116,6 +126,9 @@ function(mantis_plugin name folder)
  file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/plugins/${name}.json INPUT ${CMAKE_CURRENT_SOURCE_DIR}/${folder}/${name}.json.in)
 endfunction()
 mantis_plugin(virtual-scanner plugins/first-party/devices)
+mantis_plugin(virtual-rig plugins/first-party/devices)
+target_sources(virtual-rig PRIVATE plugins/first-party/devices/virtual-rig/profile.cpp)
+target_link_libraries(virtual-rig PRIVATE nlohmann_json::nlohmann_json Threads::Threads)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
  add_library(mantis-x1-backend STATIC plugins/first-party/devices/x1/profile.cpp plugins/first-party/devices/x1/media.cpp plugins/first-party/devices/x1/linux.cpp plugins/first-party/devices/x1/fake.cpp)
  target_link_libraries(mantis-x1-backend PRIVATE mantis-options nlohmann_json::nlohmann_json Threads::Threads)
@@ -419,6 +432,15 @@ if(BUILD_TESTING)
  set_target_properties(mantis-l2-frozen-abi mantis-l2-abi-tests PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
  add_test(NAME frozen-l2-abi COMMAND mantis-l2-abi-tests)
  add_test(NAME frozen-l2-catalog COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/contract/l2/generate_catalog.py --check)
+ add_executable(mantis-virtual-rig-tests tests/integration/virtual_rig.cpp)
+ target_link_libraries(mantis-virtual-rig-tests PRIVATE mantis-device-runtime mantis-artifact-store nlohmann_json::nlohmann_json)
+ add_dependencies(mantis-virtual-rig-tests virtual-rig)
+ add_test(NAME virtual-rig-contract COMMAND mantis-virtual-rig-tests contract $<TARGET_FILE:virtual-rig>)
+ set_tests_properties(virtual-rig-contract PROPERTIES TIMEOUT 30)
+ add_test(NAME virtual-rig-runtime COMMAND mantis-virtual-rig-tests runtime $<TARGET_FILE:virtual-rig>)
+ set_tests_properties(virtual-rig-runtime PROPERTIES TIMEOUT 30)
+ add_test(NAME virtual-rig-daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/integration/virtual_rig.py ${CMAKE_BINARY_DIR} $<TARGET_FILE:mantisd>)
+ set_tests_properties(virtual-rig-daemon PROPERTIES TIMEOUT 40)
  if(TARGET mantis-x1)
   add_executable(mantis-calibration-activation-tests tests/integration/calibration_activation.cpp)
   target_include_directories(mantis-calibration-activation-tests SYSTEM PRIVATE ${OpenCV_INCLUDE_DIRS})
@@ -671,4 +693,21 @@ endif()
 
 if(BUILD_TESTING)
  add_subdirectory(tests/storage)
+endif()
+
+# Wait observation is linked ONLY into the three existing concurrency tests.
+# --wrap also sees wait calls in static runtime archives, without a second
+# runtime build or production instrumentation. These probes qualify the Linux
+# libstdc++ matrix; other platforms report unavailable entry proof explicitly.
+if(BUILD_TESTING)
+ foreach(target mantis-core-tests mantis-semantic-processing-tests mantis-projected-raw-tests)
+  target_sources(${target} PRIVATE tests/support/observed_wait.cpp)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+   target_compile_definitions(${target} PRIVATE MANTIS_TEST_WAIT_WRAP)
+   target_link_options(${target} PRIVATE
+    "LINKER:--wrap=_ZNSt18condition_variable4waitERSt11unique_lockISt5mutexE"
+    "LINKER:--wrap=pthread_cond_clockwait"
+    "LINKER:--wrap=pthread_cond_timedwait")
+  endif()
+ endforeach()
 endif()

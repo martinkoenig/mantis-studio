@@ -1,4 +1,6 @@
 #include "../../src/artifact-store/segments.hpp"
+#include <array>
+#include <exception>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -15,7 +17,7 @@ using Json = nlohmann::json;
 #define CHECK(x)                                                                                             \
     do {                                                                                                     \
         if (!(x))                                                                                            \
-            throw std::runtime_error(#x);                                                                    \
+            throw std::runtime_error("Line " + std::to_string(__LINE__) + ": " #x);                          \
     } while (false)
 template <class F> void rejects(F f, Status code) {
     try {
@@ -100,15 +102,43 @@ void revisions() {
             Status::not_found);
     std::mutex mutex;
     std::set<uint64_t> allocated;
-    std::vector<std::thread> threads;
-    for (int i = 0; i < 8; ++i)
-        threads.emplace_back([&] {
-            auto r = store.begin_calibration({"org.mantis.RigCalibration", 1}, {}, first.reference.id);
-            std::lock_guard guard(mutex);
-            CHECK(allocated.insert(r.reference.revision).second);
-        });
-    for (auto &thread : threads)
-        thread.join();
+    struct Outcome {
+        std::exception_ptr error;
+        std::optional<uint64_t> revision;
+    };
+    std::array<Outcome, 8> outcomes;
+    {
+        // No fixed-participant barrier: a partial launch can unwind and join every
+        // launched worker. Store and all worker-owned result slots outlive joining.
+        std::vector<std::jthread> threads;
+        for (size_t i = 0; i < outcomes.size(); ++i) {
+            try {
+                threads.emplace_back([&, i] {
+                    try {
+                        auto r =
+                            store.begin_calibration({"org.mantis.RigCalibration", 1}, {}, first.reference.id);
+                        outcomes[i].revision = r.reference.revision;
+                        std::lock_guard guard(mutex);
+                        CHECK(allocated.insert(r.reference.revision).second);
+                    } catch (...) {
+                        outcomes[i].error = std::current_exception();
+                    }
+                });
+            } catch (...) {
+                std::cerr << "Launching calibration revision worker " << i << '\n';
+                throw;
+            }
+        }
+    }
+    for (size_t i = 0; i < outcomes.size(); ++i) {
+        if (outcomes[i].error) {
+            std::cerr << "Calibration revision worker " << i;
+            if (outcomes[i].revision)
+                std::cerr << ", revision " << *outcomes[i].revision;
+            std::cerr << ": ";
+            std::rethrow_exception(outcomes[i].error);
+        }
+    }
     CHECK(allocated == std::set<uint64_t>({4, 5, 6, 7, 8, 9, 10, 11}));
     rejects([&] { store.append(a.id, *packet()); }, Status::invalid_argument);
     rejects([&] { store.finalize(a.id); }, Status::invalid_argument);
@@ -118,6 +148,8 @@ void revisions() {
     CHECK(!store.active_calibration({"device"}));
     CHECK(store.get(a.id).hash == a.hash);
     Db db(t.root);
+    CHECK(db.rows("SELECT revision FROM calibration_revisions ORDER BY revision") ==
+          Json({{"1"}, {"2"}, {"3"}, {"4"}, {"5"}, {"6"}, {"7"}, {"8"}, {"9"}, {"10"}, {"11"}}));
     bool rejected = false;
     try {
         db.exec("UPDATE calibration_revisions SET revision=99");

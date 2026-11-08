@@ -1,0 +1,1 @@
+{"manifest_version":1,"id":"org.mantis.virtual-rig","version":"1.0.0","abi_version":1,"kind":"device","execution":"in_process","permissions":["filesystem"],"library":"$<TARGET_FILE_NAME:virtual-rig>"}

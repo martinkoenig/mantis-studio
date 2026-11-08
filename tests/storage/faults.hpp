@@ -1,7 +1,11 @@
 #pragma once
+#include <array>
 #include <chrono>
 #include <filesystem>
+#include <functional>
+#include <iosfwd>
 #include <string>
+#include <string_view>
 namespace mantis::artifact::storage_test {
 enum class Action {
     fail,
@@ -26,6 +30,29 @@ struct Metrics {
     uint64_t hits{}, written{}, short_results{}, rejected_commits{};
     int error{};
 };
+// Passive, bounded qualification evidence. Read samples only after matched I/O
+// has retired. Never enabled in a product binary; one serial trace at a time.
+struct StageSample {
+    char point[64]{};
+    int64_t ns{};
+};
+class Trace {
+  public:
+    std::filesystem::path root;
+    std::string id;
+    std::array<StageSample, 8192> samples{};
+    size_t count{}, overflow{};
+    Trace(std::filesystem::path, std::string);
+    ~Trace();
+    Trace(const Trace &) = delete;
+};
+struct StreamCost {
+    int64_t ordinary_ns{}, qualified_ns{};
+    uint64_t bytes{};
+};
+// Diagnostic microprobe only: identical real packet encoding, ordinary versus
+// qualified stream, same owned filesystem directory. No fsync/capacity claim.
+StreamCost stream_cost(const std::filesystem::path &, const std::function<void(std::ostream &)> &);
 // Borrowed pipe/control lifetimes require all matched Store operations to retire
 // before Arm destruction. Distinct artifacts/roots may be armed concurrently.
 class Arm {
@@ -37,6 +64,7 @@ class Arm {
     Arm(const Arm &) = delete;
     Metrics metrics() const;
 };
+void checkpoint(std::string_view, const std::filesystem::path &, std::string_view);
 Event await_event(int, std::chrono::steady_clock::time_point);
 void release_gate(int);
 } // namespace mantis::artifact::storage_test

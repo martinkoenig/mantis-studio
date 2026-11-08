@@ -1,3 +1,4 @@
+#include "../../support/async_scope.hpp"
 #include "peer.hpp"
 #include <future>
 #include <memory>
@@ -156,20 +157,31 @@ void cancel(Message message, bool after) {
     auto snapshot = h.discover(deadline());
     if (!after)
         Access::pause_message(t, message);
-    auto pending = std::async(std::launch::async, [&] {
+    bool retired = false;
+    auto release = [&] {
+        if (retired)
+            return;
+        // Fence/cancel before releasing receive or TX, then join both workers
+        // while Host, transport and the actual PTY peer are still alive.
+        h.stop(Clock::now());
+        Access::gate(t, false);
+        transport.release();
+    };
+    test::Async pending(release, [&] {
         error([&] { h.start(snapshot, BenchConfig{}.execution(), true, deadline(), h.fence()); },
               Result::bad_state);
     });
     transport.wait(); // Before registration, or after a real ACK but before Host admission.
     if (!after)
         CHECK(Access::await_message(t));
-    auto stopping = std::async(std::launch::async, [&] { CHECK(h.stop(deadline())); });
+    test::Async stopping(release, [&] { CHECK(h.stop(deadline())); });
     // STOP admission itself fences and removes unsent work; observe without sleeps.
     CHECK(Access::await(t, [](auto m) { return m.waits[2] == 1; }, deadline()));
     Access::gate(t, false);
-    stopping.get();
+    stopping.future.get();
     transport.release();
-    pending.get();
+    pending.future.get();
+    retired = true;
     CHECK(h.stop_error() == Result::ok && peer.metrics().stops == 1);
     CHECK(peer.metrics().runs == (message == Message::run && after ? 1 : 0));
     peer.advance(1'000'000);
