@@ -1,5 +1,14 @@
 # Standalone Qt Quick sanitizer qualification (UI-QT-SAN-1A)
 
+> **Historical evidence; superseded for current runtime selection.** This document
+> preserves the 2026-10-30 Qt 6.9.2 qualification and its original inputs/archive.
+> It does not qualify the current product or recommend a supported release runtime.
+> [Issue #39](https://github.com/martinkoenig/mantis-studio/issues/39), under
+> [CI-STAB-2 #11](https://github.com/martinkoenig/mantis-studio/issues/11), remains
+> the current Qt migration/release gate. Historical clean runs do not waive its
+> leak, security, maintenance, licensing or current-source acceptance requirements.
+> The current-source Studio qualification tooling is maintained separately.
+
 This package qualifies a standalone Qt Quick environment before UI-QT-SAN-1B
 attempts complete Studio sanitizer validation. It changes no Mantis product
 behavior, build graph, public contract or system Qt package. Independent review

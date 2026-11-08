@@ -17,7 +17,8 @@ class Store {
     friend class BundleCaptureReader;
     struct Impl;
     std::shared_ptr<Impl> impl_;
-    ArtifactDescriptor finalize_impl(const Id &, const CancellationToken &, bool recovery);
+    ArtifactDescriptor finalize_impl(const Id &, const CancellationToken &, bool recovery,
+                                     uint64_t journal_generation = 0);
 
   public:
     // Optional deterministic I/O/failure seam; invoked outside the metadata mutex.
