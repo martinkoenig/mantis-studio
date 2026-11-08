@@ -32,7 +32,8 @@ struct X1Roles::Permit {
 X1Roles::X1Roles(const std::filesystem::path &root, const std::filesystem::path &profile,
                  plugins::Registry &registry, jobs::Manager &jobs, std::unique_ptr<device::Runtime> &devices,
                  x1::roles::Store::Checkpoint hook)
-    : store_(root, profile, std::move(hook)), registry_(registry), jobs_(jobs), devices_(devices) {
+    : store_(root, profile, hook), checkpoint_(std::move(hook)), registry_(registry), jobs_(jobs),
+      devices_(devices) {
     cached_ = devices_->list();
     info_ = inspect(cached_, store_.mapping());
 }
@@ -138,12 +139,25 @@ Id X1Roles::submit(const X1RoleRequest &request, bool apply, std::shared_ptr<art
         apply ? "Apply X1 camera roles" : "Validate X1 camera roles",
         [this, request, apply, project = std::move(project), quiescent = std::move(quiescent), permit,
          before](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+            struct Retired {
+                const x1::roles::Store::Checkpoint &checkpoint;
+                ~Retired() {
+                    try {
+                        if (checkpoint)
+                            checkpoint("role.body.retired");
+                    } catch (...) {
+                        // A secondary observer cannot replace the initiating Job failure.
+                    }
+                }
+            } retired{checkpoint_};
             // Queued cancellation destroys permit without invoking this task. Once entered,
             // cancellation cannot interrupt a filesystem commit or fabricate returned ownership.
             for (const auto &job : jobs_.list())
                 if (job.id != context.id &&
                     (job.state == jobs::State::queued || job.state == jobs::State::running))
                     fail(Status::busy, "Another Job prevents X1 configuration", "x1-role-config");
+            if (checkpoint_)
+                checkpoint_("role.before-quiescent");
             quiescent();
             try {
                 context.update(0.1, "Validating fresh X1 topology and calibration");

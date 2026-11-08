@@ -45,12 +45,16 @@ class Manager {
     std::condition_variable_any ready_;
     std::map<Id, std::shared_ptr<Job>> jobs_;
     std::deque<std::shared_ptr<Job>> queue_;
+    bool accepting_{true};
     std::jthread worker_;
     LogSink logger_;
 
   public:
     explicit Manager(LogSink = {});
     ~Manager();
+    // Close admission/request cancellation without destroying state used by retiring tasks.
+    // The destructor still joins actual task/diagnostic/permit retirement.
+    void close();
     Id submit(std::string, Task);
     std::vector<Snapshot> list() const;
     Snapshot get(const Id &) const;

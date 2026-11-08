@@ -54,6 +54,18 @@ struct Runtime::Impl {
     std::unique_ptr<jobs::Manager> jobs;
     std::unique_ptr<ProjectedSessions> projected;
     std::unique_ptr<X1Roles> roles;
+    std::function<void(std::string_view)> role_checkpoint;
+    void lifetime_checkpoint(std::string_view phase) noexcept {
+        try {
+            if (role_checkpoint)
+                role_checkpoint(phase);
+        } catch (...) {
+            try {
+                event("error", "runtime-shutdown", "Lifetime checkpoint observer failed");
+            } catch (...) {
+            }
+        }
+    }
     void role_idle() const {
         if (roles)
             roles->guard();
@@ -96,7 +108,7 @@ struct Runtime::Impl {
     LogSink logger() {
         return [this](const LogRecord &r) { event(r.level, r.component, r.message); };
     }
-    explicit Impl(const Configuration &c) {
+    explicit Impl(const Configuration &c) : role_checkpoint(c.x1_role_checkpoint) {
         preview_now = c.preview_clock ? c.preview_clock : [] { return std::chrono::steady_clock::now(); };
         recipes = c.recipes;
         store = std::make_shared<artifact::Store>(c.project);
@@ -112,9 +124,11 @@ struct Runtime::Impl {
         devices = std::make_unique<device::Runtime>(*registry);
         jobs = std::make_unique<jobs::Manager>(logger());
         projected = std::make_unique<ProjectedSessions>(
-            *registry, *jobs, store, [this](std::string k, std::string component, std::string m) {
+            *registry, *jobs, store,
+            [this](std::string k, std::string component, std::string m) {
                 event(std::move(k), std::move(component), std::move(m));
-            });
+            },
+            role_checkpoint);
         if (!c.x1_role_state_dir.empty()) {
             const auto profile = std::getenv("MANTIS_X1_PROFILE");
             const auto root = std::getenv("MANTIS_X1_ROLE_STATE_DIR");
@@ -126,9 +140,20 @@ struct Runtime::Impl {
         event("runtime.ready", "runtime", "Project opened: " + store->root().string());
     }
     ~Impl() {
-        // Role Jobs use registry/devices/projected until their actual I/O retires.
+        // Recorders can submit finalization Jobs during shutdown. Retire those
+        // producers while Manager is live, without destroying ProjectedSessions:
+        // role Jobs still use its quiescence snapshots until their own retirement.
         if (roles)
+            for (auto &[id, capture] : captures)
+                capture.session->stop();
+        projected->quiesce();
+        if (roles) {
+            jobs->close();
+            lifetime_checkpoint("shutdown.manager.before-retire");
             jobs.reset();
+            lifetime_checkpoint("shutdown.manager.retired");
+        }
+        lifetime_checkpoint("shutdown.projected.before-destroy");
         projected.reset();
         for (auto &[id, c] : captures) {
             c.session->stop();

@@ -8,6 +8,7 @@ namespace mantis::services {
 // Control entry is serialized. The Job exclusively owns device mutation while reserved.
 class X1Roles {
     x1::roles::Store store_;
+    x1::roles::Store::Checkpoint checkpoint_;
     plugins::Registry &registry_;
     jobs::Manager &jobs_;
     std::unique_ptr<device::Runtime> &devices_;

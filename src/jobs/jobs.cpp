@@ -64,18 +64,24 @@ Manager::Manager(LogSink logger) : logger_(std::move(logger)) {
     });
 }
 Manager::~Manager() {
+    close();
+    if (worker_.joinable())
+        worker_.join();
+}
+void Manager::close() {
     {
         std::lock_guard lock(mutex_);
+        accepting_ = false;
         for (auto &[id, j] : jobs_)
             j->cancel.cancel();
         worker_.request_stop();
         ready_.notify_all();
     }
-    if (worker_.joinable())
-        worker_.join();
 }
 Id Manager::submit(std::string name, Task task) {
     std::lock_guard lock(mutex_);
+    if (!accepting_)
+        fail(Status::busy, "Job admission is closed for shutdown");
     if (queue_.size() >= 64)
         fail(Status::busy, "Job queue capacity reached");
     if (jobs_.size() >= 256) {

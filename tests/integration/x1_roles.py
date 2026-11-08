@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from x1_role_fixture_process import FixtureDaemon
 
 build, fixture = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
 sys.path.insert(0, str(build / 'python'))
@@ -31,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix='mantis-x1-roles-') as directory:
     client = mantis.connect(port=port, token=token)
     log = open(root / 'daemon.log', 'w+')
     daemon = None
+    owner = FixtureDaemon()
     def until(fn, timeout=20):
         end = time.monotonic() + timeout
         while time.monotonic() < end:
@@ -41,13 +43,13 @@ with tempfile.TemporaryDirectory(prefix='mantis-x1-roles-') as directory:
     def start(opt_in):
         args = [str(build / 'bin/mantisd'), '--project', str(root / 'project')]
         if opt_in: args += ['--x1-role-state-dir', str(state_dir)]
-        process = subprocess.Popen(args, env=env, stdout=log, stderr=log)
-        def ready():
-            assert process.poll() is None, 'Role fixture daemon exited before ready'
-            try: return client.x1_roles.query()
-            except (OSError, mantis.MantisError): return None
-        until(ready)
-        return process
+        def wait_ready(process):
+            def ready():
+                assert process.poll() is None, 'Role fixture daemon exited before ready'
+                try: return client.x1_roles.query()
+                except (OSError, mantis.MantisError): return None
+            until(ready)
+        return owner.start(args, wait_ready, env=env, stdout=log, stderr=log)
     def stop():
         client._call(shutdown=wire.Empty())
         assert daemon.wait(timeout=20) == 0
@@ -117,7 +119,12 @@ with tempfile.TemporaryDirectory(prefix='mantis-x1-roles-') as directory:
         assert failed.returncode != 0
         print('Token, opt-in, C++/Python public Jobs, stale requests, durable restart and tamper rejection passed')
     finally:
-        if daemon and daemon.poll() is None:
-            daemon.terminate()
-            daemon.wait(timeout=20)
-        log.close()
+        primary = sys.exc_info()[1]
+        try:
+            owner.retire(primary=primary)
+        finally:
+            try:
+                log.close()
+            except OSError as secondary:
+                if primary is None: raise
+                primary.add_note('Role fixture log close: ' + type(secondary).__name__)

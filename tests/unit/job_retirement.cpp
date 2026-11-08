@@ -73,6 +73,18 @@ int main() {
         queued.reset();
         manager.cancel(next);
         CHECK(!cancelled_retired);
+        manager.close();
+        bool admission_closed = false;
+        try {
+            manager.submit(
+                "Rejected after close",
+                [](jobs::Context &) -> std::optional<mantis::artifact::ArtifactReference> { return {}; });
+        } catch (const mantis::Failure &error) {
+            CHECK(error.error.code == mantis::Status::busy);
+            admission_closed = true;
+        }
+        CHECK(admission_closed);
+        CHECK(manager.get(id).state == jobs::State::completed && !retired);
         gate.release();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
         while (manager.get(next).state != jobs::State::cancelled &&

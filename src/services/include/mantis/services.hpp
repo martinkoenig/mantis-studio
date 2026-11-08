@@ -84,7 +84,7 @@ struct Configuration {
     // Injectable monotonic lease clock; default is steady_clock, with the same finite lease policy.
     std::function<std::chrono::steady_clock::time_point()> preview_clock{};
     std::filesystem::path x1_role_state_dir{};
-    // Private deterministic I/O qualification seam, never exposed over the protocol.
+    // Private deterministic I/O/lifetime qualification seam, never exposed over the protocol.
     std::function<void(std::string_view)> x1_role_checkpoint{};
 };
 class Runtime final : public DeviceService,
