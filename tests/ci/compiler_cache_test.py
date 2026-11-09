@@ -1,4 +1,4 @@
-"""Real compiler-cache regressions and the Architecture workflow's event policy.
+"""Dependency/policy fixtures and real compiler-cache regressions for Architecture.
 
 Run with python3-yaml, ccache, gcc and g++ available. No project test is replaced.
 """
@@ -7,6 +7,7 @@ import datetime
 import fnmatch
 import importlib.util
 import itertools
+import json
 import os
 from pathlib import Path
 import re
@@ -121,6 +122,133 @@ class WorkflowPolicy(unittest.TestCase):
                                                    "UBSAN_OPTIONS": "halt_on_error=1"})
             summary = job["steps"][-1]
             self.assertTrue(expression(summary["if"], {"steps.cache-config.outcome": "success"}, False))
+
+
+class DependencyProvisioning(unittest.TestCase):
+    """Exercise the actual dependency scripts with builtin-only command fixtures.
+
+    ARM runner names are selectors, not native ARM or resolved-closure evidence.
+    No real sudo, APT, dpkg, tee, compiler or network operation runs here.
+    """
+
+    SHIMS = r'''
+record() { printf '%s\0' "$@" >> "$CI111_TRACE"; printf '\0' >> "$CI111_TRACE"; }
+sudo() {
+  record sudo "$@"
+  [[ "$1" == apt-get ]] || return 96
+  case "$2" in
+    update) return "$CI111_UPDATE_EXIT" ;;
+    install) return "$CI111_INSTALL_EXIT" ;;
+    *) return 97 ;;
+  esac
+}
+dpkg-query() {
+  record dpkg-query "$@"
+  printf '%s\n' 'libopencv-dev fixture-version' 'libopencv-contrib-dev fixture-version'
+}
+tee() {
+  [[ "$#" == 2 && "$1" == -a && "$2" == "$GITHUB_STEP_SUMMARY" ]] || return 98
+  while IFS= read -r line; do printf '%s\n' "$line" >> "$GITHUB_STEP_SUMMARY"; done
+}
+'''
+
+    def setUp(self):
+        self.expected = json.loads((ROOT / 'tests/fixtures/ci/dependency-argv.json').read_text())
+        self.normal = next(s for s in WORKFLOW['jobs']['linux']['steps'] if s.get('name') == 'Dependencies')
+        self.sanitizer = next(s for s in WORKFLOW['jobs']['sanitizers']['steps']
+                              if 'apt-get install ' in s.get('run', ''))
+
+    def run_dependencies(self, step, runner=None, studio=None, update_exit=0, install_exit=0):
+        with tempfile.TemporaryDirectory(prefix='mantis-dependency-fixture-') as directory:
+            root = Path(directory)
+            trace, summary, sentinel = root / 'trace.bin', root / 'summary.txt', root / 'injected.txt'
+            # Do not inherit credentials, shell startup hooks or dependency configuration.
+            env = {'PATH': '/mantis-no-external-programs', 'LANG': 'C',
+                   'CI111_TRACE': str(trace), 'GITHUB_STEP_SUMMARY': str(summary),
+                   'CI111_SENTINEL': str(sentinel), 'CI111_UPDATE_EXIT': str(update_exit),
+                   'CI111_INSTALL_EXIT': str(install_exit)}
+            if runner is not None:
+                env['MANTIS_CI_RUNNER'] = runner
+            if studio is not None:
+                env['MANTIS_CI_STUDIO'] = studio
+            result = subprocess.run(['/bin/bash', '--noprofile', '--norc', '-e', '-o', 'pipefail',
+                                     '-c', self.SHIMS + step['run']], env=env, cwd=root,
+                                    capture_output=True, text=True, timeout=5)
+            raw = trace.read_bytes() if trace.exists() else b''
+            return {'exit': result.returncode,
+                    'calls': [part.decode().split('\0') for part in raw.split(b'\0\0') if part],
+                    'stderr': result.stderr,
+                    'summary': summary.read_text() if summary.exists() else '',
+                    'injected': sentinel.exists()}
+
+    def assert_argv(self, step, packages, runner=None, studio=None):
+        result = self.run_dependencies(step, runner, studio)
+        self.assertEqual(result['exit'], 0, result['stderr'])
+        self.assertEqual(result['calls'], [
+            ['sudo', 'apt-get', 'update'],
+            ['sudo', 'apt-get', 'install', '--assume-yes', *packages],
+            ['dpkg-query', '-W', 'libopencv-dev', 'libopencv-contrib-dev'],
+        ], 'Exact APT argv and package root order must match the independent fixture')
+        self.assertEqual(result['summary'], 'libopencv-dev fixture-version\nlibopencv-contrib-dev fixture-version\n')
+        self.assertFalse(result['injected'])
+
+    def test_matrix_values_are_data_and_dependencies_cannot_be_skipped(self):
+        self.assertEqual(self.normal['env'], {
+            'MANTIS_CI_RUNNER': '${{ matrix.runner }}', 'MANTIS_CI_STUDIO': '${{ matrix.studio }}'})
+        self.assertNotIn('${{', self.normal['run'])
+        for step in (self.normal, self.sanitizer):
+            self.assertNotIn('if', step)
+            self.assertNotIn('continue-on-error', step)
+
+    def test_on_argv(self):
+        for runner in ('ubuntu-24.04', 'ubuntu-24.04-arm'):
+            with self.subTest(runner=runner):
+                self.assert_argv(self.normal, self.expected['ordinary_on'], runner, 'ON')
+
+    def test_off_argv(self):
+        for runner in ('ubuntu-24.04', 'ubuntu-24.04-arm'):
+            with self.subTest(runner=runner):
+                self.assert_argv(self.normal, self.expected['ordinary_off'], runner, 'OFF')
+
+    def test_sanitizer_argv_unchanged(self):
+        self.assert_argv(self.sanitizer, self.expected['sanitizer'])
+
+    def test_unknown_matrix_studio(self):
+        for studio in (None, '', 'on', 'OFF ', 'AUTO', 'ON\nOFF',
+                       'OFF"; printf injected > "$CI111_SENTINEL"; #',
+                       '$(printf injected > "$CI111_SENTINEL")'):
+            with self.subTest(studio=studio):
+                result = self.run_dependencies(self.normal, 'ubuntu-24.04', studio)
+                self.assertEqual(result['exit'], 64, 'Unknown Studio must fail closed before APT')
+                self.assertEqual(result['calls'], [])
+                self.assertIn('Unsupported Studio mode', result['stderr'])
+                self.assertFalse(result['injected'])
+
+    def test_unknown_matrix_runner(self):
+        for runner in (None, '', 'ubuntu-22.04', 'windows-latest', 'ubuntu-24.04-arm ',
+                       'ubuntu-24.04"; printf injected > "$CI111_SENTINEL"; #'):
+            with self.subTest(runner=runner):
+                result = self.run_dependencies(self.normal, runner, 'ON')
+                self.assertEqual(result['exit'], 64, 'Unknown runner must fail closed before APT')
+                self.assertEqual(result['calls'], [])
+                self.assertIn('Unsupported dependency runner', result['stderr'])
+                self.assertFalse(result['injected'])
+
+    def test_update_failure_is_primary_and_stops_install(self):
+        for studio in ('ON', 'OFF'):
+            result = self.run_dependencies(self.normal, 'ubuntu-24.04', studio, update_exit=17)
+            self.assertEqual(result['exit'], 17, 'Update failure must remain primary')
+            self.assertEqual(result['calls'], [['sudo', 'apt-get', 'update']])
+            self.assertEqual(result['summary'], '')
+
+    def test_install_failure_is_primary_and_stops_receipt(self):
+        for studio in ('ON', 'OFF'):
+            result = self.run_dependencies(self.normal, 'ubuntu-24.04-arm', studio, install_exit=23)
+            self.assertEqual(result['exit'], 23, 'Install failure must remain primary')
+            self.assertEqual(len(result['calls']), 2)
+            self.assertEqual(result['calls'][0], ['sudo', 'apt-get', 'update'])
+            self.assertEqual(result['calls'][1][:4], ['sudo', 'apt-get', 'install', '--assume-yes'])
+            self.assertEqual(result['summary'], '')
 
 
 class RealCache(unittest.TestCase):
