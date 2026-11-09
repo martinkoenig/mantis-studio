@@ -20,6 +20,14 @@ x86_64 and native ARM64, with Studio enabled and disabled. Its package list and
 records describe what was actually run. This guide does not qualify a new build
 or extend platform support.
 
+Ordinary Studio-OFF CI jobs omit the eight explicit Qt6/QML package requests;
+Studio-ON requests and sanitizer provisioning remain unchanged. These are
+requested package roots, not a resolved dependency closure: OpenCV and runner
+preinstalls can still supply GUI libraries. This does not establish a Qt-free
+operating-system image or measured provisioning savings. Native package/version,
+architecture, configured/runtime and signed-source provenance require separate
+qualification on both runner architectures.
+
 | Requirement | Current source requirement |
 | --- | --- |
 | C/C++ toolchain | C++23 with `std::expected`; CI installs Ubuntu's `g++`. |

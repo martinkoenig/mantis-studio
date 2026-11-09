@@ -1,0 +1,20 @@
+{
+  "ordinary_on": [
+    "ccache", "python3-yaml", "cmake", "ninja-build", "g++", "libsqlite3-dev",
+    "protobuf-compiler", "libprotobuf-dev", "nlohmann-json3-dev", "python3-protobuf",
+    "libopencv-dev", "libopencv-contrib-dev", "qt6-base-dev", "qt6-declarative-dev",
+    "qml6-module-qtquick", "qml6-module-qtquick-controls", "qml6-module-qtquick-layouts",
+    "qml6-module-qtquick-templates", "qml6-module-qtquick-window",
+    "qml6-module-qtqml-workerscript", "gdb"
+  ],
+  "ordinary_off": [
+    "ccache", "python3-yaml", "cmake", "ninja-build", "g++", "libsqlite3-dev",
+    "protobuf-compiler", "libprotobuf-dev", "nlohmann-json3-dev", "python3-protobuf",
+    "libopencv-dev", "libopencv-contrib-dev", "gdb"
+  ],
+  "sanitizer": [
+    "ccache", "cmake", "ninja-build", "g++", "libsqlite3-dev", "protobuf-compiler",
+    "libprotobuf-dev", "nlohmann-json3-dev", "python3-protobuf", "libopencv-dev",
+    "libopencv-contrib-dev"
+  ]
+}
