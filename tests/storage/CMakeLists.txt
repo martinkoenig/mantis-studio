@@ -42,6 +42,16 @@ add_test(NAME virtual-rig-storage COMMAND mantis-rig-storage-qualification
   regression $<TARGET_FILE:virtual-rig> ${PROJECT_SOURCE_DIR}/profiles/virtual-rig-trigger.json)
 set_tests_properties(virtual-rig-storage PROPERTIES TIMEOUT 40)
 # Full-rate/collapse modes are explicitly invoked, never registered as CTests.
+# Issue #12 actual-acceptance observer: explicit target only, no normal build,
+# installation, environment selector, new runtime or product-library mutation.
+add_executable(mantis-recorder-observer-mantisd EXCLUDE_FROM_ALL
+  recorder_daemon.cpp recorder_observer.cpp
+  ${PROJECT_SOURCE_DIR}/src/device-runtime/device-runtime.cpp
+  ${PROJECT_SOURCE_DIR}/src/artifact-store/artifact-store.cpp)
+target_compile_definitions(mantis-recorder-observer-mantisd PRIVATE MANTIS_RECORDER_OBSERVER)
+target_include_directories(mantis-recorder-observer-mantisd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mantis-recorder-observer-mantisd PRIVATE mantis-service-adapter
+  mantis-artifact-store nlohmann_json::nlohmann_json)
 # Keep all 56 ordinary X1 scenarios on the product Store. Only this new case
 # uses the existing qualified Store binary and its private short-write control.
 add_test(NAME x1-pairing-stream-GREY-post-commit-store-failure-recorder

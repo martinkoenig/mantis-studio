@@ -3,6 +3,16 @@
 // defines MANTIS_STORAGE_FAULT_TESTING. Product builds have no control object,
 // callback, environment selector, allocation or checkpoint branch.
 #include <fstream>
+#ifdef MANTIS_RECORDER_OBSERVER
+#include "recorder_observer.hpp"
+#define MANTIS_RECORDER_STORE(...) __VA_ARGS__
+#define MANTIS_RECORDER_STORE_CALL(kind, expression)                                                         \
+    ::mantis::recorder_observer::measured(::mantis::recorder_observer::Kind::kind,                           \
+                                          packet.header.sequence.value, [&] { return (expression); })
+#else
+#define MANTIS_RECORDER_STORE(...) ((void)0)
+#define MANTIS_RECORDER_STORE_CALL(kind, expression) (expression)
+#endif
 #ifdef MANTIS_STORAGE_FAULT_TESTING
 #include <filesystem>
 #include <memory>
