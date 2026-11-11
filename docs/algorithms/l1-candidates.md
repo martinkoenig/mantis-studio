@@ -8,6 +8,10 @@ readiness claim.
 
 ## Integration and placement
 
+[ALG-02](l1-subpixel.md) adds an explicitly selected subpixel mode through the
+same internal factory. The specification below continues to describe the default
+ALG-01 algorithm; its integer-coordinate and replay meanings are unchanged.
+
 `pipeline::l1_candidate_extractor(L1CandidateConfig)` constructs an internal
 `SemanticNode` with one AcquisitionBundle-1 input and one LaserObservation-1
 output, deterministic CPU backend and immutable configuration. The existing typed

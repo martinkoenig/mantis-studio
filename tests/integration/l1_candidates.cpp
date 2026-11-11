@@ -44,12 +44,18 @@ void rejects(F f, std::optional<Status> status = {},
     }
     CHECK(bad);
 }
-void assert_line(const LaserObservation &o, uint32_t first, uint32_t count, uint32_t peak) {
+void assert_line(const LaserObservation &o, uint32_t first, uint32_t count, uint32_t peak,
+                 bool refined = false) {
     CHECK(o.sample_count == count);
     CHECK(o.disposition == ObservationDisposition::success);
     for (uint32_t i = 0; i < count; ++i) {
         CHECK(value<float>(o, laser::source_pixel, i) == first + i);
-        CHECK(value<float>(o, laser::source_pixel, i, 1) == 2);
+        const auto expected_y = refined ? float(2.0 + double(peak - 11) / (2 * double(peak - 9))) : 2.0f;
+        CHECK(value<float>(o, laser::source_pixel, i, 1) == expected_y);
+        if (refined) {
+            CHECK(value<uint8_t>(o, l1::refinement_valid, i) == 1);
+            CHECK(value<uint32_t>(o, l1::curvature, i) == peak - 9);
+        }
         CHECK(value<uint32_t>(o, laser::quality_flags, i) == 0);
         CHECK(value<uint32_t>(o, l1::reason, i) == 0);
         CHECK(value<uint32_t>(o, l1::peak, i) == peak);
@@ -60,7 +66,7 @@ void assert_line(const LaserObservation &o, uint32_t first, uint32_t count, uint
     }
     const auto identity = o.attributes[0].buffer.identity();
     for (const auto &a : o.attributes)
-        CHECK(a.buffer.identity() == identity);
+        CHECK((refined && a.descriptor.name == l1::curvature) || a.buffer.identity() == identity);
     CHECK(o.confidence_interpretation.presence() == Presence::unavailable);
 }
 void positives() {
@@ -407,7 +413,7 @@ struct Gate final : memory::Fence {
         cv.notify_all();
     }
 };
-void cancellation_lifetime() {
+void cancellation_lifetime(bool refined = false) {
     for (bool packed : {false, true}) {
         auto b = line(packed);
         auto source = b.frameset->frames[0]->attributes[0].buffer;
@@ -422,7 +428,10 @@ void cancellation_lifetime() {
         storage->ready = gate;
         edit_image(b, [&](auto &p) { p.attributes[0].buffer = {storage, 0, storage->size}; });
         std::array<SemanticPublished, 1> inputs{std::make_shared<const SemanticPacket>(b)};
-        auto instance = l1_candidate_extractor(config(packed)).factory();
+        auto c = config(packed);
+        if (refined)
+            c.subpixel = L1SubpixelConfig{};
+        auto instance = l1_candidate_extractor(c).factory();
         CancellationToken token;
         auto entry = gate->entered.get_future();
         auto pending = std::async(std::launch::async,
@@ -448,10 +457,10 @@ void cancellation_lifetime() {
         CHECK(weak.expired());
         auto retained = invoke(*instance, line(packed));
         instance.reset();
-        assert_line(std::get<LaserObservation>(*retained), 0, 8, packed ? 701 : 181);
+        assert_line(std::get<LaserObservation>(*retained), 0, 8, packed ? 701 : 181, refined);
     }
 }
-void recorded_path() {
+void recorded_path(bool refined = false) {
     const auto path = std::filesystem::temp_directory_path() / ("mantis-l1-" + Id::random().value);
     struct Cleanup {
         std::filesystem::path path;
@@ -471,6 +480,8 @@ void recorded_path() {
                                   {2, outcome(RecordedRunDisposition::completed, AcquisitionReason::none)});
         auto descriptor = store->finalize(raw);
         auto c = config(true);
+        if (refined)
+            c.subpixel = L1SubpixelConfig{};
         c.raw_input = {raw, {"org.mantis.RawCapture", 3}, descriptor.hash, 0};
         auto original = store->bundle(raw, 1);
         std::ostringstream raw_bytes;
@@ -485,7 +496,7 @@ void recorded_path() {
             CHECK(captured && captured->has_value());
             auto result = invoke(*instance, **captured);
             const auto &o = std::get<LaserObservation>(*result);
-            assert_line(o, 0, 8, 701);
+            assert_line(o, 0, 8, 701, refined);
             CHECK(o.context.raw_input.get()->id == raw &&
                   *o.context.raw_input.get()->hash.get() == descriptor.hash);
             CHECK(o.context.exact_inputs.size() == 1 && o.context.exact_inputs[0].id == raw);
@@ -519,7 +530,7 @@ void recorded_path() {
         rejects([&] { store->append_laser_observation(rejected, wrong); }, Status::incompatible);
     }
     CHECK(encode(retained) == expected_bytes);
-    assert_line(retained, 0, 8, 701);
+    assert_line(retained, 0, 8, 701, refined);
 }
 int main() {
     try {
@@ -529,7 +540,9 @@ int main() {
         invalid_inputs();
         dark_reference();
         cancellation_lifetime();
+        cancellation_lifetime(true);
         recorded_path();
+        recorded_path(true);
         std::cout << "L1 candidates: extraction, typed DAG, lineage, rejection, dark evidence and "
                      "cancellation passed\n";
         return 0;

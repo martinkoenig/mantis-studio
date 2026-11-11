@@ -110,6 +110,36 @@ inline pipeline::L1CandidateConfig config(bool packed = false) {
     c.maximum_width = 3;
     return c;
 }
+inline pipeline::L1CandidateConfig subpixel_config(bool packed = false) {
+    auto c = config(packed);
+    c.subpixel = pipeline::L1SubpixelConfig{};
+    c.minimum_signal = packed ? 64 : 16;
+    c.background_level = packed ? 48 : 12;
+    c.minimum_width = 1;
+    c.maximum_width = 16;
+    c.producer_generation = {{"l1-subpixel-generation"}};
+    return c;
+}
+// Independently specified exact quadratic: vertex (x, 4.25), curvature 32 DN
+// per pixel squared. Integer samples [left,center,right]=[155,179,171].
+inline AcquisitionBundle quadratic(bool packed = false, uint32_t width = 8, uint32_t height = 12) {
+    return image_bundle(packed, width, height, [](uint32_t, uint32_t y) -> uint16_t {
+        switch (y) {
+        case 2:
+            return 99;
+        case 3:
+            return 155;
+        case 4:
+            return 179;
+        case 5:
+            return 171;
+        case 6:
+            return 131;
+        default:
+            return 12;
+        }
+    });
+}
 inline AcquisitionBundle line(bool packed = false, uint32_t w = 8, uint32_t h = 8) {
     return image_bundle(packed, w, h, [=](uint32_t, uint32_t y) {
         return static_cast<uint16_t>(y == 2 ? (packed ? 701 : 181) : y == 3 ? (packed ? 700 : 180) : 10);
