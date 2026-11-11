@@ -8,7 +8,7 @@ import tempfile
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "integration"))
-from recorder_observer import AcceptanceObserver, decode, InvalidTrace, NONE
+from recorder_observer import AcceptanceObserver, decode, decode_snapshot_cut_control, InvalidTrace, NONE
 
 CAPTURE = "00000000-0000-0000-0000-000000000001"
 RAW = "00000000-0000-0000-0000-000000000002"
@@ -67,6 +67,22 @@ def encode(header, events):
     payload = json.dumps(header, separators=(",", ":")).encode()
     return b"MREC0001" + struct.pack("<Q", len(payload)) + payload + b"".join(
         struct.pack("<11Q", *event) for event in sorted(events, key=lambda e: (e[0], e[1])))
+
+
+def live_prefix():
+    header, events = fixture()
+    # Export counts stop at the open Store parent. The writer then completes all
+    # children and parents BEFORE snapshot_ns while export is descheduled.
+    # Only the original published prefix is exported; its parents remain open.
+    cut = next(e[1] for e in events if e[2] == 20) + 1
+    events = [e for e in events if e[0] != 2 or e[1] < cut]
+    header["counts"][2] = header["exported_counts"][2] = cut
+    header["workers_running"] = [False, True]
+    for e in events:
+        if e[2] in (11, 12, 20):
+            e[5] = e[7] = NONE
+            e[10] = 2
+    return header, events
 
 
 class RecorderObserverTests(unittest.TestCase):
@@ -142,6 +158,85 @@ class RecorderObserverTests(unittest.TestCase):
         service[5] = service[7] = NONE
         service[10] = 2
         self.assertEqual(self.decode(header, events)["pending_spans"], 1)
+
+    def test_live_count_cut_is_incomplete_but_closed_parents_still_require_children(self):
+        header, events = live_prefix()
+        result = self.decode(header, events)
+        self.assertEqual(result["status"], "INCOMPLETE")
+        self.assertEqual(result["pending_spans"], 3)
+        self.assertEqual(result["fully_accounted_callbacks"], 0)
+        # Reproduce the old exporter: ends are within snapshot_ns but depend on
+        # child rows outside counts[2]. Running workers must NOT waive the error.
+        _, completed = fixture()
+        for e in events:
+            if e[2] in (11, 12, 20):
+                e[:] = next(x for x in completed if x[2] == e[2])[:]
+        with self.assertRaisesRegex(InvalidTrace, "omitted writer/Store span"):
+            self.decode(header, events)
+
+    def test_native_cut_pair_oracle_requires_both_pending_and_complete_coverage(self):
+        header, events = live_prefix()
+        complete_header, complete_events = fixture()
+        header["workload"] = complete_header["workload"] = "observer-self-test"
+        with tempfile.TemporaryDirectory() as path:
+            root = Path(path)
+            prefix = root / "snapshot-0.bin"
+            final = root / "snapshot-1.bin"
+            prefix.write_bytes(encode(header, events))
+            final.write_bytes(encode(complete_header, complete_events))
+            result = decode_snapshot_cut_control(root, capture_id=CAPTURE, raw_id=RAW)
+            self.assertEqual(result["prefix"]["status"], "INCOMPLETE")
+            self.assertEqual(result["complete"]["fully_accounted_callbacks"], 1)
+            # Marking every later parent pending would conceal coverage forever.
+            for event in complete_events:
+                if event[2] in (11, 12, 20):
+                    event[5] = event[7] = NONE
+                    event[10] = 2
+            final.write_bytes(encode(complete_header, complete_events))
+            with self.assertRaisesRegex(InvalidTrace, "completed prefix"):
+                decode_snapshot_cut_control(root, capture_id=CAPTURE, raw_id=RAW)
+            final.write_bytes(encode(complete_header, [e for e in complete_events if e[2] != 24]))
+            with self.assertRaisesRegex(InvalidTrace, "truncated/extra"):
+                decode_snapshot_cut_control(root, capture_id=CAPTURE, raw_id=RAW)
+
+    def test_throwing_callback_requires_exceptional_service_not_success(self):
+        header, events = fixture()
+        events = [e for e in events if e[2] not in (13, 14, 15) and e[2] not in range(21, 35)]
+        for i, event in enumerate(e for e in events if e[0] == 2):
+            event[1] = i
+        header["counts"][2] = header["exported_counts"][2] = sum(e[0] == 2 for e in events)
+        for event in events:
+            if event[2] in (11, 12, 20):
+                event[10] = 1
+        result = self.decode(header, events)
+        self.assertEqual(result["failed_writer_cycles"], 1)
+        self.assertEqual(result["fully_accounted_callbacks"], 0)
+        self.assertEqual(result["status"], "INCOMPLETE")
+        # The original after-catch close wrote a successful service flag.
+        next(e for e in events if e[2] == 11)[10] = 0
+        with self.assertRaisesRegex(InvalidTrace, "exceptional callback without exceptional service"):
+            self.decode(header, events)
+
+    def test_post_callback_failure_retains_failed_cycle_and_still_checks_store(self):
+        header, events = fixture()
+        events = [e for e in events if e[2] not in (14, 15)]
+        for i, event in enumerate(e for e in events if e[0] == 2):
+            event[1] = i
+        header["counts"][2] = header["exported_counts"][2] = sum(e[0] == 2 for e in events)
+        for kind in (11, 13):
+            next(e for e in events if e[2] == kind)[10] = 1
+        result = self.decode(header, events)
+        self.assertEqual(result["failed_writer_cycles"], 1)
+        self.assertEqual(result["fully_accounted_callbacks"], 0)
+        self.assertEqual(result["status"], "INCOMPLETE")
+        # A failed service does not excuse missing successful callback/Store work.
+        events = [e for e in events if e[2] != 24]
+        for i, event in enumerate(e for e in events if e[0] == 2):
+            event[1] = i
+        header["counts"][2] -= 1
+        header["exported_counts"][2] -= 1
+        with self.assertRaisesRegex(InvalidTrace, "omitted writer/Store span"):
+            self.decode(header, events)
 
     def test_first_failure_survives_declared_output_exhaustion(self):
         header, events = fixture()

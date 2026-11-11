@@ -77,7 +77,7 @@ class Span {
         finish();
     }
     Span(const Span &) = delete;
-    void finish() noexcept;
+    void finish(bool exceptional = false) noexcept;
     void values(uint64_t a, uint64_t b) noexcept;
 };
 void point(Kind, uint64_t item = no_item, uint64_t a = 0, uint64_t b = 0) noexcept;
@@ -92,7 +92,7 @@ class Cycle {
         finish();
     }
     void start(uint64_t item) noexcept;
-    void finish() noexcept;
+    void finish(bool exceptional = false) noexcept;
 };
 template <class F> decltype(auto) measured(Kind kind, uint64_t item, F &&function) {
     Span span(kind, item);
@@ -115,5 +115,6 @@ template <class Queue> void queue(Queue &queue, uint64_t item) noexcept {
 // Called only by the isolated daemon wrapper, before/after the real entrypoint.
 void start(const std::filesystem::path &, uint64_t capture_ordinal);
 void stop() noexcept;
-bool self_test(const std::filesystem::path &);
+enum class SelfTest { buffer, snapshot_cut, callback_failure, nonstandard_failure };
+bool self_test(const std::filesystem::path &, SelfTest = SelfTest::buffer);
 } // namespace mantis::recorder_observer

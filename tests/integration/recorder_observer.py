@@ -149,33 +149,63 @@ def decode(data, *, capture_id, raw_id, workload="actual-acceptance"):
             by_item.setdefault(event["item"], {}).setdefault(event["kind"], []).append(event)
     committed = 0
     accounted_items = set()
+    failed_items = set()
     for item, groups in by_item.items():
         for kind, records in groups.items():
             require(len(records) == 1, "duplicate writer item/stage")
         callback = groups.get(12, [None])[0]
-        if callback is None or callback["flags"] != 0:
-            continue
         service = groups.get(11, [None])[0]
+        if callback is None:
+            if service is not None and service["flags"] == 1:
+                failed_items.add(item)  # Failure before callback entry.
+            continue
         require(service is not None, "omitted writer service cycle")
         # An ongoing service can legitimately be after callback return. It is
         # incomplete, never promoted to callback-accounted or complete coverage.
-        if service["flags"] == 2:
+        if service["flags"] == 2 or callback["flags"] == 2:
             continue
-        needed = (13, 14, 15, 20) + STORE_STAGES
+        require(service["begin"] <= callback["begin"] <= callback["end"] <= service["end"],
+                "writer callback/service nesting")
+        if callback["flags"] == 1:
+            require(service["flags"] == 1, "exceptional callback without exceptional service")
+            failed_items.add(item)
+            store = groups.get(20, [None])[0]
+            if store is not None:
+                require(store["flags"] != 2 and callback["begin"] <= store["begin"] <= store["end"]
+                        <= callback["end"], "failed Store parent misattribution")
+            continue
+        if service["flags"] == 1:
+            failed_items.add(item)
+        # A successful callback still needs complete Store coverage, including
+        # when a later payload/lock/accounting stage terminates the service.
+        needed = (20,) + STORE_STAGES
         if header["dropped"][2] and not all(k in groups for k in needed):
             continue  # Declared exhausted tail is INCOMPLETE, never coverage-qualified.
         require(all(k in groups for k in needed), "omitted writer/Store span")
         require(all(groups[k][0]["flags"] == 0 for k in needed), "incomplete successful writer cycle")
         store = groups[20][0]
         require(service["begin"] <= callback["begin"] <= store["begin"] <= store["end"]
-                <= callback["end"] <= groups[13][0]["begin"], "writer/Store nesting")
+                <= callback["end"], "writer/Store nesting")
         ordered = [groups[k][0] for k in STORE_STAGES]
         require(store["begin"] <= ordered[0]["begin"] and ordered[-1]["end"] <= store["end"],
                 "Store parent misattribution")
         require(all(left["end"] <= right["begin"] for left, right in zip(ordered, ordered[1:])),
                 "overlapping exclusive Store stages")
-        tail = [groups[k][0] for k in (13, 14, 15)]
-        require(all(left["end"] <= right["begin"] for left, right in zip(tail, tail[1:])) and
+        if service["flags"] == 1:
+            for kind in (13, 14, 15):
+                if kind in groups:
+                    event = groups[kind][0]
+                    require(event["flags"] != 2 and callback["end"] <= event["begin"] <= event["end"]
+                            <= service["end"], "failed post-callback service nesting")
+            continue  # Failed cycles are retained, never counted as successful.
+        needed = (13, 14, 15)
+        if header["dropped"][2] and not all(k in groups for k in needed):
+            continue
+        require(all(k in groups for k in needed), "omitted writer/Store span")
+        require(all(groups[k][0]["flags"] == 0 for k in needed), "incomplete successful writer cycle")
+        tail = [groups[k][0] for k in needed]
+        require(callback["end"] <= tail[0]["begin"] and
+                all(left["end"] <= right["begin"] for left, right in zip(tail, tail[1:])) and
                 tail[-1]["end"] <= service["end"], "missing/misattributed post-callback service")
         committed += 1
         accounted_items.add(item)
@@ -191,8 +221,8 @@ def decode(data, *, capture_id, raw_id, workload="actual-acceptance"):
         ordered = [next(e for e in source if e["kind"] == kind) for kind in (2, 3, 4, 5, 6)]
         require(all(left["end"] <= right["begin"] for left, right in zip(ordered, ordered[1:])),
                 "source/admission overlap")
-    if not incomplete and not any(e["kind"] == 12 and e["flags"] == 1 for e in events):
-        require(accounted_items == {e["item"] for e in admissions if e["a"] == 1},
+    if not incomplete:
+        require(accounted_items | failed_items == {e["item"] for e in admissions if e["a"] == 1},
                 "unmatched accepted item/writer accounting")
     if not incomplete and first is None:
         for event in admissions:
@@ -215,11 +245,12 @@ def decode(data, *, capture_id, raw_id, workload="actual-acceptance"):
                     following["a"] - following["b"] == e["a"], "queue snapshot counter mismatch")
         if e["kind"] == 50 and e["flags"] == 0:
             require(e["a"] <= e["begin"], "shifted observer resource window")
-    result = dict(version=1, status="INCOMPLETE" if incomplete else "COVERAGE_CHECKED",
+    result = dict(version=1, status="INCOMPLETE" if incomplete or failed_items else "COVERAGE_CHECKED",
                   observer="UNQUALIFIED", historical_cause="UNKNOWN", recovered_records=None,
                   capture=hashlib.sha256(capture_id.encode()).hexdigest(),
                   raw=hashlib.sha256(raw_id.encode()).hexdigest(),
                   records=len(events), fully_accounted_callbacks=committed,
+                  failed_writer_cycles=len(failed_items),
                   failed_admissions=sum(e["a"] == 0 for e in admissions),
                   first_failure_retained=first is not None, dropped=header["dropped"],
                   pending_spans=sum(e["flags"] == 2 for e in events),
@@ -231,6 +262,30 @@ def decode_file(path, *, capture_id, raw_id, workload="actual-acceptance"):
     with Path(path).open("rb") as source:
         data = source.read(MAX_BYTES + 1)
     return decode(data, capture_id=capture_id, raw_id=raw_id, workload=workload)
+
+
+def decode_snapshot_cut_control(path, *, capture_id, raw_id):
+    """Independent oracle for the gated native exporter-prefix regression."""
+    path = Path(path)
+    prefix = decode_file(path / "snapshot-0.bin", capture_id=capture_id, raw_id=raw_id,
+                         workload="observer-self-test")
+    complete = decode_file(path / "snapshot-1.bin", capture_id=capture_id, raw_id=raw_id,
+                           workload="observer-self-test")
+    require(prefix["status"] == "INCOMPLETE" and prefix["pending_spans"] == 3 and
+            prefix["fully_accounted_callbacks"] == 0, "snapshot cut parents must remain pending")
+    require(complete["status"] == "COVERAGE_CHECKED" and complete["pending_spans"] == 0 and
+            complete["fully_accounted_callbacks"] == 1 and complete["records"] > prefix["records"],
+            "snapshot cut completed prefix must retain full writer coverage")
+    return dict(prefix=prefix, complete=complete)
+
+
+def decode_writer_failure_control(path, *, capture_id, raw_id):
+    result = decode_file(Path(path) / "snapshot-0.bin", capture_id=capture_id, raw_id=raw_id,
+                         workload="observer-self-test")
+    require(result["failed_writer_cycles"] == 1 and result["fully_accounted_callbacks"] == 0 and
+            result["first_failure_retained"] and result["status"] == "INCOMPLETE",
+            "writer failure control must retain exceptional service and primary failure")
+    return result
 
 
 class AcceptanceObserver:
@@ -341,11 +396,19 @@ if __name__ == "__main__":
     parser.add_argument("trace", type=Path)
     parser.add_argument("--capture-id", required=True)
     parser.add_argument("--raw-id", required=True)
-    parser.add_argument("--observer-self-test", action="store_true")
+    control = parser.add_mutually_exclusive_group()
+    control.add_argument("--observer-self-test", action="store_true")
+    control.add_argument("--observer-cut-self-test", action="store_true")
+    control.add_argument("--observer-failure-self-test", action="store_true")
     args = parser.parse_args()
     try:
-        result = decode_file(args.trace, capture_id=args.capture_id, raw_id=args.raw_id,
-                             workload="observer-self-test" if args.observer_self_test else "actual-acceptance")
+        if args.observer_cut_self_test:
+            result = decode_snapshot_cut_control(args.trace, capture_id=args.capture_id, raw_id=args.raw_id)
+        elif args.observer_failure_self_test:
+            result = decode_writer_failure_control(args.trace, capture_id=args.capture_id, raw_id=args.raw_id)
+        else:
+            result = decode_file(args.trace, capture_id=args.capture_id, raw_id=args.raw_id,
+                                 workload="observer-self-test" if args.observer_self_test else "actual-acceptance")
     except (InvalidTrace, OSError):
         raise SystemExit("UNQUALIFIED: invalid or unavailable Recorder observer evidence") from None
     print(json.dumps(result, sort_keys=True))

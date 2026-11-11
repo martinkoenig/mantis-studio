@@ -1,9 +1,12 @@
 #include "recorder_observer.hpp"
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <csignal>
 #include <cstring>
 #include <fstream>
+#include <mantis/device_runtime.hpp>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <thread>
@@ -20,6 +23,9 @@ struct Event {
 };
 struct Row {
     Event event;
+    // Single-writer lane prefix at completion, published by complete.release.
+    // A snapshot cannot close a parent while omitting its later child records.
+    uint64_t completion_prefix{};
     std::atomic_bool complete{};
 };
 static_assert(sizeof(Row) * record_count < output_limit);
@@ -78,10 +84,37 @@ void number(std::ostream &out, uint64_t value) {
     for (unsigned i = 0; i < 8; ++i)
         out.put(static_cast<char>(value >> (8 * i)));
 }
+// Only the explicit native cut control supplies this gate. No frame path or
+// ordinary sampler export takes its mutex. All waits bound failure; state
+// predicates, not time or scheduler luck, establish the tested interleaving.
+struct SnapshotCut {
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool ready{}, cut{}, completed{}, released{}, failed{};
+    bool wait(std::unique_lock<std::mutex> &lock, bool &state) {
+        if (!changed.wait_for(lock, std::chrono::seconds(5), [&] { return state || released || failed; }))
+            failed = true;
+        changed.notify_all();
+        return state && !failed;
+    }
+    bool after_count_cut() {
+        std::unique_lock lock(mutex);
+        cut = true;
+        changed.notify_all();
+        return wait(lock, completed);
+    }
+    void release() {
+        std::lock_guard lock(mutex);
+        released = true;
+        changed.notify_all();
+    }
+};
 // Only the sampler writes files. Published begin fields are immutable. End and
 // value fields are read ONLY after complete.acquire(), so an in-flight span is
 // exported as pending, never as zero-duration or invented completed evidence.
-void export_snapshot(unsigned index, bool first, size_t &output_bytes) {
+// Completion also needs its entire same-lane publication prefix in this cut;
+// otherwise a delayed exporter could close parents but omit their child rows.
+void export_snapshot(unsigned index, bool first, size_t &output_bytes, SnapshotCut *test_cut = nullptr) {
     if (index >= 3 && !first)
         return;
     std::array<uint64_t, 4> counts{}, drops{};
@@ -89,6 +122,8 @@ void export_snapshot(unsigned index, bool first, size_t &output_bytes) {
         counts[i] = lanes[i].published.load(std::memory_order_acquire);
         drops[i] = lanes[i].dropped.load();
     }
+    if (test_cut && !test_cut->after_count_cut())
+        return;
     const auto failure_state = first_state.load(std::memory_order_acquire);
     const bool has_capture = selected.load(std::memory_order_acquire) != nullptr;
     const auto snapshot = static_cast<uint64_t>(wall() - origin);
@@ -156,7 +191,8 @@ void export_snapshot(unsigned index, bool first, size_t &output_bytes) {
                 e.item = row.event.item;
                 e.begin = row.event.begin;
                 e.cpu_begin = row.event.cpu_begin;
-                if (row.complete.load(std::memory_order_acquire) && row.event.end <= snapshot)
+                if (row.complete.load(std::memory_order_acquire) && row.completion_prefix <= counts[lane] &&
+                    row.event.end <= snapshot)
                     e = row.event;
                 else {
                     e.end = e.cpu_end = UINT64_MAX;
@@ -173,6 +209,153 @@ void export_snapshot(unsigned index, bool first, size_t &output_bytes) {
         return;
     std::filesystem::rename(part, path); // Export ACK is a complete immutable file.
     output_bytes += header.size() + 16 + (rejected ? 0 : count * 88);
+}
+bool snapshot_cut_control(const void *owner) {
+    SnapshotCut gate;
+    std::jthread writer([&] {
+        try {
+            bind(owner, 1);
+            for (auto kind : {Kind::source_wake, Kind::source_next, Kind::source_diagnostics, Kind::preview,
+                              Kind::admission})
+                point(kind, 0);
+            point(Kind::admission_result, 0, 1, 0);
+            point(Kind::source_sleep, 0);
+            point(Kind::producer_end);
+            unbind();
+            bind(owner, 2);
+            raw("00000000-0000-0000-0000-000000000002", 1);
+            point(Kind::queue_pop);
+            {
+                Span service(Kind::writer_service, 0);
+                {
+                    Span callback(Kind::callback, 0);
+                    {
+                        Span store(Kind::store_total, 0);
+                        {
+                            std::unique_lock lock(gate.mutex);
+                            gate.ready = true;
+                            gate.changed.notify_all();
+                            if (!gate.wait(lock, gate.cut))
+                                throw std::runtime_error("Snapshot cut gate unavailable");
+                        }
+                        for (uint64_t kind = 21; kind <= 34; ++kind)
+                            point(static_cast<Kind>(kind), 0);
+                    }
+                }
+                point(Kind::payload, 0);
+                point(Kind::session_lock_wait, 0);
+                point(Kind::accounting, 0);
+            }
+            {
+                std::unique_lock lock(gate.mutex);
+                gate.completed = true;
+                gate.changed.notify_all();
+                if (!gate.wait(lock, gate.released))
+                    throw std::runtime_error("Snapshot acknowledgement unavailable");
+            }
+            point(Kind::writer_end);
+        } catch (...) {
+            std::lock_guard lock(gate.mutex);
+            gate.failed = true;
+            gate.changed.notify_all();
+        }
+        unbind();
+    });
+    // Declared after writer: release every wait BEFORE jthread joins on unwind.
+    struct Release {
+        SnapshotCut &gate;
+        ~Release() {
+            gate.release();
+        }
+    } release{gate};
+    {
+        std::unique_lock lock(gate.mutex);
+        if (!gate.wait(lock, gate.ready))
+            return false;
+    }
+    size_t bytes{};
+    export_snapshot(0, false, bytes, &gate);
+    gate.release();
+    writer.join();
+    if (gate.failed || !gate.completed || !std::filesystem::exists(directory / "snapshot-0.bin"))
+        return false;
+    export_snapshot(1, false, bytes);
+    return std::filesystem::exists(directory / "snapshot-1.bin");
+}
+// Exercises the actual Session writer catch/cleanup, not a second runtime.
+class CallbackSource final : public device::ImageStream {
+    device::Descriptor descriptor_{{"observer-callback-source"}, {}, {}, {}, {}, {}, {}};
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    bool released_{}, timed_out_{};
+    unsigned calls_{};
+
+  public:
+    unsigned starts{}, stops{};
+    const device::Descriptor &descriptor() const override {
+        return descriptor_;
+    }
+    Result<void> start() override {
+        ++starts;
+        return {};
+    }
+    Result<data::Published> next() override {
+        if (calls_++ == 0) {
+            data::Packet image;
+            image.type = schema::image;
+            return data::publish(std::move(image));
+        }
+        std::unique_lock lock(mutex_);
+        if (!changed_.wait_for(lock, std::chrono::seconds(5), [&] { return released_; }))
+            timed_out_ = true;
+        return data::Published{};
+    }
+    void release() {
+        std::lock_guard lock(mutex_);
+        released_ = true;
+        changed_.notify_all();
+    }
+    Result<void> stop() override {
+        ++stops;
+        release();
+        return {};
+    }
+    bool bounded() const {
+        return !timed_out_; // Inspected only after Session retired its workers.
+    }
+};
+bool callback_failure_control(bool nonstandard) {
+    CallbackSource source;
+    std::atomic_uint entered{};
+    bool caught{};
+    const std::string expected =
+        nonstandard ? "Non-standard recorder exception" : "Observer callback failure";
+    // Session's real constructor selects this third capture and owns its workers.
+    captures_seen = 2;
+    try {
+        device::Session session(
+            {{"00000000-0000-0000-0000-000000000001"}, {{"observer-callback-source"}}, {}}, {&source},
+            [&](data::Published image) {
+                ++entered;
+                raw("00000000-0000-0000-0000-000000000002", 1);
+                Span store(Kind::store_total, image->header.sequence.value);
+                if (nonstandard)
+                    throw 7;
+                throw std::runtime_error(expected);
+            },
+            [&](const LogRecord &record) {
+                if (record.component == "capture")
+                    source.release(); // failed() has already stopped the producer.
+            });
+    } catch (const Failure &error) {
+        caught = expected == error.what();
+    }
+    if (!caught || entered != 1 || source.starts != 1 || source.stops != 1 || !source.bounded() ||
+        workers_running[0] || workers_running[1])
+        return false;
+    size_t bytes{};
+    export_snapshot(0, false, bytes);
+    return std::filesystem::exists(directory / "snapshot-0.bin");
 }
 } // namespace
 int64_t due(Clock::time_point value) noexcept {
@@ -267,14 +450,15 @@ void Span::values(uint64_t a, uint64_t b) noexcept {
         e.b = b;
     }
 }
-void Span::finish() noexcept {
+void Span::finish(bool exceptional) noexcept {
     if (slot_ == no_item)
         return;
     const auto cost_begin = cpu();
     auto &row = rows[offsets[lane_] + slot_];
     row.event.end = static_cast<uint64_t>(wall() - origin);
     row.event.cpu_end = static_cast<uint64_t>(cpu());
-    row.event.flags = std::uncaught_exceptions() > exceptions_ ? 1 : 0;
+    row.event.flags = exceptional || std::uncaught_exceptions() > exceptions_ ? 1 : 0;
+    row.completion_prefix = lanes[lane_].published.load(std::memory_order_relaxed);
     row.complete.store(true, std::memory_order_release);
     lanes[lane_].observer_cpu.fetch_add(static_cast<uint64_t>(cpu() - cost_begin));
     slot_ = no_item;
@@ -286,8 +470,11 @@ void Cycle::start(uint64_t item) noexcept {
     finish();
     span_ = ::new (static_cast<void *>(storage_)) Span(Kind::writer_service, item);
 }
-void Cycle::finish() noexcept {
+void Cycle::finish(bool exceptional) noexcept {
     if (span_) {
+        // A writer catch runs after unwinding, including frame destruction.
+        // Preserve that exceptional outcome before the idempotent destructor.
+        span_->finish(exceptional);
         span_->~Span();
         span_ = nullptr;
     }
@@ -381,7 +568,7 @@ void stop() noexcept {
         signal_installed = false;
     }
 }
-bool self_test(const std::filesystem::path &path) {
+bool self_test(const std::filesystem::path &path, SelfTest mode) {
     // Native qualification only, never called by a product or this source-only
     // phase. Exercises the real buffer, pending publication and sticky failure
     // after exhaustion; the independent Python decoder checks exported bytes.
@@ -393,11 +580,21 @@ bool self_test(const std::filesystem::path &path) {
     ordinal = 3;
     control = true;
     enabled = true;
+    if (mode == SelfTest::callback_failure || mode == SelfTest::nonstandard_failure) {
+        const auto ok = callback_failure_control(mode == SelfTest::nonstandard_failure);
+        enabled = false;
+        return ok;
+    }
     int owner{};
     constexpr auto id = "00000000-0000-0000-0000-000000000001";
     capture(&owner, id, 1, false);
     capture(&owner, id, 1, false);
     capture(&owner, id, 1, false);
+    if (mode == SelfTest::snapshot_cut) {
+        const auto ok = snapshot_cut_control(&owner);
+        enabled = false;
+        return ok;
+    }
     bind(&owner, 2);
     raw("00000000-0000-0000-0000-000000000002", 1);
     Span pending(Kind::writer_service, 0);

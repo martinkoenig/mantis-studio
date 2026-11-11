@@ -277,10 +277,10 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                     }
                 }
             } catch (const std::exception &error) {
-                MANTIS_RECORDER(observer_cycle.finish());
+                MANTIS_RECORDER(observer_cycle.finish(true));
                 failed(error.what());
             } catch (...) {
-                MANTIS_RECORDER(observer_cycle.finish());
+                MANTIS_RECORDER(observer_cycle.finish(true));
                 failed("Non-standard recorder exception");
             }
         });
