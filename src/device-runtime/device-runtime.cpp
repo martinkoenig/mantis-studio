@@ -35,6 +35,7 @@ struct Session::WorkerMark {
     Session &owner;
     bool writer;
     WorkerMark(Session &session, bool is_writer) : owner(session), writer(is_writer) {
+        MANTIS_RECORDER(recorder_observer::bind(&owner, writer ? 2u : 1u));
         std::lock_guard lock(owner.mutex_);
         if (writer) {
             owner.timing_.writer_started = owner.elapsed_ns();
@@ -47,6 +48,9 @@ struct Session::WorkerMark {
     ~WorkerMark() {
         std::lock_guard lock(owner.mutex_);
         (writer ? owner.timing_.writer_running : owner.timing_.producer_running) = false;
+        MANTIS_RECORDER(recorder_observer::point(writer ? recorder_observer::Kind::writer_end
+                                                        : recorder_observer::Kind::producer_end));
+        MANTIS_RECORDER(recorder_observer::unbind());
     }
 };
 void Session::source_diagnostics(ImageStream &stream, bool acquired) noexcept {
@@ -164,6 +168,9 @@ bool Session::latch_error(std::string_view message) {
     if (error_.empty()) {
         error_ = message;
         timing_.first_error = elapsed_ns();
+        MANTIS_RECORDER(recorder_observer::failure(
+            this, produced_.load(), committed_.load(), saturation_.load(),
+            message == "LOSSLESS writer queue saturated; capture failed explicitly"));
         return true;
     }
     if (error_ != message && secondary_error_.empty()) {
@@ -189,6 +196,8 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                  std::function<void(data::Published)> record, LogSink logger)
     : descriptor_(std::move(descriptor)), streams_(std::move(streams)), record_(std::move(record)),
       logger_(std::move(logger)) {
+    MANTIS_RECORDER(recorder_observer::capture(this, descriptor_.id.value, streams_.size(), false));
+    MANTIS_RECORDER(recorder_observer::Scope observer_scope(this, 0));
     try {
         if (streams_.empty())
             fail(Status::invalid_argument, "Capture requires at least one stream");
@@ -199,18 +208,35 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                 throw Failure(result.error());
         }
         timing_.source_paced = streams_.front()->source_paced();
+        MANTIS_RECORDER(recorder_observer::source_mode(timing_.source_paced));
+        MANTIS_RECORDER(recorder_observer::point(recorder_observer::Kind::capture_state,
+                                                 recorder_observer::no_item, recorder_.capacity(),
+                                                 timing_.source_paced));
         writer_ = std::jthread([this](std::stop_token) {
             WorkerMark worker(*this, true);
             bool first_callback = true;
+            MANTIS_RECORDER(recorder_observer::Cycle observer_cycle);
             try {
+#ifdef MANTIS_RECORDER_OBSERVER
+                auto observed_pop = [&] {
+                    observer_cycle.finish(); // Previous frame has now been destroyed.
+                    recorder_observer::Span pop(recorder_observer::Kind::queue_pop);
+                    return recorder_.pop();
+                };
+                while (auto frame = observed_pop()) {
+                    observer_cycle.start((*frame)->header.sequence.value);
+#else
                 while (auto frame = recorder_.pop()) {
+#endif
+                    MANTIS_RECORDER(const auto observer_item = (*frame)->header.sequence.value);
+                    MANTIS_RECORDER(recorder_observer::queue(recorder_, observer_item));
                     const auto began = elapsed_ns();
                     if (first_callback) {
                         std::lock_guard lock(mutex_);
                         timing_.first_callback = began;
                     }
                     try {
-                        record_(*frame);
+                        MANTIS_RECORDER_CALL(callback, observer_item, record_(*frame));
                     } catch (...) {
                         std::lock_guard lock(mutex_);
                         const auto duration = elapsed_ns() - began;
@@ -220,6 +246,8 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                         throw;
                     }
                     const auto finished = elapsed_ns();
+                    MANTIS_RECORDER(recorder_observer::Span observer_payload(recorder_observer::Kind::payload,
+                                                                             observer_item));
                     uint64_t payload{};
                     const auto &packet = **frame;
                     for (const auto &attribute : packet.attributes)
@@ -227,8 +255,14 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                     for (const auto &child : packet.frames)
                         for (const auto &attribute : child->attributes)
                             payload += attribute.buffer.size();
+                    MANTIS_RECORDER(observer_payload.finish());
+                    MANTIS_RECORDER(recorder_observer::Span observer_lock(
+                        recorder_observer::Kind::session_lock_wait, observer_item));
                     {
                         std::lock_guard lock(mutex_);
+                        MANTIS_RECORDER(observer_lock.finish());
+                        MANTIS_RECORDER(recorder_observer::Span observer_accounting(
+                            recorder_observer::Kind::accounting, observer_item));
                         ++committed_;
                         payload_bytes_ += payload;
                         if (first_callback) {
@@ -243,8 +277,10 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                     }
                 }
             } catch (const std::exception &error) {
+                MANTIS_RECORDER(observer_cycle.finish());
                 failed(error.what());
             } catch (...) {
+                MANTIS_RECORDER(observer_cycle.finish());
                 failed("Non-standard recorder exception");
             }
         });
@@ -253,20 +289,31 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
             try {
                 auto next = std::chrono::steady_clock::now();
                 while (!stop.stop_requested() && active_) {
+                    MANTIS_RECORDER(
+                        recorder_observer::point(recorder_observer::Kind::source_wake, produced_.load(),
+                                                 static_cast<uint64_t>(recorder_observer::due(next))));
                     for (auto *stream : streams_) {
-                        auto frame = stream->next();
-                        source_diagnostics(*stream, frame && static_cast<bool>(*frame));
+                        MANTIS_RECORDER(const auto observer_item = produced_.load());
+                        auto frame = MANTIS_RECORDER_CALL(source_next, observer_item, stream->next());
+                        MANTIS_RECORDER_CALL(source_diagnostics, observer_item,
+                                             source_diagnostics(*stream, frame && static_cast<bool>(*frame)));
                         if (!frame)
                             throw Failure(frame.error());
                         if (!*frame)
                             continue;
-                        preview_.push(*frame);
+                        MANTIS_RECORDER_CALL(preview, observer_item, preview_.push(*frame));
                         // Finish recording an observation already acquired when stop
                         // arrives: cancelling it would silently lose the last FrameSet.
 #ifdef MANTIS_SESSION_QUALIFICATION
                         const auto admission_began = time::MonotonicTimestamp::now().nanoseconds;
 #endif
-                        const auto accepted = recorder_.push_for(*frame, std::chrono::milliseconds(50));
+                        const auto accepted =
+                            MANTIS_RECORDER_CALL(admission, observer_item,
+                                                 recorder_.push_for(*frame, std::chrono::milliseconds(50)));
+                        MANTIS_RECORDER(recorder_observer::queue(recorder_, observer_item));
+                        MANTIS_RECORDER(recorder_observer::point(recorder_observer::Kind::admission_result,
+                                                                 observer_item, accepted,
+                                                                 (*frame)->header.sequence.value));
 #ifdef MANTIS_SESSION_QUALIFICATION
                         qualification_test::admission(admission_began,
                                                       time::MonotonicTimestamp::now().nanoseconds, accepted);
@@ -283,7 +330,10 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                     }
                     if (!streams_.front()->source_paced()) {
                         next += std::chrono::milliseconds(33);
-                        std::this_thread::sleep_until(next);
+                        MANTIS_RECORDER_CALL(source_sleep,
+                                             produced_.load() ? produced_.load() - 1
+                                                              : recorder_observer::no_item,
+                                             std::this_thread::sleep_until(next));
                     }
                 }
             } catch (const std::exception &error) {
@@ -332,6 +382,8 @@ Session::~Session() {
     stop();
 }
 void Session::stop() {
+    MANTIS_RECORDER(recorder_observer::Scope observer_scope(this, 0));
+    MANTIS_RECORDER(recorder_observer::Span observer_cleanup(recorder_observer::Kind::cleanup));
     {
         std::lock_guard lock(mutex_);
         if (timing_.cleanup_finished >= 0)

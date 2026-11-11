@@ -1,4 +1,14 @@
 #pragma once
+#ifdef MANTIS_RECORDER_OBSERVER
+#include "recorder_observer.hpp"
+#define MANTIS_RECORDER(...) __VA_ARGS__
+#define MANTIS_RECORDER_CALL(kind, item, expression)                                                         \
+    ::mantis::recorder_observer::measured(::mantis::recorder_observer::Kind::kind, item,                     \
+                                          [&] { return (expression); })
+#else
+#define MANTIS_RECORDER(...) ((void)0)
+#define MANTIS_RECORDER_CALL(kind, item, expression) (expression)
+#endif
 // Private compile-time sampling seam, linked only by the Linux storage
 // qualification executable. Product Session has no sampler or runtime selector.
 #ifdef MANTIS_SESSION_QUALIFICATION
