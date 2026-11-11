@@ -10,6 +10,11 @@ image-to-candidate source through the existing semantic DAG factory extension.
 Its native qualification is pending; it does not change the accepted v0.4
 infrastructure scope or establish physical laser/geometry acceptance.
 
+[ALG-02 subpixel localization](../algorithms/l1-subpixel.md) is a separate opt-in
+algorithm on that internal factory. It adds bounded numerical refinement/quality
+source without changing the default ALG-01 behavior or schema-1 lineage. Its
+native qualification and independent review remain pending.
+
 ## Runtime and processor selection
 
 The unchanged optional `org.mantis.processor.v2` table receives full borrowed
