@@ -5,6 +5,11 @@ L7b-2a FINAL ACCEPTED; L7b-2b, L7c, L7d and L8 planned. This package provides pr
 contract producers. It implements no production laser extraction, laser geometry,
 XYZ, triangulation, hardware controller, UI or remote streaming/security.
 
+The later [ALG-01 CPU candidate node](../algorithms/l1-candidates.md) implements
+image-to-candidate source through the existing semantic DAG factory extension.
+Its native qualification is pending; it does not change the accepted v0.4
+infrastructure scope or establish physical laser/geometry acceptance.
+
 ## Runtime and processor selection
 
 The unchanged optional `org.mantis.processor.v2` table receives full borrowed

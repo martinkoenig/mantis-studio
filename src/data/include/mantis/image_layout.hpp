@@ -7,14 +7,19 @@ inline constexpr std::string_view packed_image_bytes = "org.mantis.image.packed_
 class Y10PView {
     std::span<const std::byte> bytes_;
     uint32_t width_, height_, stride_;
+
   public:
     Y10PView(std::span<const std::byte>, uint32_t width, uint32_t height, uint32_t row_stride);
     uint16_t sample(uint32_t x, uint32_t y) const;
     void display_row(uint32_t y, std::span<std::byte> output) const;
 };
 enum class ImagePacking { raw8, mipi_raw10 };
-struct ImageLayout { uint32_t width{}, height{}, row_stride{}; ImagePacking packing{}; };
+struct ImageLayout {
+    uint32_t width{}, height{}, row_stride{};
+    ImagePacking packing{};
+};
 ImageLayout image_layout(const Packet &);
+ImageLayout image_layout(const Packet &, const CancellationToken &);
 // Presentation-only conversion: Y10P samples >> 2. Output is a tight grayscale
 // row, with no intermediate 16-bit image and no involvement in acquisition.
 void grayscale_row(const Packet &, const ImageLayout &, uint32_t y, std::span<std::byte> output);
