@@ -152,8 +152,10 @@ int main(int argc, char **argv) {
         std::cout
             << "Synthetic host CPU 1280x720; no sensor/Q6A FPS claim. Copy probe observes linker-visible "
                "memcpy/memmove only; compiler-inlined/manual/DSO-internal copies are outside its scope.\n";
-        for (bool packed : {false, true}) {
-            auto b = line(packed, 1280, 720);
+        for (unsigned mode = 0; mode < 4; ++mode) {
+            const bool packed = mode >= 2, refined = mode % 2 != 0;
+            // Paired runs use identical source/configuration except refinement.
+            auto b = quadratic(packed, 1280, 720);
             const auto &buffer = b.frameset->frames[0]->attributes[0].buffer;
             auto original = buffer.map_read();
             if (!original)
@@ -161,7 +163,11 @@ int main(int argc, char **argv) {
             const auto hash = content_hash(*original);
             counters::source_begin = reinterpret_cast<uintptr_t>(original->data());
             counters::source_end = counters::source_begin + original->size();
-            auto c = config(packed);
+            auto c = subpixel_config(packed);
+            if (!refined)
+                c.subpixel.reset();
+            const std::string label =
+                std::string(packed ? "Y10P " : "RAW8 ") + (refined ? "ALG02 " : "ALG01 ");
             auto node = l1_candidate_extractor(c);
             auto instance = node.factory();
             std::array<SemanticPublished, 1> input{data::publish(SemanticPacket{b})};
@@ -175,17 +181,30 @@ int main(int argc, char **argv) {
             auto verify = [&] {
                 const auto &o = std::get<LaserObservation>(*retained);
                 if (o.sample_count != 1280 || value<float>(o, laser::source_pixel, 1279) != 1279 ||
-                    value<float>(o, laser::source_pixel, 1279, 1) != 2 ||
-                    value<uint32_t>(o, l1::peak, 1279) != (packed ? 701u : 181u) ||
+                    value<float>(o, laser::source_pixel, 1279, 1) != (refined ? 4.25f : 4.0f) ||
+                    value<uint32_t>(o, l1::peak, 1279) != 179 ||
                     value<uint32_t>(o, laser::quality_flags, 1279) != 0)
                     fail(Status::corrupt, "Benchmark production-path oracle failed");
                 for (const auto &a : o.attributes)
-                    if (a.buffer.identity() != o.attributes[0].buffer.identity())
+                    if (a.descriptor.name != l1::curvature &&
+                        a.buffer.identity() != o.attributes[0].buffer.identity())
                         fail(Status::corrupt, "Output unexpectedly uses separate column allocations");
-                std::cout << " input_backing_bytes=" << buffer.backing_size()
-                          << " output_backing_bytes=" << o.attributes[0].buffer.backing_size() << '\n';
+                if (refined && (value<uint8_t>(o, l1::refinement_valid, 1279) != 1 ||
+                                value<uint32_t>(o, l1::curvature, 1279) != 32))
+                    fail(Status::corrupt, "Benchmark refinement oracle failed");
+                // Scoped to these dimensions, output buffers bound the largest
+                // expected allocation well below a whole source image.
+                if (counters::maximum_allocation > 1280 * 32)
+                    fail(Status::corrupt, "Unexpected image-sized/large production allocation");
+#ifdef MANTIS_L1_COPY_PROBE
+                if (counters::source_copied != 0)
+                    fail(Status::corrupt, "Observed production copy from source pixels");
+#endif
+                std::cout << " input_backing_bytes=" << buffer.backing_size() << " output_backing_bytes="
+                          << o.attributes[0].buffer.backing_size() + (refined ? 1280 * sizeof(uint32_t) : 0)
+                          << '\n';
             };
-            measure(packed ? "Y10P node" : "RAW8 node", repetitions, direct);
+            measure(label + "node", repetitions, direct);
             verify();
             NodeDescriptor source;
             source.id = "recorded-input";
@@ -198,7 +217,7 @@ int main(int argc, char **argv) {
             if (!plan)
                 throw Failure(plan.error());
             uint64_t high_water{};
-            measure(packed ? "Y10P DAG" : "RAW8 DAG", repetitions, [&] {
+            measure(label + "DAG", repetitions, [&] {
                 auto r = execute(*plan, input[0]);
                 if (!r)
                     throw Failure(r.error());

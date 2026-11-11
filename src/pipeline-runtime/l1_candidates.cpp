@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <mantis/image_layout.hpp>
@@ -81,6 +82,11 @@ void configure(const L1CandidateConfig &c) {
             "Invalid L1 resource/profile bounds");
     if (c.roi)
         require(c.roi->width && c.roi->height, "Empty L1 ROI");
+    if (c.subpixel)
+        require(c.subpixel->minimum_neighbor_signal > 0 &&
+                    c.subpixel->minimum_neighbor_signal <= c.minimum_signal &&
+                    c.subpixel->minimum_curvature > 0 && c.subpixel->minimum_curvature <= 2046,
+                "Invalid L1 subpixel conditioning thresholds");
     if (c.dark) {
         require(bool(c.dark->bundle), "Missing dark bundle");
         raw_reference(c.dark->raw_input);
@@ -113,7 +119,7 @@ ContentReference parameters(const L1CandidateConfig &c) {
         text(r.hash.get()->algorithm);
         text(r.hash.get()->hex);
     };
-    text("org.mantis.l1-candidates/1.0.0");
+    text(c.subpixel ? "org.mantis.l1-subpixel/1.0.0" : "org.mantis.l1-candidates/1.0.0");
     for (const auto &s : {c.run.id.value, c.camera.id.value, c.emitter.id.value, c.stream.id.id.value,
                           c.stream.generation.id.value, c.camera_role, c.pattern.id.value, c.line.id.value,
                           c.producer_stream.id.value, c.producer_generation.id.value,
@@ -140,6 +146,11 @@ ContentReference parameters(const L1CandidateConfig &c) {
         reference(c.dark->raw_input);
         text(c.dark->bundle->key.run_id.id.value);
         number(c.dark->bundle->key.sequence.value);
+    }
+    // Do not append even an absence marker to the frozen ALG-01 parameter bytes.
+    if (c.subpixel) {
+        number(c.subpixel->minimum_neighbor_signal);
+        number(c.subpixel->minimum_curvature);
     }
     auto hash = content_hash(std::as_bytes(std::span(bytes)));
     // Opaque algorithm configuration reference, not a new canonical packet schema.
@@ -286,6 +297,9 @@ struct Row {
     std::array<uint8_t, 3> reserved{}; // No uninitialized record padding in immutable column slices.
 };
 static_assert(sizeof(Row) == 32 && offsetof(Row, reserved) == 29);
+// ALG-02 keeps the ALG-01 record extent and default bytes unchanged. In refined
+// mode reserved[0] carries refinement validity; curvature has its own strided
+// bulk buffer below, so no unaligned integer is stored in byte padding.
 class Extractor final : public SemanticNodeInstance {
     const L1CandidateConfig config;
     const ContentReference parameter_reference;
@@ -363,7 +377,7 @@ class Extractor final : public SemanticNodeInstance {
             c.acquisition_evidence = bundle->evidence.key;
             c.triggers = bundle->evidence.triggers;
             c.clock_mappings = bundle->evidence.clock_mappings;
-            c.producer = {{"org.mantis.l1-candidates"},
+            c.producer = {{config.subpixel ? "org.mantis.l1-subpixel" : "org.mantis.l1-candidates"},
                           {1, 0, 0},
                           std::string(build_version) + ";l1-source-sha256:" + MANTIS_L1_SOURCE_HASH,
                           parameter_reference};
@@ -386,21 +400,28 @@ class Extractor final : public SemanticNodeInstance {
             out.line_dictionary = {{config.emitter, config.pattern, config.pattern_revision, config.line}};
             if (!known)
                 c.packet_quality_flags |= l1::attribution_unresolved;
-            // <=8192 rows; one bulk allocation shared by every strided column.
+            // <=8192 rows; main columns share one allocation. Optional curvature
+            // uses a second bounded bulk allocation, never one per sample.
             memory::BufferBuilder buffer(size_t(roi.width) * sizeof(Row));
             auto writable = buffer.writable();
+            std::optional<memory::BufferBuilder> curvature_buffer;
+            if (config.subpixel)
+                curvature_buffer.emplace(size_t(roi.width) * sizeof(uint32_t));
             uint32_t missing = 0, rejected = 0, saturated_columns = 0;
             for (uint32_t x = roi.x; x < roi.x + roi.width; ++x) {
                 token.check();
                 struct Peak {
                     uint16_t signal{}, raw{};
-                    uint32_t y{}, width{};
+                    uint32_t y{}, width{}, start{}, maxima{}, previous{};
+                    bool rising{true};
                     bool saturated{};
                 } best, second, run;
                 bool clipped = false;
                 auto finish = [&] {
                     if (!run.width)
                         return;
+                    if (config.subpixel && run.rising)
+                        ++run.maxima;
                     if (run.signal > best.signal) {
                         second = best;
                         best = run;
@@ -420,8 +441,19 @@ class Extractor final : public SemanticNodeInstance {
                         finish();
                         continue;
                     }
+                    if (config.subpixel) {
+                        if (!run.width)
+                            run.start = y;
+                        if (signal < run.previous && run.rising) {
+                            ++run.maxima;
+                            run.rising = false;
+                        } else if (signal > run.previous)
+                            run.rising = true;
+                        run.previous = signal;
+                    }
                     ++run.width;
-                    run.saturated |= value >= config.saturation_level;
+                    run.saturated |= value >= config.saturation_level ||
+                                     (config.subpixel && dark_value >= config.saturation_level);
                     if (signal > run.signal) {
                         run.signal = signal;
                         run.raw = value;
@@ -451,6 +483,57 @@ class Extractor final : public SemanticNodeInstance {
                 }
                 if (best.width < config.minimum_width || best.width > config.maximum_width)
                     row.reason |= l1::width_rejected;
+                uint32_t curvature = 0;
+                if (config.subpixel) {
+                    if (best.start == roi.y || best.width == roi.y + roi.height - best.start)
+                        row.reason |= l1::edge_profile;
+                    if (best.maxima > 1) {
+                        row.reason |= l1::multiple_local_peaks;
+                        row.flags |= laser::ambiguous;
+                    }
+                    // Interpolation is confined to this ROI and original column.
+                    if (best.y == roi.y || best.y == roi.y + roi.height - 1)
+                        row.reason |= l1::insufficient_neighbors;
+                    else {
+                        auto corrected = [&](uint32_t y) {
+                            const uint32_t value = pixels.sample(x, y);
+                            const uint32_t d = dark ? dark->sample(x, y) : 0;
+                            if (value >= config.saturation_level || d >= config.saturation_level)
+                                row.reason |= l1::saturated;
+                            const auto background = uint32_t(config.background_level) + d;
+                            return int32_t(value > background ? value - background : 0);
+                        };
+                        const int32_t left = corrected(best.y - 1), center = best.signal,
+                                      right = corrected(best.y + 1);
+                        const int32_t denominator = 2 * center - left - right;
+                        if (left == center || right == center)
+                            row.reason |= l1::flat_peak;
+                        if (left < config.subpixel->minimum_neighbor_signal ||
+                            right < config.subpixel->minimum_neighbor_signal)
+                            row.reason |= l1::weak_neighbors;
+                        if (denominator < config.subpixel->minimum_curvature)
+                            row.reason |= l1::weak_curvature;
+                        if (denominator > 0)
+                            curvature = static_cast<uint32_t>(denominator);
+                        if (!row.reason) {
+                            // Samples <=1023: signed arithmetic above cannot overflow.
+                            // Convert only after conditioning, never divide by zero.
+                            const double offset = double(right - left) / (2.0 * denominator);
+                            const double y = double(best.y) + offset;
+                            if (!std::isfinite(offset) || !std::isfinite(y) || left >= center ||
+                                right >= center || std::abs(offset) > 0.5 || y < roi.y ||
+                                y > roi.y + roi.height - 1)
+                                row.reason |= l1::numeric_rejected;
+                            else {
+                                row.y = static_cast<float>(y);
+                                row.reserved[0] = 1;
+                            }
+                        }
+                    }
+                    auto bytes = curvature_buffer->writable();
+                    std::memcpy(bytes.data() + size_t(out.sample_count) * sizeof(uint32_t), &curvature,
+                                sizeof(curvature));
+                }
                 if (row.reason) {
                     row.flags |= laser::producer_rejected;
                     ++rejected;
@@ -467,7 +550,7 @@ class Extractor final : public SemanticNodeInstance {
                              ";rejected=" + std::to_string(rejected) +
                              ";saturated=" + std::to_string(saturated_columns);
             if (out.sample_count) {
-                out.attributes.reserve(9);
+                out.attributes.reserve(config.subpixel ? 11 : 9);
                 auto backing = std::move(buffer).publish();
                 auto column = [&](std::string_view name, schema::ScalarType type, size_t offset,
                                   std::string unit = "") {
@@ -492,6 +575,17 @@ class Extractor final : public SemanticNodeInstance {
                     column(name, schema::ScalarType::u32, offsetof(Row, index));
                 for (auto name : {laser::emitter_valid, laser::line_valid})
                     column(name, schema::ScalarType::u8, offsetof(Row, valid));
+                if (config.subpixel) {
+                    column(l1::refinement_valid, schema::ScalarType::u8, offsetof(Row, reserved));
+                    out.attributes.push_back({{std::string(l1::curvature),
+                                               schema::ScalarType::u32,
+                                               {out.sample_count},
+                                               {sizeof(uint32_t)},
+                                               "DN/pixel^2"},
+                                              std::move(*curvature_buffer)
+                                                  .publish()
+                                                  .slice(0, size_t(out.sample_count) * sizeof(uint32_t))});
+                }
             }
             token.check();
             auto result = data::publish(SemanticPacket{std::move(out)});
@@ -508,12 +602,14 @@ class Extractor final : public SemanticNodeInstance {
 SemanticNode l1_candidate_extractor(L1CandidateConfig c) {
     configure(c);
     NodeDescriptor d;
-    d.id = d.algorithm_id = "org.mantis.l1-candidates";
+    d.id = d.algorithm_id = c.subpixel ? "org.mantis.l1-subpixel" : "org.mantis.l1-candidates";
     d.version = {1, 0, 0};
     d.inputs = {{"acquisition", schema::acquisition_bundle}};
     d.outputs = {{"candidates", schema::laser_observation}};
     d.resources.backends = {"cpu"};
     d.resources.memory_bytes = uint64_t(c.maximum_dimension) * sizeof(Row);
+    if (c.subpixel)
+        d.resources.memory_bytes += uint64_t(c.maximum_dimension) * sizeof(uint32_t);
     if (c.dark)
         d.resources.memory_bytes += bounded_backing(*c.dark->bundle);
     d.resources.location = Location::local; // Host reference; ADR-031 deployment remains sensor-proximal.
