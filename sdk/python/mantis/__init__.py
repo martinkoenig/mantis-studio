@@ -156,7 +156,11 @@ class Client:
             raise TimeoutError("Control exchange timed out; daemon outcome may be unknown")
         return remaining
     @staticmethod
-    def _receive(sock, count, deadline):
+    def _receive(sock, count, deadline=None):
+        # Legacy standalone readers get one bounded read, not a fresh budget
+        # per recv. _call always supplies its shared exchange deadline.
+        if deadline is None:
+            deadline = time.monotonic() + 5
         result = bytearray()
         while len(result) < count:
             sock.settimeout(Client._remaining(deadline))

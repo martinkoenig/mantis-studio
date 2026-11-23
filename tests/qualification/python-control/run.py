@@ -66,6 +66,7 @@ def main():
     snapshot.mkdir()
     inputs = [*sorted((ROOT / "sdk/python/mantis").glob("*.py")),
               ROOT / "protocol/protobuf/mantis.proto", ROOT / "tests/unit/python_control.py",
+              ROOT / "tests/integration/acceptance.py",
               ROOT / "tests/unit/python_capture.py", ROOT / "tests/unit/python_calibration.py",
               ROOT / "tests/contract/protocol_fields.py", ROOT / "tests/contract/boundaries.py",
               ROOT / "tests/ci/python_control_workflow_test.py",
@@ -165,6 +166,10 @@ def main():
             source = package / "__init__.py"
             original = source.read_text()
             mutations = [
+                ("receive-compatibility", "def _receive(sock, count, deadline=None):",
+                 "def _receive(sock, count, deadline):",
+                 "Control.test_existing_acceptance_two_argument_receive_call_shape",
+                 "AssertionError: existing two-argument receive caller is incompatible"),
                 ("deadline-renewal", 'raise TimeoutError("Control exchange timed out; daemon outcome may be unknown")',
                  "return 5  # WRONG: renew an expired whole-call budget",
                  "Control.test_trickling_progress_cannot_extend_exchange_deadline",

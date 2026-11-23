@@ -65,7 +65,12 @@ It requires installed `protoc`, Python `protobuf` and `PyYAML` (Ubuntu packages
 bindings from the canonical schema under the ignored build directory, checks exact
 source/descriptor and independent golden request bytes, runs real owned loopback
 protocol peers plus existing capture/calibration/protocol/boundary tests, and
-proves deadline-guard and blocking-budget sensitivity in disposable SDK copies.
+proves existing two-argument receive-caller compatibility, deadline-guard and
+blocking-budget sensitivity in disposable SDK copies. The compatibility regression
+executes the unchanged acceptance test's `raw_request` function with real sockets,
+not its surrounding product scenario. The private `_receive(sock, count)` form
+gets one five-second budget for that standalone read; normal `_call` exchanges
+always pass their single explicit shared deadline across header and body.
 Logs, exact input/tool hashes, commands, exits and source restorations are retained
 per run; insufficient disk reserve or an unexpected timeout fails qualification.
 No generated module is committed. The dedicated `python-control` workflow runs

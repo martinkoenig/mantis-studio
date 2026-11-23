@@ -4,6 +4,7 @@ Run with a build-style root containing python/mantis and canonical generated wir
 Virtual monotonic time advances only at observed I/O; real sockets still carry
 all request/response bytes. Timeouts are hang bounds, not ordering evidence.
 """
+import ast
 from pathlib import Path
 import socket
 import struct
@@ -167,6 +168,92 @@ class Control(unittest.TestCase):
         self.assertEqual(len(peer.requests), 1)
         self.assertEqual(peer.tail, b"")
         return result
+
+    def acceptance_raw_request(self, client, port, connect=REAL_CONNECT):
+        # Execute the existing caller itself, not a copied approximation or the
+        # surrounding daemon/product scenario. The qualifier freezes this input.
+        source = Path(__file__).resolve().parents[1] / "integration/acceptance.py"
+        functions = [node for node in ast.walk(ast.parse(source.read_text()))
+                     if isinstance(node, ast.FunctionDef) and node.name == "raw_request"]
+        self.assertEqual(len(functions), 1, "existing acceptance caller must be unique")
+        namespace = {"client": client, "port": port, "wire": wire,
+                     "socket": SimpleNamespace(create_connection=connect)}
+        exec(compile(ast.Module(body=[functions[0]], type_ignores=[]), str(source), "exec"), namespace)
+        return namespace["raw_request"]
+
+    def test_existing_acceptance_two_argument_receive_call_shape(self):
+        observed = []
+        clock = [100.0]
+
+        def connect(address, timeout):
+            sock = ClockSocket(REAL_CONNECT(address, timeout), clock, {})
+            observed.append(sock)
+            return sock
+
+        def reply(peer, conn, request):
+            self.assertEqual(request.request_id, "existing-acceptance-call")
+            self.assertTrue(request.SerializeToString().endswith(b"\xf8\x07\x01"))
+            conn.sendall(frame(response(request)))
+
+        with Peer(reply) as peer:
+            client = mantis.Client(port=peer.port, token=TOKEN)
+            raw_request = self.acceptance_raw_request(client, peer.port, connect)
+            request = wire.Request(protocol_version=1, request_id="existing-acceptance-call",
+                                   token=TOKEN, snapshot=wire.Empty())
+            try:
+                result = raw_request(request, b"\xf8\x07\x01")
+            except TypeError as error:
+                self.fail(f"existing two-argument receive caller is incompatible: {error}")
+            self.assertEqual(result.project_path, "loopback-project")
+            self.assertEqual(result.request_id, request.request_id)
+        self.assertGreater(observed[0].reads, 4, "existing header/body reads must fragment")
+        self.assertEqual(observed[0].sock.fileno(), -1)
+        self.assertEqual(len(peer.requests), 1)
+        self.assertEqual(peer.errors, [])
+        self.assertEqual(peer.tail, b"")
+
+    def test_existing_acceptance_two_argument_receive_truncation(self):
+        for data in (b"\x00\x00", struct.pack("!I", 20) + b"\x08\x01"):
+            with self.subTest(data_length=len(data)):
+                with Peer(lambda p, c, r: c.sendall(data)) as peer:
+                    client = mantis.Client(port=peer.port, token=TOKEN)
+                    raw_request = self.acceptance_raw_request(client, peer.port)
+                    request = wire.Request(protocol_version=1, request_id="truncated-acceptance",
+                                           token=TOKEN, snapshot=wire.Empty())
+                    with self.assertRaises(ConnectionError) as raised:
+                        raw_request(request)
+                    self.assertIs(type(raised.exception), ConnectionError)
+                    self.assertEqual(str(raised.exception), "mantisd closed the control connection")
+                self.assertEqual(peer.errors, [])
+                self.assertEqual(peer.tail, b"")
+                self.assertFalse(peer.thread.is_alive())
+                self.assertEqual(peer.listener.fileno(), -1)
+
+    def test_standalone_two_argument_receive_has_one_bounded_read_budget(self):
+        clock = [100.0]
+        with Peer(trickle_reply) as peer:
+            class TrickleSocket(ClockSocket):
+                def recv(self, size):
+                    peer.next_chunk.release()
+                    return super().recv(size)
+
+            with REAL_CONNECT(("127.0.0.1", peer.port), timeout=1) as conn:
+                request = wire.Request(protocol_version=1, request_id="standalone-read",
+                                       token=TOKEN, snapshot=wire.Empty())
+                conn.sendall(frame(request.SerializeToString()))
+                sock = TrickleSocket(conn, clock, {"recv": 1})
+                with patch.object(mantis, "time", SimpleNamespace(monotonic=lambda: clock[0])):
+                    with self.assertRaises(TimeoutError) as raised:
+                        mantis.Client._receive(sock, 6)
+                self.assertIs(type(raised.exception), TimeoutError)
+                self.assertEqual(sock.reads, 5, "standalone read cannot renew on partial progress")
+                for phase, timeout, before in sock.calls:
+                    self.assertEqual(phase, "recv")
+                    self.assertEqual(timeout, 105.0 - before)
+            self.assertEqual(conn.fileno(), -1)
+        self.assertEqual(peer.errors, [])
+        self.assertEqual(peer.tail, b"")
+        self.assertFalse(peer.thread.is_alive())
 
     def test_fragmented_success_uses_remaining_budget_for_every_io(self):
         clock = [100.0]
