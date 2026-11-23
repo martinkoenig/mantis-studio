@@ -80,6 +80,22 @@ inline void decoded_admission(artifact::Store &s, const Graph &g) {
     rejects(failure, Status::busy);
     CHECK(failure.error().message == "Decoded geometry preallocation admission");
     CHECK(geometry_charge(array, a3::max_geometry_bytes) > array.size() * 16);
+    // The nonallocating admission owns the depth bound, including when the DOM
+    // parser has no keep/discard callback. Escaped quotes/brackets in strings
+    // must not change lexical depth; the real loader still rejects depth 65.
+    const std::string boundary = std::string(64, '[') + "0" + std::string(64, ']');
+    CHECK(geometry_charge(boundary, a3::max_geometry_bytes) != 0);
+    CHECK(geometry_charge(R"({"text":"[\\\"{}]"})", a3::max_geometry_bytes) != 0);
+    const std::string deep = std::string(65, '[') + "0" + std::string(65, ']');
+    auto depth = result([&] { return geometry_charge(deep, a3::max_geometry_bytes); });
+    rejects(depth, Status::busy);
+    CHECK(depth.error().message == "Geometry JSON depth");
+    auto id_deep = s.begin(a3::plane_type, {});
+    s.append(id_deep, document_packet(deep));
+    const auto descriptor_deep = s.finalize(id_deep);
+    auto loaded_deep = a3::load_plane(s, {id_deep, {a3::plane_type.name, 1}, descriptor_deep.hash, 1});
+    rejects(loaded_deep, Status::busy);
+    CHECK(loaded_deep.error().message == "Geometry JSON depth");
     auto o = observation(g, 1);
     auto b = bind(s, g, o, plane(g), policy());
     CHECK(a3::prepare(s, b));
@@ -373,6 +389,65 @@ inline void filesystem_failures(artifact::Store &s, const a3::Prepared &prepared
         std::cout << "ALG03 actual post-reservation " << (snapshot ? "snapshot" : "result")
                   << " rename failure/root cause retained; same-ID recovery passed\n";
     }
+}
+
+inline void plane_readback(artifact::Store &s, const Graph &g) {
+    // Reusing an operation-local immutable graph must not skip the NEW stored
+    // plane's actual readback. Arm after its OPEN document allocation, then
+    // observe FINALIZED and cancel through the real readback token boundary.
+    // Readback is mmap-backed, not an aligned BufferBuilder allocation.
+    std::set<Id> before;
+    for (const auto &d : s.list())
+        before.insert(d.id);
+    CancellationToken token;
+    std::optional<Id> reserved;
+    std::optional<Id> entered;
+    std::function<void()> finalization_entry = [&] {
+        if (entered)
+            return;
+        CHECK(reserved);
+        if (s.get(*reserved).state == artifact::ArtifactState::finalized) {
+            entered = reserved;
+            token.cancel();
+        }
+    };
+    std::function<void()> allocation_entry = [&] {
+        if (reserved)
+            return;
+        for (const auto &d : s.list())
+            if (!before.contains(d.id) && d.type.name == a3::plane_type.name &&
+                d.state == artifact::ArtifactState::open) {
+                reserved = d.id;
+                // Do not inspect Store on every allocation while decoding the
+                // large M4 graph before reservation; arm only at this barrier.
+                allocation_observer = &finalization_entry;
+                break;
+            }
+    };
+    struct Observer {
+        explicit Observer(std::function<void()> &callback) {
+            CHECK(!aligned_allocation_observer && !allocation_observer && !observing_allocation);
+            aligned_allocation_observer = &callback;
+        }
+        ~Observer() {
+            aligned_allocation_observer = nullptr;
+            allocation_observer = nullptr;
+        }
+    };
+    auto failed = [&] {
+        Observer observer(allocation_entry);
+        return a3::create_plane(s, plane(g), token);
+    }();
+    rejects(failed, Status::cancelled);
+    CHECK(entered);
+    CHECK(s.list().size() == before.size() + 1);
+    CHECK(failed.error().message.find("ALG03 artifact " + entered->value + "; observed state FINALIZED") !=
+          std::string::npos);
+    auto d = s.get(*entered);
+    CHECK(d.state == artifact::ArtifactState::finalized && d.chunks == 1);
+    // A fresh explicit read succeeds at the very same retained identity.
+    CHECK(a3::load_plane(s, {*entered, {a3::plane_type.name, 1}, d.hash, 1}));
+    std::cout << "ALG03 created-plane finalized readback cancellation and same-ID reload passed\n";
 }
 
 inline void reserved_failures(artifact::Store &s, const a3::Prepared &prepared, const data::Packet &output,

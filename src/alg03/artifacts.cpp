@@ -86,10 +86,10 @@ class Graph {
         // lifetime of this graph, including typed values returned to its caller.
         const auto amount = geometry_charge(bytes, policy_.max_geometry_bytes - charged_, token_);
         charged_ += amount;
-        auto j = Json::parse(bytes, [](int depth, Json::parse_event_t, Json &) {
-            require(depth <= 64, "Geometry JSON depth", Status::busy);
-            return true;
-        });
+        // geometry_charge already bounds nesting before any DOM allocation.
+        // A keep/discard callback is unnecessary and makes the JSON parser scan
+        // parent containers for discarded values even though none are discarded.
+        auto j = Json::parse(bytes);
         require(j.dump() == bytes, "Noncanonical geometry document");
         documents_.emplace(id, std::move(j));
         return documents_.at(id);
@@ -182,6 +182,20 @@ class Graph {
         active_.erase(r.id);
         done_.insert(r.id);
     }
+    void evidence(const Plane &p, const Policy &policy) {
+        if (p.parameter_bounds && p.parameter_bounds->evidence)
+            new_dependency(*p.parameter_bounds->evidence);
+        if (auto c = p.producer.configuration.get())
+            new_dependency(*c);
+        if (policy.declared_ray_bounds && policy.declared_ray_bounds->evidence)
+            new_dependency(*policy.declared_ray_bounds->evidence);
+        if (auto c = policy.producer.configuration.get())
+            new_dependency(*c);
+    }
+    void consume_reserved_node() {
+        require(reserved_nodes_ != 0, "Missing snapshot node reservation");
+        --reserved_nodes_;
+    }
     Geometry calibration(const Bindings &b, const Plane &plane) {
         namespace ca = calibration::artifacts;
         auto rr = resolved(b.rig), cr = resolved(b.camera);
@@ -268,14 +282,6 @@ class Graph {
         return {cr.id == rig.left_camera_reference.id ? left : right, rig, charged_};
     }
 };
-void plane_geometry(const artifact::Store &s, const Plane &p, const CancellationToken &t) {
-    Policy limits;
-    Graph graph(s, limits, t);
-    Bindings b;
-    b.rig = p.rig;
-    b.camera = p.cameras.front().calibration;
-    (void)graph.calibration(b, p);
-}
 
 template <class T>
 T load(const artifact::Store &s, const data::ContentReference &r, const artifact::ArtifactType &type,
@@ -303,14 +309,7 @@ Geometry geometry(const artifact::Store &s, const Bindings &b, const Plane &p, c
 void evidence_dependencies(const artifact::Store &s, const Plane &p, const Policy &policy,
                            const CancellationToken &t) {
     Graph graph(s, policy, t);
-    if (p.parameter_bounds && p.parameter_bounds->evidence)
-        graph.new_dependency(*p.parameter_bounds->evidence);
-    if (auto c = p.producer.configuration.get())
-        graph.new_dependency(*c);
-    if (policy.declared_ray_bounds && policy.declared_ray_bounds->evidence)
-        graph.new_dependency(*policy.declared_ray_bounds->evidence);
-    if (auto c = policy.producer.configuration.get())
-        graph.new_dependency(*c);
+    graph.evidence(p, policy);
 }
 } // namespace mantis::alg03::detail
 
@@ -347,9 +346,18 @@ Result<data::ContentReference> create(artifact::Store &s, const T &value, const 
             throw Failure(encoded.error());
         Plane empty;
         Policy limits;
+        std::optional<Graph> plane_graph;
         if constexpr (std::is_same_v<T, Plane>) {
-            evidence_dependencies(s, value, limits, t);
-            plane_geometry(s, value, t);
+            // One bounded operation owns the exact immutable dependency graph
+            // through finalized readback. Reserve the new snapshot node before
+            // writing; only immutable M4 content is shared, never applicability
+            // of a different plane or any mutable current-calibration lookup.
+            auto &graph = plane_graph.emplace(s, limits, t, 1);
+            graph.evidence(value, limits);
+            Bindings b;
+            b.rig = value.rig;
+            b.camera = value.cameras.front().calibration;
+            (void)graph.calibration(b, value);
         } else
             evidence_dependencies(s, empty, value, t);
         artifact::Provenance provenance;
@@ -369,9 +377,12 @@ Result<data::ContentReference> create(artifact::Store &s, const T &value, const 
             phase = "readback snapshot";
             data::ContentReference r{id, {type.name, type.schema_version}, d.hash, 1};
             if constexpr (std::is_same_v<T, Plane>) {
-                auto v = load_plane(s, r, t);
-                if (!v)
-                    throw Failure(v.error());
+                // Decode and validate the actual newly stored snapshot, including
+                // descriptor/hash, typed canonical bytes, ordered provenance,
+                // dependency closure and per-plane calibration applicability.
+                plane_graph->consume_reserved_node();
+                plane_graph->new_dependency(r);
+                (void)plane_graph->snapshot<Plane>(r);
             } else {
                 auto v = load_policy(s, r, t);
                 if (!v)

@@ -24,8 +24,21 @@ namespace {
 std::atomic<size_t> fail_aligned_size{};
 thread_local uint64_t *count_allocated_bytes{};
 thread_local std::function<void()> *aligned_allocation_observer{};
+thread_local std::function<void()> *allocation_observer{};
+thread_local bool observing_allocation{};
 } // namespace
 void *operator new(size_t n) {
+    if (allocation_observer && !observing_allocation) {
+        struct Guard {
+            Guard() {
+                observing_allocation = true;
+            }
+            ~Guard() {
+                observing_allocation = false;
+            }
+        } guard;
+        (*allocation_observer)();
+    }
     if (count_allocated_bytes)
         *count_allocated_bytes += n;
     if (auto p = std::malloc(n ? n : 1))
@@ -677,6 +690,7 @@ int main(int argc, char **argv) {
             auto output = get(a3::process(prepared, source));
             reserved_failures(*store, prepared, *output, bindings.observation.id);
             filesystem_failures(*store, prepared, *output);
+            plane_readback(*store, geometry);
             std::cout << "ALG03 artifact dependency, admission and entered-state regressions passed\n";
             return 0;
         }
