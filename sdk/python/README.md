@@ -12,7 +12,8 @@ python -m pip install dist/mantis_studio_client-0.1.0-py3-none-any.whl
 ```
 
 PEP 517 isolation installs exact build tools from `pyproject.toml`. The backend
-uses the packaged protoc 3.20.1 binary (not PATH) with build protobuf 3.20.0.
+uses compiler distribution `protoc-wheel-0==21.11` (not PATH), whose binary
+reports exactly `libprotoc 3.21.11`, with build protobuf 3.20.0.
 This compiler emits builder-style code compatible with the advertised runtime
 `protobuf>=3.20,<7`; the build runtime does not replace that runtime requirement.
 Binary compiler-wheel availability is a build-platform prerequisite. Never fall
@@ -29,6 +30,15 @@ corrupt inputs, not a malicious publisher who rewrites the entire manifest.
 Verify artifacts against a trusted source and retain their external hashes.
 Build tools, native binaries, checkout paths and credentials are not wheel inputs.
 
+Provenance **format 2** records `compiler_distribution` (name/version) separately
+from the executed `compiler_version` string. The distribution version is not a
+compiler version. Format 1 artifacts remain historical evidence and are not
+relabelled; a changed or old manifest fails the new backend's strict comparison.
+Portable provenance intentionally omits architecture-specific binary hashes and
+host paths so a same-source sdist can rebuild on another qualified architecture.
+Qualification receipts, not the portable manifest, record the actual compiler
+path/hash/ELF architecture, interpreter identity and expected/observed platform.
+
 For byte reproducibility, keep Python/build/runtime tool versions fixed and set
 `SOURCE_DATE_EPOCH` (>=315532800 for wheel ZIP timestamps). The backend normalizes
 sdist timestamps/owners/order; setuptools uses the epoch for wheel timestamps.
@@ -38,6 +48,15 @@ An sdist is self-contained: unpack it in a new directory and run `python -m buil
 --wheel` there. No `PYTHONPATH`, source-generated module, native build tree or
 original checkout is required. See `tests/sdk/artifacts_test.py` for executable
 isolated artifact, descriptor, wire and failure regressions.
+
+The Linux workflow retains x86_64 Python 3.10/3.12/3.14 and adds native
+`ubuntu-24.04-arm` Python 3.12. Its expected-platform check verifies Linux,
+Python version/machine and interpreter/compiler ELF architecture, selects the
+distribution's installed executable, validates its RECORD digest and executes
+`--version`. Wrong-platform and version-spoofing substitute controls must fail,
+then the actual selected binary must pass again. These are bounded identity and
+integrity checks, not source authenticity, emulation detection or OS isolation.
+ARM success requires the completed native job; x86_64 execution cannot prove it.
 
 Importing `mantis` or `mantis.calibration` performs no connection. `mantis.Client`
 requires a token (argument or `MANTIS_TOKEN`); actual commands connect only to

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import socket
 import sys
+import platform
 
 
 def no_network(*args, **kwargs):
@@ -16,6 +17,7 @@ import mantis
 import mantis.calibration
 from mantis import mantis_pb2 as wire
 from google.protobuf import descriptor_pb2
+import google.protobuf
 
 prefix = Path(sys.prefix).resolve()
 for module in (mantis, mantis.calibration, wire):
@@ -24,6 +26,11 @@ for module in (mantis, mantis.calibration, wire):
     assert 'site-packages' in path.parts, path
 assert callable(mantis.Client) and callable(mantis.connect)
 assert mantis.Calibration is mantis.calibration.Calibration
+provenance = json.loads(Path(wire.__file__).with_name('_provenance.json').read_text())
+assert provenance['format'] == 2
+assert provenance['compiler_distribution'] == {'name': 'protoc-wheel-0', 'version': '21.11'}
+assert provenance['compiler_version'] == 'libprotoc 3.21.11'
+assert provenance['generated_sha256'] == hashlib.sha256(Path(wire.__file__).read_bytes()).hexdigest()
 # Independent golden wire bytes: version=1, correlation='r', snapshot tag=10.
 request = wire.Request(protocol_version=1, request_id='r', snapshot=wire.Empty())
 assert request.SerializeToString(deterministic=True) == bytes.fromhex('08011201725200')
@@ -50,4 +57,6 @@ if len(sys.argv) > 1:
             normalize(message)
     assert actual == expected, 'installed descriptor differs from canonical schema'
 print(json.dumps({'python': sys.version.split()[0], 'module': str(Path(mantis.__file__).resolve()),
+                  'machine': platform.machine(), 'platform': sys.platform,
+                  'protobuf': google.protobuf.__version__, 'provenance': provenance,
                   'descriptor_sha256': hashlib.sha256(wire.DESCRIPTOR.serialized_pb).hexdigest()}))

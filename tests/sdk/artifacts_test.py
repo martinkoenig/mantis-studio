@@ -9,10 +9,12 @@ import csv
 import ctypes
 from email.parser import BytesParser
 import hashlib
+import importlib.metadata
 import importlib.util
 import io
 import json
 import os
+import platform
 from pathlib import Path, PurePosixPath
 import shutil
 import signal
@@ -32,6 +34,8 @@ SCHEMA = REPO / 'protocol/protobuf/mantis.proto'
 EPOCH = '1700000000'
 WORK: Path
 COMMAND_ID = 0
+EXPECTED_MACHINE: str
+EXPECTED_PYTHON: str
 
 
 def sha(data):
@@ -154,6 +158,63 @@ def command(args, *, cwd=None, expected=0, env=None, timeout=180, expect_timeout
     return output
 
 
+def elf_machine(path):
+    """Bounded native Linux identity check, not host authenticity attestation."""
+    with Path(path).open('rb') as binary:
+        header = binary.read(20)
+    if len(header) != 20 or header[:6] != b'\x7fELF\x02\x01':
+        raise RuntimeError('Expected a 64-bit little-endian ELF executable')
+    machine = {62: 'x86_64', 183: 'aarch64'}.get(int.from_bytes(header[18:20], 'little'))
+    if machine is None:
+        raise RuntimeError('Unsupported ELF machine')
+    return machine
+
+
+def execution_identity(expected_machine, expected_python):
+    """Check observed interpreter AND the selected distribution's actual binary.
+
+    RECORD is an installed-file integrity oracle, not a signature or OS isolation.
+    Portable package provenance deliberately excludes these platform-specific data.
+    """
+    from protoc import PROTOC_EXE
+    observed = platform.machine()
+    if (sys.platform != 'linux' or expected_machine not in ('x86_64', 'aarch64') or
+            observed != expected_machine or elf_machine(sys.executable) != expected_machine):
+        raise RuntimeError('Expected-platform mismatch: expected Linux/' + expected_machine +
+                           '; observed ' + sys.platform + '/' + observed)
+    if '.'.join(map(str, sys.version_info[:2])) != expected_python:
+        raise RuntimeError('Expected-Python mismatch: ' + expected_python)
+    distribution = importlib.metadata.distribution('protoc-wheel-0')
+    if distribution.version != '21.11':
+        raise RuntimeError('Expected compiler distribution protoc-wheel-0==21.11')
+    selected = Path(PROTOC_EXE).resolve(strict=True)
+    packaged = Path(distribution.locate_file('protoc/data/bin/protoc')).resolve(strict=True)
+    if selected != packaged:
+        raise RuntimeError('Selected compiler is not distribution executable')
+    entry = next(item for item in distribution.files if str(item) == 'protoc/data/bin/protoc')
+    data = selected.read_bytes()
+    digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b'=').decode()
+    if (entry.hash is None or entry.hash.mode != 'sha256' or entry.hash.value != digest or
+            entry.size != len(data)):
+        raise RuntimeError('Selected compiler RECORD identity mismatch')
+    machine = elf_machine(selected)
+    if machine != expected_machine:
+        raise RuntimeError('Selected compiler architecture mismatch')
+    version = command([selected, '--version']).strip()
+    if version != 'libprotoc 3.21.11':
+        raise RuntimeError('Selected compiler version mismatch: ' + repr(version))
+    return {'format': 1, 'expected_machine': expected_machine, 'expected_python': expected_python,
+            'python_machine': observed, 'python_platform': sys.platform, 'python': sys.version,
+            'python_executable': sys.executable, 'python_elf_machine': elf_machine(sys.executable),
+            'python_binary_sha256': sha(Path(sys.executable).read_bytes()),
+            'compiler_distribution': {'name': 'protoc-wheel-0', 'version': distribution.version},
+            'compiler_version': version, 'compiler_executable': str(selected),
+            'compiler_binary_sha256': sha(data), 'compiler_elf_machine': machine,
+            'compiler_record_sha256': digest,
+            'ci': {key: os.environ.get(key) for key in
+                   ('GITHUB_SHA', 'GITHUB_HEAD_REF', 'GITHUB_RUN_ID', 'RUNNER_ARCH', 'RUNNER_OS')}}
+
+
 def copy_source(name):
     root = WORK / name
     source = root / 'sdk/python'
@@ -170,7 +231,24 @@ def build(source, out, *, isolated=False, expected=0, kind=None):
     if not isolated:
         args.append('--no-isolation')
     args += ['--' + kind] if kind else ['--wheel', '--sdist']
-    return command(args + ['--outdir', out, source], expected=expected)
+    output = command(args + ['--outdir', out, source], expected=expected)
+    if expected == 0:
+        verify_build_identity(output)
+    return output
+
+
+def verify_build_identity(output):
+    # Compare every successful backend hook, including isolated overlay hooks,
+    # to the independently inspected distribution executable, not backend constants.
+    records = [json.loads(line.removeprefix('MANTIS_COMPILER_IDENTITY '))
+               for line in output.splitlines() if line.startswith('MANTIS_COMPILER_IDENTITY ')]
+    assert records, 'missing executed compiler identity diagnostics'
+    reference = json.loads((WORK / 'execution.json').read_text())
+    for record in records:
+        assert record['distribution'] == {'name': 'protoc-wheel-0', 'version': '21.11'}
+        assert record['version'] == 'libprotoc 3.21.11' and record['exit'] == 0
+        assert record['argv'][1:] == ['--version']
+        assert record['binary_sha256'] == reference['compiler_binary_sha256'], 'different selected compiler binary'
 
 
 def unpack(sdist, name):
@@ -225,7 +303,14 @@ def verify_wheel(path):
     assert content['mantis/mantis.proto'] == SCHEMA.read_bytes(), 'noncanonical schema'
     assert provenance['schema_sha256'] == sha(SCHEMA.read_bytes())
     assert provenance['generated_sha256'] == sha(content['mantis/mantis_pb2.py']), 'stale generated module'
-    assert provenance['protoc'] == '3.20.1' and provenance['build_protobuf'] == '3.20.0'
+    assert set(provenance) == {'format', 'schema', 'schema_sha256', 'compiler_distribution',
+                               'compiler_version', 'build_protobuf', 'generated_sha256',
+                               'descriptor_set_sha256'}, 'unexpected provenance representation'
+    assert provenance['format'] == 2 and provenance['schema'] == 'protocol/protobuf/mantis.proto'
+    assert provenance['compiler_distribution'] == {'name': 'protoc-wheel-0', 'version': '21.11'}
+    assert provenance['compiler_version'] == 'libprotoc 3.21.11'
+    assert provenance['build_protobuf'] == '3.20.0'
+    assert provenance['descriptor_set_sha256'] == sha((WORK / 'canonical.pb').read_bytes())
     for name, data in content.items():
         assert not PurePosixPath(name).is_absolute() and '..' not in PurePosixPath(name).parts
         assert str(REPO).encode() not in data and str(WORK).encode() not in data
@@ -271,6 +356,33 @@ class Artifacts(unittest.TestCase):
                     (cls.out_a, cls.out_b, WORK / 'rebuilt') for p in directory.iterdir()}
         (WORK / 'artifacts.json').write_text(json.dumps(receipts, indent=2) + '\n')
 
+    def test_execution_identity_negatives_and_restored_positive(self):
+        wrong = 'aarch64' if EXPECTED_MACHINE == 'x86_64' else 'x86_64'
+        output = command([sys.executable, '-B', Path(__file__).resolve(), '--identity-only',
+                          '--work-dir', WORK / 'wrong-platform', '--expected-machine', wrong,
+                          '--expected-python', EXPECTED_PYTHON], expected=1)
+        self.assertIn('RuntimeError: Expected-platform mismatch:', output)
+        self.assertFalse((WORK / 'wrong-platform/execution.json').exists())
+        fake = WORK / 'false-protoc'
+        fake.write_text('#!' + sys.executable + '\nprint("libprotoc 3.21.11")\n')
+        fake.chmod(0o755)
+        self.assertEqual(command([fake, '--version']).strip(), 'libprotoc 3.21.11')
+        with patch('protoc.PROTOC_EXE', str(fake)):
+            with self.assertRaisesRegex(RuntimeError, 'Selected compiler is not distribution executable'):
+                execution_identity(EXPECTED_MACHINE, EXPECTED_PYTHON)
+        # A real binary's header, not an echoed runner label, is checked.
+        self.assertEqual(elf_machine(sys.executable), EXPECTED_MACHINE)
+        with self.assertRaisesRegex(RuntimeError, '64-bit little-endian ELF'):
+            elf_machine(fake)
+        with patch.object(platform, 'machine', return_value=wrong):
+            with self.assertRaisesRegex(RuntimeError, 'Expected-platform mismatch'):
+                execution_identity(EXPECTED_MACHINE, EXPECTED_PYTHON)
+        restored = execution_identity(EXPECTED_MACHINE, EXPECTED_PYTHON)
+        self.assertEqual(restored, json.loads((WORK / 'execution.json').read_text()))
+        (WORK / 'identity-controls.json').write_text(json.dumps({
+            'wrong_platform': 'rejected', 'false_compiler_self_report': 'rejected',
+            'restored': restored}, indent=2) + '\n')
+
     def test_command_timeout_retains_receipt_and_reaps_child(self):
         pidfile = WORK / 'hang-child.pid'
         output = command([sys.executable, PROBE.with_name('hang_fixture.py'), pidfile],
@@ -295,8 +407,10 @@ class Artifacts(unittest.TestCase):
         command([sys.executable, '-m', 'pip', '--python', python, 'install',
                  'pip==25.1.1', 'protobuf==6.33.5'])
         command([python, '-m', 'pip', 'list', '--format=json'])
-        command([python, '-m', 'pip', 'wheel', '--no-deps',
-                 '--wheel-dir', output, self.sdist])
+        log = command([python, '-m', 'pip', 'wheel', '--verbose', '--no-deps',
+                       '--wheel-dir', output, self.sdist])
+        # pip prefixes hook stdout with two spaces in verbose mode.
+        verify_build_identity('\n'.join(line.lstrip() for line in log.splitlines()))
         wheel = next(output.glob('*.whl'))
         verify_wheel(wheel)
         self.assertEqual(wheel.read_bytes(), self.wheel.read_bytes())
@@ -396,6 +510,13 @@ class Artifacts(unittest.TestCase):
             with patch.object(backend, '_run', return_value=b'libprotoc 99.0'):
                 with self.assertRaisesRegex(RuntimeError, 'Compiler version mismatch'):
                     backend.build_wheel(str(WORK / 'wrong-compiler-output'))
+            # Distribution and executed compiler versions must not be conflated.
+            with patch.object(backend, '_distribution_version', side_effect=lambda name: '3.21.11' if name == 'protoc-wheel-0' else real_version(name)):
+                with self.assertRaisesRegex(RuntimeError, 'Expected compiler distribution protoc-wheel-0==21.11; found 3.21.11'):
+                    backend.build_wheel(str(WORK / 'wrong-distribution-output'))
+            with patch.object(backend, '_run', return_value=b'libprotoc 21.11\n'):
+                with self.assertRaisesRegex(RuntimeError, "executed b'libprotoc 21.11'"):
+                    backend.build_wheel(str(WORK / 'conflated-compiler-output'))
             with patch.object(backend, '_distribution_version', side_effect=lambda name: '6.0' if name == 'protobuf' else real_version(name)):
                 with self.assertRaisesRegex(RuntimeError, 'Expected build protobuf'):
                     backend.build_sdist(str(WORK / 'wrong-runtime-output'))
@@ -413,8 +534,29 @@ class Artifacts(unittest.TestCase):
                 self.assertEqual(rejected.exception.cmd, [PROTOC_EXE, '--not-a-real-protoc-option'])
                 self.assertEqual(rejected.exception.stderr, b'Missing value for flag: --not-a-real-protoc-option\n')
         self.assertEqual(list(scratch.iterdir()), [], 'partial generation scratch retained')
-        for name in ('no-compiler-output', 'wrong-compiler-output', 'wrong-runtime-output', 'failed-compiler-output'):
+        for name in ('no-compiler-output', 'wrong-compiler-output', 'wrong-runtime-output', 'failed-compiler-output',
+                     'wrong-distribution-output', 'conflated-compiler-output'):
             self.assertFalse((WORK / name).exists(), name)
+
+    def test_versioned_sdist_provenance_rejection_and_restoration(self):
+        source = unpack(self.sdist, 'identity-provenance')
+        manifest = source / '_schema/provenance.json'
+        original = manifest.read_bytes()
+        for field, wrong in (('format', 1), ('compiler_distribution', {'name': 'protoc-wheel-0', 'version': '3.21.11'}),
+                             ('compiler_version', 'libprotoc 21.11')):
+            changed = json.loads(original)
+            changed[field] = wrong
+            manifest.write_text(json.dumps(changed))
+            out = WORK / ('wrong-provenance-' + field)
+            output = build(source, out, expected=1, kind='wheel')
+            self.assertIn('RuntimeError: Schema/generated provenance mismatch', output)
+            self.assertFalse(out.exists() and any(out.iterdir()))
+        manifest.write_bytes(original)
+        self.assertEqual(sha(manifest.read_bytes()), sha(original))
+        build(source, WORK / 'identity-provenance-restored', kind='wheel')
+        restored = next((WORK / 'identity-provenance-restored').glob('*.whl'))
+        self.assertEqual(restored.read_bytes(), self.wheel.read_bytes())
+        verify_wheel(restored)
 
     def test_malformed_tampered_wheels_and_installed_missing_module(self):
         malformed = WORK / 'malformed.whl'
@@ -472,7 +614,7 @@ class Artifacts(unittest.TestCase):
                                                      'build-backend = "setuptools.build_meta"')
                            .replace('backend-path = ["."]\n', ''))
         out = WORK / 'bypass-red'
-        build(source, out, kind='wheel')
+        command([sys.executable, '-m', 'build', '--no-isolation', '--wheel', '--outdir', out, source])
         with self.assertRaises(AssertionError):
             verify_wheel(next(out.glob('*.whl')))
         root = WORK / 'installed/bypass-red'
@@ -497,10 +639,24 @@ class Artifacts(unittest.TestCase):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--work-dir', required=True, type=Path)
+    parser.add_argument('--expected-machine', required=True, choices=('x86_64', 'aarch64'))
+    parser.add_argument('--expected-python', required=True, choices=('3.10', '3.12', '3.14'))
+    parser.add_argument('--identity-only', action='store_true')
     args, tests = parser.parse_known_args()
     WORK = args.work_dir.resolve()
     if WORK.is_relative_to(REPO):
         parser.error('--work-dir must be outside the original source/build tree')
     WORK.mkdir(parents=True, exist_ok=False)
     (WORK / 'tmp').mkdir()
-    unittest.main(argv=[sys.argv[0]] + tests, verbosity=2)
+    EXPECTED_MACHINE, EXPECTED_PYTHON = args.expected_machine, args.expected_python
+    identity = execution_identity(EXPECTED_MACHINE, EXPECTED_PYTHON)
+    (WORK / 'execution.json').write_text(json.dumps(identity, indent=2) + '\n')
+    inputs = [*sorted((REPO / 'sdk/python').rglob('*')), *sorted((REPO / 'tests/sdk').glob('*.py')),
+              SCHEMA, REPO / '.github/workflows/python-sdk.yml',
+              *(REPO / name for name in ('tests/unit/python_calibration.py', 'tests/unit/python_capture.py',
+                                         'tests/contract/protocol_fields.py'))]
+    hashes = {str(path.relative_to(REPO)): sha(path.read_bytes()) for path in inputs
+              if path.is_file() and '__pycache__' not in path.parts}
+    (WORK / 'inputs.json').write_text(json.dumps(hashes, indent=2) + '\n')
+    if not args.identity_only:
+        unittest.main(argv=[sys.argv[0]] + tests, verbosity=2)

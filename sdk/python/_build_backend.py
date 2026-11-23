@@ -18,7 +18,8 @@ import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-COMPILER = '3.20.1'
+COMPILER_DISTRIBUTION = '21.11'
+COMPILER_VERSION = b'libprotoc 3.21.11'
 BUILD_RUNTIME = '3.20.0'
 SOURCE_FILES = ('pyproject.toml', '_build_backend.py', 'README.md', 'LICENSE',
                 'MANIFEST.in', 'mantis/__init__.py', 'mantis/calibration.py')
@@ -50,8 +51,9 @@ def _stage():
     # Never consult PATH for protoc, reuse a generated module, or write into the
     # checkout. Each hook owns and retires its complete scratch directory.
     compiler_distribution = _distribution_version('protoc-wheel-0')
-    if compiler_distribution != COMPILER:
-        raise RuntimeError('Expected protoc-wheel-0==' + COMPILER + '; found ' + compiler_distribution)
+    if compiler_distribution != COMPILER_DISTRIBUTION:
+        raise RuntimeError('Expected compiler distribution protoc-wheel-0==' +
+                           COMPILER_DISTRIBUTION + '; found ' + compiler_distribution)
     import google.protobuf
     if (_distribution_version('protobuf') != BUILD_RUNTIME or
             google.protobuf.__version__ != BUILD_RUNTIME):
@@ -62,8 +64,18 @@ def _stage():
             _distribution_version('wheel') != '0.45.1' or wheel.__version__ != '0.45.1'):
         raise RuntimeError('Build-tool identity mismatch (setuptools/wheel)')
     from protoc import PROTOC_EXE
-    if _run([PROTOC_EXE, '--version']).strip() != b'libprotoc 3.20.1':
-        raise RuntimeError('Compiler version mismatch')
+    compiler_version = _run([PROTOC_EXE, '--version']).strip()
+    if compiler_version != COMPILER_VERSION:
+        raise RuntimeError('Compiler version mismatch: expected ' + repr(COMPILER_VERSION) +
+                           '; executed ' + repr(compiler_version) +
+                           ' from protoc-wheel-0==' + compiler_distribution)
+    # Execution diagnostics belong in frontend logs, never in portable artifacts.
+    # This also identifies the actual executable in pip's isolated overlay.
+    print('MANTIS_COMPILER_IDENTITY ' + json.dumps({
+        'distribution': {'name': 'protoc-wheel-0', 'version': compiler_distribution},
+        'version': compiler_version.decode('ascii'), 'argv': [str(PROTOC_EXE), '--version'],
+        'exit': 0, 'binary_sha256': _sha(Path(PROTOC_EXE).read_bytes())}, sort_keys=True),
+        flush=True)
     canonical = ROOT.parent.parent / 'protocol/protobuf/mantis.proto'
     bundled = ROOT / '_schema/mantis.proto'
     manifest = ROOT / '_schema/provenance.json'
@@ -93,8 +105,11 @@ def _stage():
         namespace = runpy.run_path(str(stage / 'mantis/mantis_pb2.py'))
         if namespace['Request'].FromString(b'\x08\x01').protocol_version != 1:
             raise RuntimeError('Generated module/runtime validation failed')
-        provenance = {'format': 1, 'schema': 'protocol/protobuf/mantis.proto',
-                      'schema_sha256': _sha(schema), 'protoc': COMPILER,
+        provenance = {'format': 2, 'schema': 'protocol/protobuf/mantis.proto',
+                      'schema_sha256': _sha(schema),
+                      'compiler_distribution': {'name': 'protoc-wheel-0',
+                                                'version': compiler_distribution},
+                      'compiler_version': compiler_version.decode('ascii'),
                       'build_protobuf': BUILD_RUNTIME,
                       'generated_sha256': _sha(generated),
                       'descriptor_set_sha256': _sha((stage / 'descriptor.pb').read_bytes())}

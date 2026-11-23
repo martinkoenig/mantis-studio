@@ -237,9 +237,13 @@ For the existing CMake development route, use `PYTHONPATH=build/debug/python`;
 its generated `mantis_pb2.py` remains build output and is not hand-maintained.
 Do not use that source/build path to qualify installed artifacts. The separate
 read-only [Python artifact workflow](.github/workflows/python-sdk.yml) executes
-`tests/sdk/artifacts_test.py` in isolated installed venvs on Python 3.10/3.12/3.14,
+`tests/sdk/artifacts_test.py` in isolated installed venvs on Linux x86_64
+Python 3.10/3.12/3.14 and native Linux ARM64 Python 3.12,
 including sdist rebuild, schema/wire, deterministic independent-root and negative
-controls. Locally run the same entry point with an unused `--work-dir` outside
+controls. Compiler distribution `protoc-wheel-0==21.11` and executed
+`libprotoc 3.21.11` are distinct identities in provenance format 2. Locally run
+the same entry point with `--expected-machine x86_64 --expected-python 3.12`
+(or the actual qualified native combination), and an unused `--work-dir` outside
 the source/build trees and the pinned tools from the workflow. Logs and failures
 are retained there. These packaging checks do not replace the five Architecture
 CI jobs or the later live-daemon/fault-protocol and release gates of Issue #75.
