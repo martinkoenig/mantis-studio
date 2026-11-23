@@ -215,17 +215,34 @@ project tests; they do not replace them.
 
 ## Python packaging
 
-For development, use `PYTHONPATH=build/debug/python`. The install example also
-requires Ubuntu's `python3-venv` package. To install a wheel/package, first
-generate the wire module in the package source:
+Build the standalone pure-Python Client SDK with PEP 517; no CMake build or manual
+source generation is required. In a Python >=3.10 venv containing
+`build==1.2.2.post1`, run from the repository root:
 
 ```bash
-protoc -I protocol/protobuf --python_out=sdk/python/mantis protocol/protobuf/mantis.proto
-python3 -m venv .venv
-.venv/bin/python -m pip install ./sdk/python
+SOURCE_DATE_EPOCH=1700000000 python -m build --outdir dist sdk/python
+python -m pip install dist/mantis_studio_client-0.1.0-py3-none-any.whl
 ```
 
-The generated `mantis_pb2.py` is build output and is not hand-maintained.
+The isolated backend uses exact binary-only compatible tooling declared in
+`sdk/python/pyproject.toml`. Set `PIP_ONLY_BINARY=:all:` when installing build
+dependencies to fail explicitly where compiler wheels are unavailable. It always
+generates from `protocol/protobuf/mantis.proto`, not a preexisting generated
+module. The sdist carries the canonical schema, generated module and integrity
+provenance; unpack it outside the checkout and run `python -m build --wheel` to
+rebuild independently. See [SDK packaging details](sdk/python/README.md).
+The distribution/import names and version remain internal/provisional.
+
+For the existing CMake development route, use `PYTHONPATH=build/debug/python`;
+its generated `mantis_pb2.py` remains build output and is not hand-maintained.
+Do not use that source/build path to qualify installed artifacts. The separate
+read-only [Python artifact workflow](.github/workflows/python-sdk.yml) executes
+`tests/sdk/artifacts_test.py` in isolated installed venvs on Python 3.10/3.12/3.14,
+including sdist rebuild, schema/wire, deterministic independent-root and negative
+controls. Locally run the same entry point with an unused `--work-dir` outside
+the source/build trees and the pinned tools from the workflow. Logs and failures
+are retained there. These packaging checks do not replace the five Architecture
+CI jobs or the later live-daemon/fault-protocol and release gates of Issue #75.
 
 ## Windows and macOS
 
