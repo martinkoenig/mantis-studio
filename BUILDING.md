@@ -240,7 +240,12 @@ read-only [Python artifact workflow](.github/workflows/python-sdk.yml) executes
 `tests/sdk/artifacts_test.py` in isolated installed venvs on Linux x86_64
 Python 3.10/3.12/3.14 and native Linux ARM64 Python 3.12,
 including sdist rebuild, schema/wire, deterministic independent-root and negative
-controls. Compiler distribution `protoc-wheel-0==21.11` and executed
+controls. Direct/unpacked-sdist/pip-overlay wheels also execute the real-loopback
+control suite from clean installed prefixes at both protobuf runtime edges;
+source-matched paths/hashes and historical-client RED/exact-restored GREEN
+receipts distinguish artifact containment from source-only testing. Peers are not
+`mantisd`; timeout can leave daemon-owned operation outcomes UNKNOWN.
+Compiler distribution `protoc-wheel-0==21.11` and executed
 `libprotoc 3.21.11` are distinct identities in provenance format 2. Locally run
 the same entry point with `--expected-machine x86_64 --expected-python 3.12`
 (or the actual qualified native combination), and an unused `--work-dir` outside

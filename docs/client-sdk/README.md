@@ -24,6 +24,61 @@ second = studio.pipeline.run(raw_artifact=capture.raw_artifact).wait()
 
 `studio.snapshot()`, `studio.artifacts.list()`, `studio.events(after=sequence)`, `studio.enable_plugin(id, enabled)`, `studio.artifacts.recover(id)`, and `studio.project(path, create=True)` expose the other service operations.
 
+### Python control exchange failures
+
+Importing the SDK or constructing `Client`/`connect()` does not open a connection.
+Credentials still come from the explicit token or `MANTIS_TOKEN`; the optional
+port comes from the argument or `MANTIS_PORT`. Calls connect only to `127.0.0.1`.
+There is no ambient remote-host selection or remote TLS transport.
+
+Each synchronous control exchange has **one monotonic five-second I/O budget**
+shared by connect, request send, response header and response body. Each blocking
+operation uses the remaining budget; fragmented/trickling progress does not
+restart it. Expired completion is rejected, including the final response read.
+This is a bounded socket-exchange policy, not a hard real-time scheduling guarantee
+or a new deadline for the entire multi-call `Job.wait()` operation.
+
+Transport failures retain their Python `TimeoutError`, `ConnectionError` or other
+`OSError` categories. Invalid frame lengths and version/request-correlation
+mismatches remain `MantisError`; malformed Protobuf is contained as
+`MantisError(component="protocol")` with the fixed diagnosis
+`Malformed control response protobuf`, not raw peer bytes or decoder diagnostics.
+A valid daemon error retains its original code, component and message. An
+initiating exchange error takes precedence over a secondary socket-close error;
+a close error after an otherwise successful exchange is not hidden.
+
+**A client timeout does not cancel daemon work.** The command may already have
+executed and its outcome can be **UNKNOWN**. The SDK never automatically retries
+or replays commands. Reconcile through authoritative daemon state where possible
+before deciding what to do next; a later independent call uses a fresh connection
+and request ID.
+
+The standalone source-level regression command is:
+
+```bash
+/usr/bin/python3 -B tests/qualification/python-control/run.py \
+  --output build/python-control --negative-controls
+```
+
+It requires installed `protoc`, Python `protobuf` and `PyYAML` (Ubuntu packages
+`protobuf-compiler`, `python3-protobuf`, `python3-yaml`). It generates temporary
+bindings from the canonical schema under the ignored build directory, checks exact
+source/descriptor and independent golden request bytes, runs real owned loopback
+protocol peers plus existing capture/calibration/protocol/boundary tests, and
+proves existing two-argument receive-caller compatibility, deadline-guard and
+blocking-budget sensitivity in disposable SDK copies. The compatibility regression
+executes the unchanged acceptance test's `raw_request` function with real sockets,
+not its surrounding product scenario. The private `_receive(sock, count)` form
+gets one five-second budget for that standalone read; normal `_call` exchanges
+always pass their single explicit shared deadline across header and body.
+Logs, exact input/tool hashes, commands, exits and source restorations are retained
+per run; insufficient disk reserve or an unexpected timeout fails qualification.
+No generated module is committed. The dedicated `python-control` workflow runs
+this command on native Ubuntu x86_64 and ARM64 with read-only repository permissions
+and no stored checkout credentials. A protocol peer is **not `mantisd`**: these
+checks do not qualify live daemon integration, built wheel/sdist integration,
+hardware, non-Linux support, release publishing or whole Issue #75.
+
 ## C++
 
 Link `mantis-client` and include `<mantis/client.hpp>`:

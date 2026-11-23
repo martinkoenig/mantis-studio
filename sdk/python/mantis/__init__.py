@@ -8,6 +8,7 @@ import socket
 import struct
 import time
 import uuid
+from google.protobuf.message import DecodeError
 from . import mantis_pb2 as wire
 
 class MantisError(RuntimeError):
@@ -149,29 +150,57 @@ class Client:
         self.x1_roles = _X1Roles(self)
         self.calibration = Calibration(self)
     @staticmethod
-    def _receive(sock, count):
+    def _remaining(deadline):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Control exchange timed out; daemon outcome may be unknown")
+        return remaining
+    @staticmethod
+    def _receive(sock, count, deadline=None):
+        # Legacy standalone readers get one bounded read, not a fresh budget
+        # per recv. _call always supplies its shared exchange deadline.
+        if deadline is None:
+            deadline = time.monotonic() + 5
         result = bytearray()
         while len(result) < count:
+            sock.settimeout(Client._remaining(deadline))
             part = sock.recv(count - len(result))
             if not part:
                 raise ConnectionError("mantisd closed the control connection")
             result.extend(part)
+        Client._remaining(deadline)
         return bytes(result)
     def _call(self, **command):
         request = wire.Request(protocol_version=1, request_id=str(uuid.uuid4()), token=self.token, **command)
         payload = request.SerializeToString()
         if len(payload) > 4 * 1024 * 1024:
             raise ValueError("Control message exceeds limit")
-        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as sock:
+        deadline = time.monotonic() + 5
+        sock = socket.create_connection(("127.0.0.1", self.port), timeout=self._remaining(deadline))
+        try:
+            sock.settimeout(self._remaining(deadline))
             sock.sendall(struct.pack("!I", len(payload)) + payload)
-            size, = struct.unpack("!I", self._receive(sock, 4))
+            size, = struct.unpack("!I", self._receive(sock, 4, deadline))
             if not 0 < size <= 4 * 1024 * 1024:
                 raise MantisError("Invalid control response length")
-            response = wire.Response.FromString(self._receive(sock, size))
-        if response.protocol_version != 1 or response.request_id != request.request_id:
-            raise MantisError("Response version/correlation mismatch")
-        if response.HasField("error"):
-            raise MantisError(response.error.message, response.error.code, response.error.component)
+            body = self._receive(sock, size, deadline)
+            try:
+                response = wire.Response.FromString(body)
+            except DecodeError:
+                raise MantisError("Malformed control response protobuf", component="protocol") from None
+            if response.protocol_version != 1 or response.request_id != request.request_id:
+                raise MantisError("Response version/correlation mismatch")
+            if response.HasField("error"):
+                raise MantisError(response.error.message, response.error.code, response.error.component)
+        except BaseException:
+            # Preserve the initiating failure, including cancellation, if close fails.
+            try:
+                sock.close()
+            except OSError:
+                pass
+            raise
+        else:
+            sock.close()
         return response
     def preview(self, capture_or_replay):
         ident = capture_or_replay if isinstance(capture_or_replay, str) else capture_or_replay.id

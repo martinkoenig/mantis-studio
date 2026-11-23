@@ -64,7 +64,30 @@ requires a token (argument or `MANTIS_TOKEN`); actual commands connect only to
 Do not put real tokens in examples/logs. SDK, application, schema and wire protocol
 versions are separate identities: package 0.1.0 does not change wire protocol v1.
 
-Stage A validates packaging only. Live-daemon/fault-protocol tests, whole-Issue75
-qualification, non-Linux support, naming/legal/notice review, distribution checks,
-TestPyPI, signing and production publishing remain separate gates. No publishing
-workflow or remote-network activation is provided.
+The integrated artifact qualifier also runs the existing real-loopback control
+suite from clean installed prefixes (`python -I`, no source-tree `PYTHONPATH`).
+Direct wheels, wheels rebuilt from an unpacked sdist without its original source
+root, and pip's isolated-overlay sdist rebuild each exercise protobuf 3.20.0 and
+6.33.5. Receipts bind actual installed client/calibration/generated/runtime paths
+and hashes to the qualified source and canonical schema. Cases include malformed,
+truncated, oversized and mismatched replies, application/transport errors,
+unavailable peers, shared deadlines without retry, legacy receive compatibility,
+recovery and teardown. The peer transports real canonical Protobuf over loopback;
+it is not a running `mantisd` or evidence of a daemon's final operation outcome.
+
+A small historical-method fixture reconstructs the **complete** ca04 pre-control
+client, checks its immutable SHA-256, builds a real wheel and installs it in fresh
+prefixes. Its trickling-deadline assertion and malformed-response containment
+fail at both protobuf edges. Restoring the accepted client bytes must reproduce
+the qualified wheel byte-for-byte and pass the full installed control suite.
+Internally valid artifacts with a different client source are also rejected.
+Original packaging, compiler identity, lifecycle and command-process negative
+controls remain in the same qualifier; no additional duplicated test family is
+needed. Logs, frozen inputs, installed identities and restoration receipts are
+retained separately from portable provenance format 2.
+
+Timeout or disconnection does not cancel daemon-owned work: its outcome may be
+**UNKNOWN**. No automatic retry is performed. Live-daemon qualification,
+whole-Issue75 qualification, non-Linux support, naming/legal/notice review,
+distribution checks, TestPyPI, signing and production publishing remain separate
+gates. No publishing workflow or remote-network activation is provided.

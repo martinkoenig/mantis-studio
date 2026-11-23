@@ -1,0 +1,35 @@
+name: python-control
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - "integration/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || (github.event_name == 'workflow_dispatch' && github.run_id || github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+  control:
+    name: Python control (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Installed canonical-schema fixture dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --assume-yes protobuf-compiler python3-protobuf python3-yaml
+      - name: Generated bindings, real loopback peers and negative sensitivity
+        run: /usr/bin/python3 -B tests/qualification/python-control/run.py --output build/python-control --negative-controls

@@ -54,4 +54,8 @@ jobs:
             ${{ runner.temp }}/python-sdk-evidence/dist-a/*
             ${{ runner.temp }}/python-sdk-evidence/dist-b/*
             ${{ runner.temp }}/python-sdk-evidence/rebuilt/*
+            ${{ runner.temp }}/python-sdk-evidence/pip-sdist-wheel/*
+            ${{ runner.temp }}/python-sdk-evidence/control-before353/*
+            ${{ runner.temp }}/python-sdk-evidence/control-restored/*
+            ${{ runner.temp }}/python-sdk-evidence/frozen-inputs/
           if-no-files-found: error

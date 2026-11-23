@@ -272,7 +272,7 @@ def unpack(sdist, name):
     return roots[0]
 
 
-def verify_wheel(path):
+def verify_wheel(path, *, client_source=None):
     """Independent strict artifact oracle, not a signature/authenticity scheme."""
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
@@ -283,6 +283,9 @@ def verify_wheel(path):
         expected |= {dist + name for name in ('METADATA', 'WHEEL', 'top_level.txt', 'LICENSE', 'RECORD')}
         assert set(names) == expected, ('unexpected/missing files', set(names) ^ expected)
         content = {name: archive.read(name) for name in names}
+    expected_client = (REPO / 'sdk/python/mantis/__init__.py').read_bytes() if client_source is None else client_source
+    assert content['mantis/__init__.py'] == expected_client, 'wheel client differs from qualified source'
+    assert content['mantis/calibration.py'] == (REPO / 'sdk/python/mantis/calibration.py').read_bytes(), 'wheel calibration differs from qualified source'
     metadata = BytesParser().parsebytes(content[dist + 'METADATA'])
     assert metadata['Name'] == 'mantis-studio-client'
     assert metadata['Version'] == '0.1.0'
@@ -326,6 +329,31 @@ def install(wheel, name, runtime):
     command([sys.executable, '-m', 'pip', '--python', python, 'check'])
     command([python, '-I', PROBE, WORK / 'canonical.pb'])
     return python
+
+
+def installed_control(python, runtime, *, source=None, test=None, diagnostic=None):
+    """Reuse the real-peer oracle, but never add a source/build import path."""
+    args = [python, '-I', REPO / 'tests/unit/python_control.py', '--installed']
+    if test:
+        args.append(test)
+    output = command(args + ['-v'], expected=1 if diagnostic else 0)
+    records = [json.loads(line.removeprefix('MANTIS_INSTALLED_CONTROL '))
+               for line in output.splitlines() if line.startswith('MANTIS_INSTALLED_CONTROL ')]
+    assert len(records) == 1, 'missing/duplicate installed control identity'
+    identity = records[0]
+    assert identity['isolated'] == 1 and identity['protobuf'] == runtime
+    assert Path(identity['prefix']).resolve() == python.parent.parent.resolve()
+    expected = {'mantis': source if source is not None else (REPO / 'sdk/python/mantis/__init__.py').read_bytes(),
+                'mantis.calibration': (REPO / 'sdk/python/mantis/calibration.py').read_bytes()}
+    for module, data in expected.items():
+        assert identity['modules'][module]['sha256'] == sha(data), 'installed control source mismatch'
+    if diagnostic:
+        receipt = json.loads((WORK / 'commands.jsonl').read_text().splitlines()[-1])
+        assert receipt['exit'] == 1 and not receipt['timed_out'], 'negative was not an ordinary test failure'
+        assert diagnostic in output and 'Ran 1 test' in output, 'intended control RED missing'
+    with (WORK / 'installed-controls.jsonl').open('a', encoding='utf-8') as out:
+        out.write(json.dumps({'identity': identity, 'test': test, 'expected_diagnostic': diagnostic}) + '\n')
+    return identity
 
 
 class Artifacts(unittest.TestCase):
@@ -414,7 +442,10 @@ class Artifacts(unittest.TestCase):
         wheel = next(output.glob('*.whl'))
         verify_wheel(wheel)
         self.assertEqual(wheel.read_bytes(), self.wheel.read_bytes())
-        install(wheel, 'pip-sdist-wheel', '3.20.0')
+        python = install(wheel, 'pip-sdist-wheel', '3.20.0')
+        installed_control(python, '3.20.0')
+        python = install(wheel, 'pip-sdist-wheel-max', '6.33.5')
+        installed_control(python, '6.33.5')
 
     def test_archives_and_independent_root_reproducibility(self):
         self.assertEqual(self.wheel.read_bytes(), next(self.out_b.glob('*.whl')).read_bytes())
@@ -444,11 +475,60 @@ class Artifacts(unittest.TestCase):
                                      (self.rebuilt, 'sdist-max', '6.33.5')):
             with self.subTest(name=name):
                 python = install(wheel, name, runtime)
+                installed_control(python, runtime)
                 # Existing tests' build/python entry is deliberately nonexistent:
                 # -I plus installed module-path probe prevents checkout fallback.
                 for script in ('tests/unit/python_calibration.py', 'tests/unit/python_capture.py',
                                'tests/contract/protocol_fields.py'):
                     command([python, '-I', REPO / script, WORK / 'absent-native-build'])
+
+    def test_pre353_installed_control_red_exact_restored_green(self):
+        # This is the actual ca04 client, not a replacement/fake Client. Keep only
+        # its small control-method slice as a fixture; verify the COMPLETE module
+        # against the immutable parent before building/installing it normally.
+        source = copy_source('control-causal')
+        client = source / 'mantis/__init__.py'
+        original = client.read_bytes()
+        start = original.index(b'    @staticmethod\n    def _remaining(')
+        end = original.index(b'    def preview(', start)
+        legacy = (original[:start] + (REPO / 'tests/sdk/fixtures/control-before353.txt').read_bytes() +
+                  original[end:]).replace(b'from google.protobuf.message import DecodeError\n', b'')
+        self.assertEqual(sha(legacy), 'ef9625080a80d1e5c8ca2ca9887d53e55aa160a6aeaf327e28a54a9865b71e20',
+                         'ca04 historical client reconstruction changed')
+        client.write_bytes(legacy)
+        build(source, WORK / 'control-before353', kind='wheel')
+        red_wheel = next((WORK / 'control-before353').glob('*.whl'))
+        verify_wheel(red_wheel, client_source=legacy)
+        # The new artifact/source-match gate must also reject an otherwise valid,
+        # internally rehashed wheel containing the historical production client.
+        with self.assertRaisesRegex(AssertionError, 'wheel client differs from qualified source'):
+            verify_wheel(red_wheel)
+        for runtime in ('3.20.0', '6.33.5'):
+            python = install(red_wheel, 'control-before353-' + runtime, runtime)
+            installed_control(python, runtime, source=legacy,
+                              test='Control.test_trickling_progress_cannot_extend_exchange_deadline',
+                              diagnostic='AssertionError: TimeoutError not raised')
+            installed_control(python, runtime, source=legacy,
+                              test='Control.test_malformed_protobuf_is_a_bounded_protocol_error',
+                              diagnostic='google.protobuf.message.DecodeError:')
+        client.write_bytes(original)
+        self.assertEqual(sha(client.read_bytes()), sha(original), 'accepted source not restored exactly')
+        build(source, WORK / 'control-restored', kind='wheel')
+        restored = next((WORK / 'control-restored').glob('*.whl'))
+        verify_wheel(restored)
+        self.assertEqual(restored.read_bytes(), self.wheel.read_bytes())
+        for runtime in ('3.20.0', '6.33.5'):
+            python = install(restored, 'control-restored-' + runtime, runtime)
+            installed_control(python, runtime)
+        (WORK / 'control-sensitivity.json').write_text(json.dumps({
+            'historical_commit': 'ca04e7ab056a5b12904f96ca5a0112cd1dd3dd7e',
+            'historical_client_sha256': sha(legacy), 'restored_client_sha256': sha(client.read_bytes()),
+            'accepted_client_sha256': sha(original), 'red_wheel_sha256': sha(red_wheel.read_bytes()),
+            'restored_wheel_sha256': sha(restored.read_bytes()),
+            'qualified_wheel_sha256': sha(self.wheel.read_bytes()),
+            'protobuf_edges': ['3.20.0', '6.33.5'],
+            'historical_installed_deadline_and_malformed': 'RED',
+            'exact_restored_installed_full_control_suite': 'GREEN'}, indent=2) + '\n')
 
     def test_missing_stale_generated_and_missing_changed_schema_fail_closed(self):
         cases = {'missing-generated': 'mantis/mantis_pb2.py',
@@ -651,12 +731,21 @@ if __name__ == '__main__':
     EXPECTED_MACHINE, EXPECTED_PYTHON = args.expected_machine, args.expected_python
     identity = execution_identity(EXPECTED_MACHINE, EXPECTED_PYTHON)
     (WORK / 'execution.json').write_text(json.dumps(identity, indent=2) + '\n')
-    inputs = [*sorted((REPO / 'sdk/python').rglob('*')), *sorted((REPO / 'tests/sdk').glob('*.py')),
+    inputs = [*sorted((REPO / 'sdk/python').rglob('*')), *sorted((REPO / 'tests/sdk').rglob('*')),
               SCHEMA, REPO / '.github/workflows/python-sdk.yml',
               *(REPO / name for name in ('tests/unit/python_calibration.py', 'tests/unit/python_capture.py',
+                                         'tests/unit/python_control.py', 'tests/integration/acceptance.py',
                                          'tests/contract/protocol_fields.py'))]
     hashes = {str(path.relative_to(REPO)): sha(path.read_bytes()) for path in inputs
               if path.is_file() and '__pycache__' not in path.parts}
     (WORK / 'inputs.json').write_text(json.dumps(hashes, indent=2) + '\n')
+    for relative in hashes:
+        frozen = WORK / 'frozen-inputs' / relative
+        frozen.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(REPO / relative, frozen)
     if not args.identity_only:
-        unittest.main(argv=[sys.argv[0]] + tests, verbosity=2)
+        result = unittest.main(argv=[sys.argv[0]] + tests, verbosity=2, exit=False).result
+        for relative, digest in hashes.items():
+            assert sha((REPO / relative).read_bytes()) == digest, 'input changed during artifact qualification: ' + relative
+            assert sha((WORK / 'frozen-inputs' / relative).read_bytes()) == digest, 'frozen input changed: ' + relative
+        sys.exit(0 if result.wasSuccessful() else 1)
