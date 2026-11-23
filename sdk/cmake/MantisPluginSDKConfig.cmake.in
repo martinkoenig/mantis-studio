@@ -1,0 +1,13 @@
+@PACKAGE_INIT@
+
+set(MantisPluginSDK_VERSION "@PROJECT_VERSION@")
+# Diagnose incomplete installations before a compiler error or an ambient include
+# path can hide a missing public header. Paths derive only from this install tree.
+foreach(header IN ITEMS c/mantis/plugin.h c/mantis/projected_light.h
+                        c/mantis/semantic_views.h cpp/mantis/sdk.hpp)
+  if(NOT EXISTS "@PACKAGE_sdk_include@/${header}")
+    message(FATAL_ERROR "MantisPluginSDK missing public header: ${header}")
+  endif()
+endforeach()
+include("${CMAKE_CURRENT_LIST_DIR}/MantisPluginSDKTargets.cmake")
+check_required_components(MantisPluginSDK)
