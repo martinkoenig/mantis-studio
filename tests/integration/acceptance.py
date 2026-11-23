@@ -14,6 +14,7 @@ sys.path.insert(0, str(build / "python"))
 import mantis
 from mantis import mantis_pb2 as wire
 from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, initial_capture, require_capture, report_failure
+from recorder_observer import AcceptanceObserver
 
 with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
     root = Path(directory)
@@ -31,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
     daemons = OwnedProcesses()
     studios = OwnedProcesses()
     observations = collections.deque(maxlen=32)
+    observer = AcceptanceObserver(build, root) if "--recorder-observer" in sys.argv else None
     def observe():
         state = client.snapshot()
         observations.append(capture_evidence(state))
@@ -46,7 +48,8 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
                     return
                 except (OSError, mantis.MantisError): time.sleep(0.05)
             raise AssertionError("Daemon startup timeout")
-        return daemons.start_ready([str(build / "bin/mantisd"), "--project", str(root / "Project.mantis")],
+        command = observer.daemon_args() if observer else [str(build / "bin/mantisd")]
+        return daemons.start_ready(command + ["--project", str(root / "Project.mantis")],
                                    ready=ready, env=env, stdout=log, stderr=log)
     def cli(*args):
         return json.loads(subprocess.check_output([str(build / "bin/mantis-cli"), *args], env=env, text=True))
@@ -104,6 +107,8 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         else:
             capture = client.capture.start(devices[0])
             active = require_capture(observe(), capture, "headless capture started")
+        if observer:
+            observer.link(active)
         if "--fail-for-diagnostics" in sys.argv:
             raise AssertionError("Injected acceptance diagnostics export failure")
         crash = client.pipeline.run(capture=active.id, recipe="crash-test")
@@ -137,6 +142,8 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         # Hard daemon termination leaves a genuinely provisional capture, then startup recovers it.
         raw = active.raw_artifact
         prior_ids = {a.id for a in client.artifacts.list() if a.state == "FINALIZED"}
+        if observer:
+            observer.flush(daemon)
         daemon.kill(); daemon.wait(timeout=5)
         daemon = start()
         assert prior_ids <= {a.id for a in client.artifacts.list()}
@@ -156,7 +163,19 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
                        secret=env["MANTIS_TOKEN"])
         raise
     finally:
+        primary = sys.exc_info()[1]
+        observer_error = False
+        if observer and observer.identity and daemon and daemon.poll() is None and len(observer.runs) == 1:
+            try:
+                observer.flush(daemon)
+            except BaseException:
+                observer.errors.append("export-unavailable")
+                observer_error = True
         studios.close()
         daemons.close()
+        if observer:
+            observer.retain(daemons, primary)
         if ui_log and not ui_log.closed: ui_log.close()
         log.close()
+        if observer_error and primary is None:
+            raise AssertionError("Recorder observer evidence unqualified")

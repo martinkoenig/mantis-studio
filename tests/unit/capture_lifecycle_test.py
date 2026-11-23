@@ -16,6 +16,7 @@ from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "integration"))
 from capture_lifecycle import OwnedProcesses, await_progress, capture_evidence, emit_failure, initial_capture, require_capture, retain_failure, report_failure, log_summary
 from capture_lifecycle import RECORDER_FIELDS, CI_RECORD_LIMIT, STATE_READ_LIMIT, identity_summary
+from recorder_observer_test import RecorderObserverTests
 
 
 def capture(**changes):

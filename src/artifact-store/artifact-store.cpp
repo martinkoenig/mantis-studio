@@ -679,26 +679,29 @@ struct Store::Impl {
             if (metadata_version < 2) {
                 Transaction migration(db);
                 if (metadata_version == 0)
-                    exec(db,
-                         "CREATE TABLE artifacts(id TEXT PRIMARY KEY,type TEXT NOT NULL,version INTEGER NOT NULL,"
-                         "state INTEGER NOT NULL,provenance TEXT NOT NULL,hash TEXT NOT NULL DEFAULT '',"
-                         "bytes INTEGER NOT NULL DEFAULT 0,chunks INTEGER NOT NULL DEFAULT 0);"
-                         "CREATE TABLE chunks(artifact TEXT NOT NULL REFERENCES artifacts(id),idx INTEGER NOT NULL,"
-                         "path TEXT NOT NULL,hash TEXT NOT NULL,bytes INTEGER NOT NULL,PRIMARY KEY(artifact,idx));");
-                exec(db,
-                     "CREATE TABLE calibration_revisions("
-                     "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),"
-                     "artifact_id TEXT NOT NULL UNIQUE REFERENCES artifacts(id),kind TEXT NOT NULL,"
-                     "PRIMARY KEY(calibration_id,revision),UNIQUE(calibration_id,revision,artifact_id));"
-                     "CREATE TABLE active_calibrations(logical_device_id TEXT PRIMARY KEY NOT NULL,"
-                     "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL,artifact_id TEXT NOT NULL,"
-                     "FOREIGN KEY(calibration_id,revision,artifact_id) "
-                     "REFERENCES calibration_revisions(calibration_id,revision,artifact_id));"
-                     "CREATE TRIGGER calibration_revision_immutable_update BEFORE UPDATE ON calibration_revisions "
-                     "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
-                     "CREATE TRIGGER calibration_revision_immutable_delete BEFORE DELETE ON calibration_revisions "
-                     "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
-                     "PRAGMA user_version=2;");
+                    exec(db, "CREATE TABLE artifacts(id TEXT PRIMARY KEY,type TEXT NOT NULL,version INTEGER "
+                             "NOT NULL,"
+                             "state INTEGER NOT NULL,provenance TEXT NOT NULL,hash TEXT NOT NULL DEFAULT '',"
+                             "bytes INTEGER NOT NULL DEFAULT 0,chunks INTEGER NOT NULL DEFAULT 0);"
+                             "CREATE TABLE chunks(artifact TEXT NOT NULL REFERENCES artifacts(id),idx "
+                             "INTEGER NOT NULL,"
+                             "path TEXT NOT NULL,hash TEXT NOT NULL,bytes INTEGER NOT NULL,PRIMARY "
+                             "KEY(artifact,idx));");
+                exec(db, "CREATE TABLE calibration_revisions("
+                         "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),"
+                         "artifact_id TEXT NOT NULL UNIQUE REFERENCES artifacts(id),kind TEXT NOT NULL,"
+                         "PRIMARY KEY(calibration_id,revision),UNIQUE(calibration_id,revision,artifact_id));"
+                         "CREATE TABLE active_calibrations(logical_device_id TEXT PRIMARY KEY NOT NULL,"
+                         "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL,artifact_id TEXT NOT NULL,"
+                         "FOREIGN KEY(calibration_id,revision,artifact_id) "
+                         "REFERENCES calibration_revisions(calibration_id,revision,artifact_id));"
+                         "CREATE TRIGGER calibration_revision_immutable_update BEFORE UPDATE ON "
+                         "calibration_revisions "
+                         "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
+                         "CREATE TRIGGER calibration_revision_immutable_delete BEFORE DELETE ON "
+                         "calibration_revisions "
+                         "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
+                         "PRAGMA user_version=2;");
                 migration.commit();
             }
             replay_journal();
@@ -1341,7 +1344,14 @@ data::Metadata Store::raw_append_diagnostics(const Id &id) const {
     return out;
 }
 void Store::append(const Id &id, const data::Packet &packet) {
+    MANTIS_RECORDER_STORE(recorder_observer::Span observer_total(recorder_observer::Kind::store_total,
+                                                                 packet.header.sequence.value));
+    MANTIS_RECORDER_STORE(recorder_observer::Span observer_lock(recorder_observer::Kind::store_lock_wait,
+                                                                packet.header.sequence.value));
     std::lock_guard guard(impl_->mutex);
+    MANTIS_RECORDER_STORE(observer_lock.finish());
+    MANTIS_RECORDER_STORE(recorder_observer::Span observer_dispatch(recorder_observer::Kind::store_dispatch,
+                                                                    packet.header.sequence.value));
     impl_->observation_idle(id);
     if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
         if (writer->second->bundles)
@@ -1361,6 +1371,7 @@ void Store::append(const Id &id, const data::Packet &packet) {
         return;
     }
     auto index = a.chunks;
+    MANTIS_RECORDER_STORE(recorder_observer::raw(id.value, a.type.schema_version));
     const auto pending = impl_->root / "journal" / (id.value + "_" + std::to_string(index) + ".json");
     if (std::filesystem::exists(pending) || std::filesystem::exists(pending.string() + ".invalid"))
         fail(Status::busy, "Pending journal requires recovery before another append");
@@ -1368,14 +1379,20 @@ void Store::append(const Id &id, const data::Packet &packet) {
     auto file = impl_->root / rel;
     auto part = file;
     part += ".part";
-    data::write_packet(part, packet);
-    platform::durable_file(part);
+    MANTIS_RECORDER_STORE(observer_dispatch.finish());
+    MANTIS_RECORDER_STORE_CALL(packet_write, data::write_packet(part, packet));
+    MANTIS_RECORDER_STORE_CALL(packet_sync, platform::durable_file(part));
+    MANTIS_RECORDER_STORE(recorder_observer::Span observer_hash(recorder_observer::Kind::packet_hash,
+                                                                packet.header.sequence.value));
     auto hash = file_hash(part);
     auto bytes = std::filesystem::file_size(part);
+    MANTIS_RECORDER_STORE(observer_hash.finish());
     auto journal = impl_->root / "journal" / (id.value + "_" + std::to_string(index) + ".json");
     auto journal_part = journal;
     journal_part += ".part";
     {
+        MANTIS_RECORDER_STORE(recorder_observer::Span observer_journal(recorder_observer::Kind::journal_write,
+                                                                       packet.header.sequence.value));
         std::ofstream out(journal_part);
         out << Json{{"id", id.value}, {"index", index}, {"path", rel}, {"hash", hash.hex}, {"bytes", bytes}}
                    .dump();
@@ -1383,14 +1400,14 @@ void Store::append(const Id &id, const data::Packet &packet) {
         if (!out)
             fail(Status::io, "Journal write failed");
     }
-    platform::durable_file(journal_part);
-    std::filesystem::rename(journal_part, journal);
-    platform::durable_directory(journal.parent_path());
-    std::filesystem::rename(part, file);
-    platform::durable_directory(file.parent_path());
-    impl_->commit_chunk(id.value, index, rel, hash.hex, bytes);
-    std::filesystem::remove(journal);
-    platform::durable_directory(journal.parent_path());
+    MANTIS_RECORDER_STORE_CALL(journal_sync, platform::durable_file(journal_part));
+    MANTIS_RECORDER_STORE_CALL(journal_rename, std::filesystem::rename(journal_part, journal));
+    MANTIS_RECORDER_STORE_CALL(journal_dir_sync, platform::durable_directory(journal.parent_path()));
+    MANTIS_RECORDER_STORE_CALL(packet_rename, std::filesystem::rename(part, file));
+    MANTIS_RECORDER_STORE_CALL(packet_dir_sync, platform::durable_directory(file.parent_path()));
+    MANTIS_RECORDER_STORE_CALL(sql_commit, impl_->commit_chunk(id.value, index, rel, hash.hex, bytes));
+    MANTIS_RECORDER_STORE_CALL(journal_cleanup, std::filesystem::remove(journal));
+    MANTIS_RECORDER_STORE_CALL(cleanup_dir_sync, platform::durable_directory(journal.parent_path()));
 }
 ArtifactId Store::begin_laser_observation(Provenance provenance) {
     return begin({"org.mantis.LaserObservation", 1}, std::move(provenance));
@@ -1631,9 +1648,11 @@ ArtifactDescriptor Store::get(const Id &id) const {
     std::lock_guard guard(impl_->mutex);
     auto result = impl_->get(id);
     impl_->verify_projected_identity(result);
-    if (auto writer = impl_->writers.find(id); writer != impl_->writers.end() && writer->second->output.is_open()) {
+    if (auto writer = impl_->writers.find(id);
+        writer != impl_->writers.end() && writer->second->output.is_open()) {
         auto position = writer->second->output.tellp();
-        if (position >= 0) result.bytes += static_cast<uint64_t>(position);
+        if (position >= 0)
+            result.bytes += static_cast<uint64_t>(position);
     }
     return result;
 }
@@ -1658,8 +1677,10 @@ data::Published Store::packet(const Id &id, uint64_t chunk) const {
     if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version == 2) {
         for (uint64_t i = 0; i < artifact.chunks; ++i) {
             auto scanned = segments::scan(object_path(id, i));
-            if (!scanned.corruption.empty() || scanned.incomplete) fail(Status::corrupt, "Invalid RawCapture segment");
-            if (chunk < scanned.records.size()) return segments::packet(scanned, static_cast<size_t>(chunk));
+            if (!scanned.corruption.empty() || scanned.incomplete)
+                fail(Status::corrupt, "Invalid RawCapture segment");
+            if (chunk < scanned.records.size())
+                return segments::packet(scanned, static_cast<size_t>(chunk));
             chunk -= scanned.records.size();
         }
         fail(Status::not_found, "RawCapture record not found");
@@ -1670,7 +1691,8 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
     std::unique_lock guard(impl_->mutex);
     impl_->observation_idle(id);
     const auto a = impl_->get(id);
-    if (a.state != ArtifactState::recoverable) fail(Status::invalid_argument, "Artifact is not recoverable");
+    if (a.state != ArtifactState::recoverable)
+        fail(Status::invalid_argument, "Artifact is not recoverable");
     Impl::JournalReservation operation(*impl_, id);
     // Retry journal publication while still RECOVERABLE. An operational replay
     // failure must not require a second, potentially failing state transaction.
@@ -1680,7 +1702,9 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
         return finalize_impl(id, token, true, operation.generation);
     }
     {
-        Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
+        Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?");
+        update.text(1, id.value);
+        update.row();
     }
     guard.unlock();
     try {
@@ -1731,16 +1755,22 @@ void Store::prepare_finalize(const Id &id) {
         }
         throw;
     }
-    Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
+    Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?");
+    update.text(1, id.value);
+    update.row();
 }
 void Store::abandon(const Id &id) {
     std::lock_guard guard(impl_->mutex);
     impl_->observation_idle(id);
-    if (impl_->get(id).state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized captures are immutable");
+    if (impl_->get(id).state == ArtifactState::finalized)
+        fail(Status::invalid_argument, "Finalized captures are immutable");
     impl_->writers.erase(id);
-    Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?"); update.text(1, id.value); update.row();
+    Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+    update.text(1, id.value);
+    update.row();
 }
-void Store::replay(const Id &id, const std::function<void(data::Published)> &emit, const CancellationToken &token) const {
+void Store::replay(const Id &id, const std::function<void(data::Published)> &emit,
+                   const CancellationToken &token) const {
     auto a = get(id);
     if (a.state != ArtifactState::finalized || a.type.name != "org.mantis.RawCapture")
         fail(Status::incompatible, "Replay requires finalized RawCapture");
@@ -1750,20 +1780,29 @@ void Store::replay(const Id &id, const std::function<void(data::Published)> &emi
     for (uint64_t i = 0; i < a.chunks; ++i) {
         token.check();
         auto path = object_path(id, i);
-        if (a.type.schema_version == 1) { emit(data::read_packet(path)); continue; }
-        if (a.type.schema_version != 2) fail(Status::incompatible, "Unsupported RawCapture schema");
+        if (a.type.schema_version == 1) {
+            emit(data::read_packet(path));
+            continue;
+        }
+        if (a.type.schema_version != 2)
+            fail(Status::incompatible, "Unsupported RawCapture schema");
         auto scanned = segments::scan(path);
-        if (scanned.incomplete || !scanned.corruption.empty()) fail(Status::corrupt, "RawCapture integrity failure");
+        if (scanned.incomplete || !scanned.corruption.empty())
+            fail(Status::corrupt, "RawCapture integrity failure");
         for (size_t n = 0; n < scanned.records.size(); ++n) {
-            token.check(); auto packet = segments::packet(scanned, n);
-            if (sequence && packet->header.sequence.value != *sequence + 1) fail(Status::corrupt, "Replay sequence discontinuity");
-            sequence = packet->header.sequence.value; emit(std::move(packet));
+            token.check();
+            auto packet = segments::packet(scanned, n);
+            if (sequence && packet->header.sequence.value != *sequence + 1)
+                fail(Status::corrupt, "Replay sequence discontinuity");
+            sequence = packet->header.sequence.value;
+            emit(std::move(packet));
         }
     }
 }
 uint64_t Store::record_count(const Id &id) const {
     uint64_t count{};
-    replay(id, [&](data::Published) { ++count; }); return count;
+    replay(id, [&](data::Published) { ++count; });
+    return count;
 }
 struct CaptureReader::Impl {
     std::shared_ptr<const Store> store;
@@ -1777,18 +1816,23 @@ struct CaptureReader::Impl {
             fail(Status::incompatible, "CaptureReader requires finalized supported RawCapture");
     }
 };
-CaptureReader::CaptureReader(std::shared_ptr<const Store> s, Id id) : impl_(std::make_unique<Impl>(std::move(s), std::move(id))) {}
+CaptureReader::CaptureReader(std::shared_ptr<const Store> s, Id id)
+    : impl_(std::make_unique<Impl>(std::move(s), std::move(id))) {}
 CaptureReader::~CaptureReader() = default;
 data::Published CaptureReader::next() {
     auto &r = *impl_;
     if (r.artifact.type.schema_version == 1) {
-        if (r.segment == r.artifact.chunks) return {};
+        if (r.segment == r.artifact.chunks)
+            return {};
         return r.store->packet(r.artifact.id, r.segment++);
     }
     while (!r.scan || r.record == r.scan->records.size()) {
-        if (r.segment == r.artifact.chunks) return {};
-        r.scan = segments::scan(r.store->object_path(r.artifact.id, r.segment++)); r.record = 0;
-        if (r.scan->incomplete || !r.scan->corruption.empty()) fail(Status::corrupt, "Replay segment integrity failure");
+        if (r.segment == r.artifact.chunks)
+            return {};
+        r.scan = segments::scan(r.store->object_path(r.artifact.id, r.segment++));
+        r.record = 0;
+        if (r.scan->incomplete || !r.scan->corruption.empty())
+            fail(Status::corrupt, "Replay segment integrity failure");
     }
     return segments::packet(*r.scan, r.record++);
 }
@@ -1814,7 +1858,9 @@ struct BundleCaptureReader::Impl {
 BundleCaptureReader::BundleCaptureReader(std::shared_ptr<const Store> s, Id id)
     : impl_(std::make_unique<Impl>(std::move(s), std::move(id))) {}
 BundleCaptureReader::~BundleCaptureReader() = default;
-const data::ProjectedCaptureHeader &BundleCaptureReader::header() const { return impl_->state.header; }
+const data::ProjectedCaptureHeader &BundleCaptureReader::header() const {
+    return impl_->state.header;
+}
 const std::optional<data::ProjectedRunOutcome> &BundleCaptureReader::final_outcome() const {
     return impl_->final;
 }

@@ -20,6 +20,7 @@ for binary in sys.argv[2:-3]:
     assert 'device::qualification_test::' not in symbols, binary
     assert 'device::startup_test::' not in symbols, binary
     assert 'plugins::qualification_test::' not in symbols, binary
+    assert 'recorder_observer::' not in symbols, binary
     strings = subprocess.check_output(['strings', binary], text=True)
     assert 'Storage checkpoint pipe deadline' not in strings, binary
 for binary in sys.argv[-3:]:
