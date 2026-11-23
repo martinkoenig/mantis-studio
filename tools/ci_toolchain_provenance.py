@@ -93,7 +93,7 @@ def tool(value):
         resolved = Path(value).resolve(strict=True)
         if not os.access(resolved, os.X_OK):
             fail("configured-tool-unavailable")
-    except OSError:
+    except (OSError, RuntimeError):
         fail("configured-tool-unavailable")
     return {"configured_path_sha256": path_identity(value),
             "resolved_path_sha256": path_identity(resolved),
@@ -152,10 +152,15 @@ def snapshot(args):
     cache_data = read(build / "CMakeCache.txt", 8 * 1024 * 1024, "cache")
     cache = cache_values(cache_data)
     try:
-        if (not Path(cache["CMAKE_HOME_DIRECTORY"]).is_absolute()
-                or not Path(cache["CMAKE_CACHEFILE_DIR"]).is_absolute()
-                or Path(cache["CMAKE_HOME_DIRECTORY"]).resolve() != source
-                or Path(cache["CMAKE_CACHEFILE_DIR"]).resolve() != build):
+        # pathlib reports symlink loops as RuntimeError on Python <=3.12,
+        # OSError on newer versions. Contain only this resolution boundary.
+        try:
+            if (not Path(cache["CMAKE_HOME_DIRECTORY"]).is_absolute()
+                    or not Path(cache["CMAKE_CACHEFILE_DIR"]).is_absolute()
+                    or Path(cache["CMAKE_HOME_DIRECTORY"]).resolve() != source
+                    or Path(cache["CMAKE_CACHEFILE_DIR"]).resolve() != build):
+                fail("configured-root-mismatch")
+        except (OSError, RuntimeError):
             fail("configured-root-mismatch")
         reply = build / ".cmake/api/v1/reply"
         indexes = list(itertools.islice(reply.glob("index-*.json"), 2))
@@ -223,7 +228,7 @@ def snapshot(args):
             path = (source / name).resolve(strict=True)
             if not path.is_relative_to(source):
                 fail("input-root-escape")
-        except OSError:
+        except (OSError, RuntimeError):
             fail("source-input-unavailable")
         data = read(path, 16 * 1024 * 1024, "source-input")
         total += len(data)

@@ -224,6 +224,74 @@ class RealConfiguration(unittest.TestCase):
                 hidden.rename(path)
         self.verify()
 
+    def cyclic_mutation(self, mutate, restore, diagnosis):
+        self.capture()
+        frozen = self.report.read_bytes()
+        partial = self.report.with_suffix(".partial.json")
+        temporaries = set(EVIDENCE.glob(".provenance-*"))
+        try:
+            mutate()
+            # Exercise both entry points even when one has a broken error boundary.
+            results = [run(self.command("capture", report=partial)),
+                       run(self.command("verify"))]
+        finally:
+            restore()
+            self.assertEqual(self.report.read_bytes(), frozen)
+            self.assertFalse(partial.exists())
+            self.assertEqual(set(EVIDENCE.glob(".provenance-*")), temporaries)
+            self.verify()
+        for mode, result in zip(("capture", "verify"), results):
+            with self.subTest(mode=mode):
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.stderr, diagnosis + "\n")
+                self.assertEqual(result.stdout, "")
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertNotIn(str(EVIDENCE), result.stderr)
+
+    def test_cyclic_configured_launcher(self):
+        path = self.build / "CMakeCache.txt"
+        original = path.read_bytes()
+        launcher = EVIDENCE / "private cyclic launcher"
+        launcher.symlink_to("private cyclic launcher")
+        try:
+            self.cyclic_mutation(
+                lambda: path.write_bytes(original + (
+                    "\nCMAKE_C_COMPILER_LAUNCHER:STRING=" + str(launcher) + "\n").encode()),
+                lambda: path.write_bytes(original), "configured-tool-unavailable")
+        finally:
+            launcher.unlink()
+
+    def test_cyclic_selected_source_input(self):
+        path = self.source / "value.c"
+        original = path.read_bytes()
+        def mutate():
+            path.unlink()
+            path.symlink_to("value.c")
+        def restore():
+            path.unlink()
+            path.write_bytes(original)
+        self.cyclic_mutation(mutate, restore, "source-input-unavailable")
+
+    def cyclic_cache_root(self, key, current):
+        path = self.build / "CMakeCache.txt"
+        original = path.read_bytes()
+        cyclic = EVIDENCE / ("private cyclic " + key)
+        cyclic.symlink_to(cyclic.name)
+        before = (key + ":INTERNAL=" + str(current) + "\n").encode()
+        after = (key + ":INTERNAL=" + str(cyclic) + "\n").encode()
+        self.assertEqual(original.count(before), 1)
+        try:
+            self.cyclic_mutation(lambda: path.write_bytes(original.replace(before, after)),
+                                 lambda: path.write_bytes(original), "configured-root-mismatch")
+        finally:
+            cyclic.unlink()
+
+    def test_cyclic_cache_source_root(self):
+        self.cyclic_cache_root("CMAKE_HOME_DIRECTORY", self.source)
+
+    def test_cyclic_cache_build_root(self):
+        self.cyclic_cache_root("CMAKE_CACHEFILE_DIR", self.build)
+
     def test_relative_cache_root_is_not_resolved_from_cwd(self):
         path = self.build / "CMakeCache.txt"
         original = path.read_bytes()

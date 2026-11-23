@@ -112,8 +112,12 @@ valid current input, comparisons use this primary order:
 5. `configuration-fingerprint-mismatch`;
 6. `report-claims-mismatch`.
 
-Cache/source root disagreement is `configured-root-mismatch`, missing/unreadable
-configured tools are `configured-tool-unavailable`, and absent/ambiguous File API
+Cache/source root disagreement or unresolvable configured cache roots (including
+symlink loops) is `configured-root-mismatch`. Missing/unreadable or cyclic
+configured tools are `configured-tool-unavailable`; unresolvable selected source
+inputs, including symlink loops, are `source-input-unavailable`. These diagnoses
+apply to both capture and frozen verification across supported Python versions.
+Absent/ambiguous File API
 indexes are `missing-or-ambiguous-file-api-index`. Invalid current metadata can
 therefore be the primary diagnosis even when another comparison would also fail.
 
