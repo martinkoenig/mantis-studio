@@ -1,4 +1,4 @@
-"""Python-only Stage A qualification; all commands/logs retained in --work-dir.
+"""Linux Python-only Stage A qualification; logs retained in --work-dir.
 
 Run in a venv containing build==1.2.2.post1 and pyproject's exact build tools.
 No daemon, CMake, compiler campaign or source-tree PYTHONPATH is used.
@@ -6,6 +6,7 @@ No daemon, CMake, compiler campaign or source-tree PYTHONPATH is used.
 import argparse
 import base64
 import csv
+import ctypes
 from email.parser import BytesParser
 import hashlib
 import importlib.util
@@ -19,6 +20,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 import venv
@@ -36,7 +38,40 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def command(args, *, cwd=None, expected=0, env=None, timeout=180):
+def _retire_group(process, reaped):
+    # The leader may already have exited on TERM. Its owned group still needs
+    # escalation, and orphaned descendants adopted by this runner need reaping.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait(timeout=5)
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            pid, status = os.waitpid(-process.pid, os.WNOHANG)
+        except ChildProcessError:
+            break
+        if pid:
+            reaped.append({'pid': pid, 'status': status})
+        elif time.monotonic() >= deadline:
+            raise RuntimeError('owned descendant reaping timeout')
+        else:
+            time.sleep(0.01)
+    try:
+        os.killpg(process.pid, 0)
+    except ProcessLookupError:
+        return
+    raise RuntimeError('owned process group remains after cleanup')
+
+
+def command(args, *, cwd=None, expected=0, env=None, timeout=180, expect_timeout=False):
+    """Linux qualification runner; timeout is never an ordinary negative exit.
+
+    Commands must keep descendants in their new session/process group. Subreaper
+    state is local to this serial runner process, saved/restored per invocation;
+    waitpid/signals target only the newly created command group, never all children.
+    """
     global COMMAND_ID
     COMMAND_ID += 1
     label = f'{COMMAND_ID:03d}'
@@ -47,37 +82,75 @@ def command(args, *, cwd=None, expected=0, env=None, timeout=180):
     settings.pop('PYTHONHOME', None)
     if env:
         settings.update(env)
-    timed_out = False
-    with (WORK / (label + '.log')).open('wb') as log:
-        process = subprocess.Popen([str(arg) for arg in args], cwd=cwd or WORK,
-                                   env=settings, stdout=log, stderr=subprocess.STDOUT,
-                                   start_new_session=(os.name != 'nt'))
-        try:
-            process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            if os.name == 'nt':
-                process.terminate()
-            else:
-                os.killpg(process.pid, signal.SIGTERM)
+    timed_out, process, failure, previous = False, None, None, None
+    libc = None
+    cleanup_errors, reaped = [], []
+    output = ''
+    try:
+        if sys.platform != 'linux':
+            raise RuntimeError('UNQUALIFIED: command lifecycle checks require Linux')
+        libc = ctypes.CDLL(None, use_errno=True)
+        state = ctypes.c_int()
+        if libc.prctl(37, ctypes.byref(state), 0, 0, 0) != 0:
+            raise RuntimeError('cannot read runner subreaper state')
+        previous = state.value
+        if libc.prctl(36, 1, 0, 0, 0) != 0:
+            raise RuntimeError('cannot enable runner subreaper')
+        with (WORK / (label + '.log')).open('wb') as log:
+            process = subprocess.Popen([str(arg) for arg in args], cwd=cwd or WORK,
+                                       env=settings, stdout=log, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
             try:
-                process.wait(timeout=5)
+                process.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
-                if os.name == 'nt':
-                    process.kill()
-                else:
-                    os.killpg(process.pid, signal.SIGKILL)
-                process.wait(timeout=5)
-    receipt = {'argv': [str(arg) for arg in args], 'cwd': str(cwd or WORK),
-               'exit': process.returncode, 'timed_out': timed_out, 'timeout_seconds': timeout,
-               'log': label + '.log',
-               'controlled_environment': {key: settings[key] for key in
-                   ('SOURCE_DATE_EPOCH', 'PYTHONHASHSEED', 'PIP_ONLY_BINARY')}}
-    with (WORK / 'commands.jsonl').open('a', encoding='utf-8') as out:
-        out.write(json.dumps(receipt) + '\n')
-    output = (WORK / (label + '.log')).read_text(errors='replace')
-    if (expected == 0 and (process.returncode != 0 or timed_out)) or (expected != 0 and process.returncode == 0):
-        raise AssertionError(f'command exit {process.returncode}, expected {expected}; {label}.log\n{output[-5000:]}')
+                timed_out = True
+                # Establish the initiating failure before any cleanup can fail.
+                if not expect_timeout:
+                    failure = AssertionError(f'unexpected command timeout ({timeout}s); {label}.log')
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass  # Finally escalates the group, regardless of leader state.
+        output = (WORK / (label + '.log')).read_text(errors='replace')
+        if failure is None:
+            if expect_timeout and not timed_out:
+                failure = AssertionError(f'expected command timeout did not occur; {label}.log')
+            elif not expect_timeout and ((expected == 0 and process.returncode != 0) or
+                                         (expected != 0 and process.returncode == 0)):
+                failure = AssertionError(f'command exit {process.returncode}, expected {expected}; {label}.log')
+    except BaseException as error:
+        failure = failure or error
+    finally:
+        if process is not None:
+            try:
+                _retire_group(process, reaped)
+            except BaseException as error:
+                cleanup_errors.append(f'{type(error).__name__}: {error}')
+        if previous is not None and libc is not None and libc.prctl(36, previous, 0, 0, 0) != 0:
+            cleanup_errors.append('runner subreaper restore failed')
+        receipt = {'argv': [str(arg) for arg in args], 'cwd': str(cwd or WORK),
+                   'pid': process.pid if process else None,
+                   'exit': process.returncode if process else None,
+                   'timed_out': timed_out, 'expected_timeout': expect_timeout,
+                   'timeout_seconds': timeout, 'log': label + '.log',
+                   'failure': str(failure) if failure else None,
+                   'cleanup_errors': cleanup_errors, 'reaped_descendants': reaped,
+                   'controlled_environment': {key: settings[key] for key in
+                       ('SOURCE_DATE_EPOCH', 'PYTHONHASHSEED', 'PIP_ONLY_BINARY')}}
+        try:
+            with (WORK / 'commands.jsonl').open('a', encoding='utf-8') as out:
+                out.write(json.dumps(receipt) + '\n')
+        except OSError as error:
+            cleanup_errors.append(f'receipt write failed: {error}')
+    if failure is not None or cleanup_errors:
+        failure = failure or AssertionError('command cleanup failed')
+        failure.args = (str(failure) + '\n' + output[-5000:] +
+                        ('\ncleanup: ' + '; '.join(cleanup_errors) if cleanup_errors else ''),)
+        raise failure
     return output
 
 
@@ -201,12 +274,16 @@ class Artifacts(unittest.TestCase):
     def test_command_timeout_retains_receipt_and_reaps_child(self):
         pidfile = WORK / 'hang-child.pid'
         output = command([sys.executable, PROBE.with_name('hang_fixture.py'), pidfile],
-                         timeout=2, expected=1)
+                         timeout=2, expect_timeout=True)
         self.assertIn('parent-and-child-ready', output)
         receipt = json.loads((WORK / 'commands.jsonl').read_text().splitlines()[-1])
         self.assertTrue(receipt['timed_out'])
         with self.assertRaises(ProcessLookupError):
             os.kill(int(pidfile.read_text()), 0)
+
+    def test_command_runner_regressions(self):
+        command([sys.executable, '-B', PROBE.with_name('command_test.py')],
+                env={'MANTIS_COMMAND_EVIDENCE': str(WORK / 'command-regressions')})
 
     def test_pep517_metadata_and_pip_sdist_build(self):
         output = WORK / 'pip-sdist-wheel'
@@ -275,19 +352,31 @@ class Artifacts(unittest.TestCase):
                     target.write_bytes(target.read_bytes() + b'\n// corrupt\n' if name == 'changed-schema'
                                        else b'# stale generated code\n')
                 out = WORK / (name + '-out')
-                build(source, out, kind='wheel', expected=1)
+                output = build(source, out, kind='wheel', expected=1)
+                diagnostics = {
+                    'missing-generated': ('FileNotFoundError', 'mantis_pb2.py'),
+                    'stale-generated': ('RuntimeError: Missing or stale generated module',),
+                    'missing-schema': ('FileNotFoundError', '_schema/mantis.proto'),
+                    'changed-schema': ('RuntimeError: Schema/generated provenance mismatch',),
+                    'missing-provenance': ('FileNotFoundError', '_schema/provenance.json'),
+                }
+                for diagnostic in diagnostics[name]:
+                    self.assertIn(diagnostic, output, 'not the intended source rejection')
                 self.assertFalse(out.exists() and any(out.iterdir()), 'partial artifact retained')
                 self.assertFalse((source / 'build').exists(), 'build scratch leaked into source')
         source = copy_source('missing-canonical')
         (source.parent.parent / 'protocol/protobuf/mantis.proto').unlink()
-        build(source, WORK / 'missing-canonical-out', expected=1, kind='sdist')
+        output = build(source, WORK / 'missing-canonical-out', expected=1, kind='sdist')
+        self.assertIn('FileNotFoundError', output)
+        self.assertIn('protocol/protobuf/mantis.proto', output)
         self.assertFalse((WORK / 'missing-canonical-out').exists() and any((WORK / 'missing-canonical-out').iterdir()))
 
     def test_checkout_stale_generated_is_not_a_fallback(self):
         source = copy_source('stale-checkout')
         (source / 'mantis/mantis_pb2.py').write_text('# obsolete\n')
         out = WORK / 'stale-checkout-out'
-        build(source, out, expected=1, kind='wheel')
+        output = build(source, out, expected=1, kind='wheel')
+        self.assertIn('RuntimeError: Missing or stale generated module', output)
         self.assertFalse(out.exists() and any(out.iterdir()))
 
     def test_compiler_failure_version_and_runtime_mismatch_retire_scratch(self):
@@ -301,8 +390,9 @@ class Artifacts(unittest.TestCase):
         real_version = backend._distribution_version
         with patch.object(tempfile, 'tempdir', str(scratch)):
             with patch('protoc.PROTOC_EXE', str(WORK / 'absent-compiler')):
-                with self.assertRaises(FileNotFoundError):
+                with self.assertRaises(FileNotFoundError) as rejected:
                     backend.build_wheel(str(WORK / 'no-compiler-output'))
+                self.assertEqual(rejected.exception.filename, str(WORK / 'absent-compiler'))
             with patch.object(backend, '_run', return_value=b'libprotoc 99.0'):
                 with self.assertRaisesRegex(RuntimeError, 'Compiler version mismatch'):
                     backend.build_wheel(str(WORK / 'wrong-compiler-output'))
@@ -318,8 +408,10 @@ class Artifacts(unittest.TestCase):
                 Path(output, 'mantis_pb2.py').write_bytes(b'partial')
                 return real_run([PROTOC_EXE, '--not-a-real-protoc-option'])
             with patch.object(backend, '_run', side_effect=failed_compiler):
-                with self.assertRaises(subprocess.CalledProcessError):
+                with self.assertRaises(subprocess.CalledProcessError) as rejected:
                     backend.build_wheel(str(WORK / 'failed-compiler-output'))
+                self.assertEqual(rejected.exception.cmd, [PROTOC_EXE, '--not-a-real-protoc-option'])
+                self.assertEqual(rejected.exception.stderr, b'Missing value for flag: --not-a-real-protoc-option\n')
         self.assertEqual(list(scratch.iterdir()), [], 'partial generation scratch retained')
         for name in ('no-compiler-output', 'wrong-compiler-output', 'wrong-runtime-output', 'failed-compiler-output'):
             self.assertFalse((WORK / name).exists(), name)

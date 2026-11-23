@@ -41,6 +41,7 @@ jobs:
             ${{ runner.temp }}/python-sdk-evidence/*.log
             ${{ runner.temp }}/python-sdk-evidence/*.json
             ${{ runner.temp }}/python-sdk-evidence/*.jsonl
+            ${{ runner.temp }}/python-sdk-evidence/command-regressions/
             ${{ runner.temp }}/python-sdk-evidence/dist-a/*
             ${{ runner.temp }}/python-sdk-evidence/dist-b/*
             ${{ runner.temp }}/python-sdk-evidence/rebuilt/*
