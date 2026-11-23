@@ -80,6 +80,17 @@ without fabricating unavailable current test registrations. The policy is adapte
 from the accepted inert prototype; current generated/header/runtime closure and
 representative labelled failure outcomes are still missing.
 
+Diagnostic target reachability uses a reverse-dependency index and a worklist:
+each target is discovered at most once and each dependency edge is indexed and
+visited a bounded number of times, rather than repeatedly rescanning the graph.
+Memory is proportional to the supplied targets/edges; deterministic reason/output
+sorting is additional work proportional to the reported data. For a target with
+no direct changed source, reasons list **all reached immediate dependencies**;
+direct source reasons take precedence. Cycles terminate without recursion and
+unreachable cycles are not impacted. Renaming/reordering targets cannot alter
+logical reachability. This is bounded-input diagnostic computation, not an
+end-to-end wall-clock guarantee, selection qualification or CI speedup claim.
+
 Stdout is canonical JSON (`mantis-git-shadow-v1`). Zero exit means a manifest was
 emitted, including fail-closed manifests; it never means qualification. Unsupported events produce a full fallback; argument
 usage errors return nonzero. The `acquisition` object holds checked identities,
@@ -100,6 +111,9 @@ repositories. They cover actual commit/ref/merge relationships, complete source
 changes and transitive consumer oracles, PR checkout mappings, shallow/missing and
 corrupt objects/refs, ambient overrides/replacement objects, rename/deletion/type
 changes/gitlinks, raw paths, empty diffs, resource/error controls and CLI behavior.
+Graph controls exercise equivalent favorable/unfavorable chain renamings through
+the actual CLI, count dependency visits independently of elapsed time, and verify
+reachable/unreachable cycles, complete reasons and invalid/stale input recovery.
 Resource controls use gated owned Python descendants and real FIFO/symlink/
 descriptor races. Fixture-local subreaper ownership exists only in disposable
 probe processes, with failure unwind reaping their own children. No configure,

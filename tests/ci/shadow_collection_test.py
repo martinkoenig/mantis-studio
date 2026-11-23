@@ -5,6 +5,7 @@ fixture is used. All commits/refs/config mutations belong to disposable repos.
 """
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +16,28 @@ from unittest.mock import patch
 TOOLS = Path(os.environ.get('MANTIS_SHADOW_TEST_TOOL_DIR', Path(__file__).resolve().parents[2] / 'tools'))
 sys.path.insert(0, str(TOOLS))
 import ci_shadow as shadow
+import shadow_resource_test as resources
+
+
+def graph_cli_probe(command, output):
+    """Isolated fixture owner also reaps acquisition children on failed deadlines."""
+    resources.subreaper(True)
+    try:
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              start_new_session=True) as process:
+            timed_out = False
+            try:
+                out, err = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                os.killpg(process.pid, signal.SIGKILL)
+                out, err = process.communicate(timeout=1)
+            result = {'timeout': timed_out, 'exit': process.returncode,
+                      'stdout': out.decode(), 'stderr': err.decode()}
+    finally:
+        resources.reap_fixture_children()
+    result['owned_children_reaped'] = True
+    output.write_text(json.dumps(result))
 
 
 class Repository:
@@ -78,6 +101,22 @@ def inventory(repo):
             'profiles':profiles}
 
 
+def chain_inventory(repo, count, reverse=False):
+    """Isomorphic chains whose sorted names favor opposite traversal orders."""
+    names = [f't{n:04d}' for n in (reversed(range(count)) if reverse else range(count))]
+    inv = inventory(repo)
+    inv['files'] = {'src/public.hpp': inv['files']['src/public.hpp']}
+    inv['files']['src/public.hpp']['targets'] = [names[0]]
+    inv['targets'] = {
+        name: {'dependencies': [names[i - 1]] if i else [],
+               'sources': [] if i else ['src/public.hpp'], 'origin': 'independent chain'}
+        for i, name in enumerate(names)}
+    inv['targets']['unrelated'] = {'dependencies': [], 'sources': [], 'origin': 'unaffected control'}
+    inv['tests'][0].update(id='tail-consumer', targets=[names[-1]])
+    inv['tests'][1].update(id='unrelated-consumer', targets=['unrelated'])
+    return inv, names
+
+
 class RealGit(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mantis-shadow-regression-')
@@ -108,6 +147,113 @@ class RealGit(unittest.TestCase):
         self.assertEqual(shadow.policy.canonical(r),shadow.policy.canonical(self.collect(
             head,inventory=inv,inventory_sha256=shadow.policy.digest(inv))))
         self.full(r)
+
+    def test_graph_dependency_visits_are_linear(self):
+        inv, names = chain_inventory(self.repo, 128, reverse=True)
+        shadow.policy.validate_inventory(inv)
+        visits = 0
+        class ObservedDependencies(list):
+            def __iter__(self):
+                nonlocal visits
+                for dependency in super().__iter__():
+                    visits += 1
+                    yield dependency
+        for target in inv['targets'].values():
+            target['dependencies'] = ObservedDependencies(target['dependencies'])
+        reasons, impacted = shadow.policy.closure(inv, [{'path': 'src/public.hpp'}])
+        self.assertEqual(set(reasons), set(names), 'transitive traversal omitted or invented targets')
+        self.assertEqual(impacted, {'tail-consumer'}, 'unrelated test confused with impacted test')
+        # Count actual edge visits, not elapsed time or a production-reported counter.
+        # Four passes over V+E allows index, reachability and reason construction,
+        # but rejects repeated whole-graph scans independently of host scheduling.
+        print(json.dumps({'nodes': len(inv['targets']), 'edges': len(names) - 1,
+                          'observed_dependency_visits': visits, 'linear_allowance':
+                          4 * (len(inv['targets']) + len(names) - 1)}))
+        self.assertLessEqual(visits, 4 * (len(inv['targets']) + len(names) - 1),
+                             'diagnostic traversal repeatedly revisited dependency edges')
+
+    def test_cli_graph_impact_is_invariant_under_equivalent_renaming(self):
+        self.repo.write('src/public.hpp', 'changed public contract\n')
+        head = self.repo.commit('chain source change')
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'),
+                   '--repository', str(self.repo.root), '--event', 'push',
+                   '--ref', 'refs/heads/develop', '--base', self.repo.base, '--head', head]
+        normalized = []
+        for reverse in (True, False):
+            with self.subTest(reverse=reverse):
+                inv, names = chain_inventory(self.repo, 1500, reverse=reverse)
+                shadow.policy.validate_inventory(inv)
+                raw = shadow.policy.canonical(inv)
+                path = self.root / 'chain.json'
+                path.write_bytes(raw)
+                output = self.root / 'chain-probe.json'
+                completed = subprocess.run([sys.executable, '-B', str(Path(__file__)),
+                    '--graph-probe', str(output), *command, '--inventory', str(path),
+                    '--inventory-sha256', shadow.policy.digest(raw)],
+                    capture_output=True, timeout=15, check=True)
+                observed = json.loads(output.read_text())
+                self.assertTrue(observed['owned_children_reaped'])
+                print(json.dumps({'reverse': reverse, 'owned_children_reaped': True,
+                                  'timeout': observed['timeout'], 'exit': observed['exit']}))
+                self.assertFalse(observed['timeout'],
+                                 'actual CLI did not emit a manifest for the bounded chain fixture')
+                self.assertEqual(observed['exit'], 0)
+                self.assertEqual(observed['stderr'], '')
+                self.assertEqual(completed.stderr, b'')
+                result = json.loads(observed['stdout'])
+                self.assertEqual(result['inventory_acquisition'],
+                                 {'status': 'regular-file', 'error': None, 'cleanup_errors': []})
+                self.assertTrue(result['acquisition']['diff']['complete'])
+                self.assertEqual(result['acquisition']['errors'], [])
+                self.assertEqual(result['decision']['impacted_test_ids'], ['tail-consumer'])
+                expected = {names[0]: ['source:src/public.hpp']}
+                expected.update({name: ['depends-on:' + names[i - 1]]
+                                 for i, name in enumerate(names) if i})
+                self.assertEqual(result['decision']['target_reasons'], expected,
+                                 'CLI lost the independently known transitive chain')
+                self.full(result)
+                logical = {name: i for i, name in enumerate(names)}
+                normalized.append({logical[name]: [logical[reason.removeprefix('depends-on:')]
+                    for reason in reasons if reason.startswith('depends-on:')]
+                    for name, reasons in result['decision']['target_reasons'].items()})
+        self.assertEqual(len(normalized), 2, 'both graph renamings must emit a complete manifest')
+        self.assertEqual(normalized[0], normalized[1], 'target naming changed graph semantics')
+
+    def test_cyclic_graph_reasons_and_invalid_inventory_recovery(self):
+        self.repo.write('src/public.hpp', 'changed public contract\n')
+        head = self.repo.commit('cyclic consumer source change')
+        inv = inventory(self.repo)
+        inv['targets']['ui']['dependencies'] = ['data', 'storage']
+        inv['targets']['storage']['dependencies'] = ['ui']
+        inv['targets'].update({
+            'unrelated-a': {'dependencies': ['unrelated-b'], 'sources': [], 'origin': 'unreachable cycle'},
+            'unrelated-b': {'dependencies': ['unrelated-a'], 'sources': [], 'origin': 'unreachable cycle'}})
+        raw = shadow.policy.canonical(inv)
+        good = self.collect(head, inventory=raw, inventory_sha256=shadow.policy.digest(raw))
+        self.full(good)
+        self.assertEqual(good['decision']['target_reasons'], {
+            'data': ['source:src/public.hpp'],
+            'ui': ['depends-on:data', 'depends-on:storage'],
+            'storage': ['depends-on:ui']}, 'cycle reasons depended on first discovery order')
+        self.assertEqual(good['decision']['impacted_test_ids'], ['storage-contract', 'ui-contract'])
+        # A stale but well-formed graph remains diagnostic only, never admission.
+        inv['source']['commit'] = '0' * 40
+        stale = shadow.policy.canonical(inv)
+        result = self.collect(head, inventory=stale, inventory_sha256=shadow.policy.digest(stale))
+        self.assertIn('inventory-base-identity-mismatch', result['decision']['errors'])
+        self.full(result)
+        inv['targets']['ui']['dependencies'].append('missing-target')
+        malformed = shadow.policy.canonical(inv)
+        for data, anchor in ((None, None), (malformed, shadow.policy.digest(malformed))):
+            result = self.collect(head, inventory=data, inventory_sha256=anchor)
+            self.assertEqual(result['decision']['target_reasons'], {})
+            self.assertEqual(result['decision']['impacted_test_ids'], [])
+            self.assertEqual(result['decision']['would_select_test_ids'], [])
+            self.full(result)
+            self.assertEqual(result, self.collect(head, inventory=data, inventory_sha256=anchor),
+                             'invalid inventory fallback was not deterministic')
+        self.assertEqual(good, self.collect(head, inventory=raw, inventory_sha256=shadow.policy.digest(raw)),
+                         'restored pinned graph did not recover exactly')
 
     def test_missing_graph_keeps_full(self):
         r=self.collect(self.repo.change());self.full(r)
@@ -305,4 +451,7 @@ class RealGit(unittest.TestCase):
 
 
 if __name__=='__main__':
-    unittest.main()
+    if len(sys.argv) > 3 and sys.argv[1] == '--graph-probe':
+        graph_cli_probe(sys.argv[3:], Path(sys.argv[2]))
+    else:
+        unittest.main()

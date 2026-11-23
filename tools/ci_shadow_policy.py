@@ -183,15 +183,25 @@ def closure(inv, changes):
             direct_tests.update(f['tests'])
             for target in f['targets']:
                 reasons.setdefault(target, []).append('source:' + c['path'])
-    changed = True
-    while changed:
-        changed = False
-        for target, info in sorted(inv['targets'].items()):
-            hits = sorted(set(info['dependencies']) & set(reasons))
-            if hits and target not in reasons:
-                reasons[target] = ['depends-on:' + h for h in hits]
-                changed = True
-    impacted = direct_tests | {t['id'] for t in inv['tests'] if set(t['targets']) & set(reasons)}
+    # Index each edge once; discover each consumer once, independent of names.
+    consumers = {target: [] for target in inv['targets']}
+    for target, info in inv['targets'].items():
+        for dependency in info['dependencies']:
+            consumers[dependency].append(target)
+    reached = set(reasons)
+    pending = list(reasons)
+    while pending:
+        for target in consumers[pending.pop()]:
+            if target not in reached:
+                reached.add(target)
+                pending.append(target)
+    # Report all reached immediate dependencies, not the order-dependent subset
+    # visible on the first scan. Direct source reasons retain their precedence.
+    for target in reached:
+        if target not in reasons:
+            reasons[target] = ['depends-on:' + dependency for dependency in
+                               sorted(d for d in inv['targets'][target]['dependencies'] if d in reached)]
+    impacted = direct_tests | {t['id'] for t in inv['tests'] if any(target in reached for target in t['targets'])}
     return reasons, impacted
 
 
