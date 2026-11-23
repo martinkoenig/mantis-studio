@@ -14,6 +14,17 @@ inline void require(bool ok, std::string_view message, Status code = Status::cor
     if (!ok)
         fail(code, std::string(message), "alg03");
 }
+inline Error filesystem_error(const std::filesystem::filesystem_error &error, std::string_view phase) {
+    // Never copy what(), paths, or custom category messages/names.
+    const auto &category = error.code().category();
+    const char *name = &category == &std::generic_category()  ? "generic"
+                       : &category == &std::system_category() ? "system"
+                                                              : "other";
+    return {Status::io,
+            "ALG03 filesystem phase=" + std::string(phase) + "; category=" + name +
+                "; code=" + std::to_string(error.code().value()),
+            "alg03"};
+}
 template <class F> auto result(F &&f) -> Result<decltype(f())> {
     try {
         if constexpr (std::is_void_v<decltype(f())>) {
@@ -25,8 +36,8 @@ template <class F> auto result(F &&f) -> Result<decltype(f())> {
         return std::unexpected(Error{e.error.code, e.error.message.substr(0, 1024), "alg03"});
     } catch (const std::bad_alloc &) {
         return std::unexpected(Error{Status::busy, "ALG03 allocation failed", "alg03"});
-    } catch (const std::filesystem::filesystem_error &) {
-        return std::unexpected(Error{Status::io, "ALG03 filesystem operation failed", "alg03"});
+    } catch (const std::filesystem::filesystem_error &error) {
+        return std::unexpected(filesystem_error(error, "unreserved operation"));
     } catch (const std::exception &) {
         return std::unexpected(Error{Status::corrupt, "Malformed ALG03 document/data", "alg03"});
     }
@@ -98,7 +109,8 @@ data::Packet document_packet(std::string);
 std::string document_bytes(const data::Packet &, std::string_view attribute = document_attribute,
                            const CancellationToken & = {});
 artifact::ArtifactDescriptor descriptor(const artifact::Store &, const data::ContentReference &,
-                                        const artifact::ArtifactType &, const CancellationToken &);
+                                        const artifact::ArtifactType &, const CancellationToken &,
+                                        uint64_t cap = max_geometry_bytes);
 std::vector<Id> inputs(const Plane &);
 std::vector<Id> inputs(const Policy &);
 std::vector<Id> inputs(const Bindings &);
@@ -162,7 +174,8 @@ namespace mantis::alg03::detail {
 inline Error reserved_error(const artifact::Store &s, const Id &id, Error e) {
     std::string state = "UNKNOWN";
     try {
-        state = artifact::state_name(s.get(id).state);
+        auto cap = max_geometry_bytes;
+        state = artifact::state_name(s.get_bounded(id, cap).state);
     } catch (...) { /* Do not replace the first failure. */
     }
     e.message = e.message.substr(0, 800) + "; ALG03 artifact " + id.value + "; observed state " + state;

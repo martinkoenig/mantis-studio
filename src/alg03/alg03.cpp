@@ -131,14 +131,15 @@ void opaque_configuration(const data::LaserObservation &o, const Policy &p) {
     // Deliberately no Store lookup, preimage reconstruction, or historical RAW/
     // dark/config artifact resolution. The accepted observation binds the bytes.
 }
-void known_historical_metadata(const artifact::Store &store, const data::LaserObservation &o,
-                               const CancellationToken &t) {
+uint64_t known_historical_metadata(const artifact::Store &store, const data::LaserObservation &o,
+                                   const CancellationToken &t, uint64_t cap) {
+    const auto initial = cap;
     // Optional local descriptor checks preserve existing Store semantics. No
     // RAW/dark object read, network retrieval, ancestry walk or opaque lookup.
     auto check = [&](const data::ContentReference &r) {
         t.check();
         try {
-            auto d = store.get(r.id);
+            auto d = store.get_bounded(r.id, cap, t);
             require(d.state == artifact::ArtifactState::finalized && d.type.name == r.type.name &&
                         d.type.schema_version == r.type.version && r.hash.get() && d.hash == *r.hash.get(),
                     "Known historical input metadata contradicts source", Status::incompatible);
@@ -156,6 +157,7 @@ void known_historical_metadata(const artifact::Store &store, const data::LaserOb
         if (auto r = c->get())
             if (auto content = r->content.get())
                 check(*content);
+    return initial - cap;
 }
 void refinement(const data::LaserObservation &o, const Policy &p, const CancellationToken &t) {
     if (p.source_contract != SourceContract::alg02_subpixel_1 || o.sample_count == 0)
@@ -214,11 +216,12 @@ Result<Prepared> prepare(const artifact::Store &store, const Bindings &b, const 
         if (!policy)
             throw Failure(policy.error());
         state->policy = std::move(*policy);
-        auto plane_desc = descriptor(store, b.plane, plane_type, t);
+        auto plane_desc = descriptor(store, b.plane, plane_type, t, state->policy.max_geometry_bytes);
         require(plane_desc.bytes <= state->policy.max_geometry_bytes, "Plane metadata admission",
                 Status::busy);
         state->plane = plane_snapshot(store, b.plane, t, state->policy.max_geometry_bytes);
-        auto source_desc = descriptor(store, b.observation, {schema::laser_observation.name, 1}, t);
+        auto source_desc = descriptor(store, b.observation, {schema::laser_observation.name, 1}, t,
+                                      state->policy.max_geometry_bytes);
         require(b.observation.revision == 1 && source_desc.chunks == 1 &&
                     source_desc.bytes <= state->policy.max_source_bytes,
                 "Observation snapshot admission", Status::busy);
@@ -245,8 +248,9 @@ Result<Prepared> prepare(const artifact::Store &store, const Bindings &b, const 
             fail(Status::unsupported, "Upstream extractor unavailable", "alg03");
         opaque_configuration(safe, state->policy);
         refinement(safe, state->policy, t);
-        known_historical_metadata(store, safe, t);
         state->geometry = geometry(store, b, state->plane, state->policy, t);
+        state->geometry.retained_charge += known_historical_metadata(
+            store, safe, t, state->policy.max_geometry_bytes - state->geometry.retained_charge);
         state->source_metadata =
             metadata(safe, (state->policy.max_geometry_bytes - state->geometry.retained_charge) / 8, t);
         // Includes two typed context copies and canonical metadata, with bounded
@@ -527,10 +531,13 @@ Result<artifact::ArtifactReference> persist_result(artifact::Store &store, const
         provenance.calibration = prepared.state_->binding.rig.calibration;
         t.check();
         auto id = store.begin(result_type, provenance);
+        std::string_view phase = "append result";
         try {
             store.append(id, value);
             t.check();
+            phase = "finalize result";
             auto d = store.finalize(id, t);
+            phase = "readback result";
             auto readback = load_result(store, id, t);
             if (!readback)
                 throw Failure(readback.error());
@@ -539,6 +546,8 @@ Result<artifact::ArtifactReference> persist_result(artifact::Store &store, const
             throw Failure(reserved_error(store, id, error.error));
         } catch (const std::bad_alloc &) {
             throw Failure(reserved_error(store, id, {Status::busy, "ALG03 allocation failed", "alg03"}));
+        } catch (const std::filesystem::filesystem_error &error) {
+            throw Failure(reserved_error(store, id, filesystem_error(error, phase)));
         } catch (const std::exception &) {
             throw Failure(reserved_error(store, id, {Status::io, "ALG03 materialization failed", "alg03"}));
         }
@@ -547,7 +556,8 @@ Result<artifact::ArtifactReference> persist_result(artifact::Store &store, const
 Result<data::Published> load_result(const artifact::Store &store, const Id &id, const CancellationToken &t) {
     return result([&] {
         t.check();
-        auto d = store.get(id);
+        auto cap = max_geometry_bytes;
+        auto d = store.get_bounded(id, cap, t);
         require(d.type.name == result_type.name && d.type.schema_version == 1 &&
                     d.state == artifact::ArtifactState::finalized && d.chunks == 1 &&
                     d.bytes <= max_result_bytes,

@@ -22,8 +22,34 @@ using Json = nlohmann::json;
 // injection API and no global allocator failure outside the scoped row buffer.
 namespace {
 std::atomic<size_t> fail_aligned_size{};
+thread_local uint64_t *count_allocated_bytes{};
+thread_local std::function<void()> *aligned_allocation_observer{};
+} // namespace
+void *operator new(size_t n) {
+    if (count_allocated_bytes)
+        *count_allocated_bytes += n;
+    if (auto p = std::malloc(n ? n : 1))
+        return p;
+    throw std::bad_alloc();
+}
+void operator delete(void *p) noexcept {
+    std::free(p);
+}
+void operator delete(void *p, size_t) noexcept {
+    std::free(p);
+}
+void *operator new[](size_t n) {
+    return ::operator new(n);
+}
+void operator delete[](void *p) noexcept {
+    ::operator delete(p);
+}
+void operator delete[](void *p, size_t) noexcept {
+    ::operator delete(p);
 }
 void *operator new(size_t n, std::align_val_t alignment) {
+    if (aligned_allocation_observer)
+        (*aligned_allocation_observer)();
     auto expected = n;
     if (fail_aligned_size.compare_exchange_strong(expected, 0))
         throw std::bad_alloc();
@@ -54,6 +80,16 @@ struct AllocationFault {
     }
     ~AllocationFault() {
         fail_aligned_size = 0;
+    }
+};
+struct AllocationCount {
+    uint64_t bytes{};
+    AllocationCount() {
+        CHECK(!count_allocated_bytes);
+        count_allocated_bytes = &bytes;
+    }
+    ~AllocationCount() {
+        count_allocated_bytes = nullptr;
     }
 };
 Json manifest(const data::Packet &p) {
@@ -270,11 +306,13 @@ void ordinary_and_storage(artifact::Store &s, const Graph &g) {
         BlockObjects blocked(s);
         auto failed = a3::persist_result(s, prepared, *output);
         rejects(failed, Status::io);
-        CHECK(failed.error().message == "ALG03 filesystem operation failed");
+        CHECK(failed.error().message.starts_with("ALG03 filesystem phase=unreserved operation; category="));
+        CHECK(failed.error().message.find("; code=") != std::string::npos);
+        CHECK(failed.error().message.find(s.root().string()) == std::string::npos);
         CHECK(s.list().size() == before_reservation);
         auto snapshot = a3::create_policy(s, policy());
         rejects(snapshot, Status::io);
-        CHECK(snapshot.error().message == "ALG03 filesystem operation failed");
+        CHECK(snapshot.error().message.starts_with("ALG03 filesystem phase=unreserved operation; category="));
         CHECK(s.list().size() == before_reservation);
     }
     // A real reserved identity must still be retained by the existing wrapper.
@@ -614,15 +652,23 @@ void actual_alg02(artifact::Store &s, const Graph &g) {
 int main(int argc, char **argv) {
     try {
         const bool artifact_regressions = argc == 2 && std::string_view(argv[1]) == "--artifact-regressions";
-        CHECK(argc == 1 || artifact_regressions);
-        if (!artifact_regressions)
+        const bool geometry_regressions = argc == 2 && std::string_view(argv[1]) == "--geometry-regressions";
+        CHECK(argc == 1 || artifact_regressions || geometry_regressions);
+        if (!artifact_regressions && !geometry_regressions)
             metadata_comparison_regression();
         Temp temp;
         auto store = std::make_unique<artifact::Store>(temp.path);
         auto geometry = graph(*store);
+        if (geometry_regressions) {
+            // The new metadata/recursive-schema controls get an independent
+            // fixture, not a larger deadline. All integration limits stay 60s.
+            metadata_admission(*store, geometry);
+            nested_snapshots(*store, geometry);
+            std::cout << "ALG03 metadata admission and nested geometry regressions passed\n";
+            return 0;
+        }
         if (artifact_regressions) {
-            // Independent Store/fixture for the new artifact/failure seams. No
-            // assertion is omitted and both registrations retain TIMEOUT 60.
+            // Preserve all existing artifact/failure controls and deadline.
             plane_dependencies(*store, geometry);
             decoded_admission(*store, geometry);
             auto source = observation(geometry);
@@ -630,6 +676,7 @@ int main(int argc, char **argv) {
             auto prepared = get(a3::prepare(*store, bindings));
             auto output = get(a3::process(prepared, source));
             reserved_failures(*store, prepared, *output, bindings.observation.id);
+            filesystem_failures(*store, prepared, *output);
             std::cout << "ALG03 artifact dependency, admission and entered-state regressions passed\n";
             return 0;
         }

@@ -10,6 +10,11 @@ class Graph {
     const CancellationToken &token_;
     std::map<Id, artifact::ArtifactDescriptor> descriptors_;
     std::map<Id, Json> documents_;
+    struct CalibratedRig {
+        calibration::artifacts::RigArtifact rig;
+        calibration::artifacts::CameraArtifact left, right;
+    };
+    std::map<Id, CalibratedRig> rigs_;
     std::set<Id> active_, done_;
     uint64_t charged_{};
     uint32_t reserved_nodes_{};
@@ -26,35 +31,11 @@ class Graph {
             return it->second;
         require(descriptors_.size() + reserved_nodes_ < policy_.max_dependency_nodes,
                 "Processing dependency node cap", Status::busy);
-        auto d = store_.get(id);
+        auto remaining = policy_.max_geometry_bytes - charged_;
+        auto d = store_.get_bounded(id, remaining, token_);
+        charged_ = policy_.max_geometry_bytes - remaining;
         require(d.state == artifact::ArtifactState::finalized, "Processing dependency not FINALIZED",
                 Status::incompatible);
-        uint64_t amount = sizeof(d) * 4;
-        auto text = [&](const std::string &v) {
-            require(v.capacity() <= policy_.max_geometry_bytes / 8, "Descriptor metadata bound",
-                    Status::busy);
-            amount += 8 * (v.capacity() + 1);
-        };
-        text(d.id.value);
-        text(d.type.name);
-        text(d.hash.algorithm);
-        text(d.hash.hex);
-        text(d.provenance.producer);
-        text(d.provenance.calibration.id.value);
-        require(d.provenance.inputs.size() <= 4096 && d.provenance.parameters.size() <= 4096,
-                "Descriptor collection bound", Status::busy);
-        for (auto &v : d.provenance.inputs) {
-            token_.check();
-            text(v.value);
-        }
-        for (auto &[k, v] : d.provenance.parameters) {
-            token_.check();
-            text(k);
-            text(v);
-        }
-        require(amount <= policy_.max_geometry_bytes - charged_, "Descriptor metadata admission",
-                Status::busy);
-        charged_ += amount;
         descriptors_.emplace(id, d);
         return d;
     }
@@ -132,50 +113,65 @@ class Graph {
     void lineage(const Id &id, const std::vector<Id> &expected) {
         require(get(id).provenance.inputs == expected, "Geometry ordered provenance mismatch");
     }
+    template <class T> T snapshot(const data::ContentReference &r) {
+        const auto &type = std::is_same_v<T, Plane> ? plane_type : policy_type;
+        require(r.revision == 1, "ALG03 snapshot reference revision", Status::incompatible);
+        auto d = ref(r);
+        require(d.type.schema_version == 1, "ALG03 dependency schema/revision", Status::incompatible);
+        const auto &j = doc(r.id, type, false);
+        auto payload = parse_document(j.dump(), type.name);
+        T p;
+        if constexpr (std::is_same_v<T, Plane>)
+            p = plane(payload);
+        else
+            p = policy(payload);
+        auto ok = validate(p);
+        if (!ok)
+            throw Failure(ok.error());
+        auto canonical = encode_document(p);
+        if (!canonical)
+            throw Failure(canonical.error());
+        require(*canonical == j.dump(), "Noncanonical typed snapshot");
+        lineage(r.id, inputs(p));
+        require(d.provenance.producer == p.producer.implementation.value &&
+                    d.provenance.version == p.producer.version && d.provenance.parameters.empty(),
+                "Snapshot descriptor provenance");
+        if constexpr (std::is_same_v<T, Plane>)
+            require(enc(d.provenance.calibration) == enc(p.rig.calibration), "Plane descriptor calibration");
+        else
+            require(enc(d.provenance.calibration) == enc(calibration::Reference{}),
+                    "Policy descriptor calibration");
+        return p;
+    }
     void new_dependency(const data::ContentReference &r, unsigned depth = 0) {
         token_.check();
         require(depth <= 64, "Dependency depth cap", Status::busy);
         auto d = ref(r);
         require(!active_.contains(r.id), "Cyclic processing dependency");
+        if (d.type.name == plane_type.name || d.type.name == policy_type.name)
+            require(d.type.schema_version == 1 && r.revision == 1, "ALG03 dependency schema/revision",
+                    Status::incompatible);
         if (done_.contains(r.id))
             return;
         active_.insert(r.id);
-        if (d.type.name == plane_type.name || d.type.name == policy_type.name) {
-            require(r.revision == 1, "ALG03 snapshot reference revision", Status::incompatible);
-            const auto &j = doc(r.id, d.type, false);
-            auto payload = parse_document(j.dump(), d.type.name);
-            if (d.type.name == plane_type.name) {
-                auto p = plane(payload);
-                auto ok = validate(p);
-                if (!ok)
-                    throw Failure(ok.error());
-                lineage(r.id, inputs(p));
-                new_dependency(resolved(p.rig), depth + 1);
-                for (auto &c : p.cameras)
-                    new_dependency(resolved(c.calibration), depth + 1);
-                if (p.parameter_bounds && p.parameter_bounds->evidence)
-                    new_dependency(*p.parameter_bounds->evidence, depth + 1);
-                if (auto c = p.producer.configuration.get())
-                    new_dependency(*c, depth + 1);
-                require(d.provenance.producer == p.producer.implementation.value &&
-                            d.provenance.version == p.producer.version && d.provenance.parameters.empty() &&
-                            enc(d.provenance.calibration) == enc(p.rig.calibration),
-                        "Plane descriptor provenance");
-            } else {
-                auto p = policy(payload);
-                auto ok = validate(p);
-                if (!ok)
-                    throw Failure(ok.error());
-                lineage(r.id, inputs(p));
-                if (p.declared_ray_bounds && p.declared_ray_bounds->evidence)
-                    new_dependency(*p.declared_ray_bounds->evidence, depth + 1);
-                if (auto c = p.producer.configuration.get())
-                    new_dependency(*c, depth + 1);
-                require(d.provenance.producer == p.producer.implementation.value &&
-                            d.provenance.version == p.producer.version && d.provenance.parameters.empty() &&
-                            enc(d.provenance.calibration) == enc(calibration::Reference{}),
-                        "Policy descriptor provenance");
-            }
+        if (d.type.name == plane_type.name) {
+            auto p = snapshot<Plane>(r);
+            // The same selected M4 graph/applicability validation as the
+            // standalone loader, inside this graph's budget/cycle context.
+            Bindings b;
+            b.rig = p.rig;
+            b.camera = p.cameras.front().calibration;
+            (void)calibration(b, p);
+            if (p.parameter_bounds && p.parameter_bounds->evidence)
+                new_dependency(*p.parameter_bounds->evidence, depth + 1);
+            if (auto c = p.producer.configuration.get())
+                new_dependency(*c, depth + 1);
+        } else if (d.type.name == policy_type.name) {
+            auto p = snapshot<Policy>(r);
+            if (p.declared_ray_bounds && p.declared_ray_bounds->evidence)
+                new_dependency(*p.declared_ray_bounds->evidence, depth + 1);
+            if (auto c = p.producer.configuration.get())
+                new_dependency(*c, depth + 1);
         } else {
             // Explicit evidence may have an arbitrary established artifact type.
             // Its historical Provenance.inputs are not implicitly processing data.
@@ -193,54 +189,63 @@ class Graph {
         ref(cr);
         require(rr.type.name == ca::rig_type.name && cr.type.name == ca::camera_type.name,
                 "Selected calibration kinds", Status::incompatible);
-        auto rig = m4doc<ca::RigArtifact>(rr.id, ca::rig_type);
+        if (!rigs_.contains(rr.id)) {
+            auto rig = m4doc<ca::RigArtifact>(rr.id, ca::rig_type);
+            require(enc(rig.revision) == enc(b.rig.calibration), "Rig logical reference mismatch",
+                    Status::incompatible);
+            auto dataset = m4doc<ca::DatasetArtifact>(rig.dataset_reference.id, ca::dataset_type);
+            ref(rig.dataset_reference, ca::dataset_type);
+            auto target = m4doc<ca::TargetArtifact>(rig.target_reference.id, ca::target_type);
+            ref(rig.target_reference, ca::target_type);
+            require(dataset.target_reference.id == rig.target_reference.id &&
+                        dataset.target_reference.hash == rig.target_reference.hash &&
+                        calibration::solve_detail::same_target(dataset.dataset.target, target.target),
+                    "M4 shared target mismatch");
+            auto vd = calibration::validate_calibration_dataset(dataset.dataset);
+            if (!vd)
+                throw Failure(vd.error());
+            require(dataset.raw_capture_references.size() == dataset.dataset.raw_capture_ids.size(),
+                    "Calibration source descriptor count");
+            std::vector<Id> dataset_ids{dataset.target_reference.id};
+            for (size_t i = 0; i < dataset.raw_capture_references.size(); ++i) {
+                token_.check();
+                require(dataset.raw_capture_references[i].id == dataset.dataset.raw_capture_ids[i],
+                        "Calibration source order");
+                ref(dataset.raw_capture_references[i], {"org.mantis.RawCapture", 2});
+                dataset_ids.push_back(dataset.raw_capture_references[i].id);
+            }
+            lineage(rig.target_reference.id, {});
+            lineage(rig.dataset_reference.id, dataset_ids);
+            auto camera = [&](const artifact::ArtifactReference &r) {
+                token_.check();
+                ref(r, ca::camera_type);
+                auto c = m4doc<ca::CameraArtifact>(r.id, ca::camera_type);
+                require(c.dataset_reference.id == rig.dataset_reference.id &&
+                            c.dataset_reference.hash == rig.dataset_reference.hash &&
+                            c.target_reference.id == rig.target_reference.id &&
+                            c.target_reference.hash == rig.target_reference.hash,
+                        "Camera graph mismatch");
+                lineage(r.id, {c.dataset_reference.id, c.target_reference.id});
+                auto ok = calibration::validate_camera_solution(c.solution, dataset.dataset);
+                if (!ok)
+                    throw Failure(ok.error());
+                return c;
+            };
+            auto left = camera(rig.left_camera_reference), right = camera(rig.right_camera_reference);
+            lineage(rr.id, {rig.dataset_reference.id, rig.target_reference.id, rig.left_camera_reference.id,
+                            rig.right_camera_reference.id});
+            auto vr = calibration::validate_stereo_solution(rig.solution, dataset.dataset, left.solution,
+                                                            right.solution);
+            if (!vr)
+                throw Failure(vr.error());
+            // Validation of immutable M4 content is shared across all new-schema
+            // dependencies in this bounded graph. Applicability is checked below
+            // for EVERY plane/camera selection, never cached by type alone.
+            rigs_.emplace(rr.id, CalibratedRig{std::move(rig), std::move(left), std::move(right)});
+        }
+        const auto &[rig, left, right] = rigs_.at(rr.id);
         require(enc(rig.revision) == enc(b.rig.calibration), "Rig logical reference mismatch",
                 Status::incompatible);
-        auto dataset = m4doc<ca::DatasetArtifact>(rig.dataset_reference.id, ca::dataset_type);
-        ref(rig.dataset_reference, ca::dataset_type);
-        auto target = m4doc<ca::TargetArtifact>(rig.target_reference.id, ca::target_type);
-        ref(rig.target_reference, ca::target_type);
-        require(dataset.target_reference.id == rig.target_reference.id &&
-                    dataset.target_reference.hash == rig.target_reference.hash &&
-                    calibration::solve_detail::same_target(dataset.dataset.target, target.target),
-                "M4 shared target mismatch");
-        auto vd = calibration::validate_calibration_dataset(dataset.dataset);
-        if (!vd)
-            throw Failure(vd.error());
-        require(dataset.raw_capture_references.size() == dataset.dataset.raw_capture_ids.size(),
-                "Calibration source descriptor count");
-        std::vector<Id> dataset_ids{dataset.target_reference.id};
-        for (size_t i = 0; i < dataset.raw_capture_references.size(); ++i) {
-            token_.check();
-            require(dataset.raw_capture_references[i].id == dataset.dataset.raw_capture_ids[i],
-                    "Calibration source order");
-            ref(dataset.raw_capture_references[i], {"org.mantis.RawCapture", 2});
-            dataset_ids.push_back(dataset.raw_capture_references[i].id);
-        }
-        lineage(rig.target_reference.id, {});
-        lineage(rig.dataset_reference.id, dataset_ids);
-        auto camera = [&](const artifact::ArtifactReference &r) {
-            token_.check();
-            ref(r, ca::camera_type);
-            auto c = m4doc<ca::CameraArtifact>(r.id, ca::camera_type);
-            require(c.dataset_reference.id == rig.dataset_reference.id &&
-                        c.dataset_reference.hash == rig.dataset_reference.hash &&
-                        c.target_reference.id == rig.target_reference.id &&
-                        c.target_reference.hash == rig.target_reference.hash,
-                    "Camera graph mismatch");
-            lineage(r.id, {c.dataset_reference.id, c.target_reference.id});
-            auto ok = calibration::validate_camera_solution(c.solution, dataset.dataset);
-            if (!ok)
-                throw Failure(ok.error());
-            return c;
-        };
-        auto left = camera(rig.left_camera_reference), right = camera(rig.right_camera_reference);
-        lineage(rr.id, {rig.dataset_reference.id, rig.target_reference.id, rig.left_camera_reference.id,
-                        rig.right_camera_reference.id});
-        auto vr = calibration::validate_stereo_solution(rig.solution, dataset.dataset, left.solution,
-                                                        right.solution);
-        if (!vr)
-            throw Failure(vr.error());
         require(
             (cr.id == rig.left_camera_reference.id && *cr.hash.get() == rig.left_camera_reference.hash) ||
                 (cr.id == rig.right_camera_reference.id && *cr.hash.get() == rig.right_camera_reference.hash),
@@ -260,8 +265,7 @@ class Graph {
                         calibration::solve_detail::same_camera(c.camera, actual.solution.camera),
                     "Plane camera applicability mismatch", Status::incompatible);
         }
-        auto selected = cr.id == rig.left_camera_reference.id ? std::move(left) : std::move(right);
-        return {std::move(selected), std::move(rig), charged_};
+        return {cr.id == rig.left_camera_reference.id ? left : right, rig, charged_};
     }
 };
 void plane_geometry(const artifact::Store &s, const Plane &p, const CancellationToken &t) {
@@ -272,46 +276,16 @@ void plane_geometry(const artifact::Store &s, const Plane &p, const Cancellation
     b.camera = p.cameras.front().calibration;
     (void)graph.calibration(b, p);
 }
-void checked_neutral(const data::Packet &packet) {
-    auto expected = packet;
-    expected.header = {};
-    equal_packet(expected, packet, 1ull << 20, {});
-}
+
 template <class T>
 T load(const artifact::Store &s, const data::ContentReference &r, const artifact::ArtifactType &type,
        const CancellationToken &t, uint64_t cap = max_geometry_bytes) {
-    auto d = descriptor(s, r, type, t);
-    require(r.revision == 1 && d.chunks == 1 && d.bytes <= (1ull << 20),
-            "ALG03 snapshot revision/chunk/size");
-    require(d.bytes <= cap / 16, "Snapshot canonical working admission", Status::busy);
-    auto p = s.packet(r.id);
-    require(p->attributes.size() == 1, "Snapshot has extra attributes");
-    checked_neutral(*p);
-    auto bytes = document_bytes(*p, document_attribute, t);
-    (void)geometry_charge(bytes, cap, t);
-    auto j = parse_document(bytes, type.name);
-    T v;
-    if constexpr (std::is_same_v<T, Plane>)
-        v = plane(j);
-    else
-        v = policy(j);
-    auto ok = validate(v);
-    if (!ok)
-        throw Failure(ok.error());
-    auto canonical = encode_document(v);
-    if (!canonical)
-        throw Failure(canonical.error());
-    require(*canonical == bytes, "Noncanonical typed snapshot");
-    require(d.provenance.producer == v.producer.implementation.value &&
-                d.provenance.version == v.producer.version && d.provenance.parameters.empty() &&
-                d.provenance.inputs == inputs(v),
-            "Snapshot descriptor provenance");
-    if constexpr (std::is_same_v<T, Plane>)
-        require(enc(d.provenance.calibration) == enc(v.rig.calibration), "Plane descriptor calibration");
-    else
-        require(enc(d.provenance.calibration) == enc(calibration::Reference{}),
-                "Policy descriptor calibration");
-    return v;
+    Policy limits;
+    limits.max_geometry_bytes = cap;
+    Graph graph(s, limits, t);
+    require(type.name == (std::is_same_v<T, Plane> ? plane_type.name : policy_type.name),
+            "Snapshot loader kind", Status::incompatible);
+    return graph.snapshot<T>(r);
 }
 } // namespace
 Plane plane_snapshot(const artifact::Store &s, const data::ContentReference &r, const CancellationToken &t,
@@ -320,7 +294,8 @@ Plane plane_snapshot(const artifact::Store &s, const data::ContentReference &r, 
 }
 Geometry geometry(const artifact::Store &s, const Bindings &b, const Plane &p, const Policy &policy,
                   const CancellationToken &t) {
-    Graph graph(s, policy, t, 1); // The already resolved observation is a processing node too.
+    Graph graph(s, policy, t);
+    (void)graph.ref(b.observation); // Admit source descriptor metadata too, not its historical ancestry.
     graph.new_dependency(b.plane);
     graph.new_dependency(b.policy);
     return graph.calibration(b, p);
@@ -344,18 +319,21 @@ using namespace detail;
 Result<Plane> load_plane(const artifact::Store &s, const data::ContentReference &r,
                          const CancellationToken &t) {
     return result([&] {
-        auto p = load<Plane>(s, r, plane_type, t);
-        evidence_dependencies(s, p, Policy{}, t);
-        plane_geometry(s, p, t);
-        return p;
+        Policy limits;
+        Graph graph(s, limits, t);
+        graph.new_dependency(r);
+        return graph.snapshot<Plane>(r);
     });
 }
 Result<Policy> load_policy(const artifact::Store &s, const data::ContentReference &r,
                            const CancellationToken &t) {
     return result([&] {
+        // The policy must first be decoded under the fixed hard cap before its
+        // own (possibly smaller) selected budget can be known. Its required
+        // closure, including its descriptor/document, then uses that budget.
         auto p = load<Policy>(s, r, policy_type, t);
-        Plane empty;
-        evidence_dependencies(s, empty, p, t);
+        Graph graph(s, p, t);
+        graph.new_dependency(r);
         return p;
     });
 }
@@ -382,10 +360,13 @@ Result<data::ContentReference> create(artifact::Store &s, const T &value, const 
             provenance.calibration = value.rig.calibration;
         t.check();
         auto id = s.begin(type, provenance);
+        std::string_view phase = "append snapshot";
         try {
             s.append(id, document_packet(*encoded));
             t.check();
+            phase = "finalize snapshot";
             auto d = s.finalize(id, t);
+            phase = "readback snapshot";
             data::ContentReference r{id, {type.name, type.schema_version}, d.hash, 1};
             if constexpr (std::is_same_v<T, Plane>) {
                 auto v = load_plane(s, r, t);
@@ -401,6 +382,8 @@ Result<data::ContentReference> create(artifact::Store &s, const T &value, const 
             throw Failure(reserved_error(s, id, error.error));
         } catch (const std::bad_alloc &) {
             throw Failure(reserved_error(s, id, {Status::busy, "ALG03 allocation failed", "alg03"}));
+        } catch (const std::filesystem::filesystem_error &error) {
+            throw Failure(reserved_error(s, id, filesystem_error(error, phase)));
         } catch (const std::exception &) {
             throw Failure(reserved_error(s, id, {Status::io, "ALG03 snapshot failed", "alg03"}));
         }

@@ -125,6 +125,7 @@ endif()
 set(mantis_alg03_fingerprint_inputs
  src/alg03/alg03.cpp src/alg03/artifacts.cpp src/alg03/documents.cpp src/alg03/numeric.cpp
  src/alg03/private.hpp src/alg03/include/mantis/l1_ray_plane.hpp
+ src/artifact-store/artifact-store.cpp src/artifact-store/include/mantis/artifact_store.hpp
  src/calibration-artifacts/codecs.hpp src/calibration/include/mantis/calibration_solve.hpp
  src/data/include/mantis/semantic_packet.hpp src/data/include/mantis/projected_light.hpp
  src/memory/include/mantis/memory.hpp)
@@ -835,7 +836,8 @@ if(BUILD_TESTING)
  target_link_libraries(mantis-alg03-integration-tests PRIVATE mantis-alg03 mantis-calibration-solver-opencv opencv_core opencv_calib3d nlohmann_json::nlohmann_json)
  add_test(NAME alg03-integration COMMAND mantis-alg03-integration-tests)
  add_test(NAME alg03-artifact-regressions COMMAND mantis-alg03-integration-tests --artifact-regressions)
- set_tests_properties(alg03-integration alg03-artifact-regressions PROPERTIES TIMEOUT 60)
+ add_test(NAME alg03-geometry-regressions COMMAND mantis-alg03-integration-tests --geometry-regressions)
+ set_tests_properties(alg03-integration alg03-artifact-regressions alg03-geometry-regressions PROPERTIES TIMEOUT 60)
  add_executable(mantis-alg03-benchmark benchmarks/alg03.cpp)
  target_include_directories(mantis-alg03-benchmark SYSTEM PRIVATE ${OpenCV_INCLUDE_DIRS})
  target_link_libraries(mantis-alg03-benchmark PRIVATE mantis-alg03 mantis-calibration-solver-opencv opencv_core opencv_calib3d)

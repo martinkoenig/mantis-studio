@@ -352,12 +352,13 @@ std::string document_bytes(const data::Packet &p, std::string_view attribute,
     return {reinterpret_cast<const char *>(b->data()), b->size()};
 }
 artifact::ArtifactDescriptor descriptor(const artifact::Store &s, const data::ContentReference &r,
-                                        const artifact::ArtifactType &type, const CancellationToken &t) {
+                                        const artifact::ArtifactType &type, const CancellationToken &t,
+                                        uint64_t cap) {
     t.check();
     reference_shape(r);
     require(r.type.name == type.name && r.type.version == type.schema_version,
             "Wrong processing reference type/schema", Status::incompatible);
-    auto d = s.get(r.id);
+    auto d = s.get_bounded(r.id, cap, t);
     require(d.type.name == type.name && d.type.schema_version == type.schema_version &&
                 d.state == artifact::ArtifactState::finalized && d.hash == *r.hash.get(),
             "Processing artifact type/state/hash mismatch", Status::incompatible);

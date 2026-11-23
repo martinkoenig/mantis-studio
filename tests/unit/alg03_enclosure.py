@@ -9,6 +9,7 @@ import decimal
 import json
 import math
 import subprocess
+import struct
 import sys
 
 D = decimal.Decimal
@@ -20,6 +21,20 @@ with decimal.localcontext() as ctx:
     cases = json.loads(run.stdout)
     assert cases
     for case in cases:
+        if case.get('kind') == 'declared-model':
+            # Analytical affine centre witness, independently evaluated from
+            # exact fixture geometry/bounds (not reported diagnostic values).
+            es, eq, tau, q, vn, eo, ev = D(1), D(0), D(1000), D(1), D(1), D(1), D(0)
+            bound = eo + tau*ev + (es + tau*eq)/(q-eq)*(vn+ev)
+            radius = D.from_float(float(case['radius']))
+            allowance = D.from_float(float(case['allowance']))
+            assert case['diagnostic_valid'] & (1 << 7), case
+            assert D(1) <= bound <= radius < bound+D('1e-12'), ('declared bound under-report', case)
+            assert case['reasons'] == (0 if bound < allowance else 1 << 14), case
+            if case['reasons']:
+                assert case['position'] == [0, 0, 0], case
+            print(f'declared-model: independent_bound_mm={bound} reported_mm={radius} allowance_mm={allowance}')
+            continue
         m = {k: D(v) for k, v in case['model'].items()}
         # C++ writes round-trip decimals; recover the exact binary64 values.
         m = {k: D.from_float(float(v)) for k, v in m.items()}
@@ -59,4 +74,27 @@ with decimal.localcontext() as ctx:
         assert error <= radius <= allowance, (case['name'], error, radius, allowance)
         if error != 0:
             assert error+D('1e-80') <= radius, (case['name'], 'oracle margin')
+        if all(m[k] == 0 for k in ('k1', 'k2', 'k3', 'p1', 'p2')):
+            # IEEE f32 adjacent spacing derived by bit stepping independently
+            # of C++ nextafter/certify/interval mapping. The plane map is affine:
+            # p=(-50+1000*(u-cx)/fx,1000,-1000*(v-cy)/fy).
+            def half_spacing(value):
+                bits = struct.unpack('<I', struct.pack('<f', float(value)))[0]
+                neighbours = [D.from_float(struct.unpack('<f', struct.pack('<I', bits+s))[0])
+                              for s in (-1, 1)]
+                return max(abs(n-value) for n in neighbours)/2
+            hu, hv = half_spacing(u), half_spacing(v)
+            within = abs(x)+hu/m['fx'] <= a and abs(y)+hv/m['fy'] <= b
+            if not within:
+                assert not case['diagnostic_valid'] & (1 << 8), ('cell crosses domain', case)
+                assert case['quantization_radius'] == 0, case
+            else:
+                assert case['diagnostic_valid'] & (1 << 8), case
+                corners = [[-50+1000*((u+su*hu-m['cx'])/m['fx']), D(1000),
+                            -1000*((v+sv*hv-m['cy'])/m['fy'])]
+                           for su in (-1, 1) for sv in (-1, 1)]
+                witness = max(sum((p-q)**2 for p, q in zip(actual, corner)).sqrt() for corner in corners)
+                quantization = D.from_float(float(case['quantization_radius']))
+                assert witness > 0 and witness <= quantization, ('rounding-cell under-report', case['name'], witness, quantization)
+                print(f"{case['name']}: independent_cell_corner_mm={witness} reported_quantization_mm={quantization}")
         print(f"{case['name']}: actual_L2_error_mm={error} reported_radius_mm={radius} policy_mm={allowance}")

@@ -37,6 +37,8 @@ int enclosure_data() {
                         {"pixel", {u, v}},
                         {"position", s.position},
                         {"radius", s.diagnostics[6]},
+                        {"quantization_radius", s.diagnostics[8]},
+                        {"diagnostic_valid", s.diagnostic_valid},
                         {"reasons", s.reasons},
                         {"allowance", allowance.max_numeric_error_mm},
                         {"domain", {p.domain.a, p.domain.b}},
@@ -54,6 +56,11 @@ int enclosure_data() {
     emit("exact-centre", 319.5f, 239.5f);
     emit("rational-off-axis", 399.5f, 199.5f);
     emit("domain-interior-near-boundary", 718.7f, 239.5f);
+    // The point is certifiably inside, but its f32 rounding cell crosses
+    // the domain. An exact-boundary root need not itself be certifiable.
+    p.domain.a = .5 + 1e-8;
+    emit("near-domain-boundary-cell-unavailable", 719.5f, 239.5f);
+    p.domain.a = .5;
     m.k1 = .01;
     emit("radial-stored-f32", 399.51f, 199.495f);
     m.k2 = -.002;
@@ -63,6 +70,23 @@ int enclosure_data() {
     emit("radial-tangential", 423.1234f, 181.5678f);
     emit("numeric-policy-tight", 423.1234f, 181.5678f, true);
     emit("distorted-domain-near-boundary", 718.7f, 239.5f);
+    // Independent centre fixture: n=(0,-1,0), v=(0,1,0), tau=1000.
+    // eo=1, ev=en=ed=0 gives contractual es=1, eq=0, dt=1,
+    // model bound=2 mm. Tangential translation alone witnesses 1 mm.
+    m.k1 = m.k2 = m.k3 = m.p1 = m.p2 = 0;
+    plane.parameter_bounds = PlaneBounds{0, 0, {}};
+    p.declared_ray_bounds = RayBounds{1, 0, {}};
+    for (double allowance : {1.5, 2.5}) {
+        p.uncertainty_requirement = Uncertainty::require_declared_bound;
+        p.max_declared_model_error_mm = allowance;
+        auto s = intersect(m, transform(), plane, p, 319.5f, 239.5f);
+        rows.push_back({{"kind", "declared-model"},
+                        {"allowance", allowance},
+                        {"radius", s.diagnostics[7]},
+                        {"diagnostic_valid", s.diagnostic_valid},
+                        {"reasons", s.reasons},
+                        {"position", s.position}});
+    }
     std::cout << rows.dump() << '\n';
     return 0;
 }
@@ -193,6 +217,22 @@ int main(int argc, char **argv) {
         bounded.declared_ray_bounds = RayBounds{0, 0, {}};
         s = intersect(camera, transform(), changed, bounded, 319.5f, 239.5f);
         CHECK(s.reasons == 0 && s.diagnostics[7] == 0 && (s.diagnostic_valid & (1u << 7)));
+        bounded.declared_ray_bounds->origin_l2_mm = 1;
+        bounded.max_declared_model_error_mm = 2.5;
+        s = intersect(camera, transform(), changed, bounded, 319.5f, 239.5f);
+        CHECK(s.reasons == 0 && (s.diagnostic_valid & (1u << 7)));
+        CHECK(s.diagnostics[7] >= 2 && s.diagnostics[7] < 2.5);
+        bounded.max_declared_model_error_mm = 1.5;
+        s = intersect(camera, transform(), changed, bounded, 319.5f, 239.5f);
+        CHECK(s.reasons == declared_bound_unavailable_or_exceeded);
+        CHECK((s.diagnostic_valid & (1u << 7)) && s.diagnostics[7] >= 2);
+        CHECK(s.position == (std::array<double, 3>{0, 0, 0}));
+        bounded.uncertainty_requirement = Uncertainty::numeric_only;
+        bounded.max_declared_model_error_mm.reset();
+        s = intersect(camera, transform(), changed, bounded, 319.5f, 239.5f);
+        CHECK(s.reasons == 0 && s.diagnostics[7] >= 2 && (s.diagnostic_valid & (1u << 7)));
+        bounded.uncertainty_requirement = Uncertainty::require_declared_bound;
+        bounded.max_declared_model_error_mm = 1;
         bounded.declared_ray_bounds->direction_l2 = .9;
         changed.parameter_bounds->normal_l2 = .9;
         CHECK(intersect(camera, transform(), changed, bounded, 319.5f, 239.5f).reasons &
