@@ -16,6 +16,9 @@ CLI = Path(os.environ.get("MANTIS_PROVENANCE_CLI", ROOT / "tools/ci_toolchain_pr
 FIXTURE = ROOT / "tests/ci/toolchain_fixture"
 INPUTS = ("CMakeLists.txt", "main.cpp", "value.c")
 REVISION = os.environ.get("MANTIS_PROVENANCE_REVISION", "1234567890abcdef1234567890abcdef12345678")
+CMAKE = os.environ.get("MANTIS_PROVENANCE_CMAKE", "/usr/bin/cmake")
+CTEST = os.environ.get("MANTIS_PROVENANCE_CTEST", "/usr/bin/ctest")
+NINJA = os.environ.get("MANTIS_PROVENANCE_NINJA", "/usr/bin/ninja")
 
 
 def digest(path):
@@ -61,6 +64,9 @@ EVIDENCE = Path(os.environ["MANTIS_PROVENANCE_TEST_ROOT"]).resolve()
 class RealConfiguration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        for executable in (CMAKE, CTEST, NINJA):
+            if not Path(executable).is_absolute() or not os.access(executable, os.X_OK):
+                raise AssertionError("Explicit absolute available fixture tool required")
         EVIDENCE.mkdir(parents=True, exist_ok=False)
         cls.source = EVIDENCE / "source with spaces"
         cls.build = EVIDENCE / "build with spaces"
@@ -68,12 +74,12 @@ class RealConfiguration(unittest.TestCase):
         query = cls.build / ".cmake/api/v1/query"
         query.mkdir(parents=True)
         (query / "toolchains-v1").touch()
-        for command in (("/usr/bin/cmake", "-S", cls.source, "-B", cls.build,
+        for command in ((CMAKE, "-S", cls.source, "-B", cls.build,
                          "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug",
                          "-DCMAKE_C_COMPILER=/usr/bin/cc", "-DCMAKE_CXX_COMPILER=/usr/bin/c++",
-                         "-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja"),
-                        ("/usr/bin/cmake", "--build", cls.build, "--parallel", "1"),
-                        ("/usr/bin/ctest", "--test-dir", cls.build, "--output-on-failure", "-j", "1")):
+                         "-DCMAKE_MAKE_PROGRAM=" + NINJA),
+                        (CMAKE, "--build", cls.build, "--parallel", "1"),
+                        (CTEST, "--test-dir", cls.build, "--output-on-failure", "-j", "1")):
             result = run(command)
             if result.returncode != 0:
                 raise AssertionError(f"Fixture prerequisite failed: {result.stderr}")
@@ -104,6 +110,15 @@ class RealConfiguration(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "VERIFIED configured-toolchain-v1")
 
+    def test_explicit_fixture_tool_selection(self):
+        receipts = [json.loads(line) for line in (EVIDENCE / "commands.jsonl").read_text().splitlines()]
+        self.assertEqual(receipts[0]["command"][0],
+                         os.environ.get("MANTIS_PROVENANCE_CMAKE", "/usr/bin/cmake"))
+        self.assertEqual(receipts[2]["command"][0],
+                         os.environ.get("MANTIS_PROVENANCE_CTEST", "/usr/bin/ctest"))
+        expected_ninja = os.environ.get("MANTIS_PROVENANCE_NINJA", "/usr/bin/ninja")
+        self.assertIn("-DCMAKE_MAKE_PROGRAM=" + expected_ninja, receipts[0]["command"])
+
     def test_real_capture_verify(self):
         report = self.capture()
         self.assertEqual(report["schema"], "configured-toolchain-v1")
@@ -112,8 +127,8 @@ class RealConfiguration(unittest.TestCase):
         self.assertEqual(report["binding"], {
             "source_root_sha256": hashlib.sha256(os.fsencode(self.source)).hexdigest(),
             "build_root_sha256": hashlib.sha256(os.fsencode(self.build)).hexdigest()})
-        self.assertEqual(report["configured"]["cmake"]["file"]["sha256"], digest(Path("/usr/bin/cmake")))
-        self.assertEqual(report["configured"]["build_tool"]["file"]["sha256"], digest(Path("/usr/bin/ninja")))
+        self.assertEqual(report["configured"]["cmake"]["file"]["sha256"], digest(Path(CMAKE)))
+        self.assertEqual(report["configured"]["build_tool"]["file"]["sha256"], digest(Path(NINJA)))
         self.assertEqual(report["configured"]["build_tool"]["version"], "UNVERIFIED")
         for lang, executable in (("C", "/usr/bin/cc"), ("CXX", "/usr/bin/c++")):
             tool = report["configured"]["compilers"][lang]
@@ -282,15 +297,15 @@ class RealConfiguration(unittest.TestCase):
         query = build / ".cmake/api/v1/query"
         query.mkdir(parents=True)
         (query / "toolchains-v1").touch()
-        configured = run(["/usr/bin/cmake", "-S", source, "-B", build, "-G", "Ninja",
+        configured = run([CMAKE, "-S", source, "-B", build, "-G", "Ninja",
                           "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=/usr/bin/cc",
-                          "-DCMAKE_CXX_COMPILER=/usr/bin/c++", "-DCMAKE_MAKE_PROGRAM=/usr/bin/ninja",
+                          "-DCMAKE_CXX_COMPILER=/usr/bin/c++", "-DCMAKE_MAKE_PROGRAM=" + NINJA,
                           "-DCMAKE_C_COMPILER_LAUNCHER=/usr/bin/env",
                           "-DCMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/env"])
         self.assertEqual(configured.returncode, 0, configured.stderr)
-        built = run(["/usr/bin/cmake", "--build", build, "--parallel", "1"])
+        built = run([CMAKE, "--build", build, "--parallel", "1"])
         self.assertEqual(built.returncode, 0, built.stderr)
-        tested = run(["/usr/bin/ctest", "--test-dir", build, "--output-on-failure", "-j", "1"])
+        tested = run([CTEST, "--test-dir", build, "--output-on-failure", "-j", "1"])
         self.assertEqual(tested.returncode, 0, tested.stderr)
         captured = run(self.command("capture", source=source, build=build))
         self.assertEqual(captured.returncode, 0, captured.stderr)

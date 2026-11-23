@@ -134,13 +134,19 @@ MANTIS_PROVENANCE_TEST_ROOT="$PWD/build/provenance-evidence/new-run" \
   /usr/bin/python3 -B tests/ci/toolchain_provenance_test.py
 ```
 
-The evidence directory must not exist. Requires installed `/usr/bin/cmake`, Ninja,
-`/usr/bin/ctest`, GCC/G++, `/usr/bin/env`, and POSIX/Linux process APIs. No installation,
+The evidence directory must not exist. Requires installed CMake, Ninja, CTest,
+GCC/G++, `/usr/bin/env`, and POSIX/Linux process APIs. No installation,
 product configuration or heavy workload is performed. Use the project's actual
 single-HEAVY resource admission before this tiny compile campaign, one compiler
 job and serial CTest. Source copies/builds (including paths with spaces), command
 receipts, PID/birth/group retirement and frozen reports remain in the explicit
-private evidence directory. `MANTIS_PROVENANCE_REVISION` can supply a known checkout
+private evidence directory. The trusted fixture harness accepts explicit absolute
+`MANTIS_PROVENANCE_CMAKE`, `MANTIS_PROVENANCE_CTEST`, and `MANTIS_PROVENANCE_NINJA`
+paths (local defaults `/usr/bin/cmake`, `/usr/bin/ctest`, `/usr/bin/ninja`). CI
+explicitly selects the preinstalled tools using `command -v` before running tests;
+this selection is outside the collector and never derived from cache metadata.
+Missing/nonabsolute selected tools fail, without alternate-path fallback.
+`MANTIS_PROVENANCE_REVISION` can supply a known checkout
 revision (CI passes `github.sha`); otherwise tests use an explicitly synthetic
 caller-declared revision. `MANTIS_PROVENANCE_CLI` selects a disposable candidate for
 negative-sensitivity qualification, without changing production code.

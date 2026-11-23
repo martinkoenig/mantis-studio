@@ -27,6 +27,11 @@ jobs:
         env:
           MANTIS_PROVENANCE_TEST_ROOT: ${{ runner.temp }}/configured provenance
           MANTIS_PROVENANCE_REVISION: ${{ github.sha }}
-        run: python3 -B tests/ci/toolchain_provenance_test.py
+        run: |
+          # Trusted fixture setup only; the collector never resolves cache paths via PATH.
+          export MANTIS_PROVENANCE_CMAKE="$(command -v cmake)"
+          export MANTIS_PROVENANCE_CTEST="$(command -v ctest)"
+          export MANTIS_PROVENANCE_NINJA="$(command -v ninja)"
+          python3 -B tests/ci/toolchain_provenance_test.py
       # Private command receipts/cache metadata are deliberately not uploaded.
       # This is not integration into Architecture or a product toolchain report.
