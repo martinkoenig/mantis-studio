@@ -1,7 +1,7 @@
 """Capture/verify bounded configured CMake identities, never invocation attestation.
 
 No subprocesses, network, PATH lookup, Git acquisition or import-time I/O.
-See docs/engineering/configured-toolchain-provenance.md for the v1 contract.
+See docs/engineering/configured-toolchain-provenance.md for the versioned contract.
 """
 import argparse
 import hashlib
@@ -16,6 +16,7 @@ import tempfile
 from typing import NoReturn
 
 SCHEMA = "configured-toolchain-v1"
+NAMED_SCHEMA = "configured-toolchain-v2"
 UNVERIFIED = ["actual-tool-invocation", "source-consumed", "dependency-closure",
               "package-authenticity", "performance", "release-provenance", "os-isolation"]
 
@@ -26,6 +27,27 @@ class Invalid(ValueError):
 
 def fail(code) -> NoReturn:
     raise Invalid(code)
+
+
+class SafeParser(argparse.ArgumentParser):
+    def error(self, message):
+        # argparse's ordinary errors can echo arbitrary command-line values.
+        fail("invalid-command-line")
+
+
+class SelectSchema(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if namespace.schema is not None:
+            fail("duplicate-schema-selection")
+        namespace.schema = values
+
+
+class BindLauncher(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        # Bound retained mappings during parsing, not only after accumulating argv.
+        if len(namespace.launcher_binding) >= 2:
+            fail("launcher-binding-count-limit")
+        namespace.launcher_binding = namespace.launcher_binding + [values]
 
 
 def sha(data):
@@ -142,7 +164,53 @@ def configured_file(value):
             "sha256": fingerprint(value, 16 * 1024 * 1024, "toolchain-file")}
 
 
+def launcher_bindings(args):
+    if args.schema not in (SCHEMA, NAMED_SCHEMA):
+        fail("unsupported-selected-schema")
+    if args.launcher_binding and args.schema != NAMED_SCHEMA:
+        fail("launcher-bindings-require-v2")
+    if len(args.launcher_binding) > 2:
+        fail("launcher-binding-count-limit")
+    result = {}
+    for language, name, path in args.launcher_binding:
+        if language not in ("C", "CXX"):
+            fail("unsupported-launcher-binding-language")
+        if language in result:
+            fail("duplicate-launcher-binding")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,79}", name):
+            fail("invalid-launcher-binding-name")
+        selected = Path(path)
+        if (not 1 <= len(path) <= 4096 or not selected.is_absolute()
+                or path.startswith("//") or str(selected) != path or ".." in selected.parts
+                or any(ord(c) < 32 or ord(c) > 126 or c in ";\\" for c in path)):
+            fail("invalid-launcher-binding-path")
+        result[language] = (name, path)
+    return result
+
+
+def launchers(cache, bindings, schema):
+    result = {}
+    for language in ("C", "CXX"):
+        value = cache.get(f"CMAKE_{language}_COMPILER_LAUNCHER")
+        if value and not Path(value).is_absolute() and schema == NAMED_SCHEMA:
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,79}", value):
+                fail("unsupported-launcher-name")
+            if language not in bindings:
+                fail("missing-launcher-binding")
+            name, path = bindings.pop(language)
+            if value != name:
+                fail("launcher-binding-name-mismatch")
+            result[language] = {"configured_name": value, "origin": "caller-declared",
+                                "file": tool(path)}
+        else:
+            result[language] = tool(value) if value else None
+    if bindings:
+        fail("unused-launcher-binding")
+    return result
+
+
 def snapshot(args):
+    bindings = launcher_bindings(args)
     source, build = root(args.source), root(args.build)
     if source == build or source.is_relative_to(build):
         fail("unsupported-root-layout")
@@ -216,9 +284,7 @@ def snapshot(args):
                                 "file": tool(cmake["paths"]["cmake"]), "origin": "cmake-file-api:index"},
                       "build_tool": {"file": tool(cache["CMAKE_MAKE_PROGRAM"]),
                                      "version": "UNVERIFIED", "origin": "cmake-cache:CMAKE_MAKE_PROGRAM"},
-                      "launchers": {lang: tool(cache[f"CMAKE_{lang}_COMPILER_LAUNCHER"])
-                                    if cache.get(f"CMAKE_{lang}_COMPILER_LAUNCHER") else None
-                                    for lang in ("C", "CXX")}}
+                      "launchers": launchers(cache, bindings, args.schema)}
     except (KeyError, TypeError, AttributeError):
         fail("missing-or-malformed-configured-metadata")
     inputs = {}
@@ -237,14 +303,14 @@ def snapshot(args):
         inputs[name] = sha(data)
     # All raw metadata is fingerprinted, but arbitrary flags, paths, implicit
     # includes and cache variables are never copied into the public representation.
-    return {"schema": SCHEMA,
+    return {"schema": args.schema,
             "binding": {"source_root_sha256": path_identity(source),
                         "build_root_sha256": path_identity(build)},
             "context": {"revision": args.revision, "dirty": args.dirty, "origin": "caller-declared"},
             "inputs": inputs, "configured": configured,
             "observed": {"cache_sha256": sha(cache_data), "index_sha256": sha(index_data),
                          "toolchains_sha256": sha(chain_data)},
-            "unverified": UNVERIFIED}
+            "unverified": UNVERIFIED + (["launcher-selection"] if args.schema == NAMED_SCHEMA else [])}
 
 
 def publish(path, data):
@@ -275,7 +341,8 @@ def verify(args):
     expected = decode(data, "malformed-report")
     if not isinstance(expected, dict) or "schema" not in expected:
         fail("malformed-report")
-    if expected["schema"] != SCHEMA:
+    launcher_bindings(args)
+    if expected["schema"] != args.schema:
         fail("unsupported-report-schema")
     if not re.fullmatch(r"[0-9a-f]{64}", args.report_sha256):
         fail("invalid-report-digest")
@@ -295,7 +362,7 @@ def verify(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = SafeParser(description=__doc__)
     modes = parser.add_subparsers(dest="mode", required=True)
     for mode in ("capture", "verify"):
         command = modes.add_parser(mode)
@@ -303,10 +370,15 @@ def main(argv=None):
             command.add_argument("--" + name, required=True)
         command.add_argument("--dirty", required=True, choices=("clean", "dirty"))
         command.add_argument("--input", required=True, action="append")
+        command.add_argument("--schema", action=SelectSchema)
+        command.add_argument("--launcher-binding", nargs=3, action=BindLauncher, default=[],
+                             metavar=("LANGUAGE", "NAME", "ABSOLUTE_PATH"))
         if mode == "verify":
             command.add_argument("--report-sha256", required=True)
-    args = parser.parse_args(argv)
     try:
+        args = parser.parse_args(argv)
+        if args.schema is None:
+            args.schema = SCHEMA
         if args.mode == "capture":
             path = Path(args.report)
             if path.exists() or path.is_symlink():
@@ -316,7 +388,7 @@ def main(argv=None):
             print(sha(data))
         else:
             verify(args)
-            print("VERIFIED " + SCHEMA)
+            print("VERIFIED " + args.schema)
         return 0
     except Invalid as error:
         print(str(error), file=sys.stderr)
