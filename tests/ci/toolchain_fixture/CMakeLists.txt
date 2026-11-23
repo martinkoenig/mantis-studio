@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.25)
+project(provenance_fixture LANGUAGES C CXX)
+add_executable(provenance_fixture main.cpp value.c)
+enable_testing()
+add_test(NAME fixture-value COMMAND provenance_fixture)
