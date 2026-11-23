@@ -49,7 +49,7 @@ add_test(NAME x1-pairing-stream-GREY-post-commit-store-failure-recorder
 set_tests_properties(x1-pairing-stream-GREY-post-commit-store-failure-recorder PROPERTIES TIMEOUT 30)
 add_executable(mantis-storage-fault-mantisd daemon.cpp)
 target_link_libraries(mantis-storage-fault-mantisd PRIVATE
-  "$<LINK_LIBRARY:WHOLE_ARCHIVE,mantis-storage-qualification>" mantis-service-adapter)
+  "$<LINK_LIBRARY:WHOLE_ARCHIVE,mantis-storage-qualification>" mantis-service-adapter mantis-daemon-paths)
 target_link_options(mantis-storage-fault-mantisd PRIVATE "LINKER:--wrap=fsync")
 add_executable(mantis-storage-fault-client daemon-client.cpp)
 target_link_libraries(mantis-storage-fault-client PRIVATE mantis-client mantis-service-adapter)

@@ -7,7 +7,7 @@ file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/project-capabilities-plugins/virtual-s
   "{\"manifest_version\":1,\"id\":\"org.mantis.virtual-scanner\",\"version\":\"0.1.0\",\"abi_version\":1,\"library\":\"$<TARGET_FILE_NAME:mantis-project-paced-scanner>\",\"kind\":\"device\",\"execution\":\"in_process\",\"permissions\":[\"synthetic\"]}\n")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(mantis-project-capabilities-mantisd daemon.cpp)
-  target_link_libraries(mantis-project-capabilities-mantisd PRIVATE mantis-service-adapter)
+  target_link_libraries(mantis-project-capabilities-mantisd PRIVATE mantis-service-adapter mantis-daemon-paths)
   target_link_options(mantis-project-capabilities-mantisd PRIVATE "LINKER:--wrap=mmap")
   add_test(NAME project-public-capabilities-negative-writer COMMAND ${Python3_EXECUTABLE}
     ${PROJECT_SOURCE_DIR}/tests/integration/project_capabilities.py ${CMAKE_BINARY_DIR} --negative-writer)

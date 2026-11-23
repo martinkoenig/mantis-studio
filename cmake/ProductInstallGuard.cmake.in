@@ -1,0 +1,34 @@
+# Nonprivileged staging preflight. CMake is not a transaction/package manager.
+cmake_policy(PUSH)
+cmake_policy(VERSION 3.24)
+if(NOT IS_ABSOLUTE "${CMAKE_INSTALL_PREFIX}")
+ message(FATAL_ERROR "Product staging requires an absolute install prefix")
+endif()
+set(root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+# Refuse symlink ancestry rather than letting an owned staging tree escape through
+# a destination symlink. No permissions or pre-existing files are modified here.
+foreach(destination IN ITEMS "@CMAKE_INSTALL_BINDIR@" "@MANTIS_INSTALL_HOSTDIR@"
+ "@MANTIS_INSTALL_PLUGINSDIR@" "@MANTIS_INSTALL_RECIPESDIR@"
+ "@CMAKE_INSTALL_INCLUDEDIR@/mantis-plugin-sdk-@PROJECT_VERSION@/c/mantis"
+ "@CMAKE_INSTALL_INCLUDEDIR@/mantis-plugin-sdk-@PROJECT_VERSION@/cpp/mantis"
+ "@CMAKE_INSTALL_DATADIR@/licenses/MantisPluginSDK-@PROJECT_VERSION@"
+ "@CMAKE_INSTALL_DATADIR@/licenses/MantisStudio-@PROJECT_VERSION@/Daemon"
+ "@CMAKE_INSTALL_DATADIR@/licenses/MantisStudio-@PROJECT_VERSION@/CLI"
+ "@CMAKE_INSTALL_DATADIR@/licenses/MantisStudio-@PROJECT_VERSION@/Studio"
+ "@MantisPluginSDK_INSTALL_CMAKEDIR@")
+ set(path "${root}/${destination}")
+ while(TRUE)
+  if(IS_SYMLINK "${path}")
+   message(FATAL_ERROR "Product staging refuses symlink destination ancestry: ${path}")
+  endif()
+  if(path STREQUAL "/" OR path STREQUAL "$ENV{DESTDIR}")
+   break()
+  endif()
+  get_filename_component(parent "${path}" DIRECTORY)
+  if(parent STREQUAL path)
+   break()
+  endif()
+  set(path "${parent}")
+ endwhile()
+endforeach()
+cmake_policy(POP)

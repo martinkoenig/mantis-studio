@@ -69,6 +69,14 @@ cmake --build build/debug --parallel 4
 Outputs are in `build/debug/bin`, plugins/manifests in `build/debug/plugins`, recipes in `build/debug/recipes`, and the generated Python package in `build/debug/python/mantis`.
 Do not copy only an executable away from its matching plugin/recipe directories.
 
+## Internal staged installation
+
+The top-level project now has provisional `Daemon`, `CLI`, optional `Studio` and
+`PluginSDK` install components. See the [internal install contract v1](docs/distribution/staged-install-v1.md)
+for relative GNUInstallDirs destinations, executable-origin lookup, actual staged
+role/dependency manifests, DESTDIR/relocation qualification and explicit non-goals.
+This is not a native Debian install, service policy or release approval.
+
 ## Running
 
 After the Debug build and tests, start both processes from the repository root.

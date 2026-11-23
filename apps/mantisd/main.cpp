@@ -1,3 +1,4 @@
+#include "product_paths.hpp"
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
@@ -7,14 +8,19 @@ int main(int argc, char **argv) {
 #ifndef _WIN32
         std::signal(SIGPIPE, SIG_IGN);
 #endif
-        auto binary = std::filesystem::absolute(argv[0]).parent_path();
-        mantis::services::Configuration config{binary.parent_path() / "plugins",
-                                               binary / "mantis-plugin-host",
-                                               std::filesystem::current_path() / "Example.mantis",
-                                               binary.parent_path() / "recipes",
-                                               {"org.mantis.virtual-scanner", "org.mantis.virtual-rig",
-                                                "org.mantis.example-points", "org.mantis.ply",
-                                                "org.mantis.x1"}};
+        const auto image = mantis::app::executable_path();
+        const auto binary = image.parent_path();
+        // Compatibility is confined to the exact configured build output. An installed
+        // image never falls back to source/build assets, even when installed files vanish.
+        const bool build_tree = binary == std::filesystem::path(mantis::app::build_bin);
+        mantis::services::Configuration config{
+            build_tree ? binary.parent_path() / "plugins" : binary / mantis::app::plugins_from_bin,
+            build_tree ? binary / "mantis-plugin-host"
+                       : binary / mantis::app::host_from_bin / "mantis-plugin-host",
+            std::filesystem::current_path() / "Example.mantis",
+            build_tree ? binary.parent_path() / "recipes" : binary / mantis::app::recipes_from_bin,
+            {"org.mantis.virtual-scanner", "org.mantis.virtual-rig", "org.mantis.example-points",
+             "org.mantis.ply", "org.mantis.x1"}};
 #ifdef _WIN32
         config.plugin_host += ".exe";
 #endif
@@ -28,7 +34,8 @@ int main(int argc, char **argv) {
             std::string arg = argv[i];
             if (arg == "--help") {
                 std::cout << "mantisd [--project PATH] [--plugins DIR] [--plugin-host PATH] [--port "
-                             "PORT] [--x1-role-state-dir PROVISIONED_DIR]\nSet MANTIS_TOKEN (at least 16 "
+                             "PORT] [--recipes DIR] [--x1-role-state-dir PROVISIONED_DIR]\nSet MANTIS_TOKEN "
+                             "(at least 16 "
                              "characters). Loopback only.\n";
                 return 0;
             }
