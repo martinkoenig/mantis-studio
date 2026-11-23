@@ -46,6 +46,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: python-sdk-${{ matrix.python }}-${{ matrix.machine }}
+          # Manifest-only ZIP preserves .github input without broad hidden-file upload.
           path: |
             ${{ runner.temp }}/python-sdk-evidence/*.log
             ${{ runner.temp }}/python-sdk-evidence/*.json
@@ -57,5 +58,5 @@ jobs:
             ${{ runner.temp }}/python-sdk-evidence/pip-sdist-wheel/*
             ${{ runner.temp }}/python-sdk-evidence/control-before353/*
             ${{ runner.temp }}/python-sdk-evidence/control-restored/*
-            ${{ runner.temp }}/python-sdk-evidence/frozen-inputs/
+            ${{ runner.temp }}/python-sdk-evidence/frozen-inputs.zip
           if-no-files-found: error

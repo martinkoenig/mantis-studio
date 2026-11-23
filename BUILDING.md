@@ -246,7 +246,12 @@ source-matched paths/hashes and historical-client RED/exact-restored GREEN
 receipts distinguish artifact containment from source-only testing. Peers are not
 `mantisd`; timeout can leave daemon-owned operation outcomes UNKNOWN.
 Compiler distribution `protoc-wheel-0==21.11` and executed
-`libprotoc 3.21.11` are distinct identities in provenance format 2. Locally run
+`libprotoc 3.21.11` are distinct identities in provenance format 2. The artifact
+workflow retains manifest-listed qualified input bytes in `frozen-inputs.zip`,
+including the hidden `.github` workflow path; downloaded bundles must match every
+`inputs.json` entry to the corresponding archived bytes and SHA-256. This is an
+allowlisted evidence export, not permission to upload arbitrary hidden files.
+Locally run
 the same entry point with `--expected-machine x86_64 --expected-python 3.12`
 (or the actual qualified native combination), and an unused `--work-dir` outside
 the source/build trees and the pinned tools from the workflow. Logs and failures

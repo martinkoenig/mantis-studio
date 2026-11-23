@@ -59,11 +59,14 @@ class Workflow(unittest.TestCase):
                          '--expected-machine ${{ matrix.machine }} --expected-python ${{ matrix.python }}')
         retained = steps[-1]
         self.assertEqual(retained['if'], 'always()')
-        for pattern in ('*.log', '*.json', '*.jsonl', 'command-regressions/', 'dist-a/*',
-                        'dist-b/*', 'rebuilt/*', 'pip-sdist-wheel/*', 'control-before353/*',
-                        'control-restored/*', 'frozen-inputs/'):
-            self.assertIn('${{ runner.temp }}/python-sdk-evidence/' + pattern,
-                          retained['with']['path'].splitlines())
+        self.assertEqual(retained['uses'], 'actions/upload-artifact@v4')
+        self.assertEqual(retained['with'].get('include-hidden-files', 'false'), 'false')
+        self.assertEqual(retained['with']['if-no-files-found'], 'error')
+        patterns = ('*.log', '*.json', '*.jsonl', 'command-regressions/', 'dist-a/*',
+                    'dist-b/*', 'rebuilt/*', 'pip-sdist-wheel/*', 'control-before353/*',
+                    'control-restored/*', 'frozen-inputs.zip')
+        self.assertEqual(retained['with']['path'].splitlines(),
+                         ['${{ runner.temp }}/python-sdk-evidence/' + pattern for pattern in patterns])
 
 
 if __name__ == "__main__":

@@ -42,6 +42,32 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def write_frozen_input_export(work, hashes):
+    """Export only manifest-listed bytes; preserve hidden path components inside ZIP.
+
+    upload-artifact's default hidden-file exclusion applies to the outer ZIP,
+    not its members. Fixed order/metadata make the allowlisted export repeatable.
+    No recursive directory upload or broad include-hidden-files option is needed.
+    """
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_STORED) as archive:
+        for relative, digest in sorted(hashes.items()):
+            parts = PurePosixPath(relative)
+            assert (parts.parts and not parts.is_absolute() and
+                    relative == parts.as_posix() and '\\' not in relative and
+                    '..' not in parts.parts), 'unsafe frozen input path'
+            path = work / 'frozen-inputs' / relative
+            assert not any(parent.is_symlink() for parent in
+                           (path, *path.parents)), 'symlink frozen input'
+            data = path.read_bytes()
+            assert sha(data) == digest, 'frozen input hash mismatch: ' + relative
+            member = zipfile.ZipInfo('frozen-inputs/' + relative, (1980, 1, 1, 0, 0, 0))
+            member.create_system = 3
+            member.external_attr = 0o100644 << 16
+            archive.writestr(member, data)
+    (work / 'frozen-inputs.zip').write_bytes(output.getvalue())
+
+
 def _retire_group(process, reaped):
     # The leader may already have exited on TERM. Its owned group still needs
     # escalation, and orphaned descendants adopted by this runner need reaping.
@@ -685,6 +711,59 @@ class Artifacts(unittest.TestCase):
         module.write_bytes(original)
         command([python, '-I', PROBE, WORK / 'canonical.pb'])
 
+    def test_frozen_input_upload_survives_hidden_exclusion(self):
+        # Model only upload-artifact's documented default hidden-path exclusion,
+        # not the remote service. Actual downloaded CI bundles remain a review gate.
+        manifest = json.loads((WORK / 'inputs.json').read_text())
+        hidden = '.github/workflows/python-sdk.yml'
+        self.assertIn(hidden, manifest)
+        visible = {name for name in manifest
+                   if not any(part.startswith('.') for part in PurePosixPath(name).parts)}
+        self.assertEqual(set(manifest) - visible, {hidden})
+        # The rejected directory export loses exactly this qualified input.
+        with self.assertRaisesRegex(AssertionError, 'missing frozen input'):
+            self.assertTrue(set(manifest) <= visible, 'missing frozen input')
+        # The nonhidden ZIP itself survives the same filter; its member names do
+        # not pass through that filter. Compare actual bytes, not a path string.
+        export = WORK / 'frozen-inputs.zip'
+        self.assertFalse(any(part.startswith('.') for part in export.name.split('/')))
+        self.assertTrue(export.is_file(), 'missing complete frozen-input export')
+        with zipfile.ZipFile(export) as archive:
+            self.assertEqual(len(archive.namelist()), len(manifest))
+            self.assertEqual(set(archive.namelist()), {'frozen-inputs/' + name for name in manifest})
+            for name, digest in manifest.items():
+                self.assertEqual(sha(archive.read('frozen-inputs/' + name)), digest, name)
+        # Unlisted/private files beside frozen inputs must never enter export.
+        scratch = WORK / 'export-sensitivity'
+        shutil.copytree(WORK / 'frozen-inputs', scratch / 'frozen-inputs')
+        secret = scratch / 'frozen-inputs/.unlisted-private'
+        secret.write_text('unqualified fixture, must not be exported')
+        write_frozen_input_export(scratch, manifest)
+        self.assertEqual((scratch / 'frozen-inputs.zip').read_bytes(), export.read_bytes())
+        selected = scratch / 'frozen-inputs' / hidden
+        original = selected.read_bytes()
+        selected.write_bytes(original + b'\n# corrupt fixture\n')
+        with self.assertRaisesRegex(AssertionError, 'frozen input hash mismatch'):
+            write_frozen_input_export(scratch, manifest)
+        selected.write_bytes(original)
+        selected.unlink()
+        with self.assertRaises(FileNotFoundError):
+            write_frozen_input_export(scratch, manifest)
+        selected.write_bytes(original)
+        write_frozen_input_export(scratch, manifest)
+        self.assertEqual((scratch / 'frozen-inputs.zip').read_bytes(), export.read_bytes())
+        for invalid in ('../escape', '/absolute', 'a/../escape', 'a\\b', './alias'):
+            with self.subTest(path=invalid), self.assertRaisesRegex(AssertionError, 'unsafe frozen input path'):
+                write_frozen_input_export(scratch, {invalid: sha(b'')})
+        selected.unlink()
+        selected.symlink_to(WORK / 'frozen-inputs' / hidden)
+        with self.assertRaisesRegex(AssertionError, 'symlink frozen input'):
+            write_frozen_input_export(scratch, manifest)
+        selected.unlink()
+        selected.write_bytes(original)
+        write_frozen_input_export(scratch, manifest)
+        self.assertEqual((scratch / 'frozen-inputs.zip').read_bytes(), export.read_bytes())
+
     def test_disposable_old_backend_red_exact_restored_green(self):
         source = copy_source('bypass')
         project = source / 'pyproject.toml'
@@ -743,6 +822,7 @@ if __name__ == '__main__':
         frozen = WORK / 'frozen-inputs' / relative
         frozen.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(REPO / relative, frozen)
+    write_frozen_input_export(WORK, hashes)
     if not args.identity_only:
         result = unittest.main(argv=[sys.argv[0]] + tests, verbosity=2, exit=False).result
         for relative, digest in hashes.items():
