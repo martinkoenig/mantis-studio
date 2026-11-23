@@ -100,11 +100,19 @@ with a hard 1 GiB free-space reserve. A caller may explicitly select
 are not reduced. Admission reserves the selected allowance; input copies,
 generated files, command captures and the receipt count toward it. An allowance
 too small for complete qualification fails closed, never omits a gate or converts
-a truncated failure into PASS. Captures are streamed/bounded, owned direct
-children are retired/reaped on failure, and the fixed two-file canonical protoc
-generation also has a kernel file-size bound. Receipt/restoration failures do not
-mask an initiating error. This is a bound for this fixed qualification workload,
-not a general untrusted-process sandbox or descendant supervisor.
+a truncated failure into PASS. Captures are streamed/bounded. A dedicated Linux
+cleanup owner establishes subreaping **before** admitting each fixed command;
+it retires/reaps that command's actual descendants (including nested budget-test
+runners/emitters) on exhaustion, timeout/cancellation and leader exit. Only that
+dedicated process reaps its adopted children; unrelated caller children and the
+caller's subreaper state are untouched. The existing 30-second command and
+five-second failure-cleanup bounds are retained; incomplete retirement is an
+explicit failure, not PASS. Phase-observed real-emitter composition regressions
+and a direct-launch bypass mutant check this boundary. The fixed two-file
+canonical protoc generation also has a kernel file-size bound. Receipt,
+restoration and cleanup failures do not mask an initiating error. This contains
+the fixed cooperative qualification workload, not arbitrary hostile processes,
+OS-enforced isolation, or external killing of the cleanup authority.
 No generated module is committed. The dedicated `python-control` workflow runs
 this command on native Ubuntu x86_64 and ARM64 with read-only repository permissions
 and no stored checkout credentials. A protocol peer is **not `mantisd`**: these

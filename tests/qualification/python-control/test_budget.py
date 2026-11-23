@@ -1,5 +1,6 @@
 """Qualifier resource controls; tiny owned emitters, not SDK behavior doubles."""
 
+import ctypes
 import importlib.util
 import json
 import os
@@ -115,6 +116,41 @@ class Budgets(unittest.TestCase):
             self.assertEqual(children[0].returncode, -signal.SIGKILL)
             self.assertIn("Owned child cleanup failed: OSError", raised.exception.__notes__)
 
+    def test_owner_preserves_command_status_and_later_success(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            budget = qualifier.OutputBudget(root, 65536)
+            script = root / "status.py"
+            script.write_text("import os, signal\nos.kill(os.getpid(), signal.SIGTERM)\n")
+            self.assertEqual(qualifier.capture_command([sys.executable, "-B", script],
+                                                      root / "signal.log", budget), -signal.SIGTERM)
+            script.write_text("import sys\nprint('owned success')\nsys.exit(7)\n")
+            self.assertEqual(qualifier.capture_command([sys.executable, "-B", script],
+                                                      root / "status.log", budget), 7)
+            script.write_text("print('later owned success')\n")
+            self.assertEqual(qualifier.capture_command([sys.executable, "-B", script],
+                                                      root / "success.log", budget), 0)
+            self.assertEqual((root / "success.log").read_text(), "later owned success\n")
+
+    def test_unconfirmed_cleanup_status_does_not_replace_primary_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            budget = qualifier.OutputBudget(root, 36864)
+            emitter = root / "emit.py"
+            emitter.write_text("import os, signal\nos.write(1, b'x' * 8192)\nsignal.pause()\n")
+            def spawn(*args, **kwargs):
+                child = REAL_POPEN(*args, **kwargs)
+                real_wait = child.wait
+                def wait(timeout=None):
+                    real_wait(timeout=timeout)
+                    return 1  # Inject report failure only after real tree retirement/reap.
+                child.wait = wait
+                return child
+            with patch.object(qualifier.subprocess, "Popen", side_effect=spawn):
+                with self.assertRaisesRegex(RuntimeError, "Python-control output budget exceeded") as raised:
+                    qualifier.capture_command([sys.executable, "-B", emitter], root / "capture.log", budget)
+            self.assertIn("Owned command tree retirement unconfirmed: status 1", raised.exception.__notes__)
+
     def test_mutant_restores_exact_bytes_on_exhaustion_and_preserves_primary(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -151,6 +187,135 @@ class Budgets(unittest.TestCase):
             self.assertEqual(receipt["failure"], "RuntimeError")
             self.assertEqual(receipt["commands"], [])
             self.assertLessEqual(sum(p.stat().st_size for p in Path(temporary).rglob("*") if p.is_file()), 32768)
+
+
+class CommandTrees(unittest.TestCase):
+    def exercise(self, mode):
+        # This test process can have unrelated children. Scope adoption only for
+        # fail-safe retirement when running the regression against rejected code.
+        libc = ctypes.CDLL(None, use_errno=True)
+        previous = ctypes.c_int()
+        self.assertEqual(libc.prctl(37, ctypes.byref(previous), 0, 0, 0), 0)
+        self.assertEqual(libc.prctl(36, 1, 0, 0, 0), 0)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            capture = root / "capture"
+            capture.mkdir()
+            pidfile = root / "observed.json"
+            wrapper = root / "exercise.py"
+            wrapper.write_text('''import importlib.util, json, os, signal, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("actual_tests", sys.argv[1])
+tests = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tests)
+real = tests.REAL_POPEN
+
+def identity(pid):
+    return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+
+def observed_spawn(*args, **kwargs):
+    child = real(*args, **kwargs)
+    # Observe actual emit.py output, not elapsed time or only launcher creation.
+    assert child.stdout.read(4096) == b"x" * 4096
+    pending, identities = [child.pid], {}
+    while pending:
+        pid = pending.pop()
+        identities[pid] = identity(pid)
+        for task in Path(f"/proc/{pid}/task").iterdir():
+            pending.extend(map(int, (task / "children").read_text().split()))
+    Path(sys.argv[2]).write_text(json.dumps(identities))
+    if sys.argv[3] == "leader-exit":
+        os._exit(0)  # Deliberately bypass the actual test's inner cleanup.
+    os.write(1, b"observed actual emitter output\\n" + b"x" * 8192)
+    signal.pause()
+    return child
+
+tests.REAL_POPEN = observed_spawn
+tests.Budgets("test_exhausted_capture_reaps_owned_emitter_and_does_not_return_success").run()
+''')
+            # An unrelated live child must neither be signalled nor reaped.
+            idle = root / "unrelated.py"
+            idle.write_text("import signal\nsignal.pause()\n")
+            unrelated = REAL_POPEN([sys.executable, "-B", idle])
+            direct = []
+            def spawn(*args, **kwargs):
+                child = REAL_POPEN(*args, **kwargs)
+                direct.append(child)
+                return child
+
+            budget = qualifier.OutputBudget(capture, 36864)
+            check = budget.check
+            def observed_check(extra=0, **kwargs):
+                if pidfile.exists():
+                    if mode == "timeout":
+                        raise subprocess.TimeoutExpired("observed command tree", 30)
+                    if mode == "cancel":
+                        raise KeyboardInterrupt("observed command tree cancellation")
+                check(extra, **kwargs)
+
+            identities = {}
+            try:
+                with patch.object(qualifier.subprocess, "Popen", side_effect=spawn), \
+                     patch.object(budget, "check", side_effect=observed_check):
+                    argv = [sys.executable, "-B", wrapper, Path(__file__).resolve(), pidfile, mode]
+                    if mode == "leader-exit":
+                        self.assertEqual(qualifier.capture_command(argv, capture / "outer.log", budget), 0)
+                    else:
+                        category, message = {
+                            "exhaustion": (RuntimeError, "Python-control output budget exceeded"),
+                            "timeout": (subprocess.TimeoutExpired, "observed command tree"),
+                            "cancel": (KeyboardInterrupt, "observed command tree cancellation"),
+                        }[mode]
+                        with self.assertRaisesRegex(category, message):
+                            qualifier.capture_command(argv, capture / "outer.log", budget)
+                self.assertTrue(pidfile.exists(), "real emitter phase was not observed")
+                identities = json.loads(pidfile.read_text())
+                self.assertEqual(len(direct), 1)
+                self.assertIsNotNone(direct[0].returncode, "outer immediate child was not reaped")
+                self.assertTrue(direct[0].stdout.closed)
+                for pid in identities:
+                    self.assertFalse(Path(f"/proc/{pid}").exists(),
+                                     f"owned descendant survived outer {mode}")
+                self.assertIsNone(unrelated.poll(), "unrelated child was retired")
+                self.assertLessEqual(budget.used(), budget.limit)
+            finally:
+                # Make intended RED/assertion unwind safe. Kill/reap only the
+                # phase-recorded descendants, checking birth identity first.
+                if pidfile.exists():
+                    identities = json.loads(pidfile.read_text())
+                for value, birth in identities.items():
+                    pid = int(value)
+                    try:
+                        actual = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+                        if actual == birth:
+                            os.kill(pid, signal.SIGKILL)
+                    except FileNotFoundError:
+                        pass
+                # A recorded nested owner may still be exiting. Its killed
+                # children are adopted after that owner is reaped.
+                for value in identities:
+                    try:
+                        os.waitpid(int(value), 0)
+                    except ChildProcessError:
+                        pass
+                unrelated.kill()
+                unrelated.wait(timeout=5)
+                self.assertEqual(libc.prctl(36, previous.value, 0, 0, 0), 0)
+                restored = ctypes.c_int()
+                self.assertEqual(libc.prctl(37, ctypes.byref(restored), 0, 0, 0), 0)
+                self.assertEqual(restored.value, previous.value)
+
+    def test_outer_exhaustion_retires_actual_resource_test_tree(self):
+        self.exercise("exhaustion")
+
+    def test_outer_timeout_retires_actual_resource_test_tree(self):
+        self.exercise("timeout")
+
+    def test_outer_cancellation_retires_actual_resource_test_tree(self):
+        self.exercise("cancel")
+
+    def test_leader_exit_retires_actual_resource_test_tree(self):
+        self.exercise("leader-exit")
 
 
 if __name__ == "__main__":

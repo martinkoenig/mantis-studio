@@ -14,6 +14,7 @@ import platform
 import resource
 import selectors
 import shutil
+import signal
 import subprocess
 import sys
 import tabnanny
@@ -63,10 +64,11 @@ class OutputBudget:
 
 
 def capture_command(argv, log, budget, *, cwd=ROOT, generated_paths=()):
-    """Continuously bound capture; retire/reap the owned direct child on failure.
+    """Bound capture and the fixed command tree through a dedicated Linux owner.
 
-    These fixed qualification scripts do not launch descendants. The existing
-    thirty-second command hang bound includes reading pipes and waiting for exit.
+    The owner establishes subreaping before it admits the command, and reaps its
+    descendants even if a nested runner/leader exits. The existing thirty-second
+    command hang bound includes reading pipes, tree retirement and owner exit.
     """
     deadline = time.monotonic() + 30
     budget.check()
@@ -84,8 +86,9 @@ def capture_command(argv, log, budget, *, cwd=ROOT, generated_paths=()):
         def limit_files():
             resource.setrlimit(resource.RLIMIT_FSIZE, (file_limit, file_limit))
         child_options["preexec_fn"] = limit_files
+    owned_argv = [sys.executable, "-B", Path(__file__).with_name("supervise.py"), *argv]
     with log.open("wb") as stream, selectors.DefaultSelector() as selector:
-        child = subprocess.Popen(argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        child = subprocess.Popen(owned_argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                  env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, **child_options)
         try:
             selector.register(child.stdout, selectors.EVENT_READ)
@@ -113,8 +116,12 @@ def capture_command(argv, log, budget, *, cwd=ROOT, generated_paths=()):
         except BaseException as initiating:
             try:
                 if child.poll() is None:
-                    child.kill()
-                child.wait(timeout=5)
+                    # Ask the owner to retire its tree, not kill the cleanup
+                    # authority before it can reap nested runners/emitters.
+                    child.terminate()
+                status = child.wait(timeout=5)
+                if status != -signal.SIGKILL:
+                    initiating.add_note(f"Owned command tree retirement unconfirmed: status {status}")
             except BaseException as cleanup:
                 initiating.add_note(f"Owned child cleanup failed: {type(cleanup).__name__}")
             raise
@@ -191,6 +198,7 @@ def main():
               ROOT / "protocol/protobuf/mantis.proto", ROOT / "tests/unit/python_control.py",
               ROOT / "tests/unit/python_job.py",
               ROOT / "tests/qualification/python-control/test_budget.py",
+              ROOT / "tests/qualification/python-control/supervise.py",
               ROOT / "tests/integration/acceptance.py",
               ROOT / "tests/unit/python_capture.py", ROOT / "tests/unit/python_calibration.py",
               ROOT / "tests/contract/protocol_fields.py", ROOT / "tests/contract/boundaries.py",
@@ -317,6 +325,25 @@ def main():
                 if digest(source) != receipt["inputs"]["sdk/python/mantis/__init__.py"]:
                     raise AssertionError("Exact production source restoration failed")
                 command(f"{name}-restored", [*python, suite, run, test, "-v"])
+
+            # The resource regression imports the frozen runner next to it. A
+            # direct-launch bypass must expose the actual nested-emitter leak.
+            owner_source = snapshot / "tests/qualification/python-control/run.py"
+            owner_original = owner_source.read_text()
+            before = '    owned_argv = [sys.executable, "-B", Path(__file__).with_name("supervise.py"), *argv]\n'
+            if owner_original.count(before) != 1:
+                raise AssertionError("command-tree-owner: mutation target must be unique")
+            suite = snapshot / "tests/qualification/python-control/test_budget.py"
+            test = "CommandTrees.test_outer_exhaustion_retires_actual_resource_test_tree"
+            with mutated_source(owner_source, owner_original,
+                                owner_original.replace(before, "    owned_argv = argv  # WRONG: bypass cleanup owner\n"),
+                                budget):
+                receipt["command-tree-owner_source_sha256"] = digest(owner_source)
+                command("command-tree-owner", [*python, suite, test, "-v"], expected=1,
+                        diagnostic="AssertionError: True is not false : owned descendant survived outer exhaustion")
+            if digest(owner_source) != receipt["inputs"]["tests/qualification/python-control/run.py"]:
+                raise AssertionError("Exact command ownership source restoration failed")
+            command("command-tree-owner-restored", [*python, suite, test, "-v"])
         for relative, expected_hash in receipt["inputs"].items():
             if digest(ROOT / relative) != expected_hash:
                 raise AssertionError(f"Input changed during qualification: {relative}")
