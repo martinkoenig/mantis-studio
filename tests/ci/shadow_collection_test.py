@@ -1,7 +1,8 @@
 """Independent tiny real-Git fixtures for the read-only shadow collector.
 
-No compiler, native program, CMake/CTest discovery, external network or project
-fixture is used. All commits/refs/config mutations belong to disposable repos.
+The configured diagnostics also use an owned tiny serial-compiled CMake fixture
+and CTest JSON discovery, never product compilation or test-command execution.
+All commits/refs/config mutations belong to disposable repos; no network is used.
 """
 import json
 import os
@@ -448,6 +449,331 @@ class RealGit(unittest.TestCase):
         self.assertEqual(p.returncode,2);self.assertEqual(p.stdout,b'')
         r=shadow.manifest(self.root/'missing','push','refs/heads/develop',self.repo.base,head)
         self.assertFalse(r['acquisition']['diff']['complete']);self.full(r)
+
+
+class ConfiguredInventory(unittest.TestCase):
+    """Real CMake/CTest producer, independent named graph oracles, no test runs."""
+    @classmethod
+    def setUpClass(cls):
+        import copy
+        import shutil
+        import shadow_configured_fixture as fixture
+        import ci_shadow_configured as configured
+        cls.fixture, cls.configured = fixture, configured
+        cls.copy = staticmethod(copy.deepcopy)
+        cls.temp = tempfile.TemporaryDirectory(prefix='mantis-configured-')
+        cls.root = Path(cls.temp.name)
+        def retire():
+            evidence = os.environ.get('MANTIS_SHADOW_CONFIGURED_EVIDENCE')
+            if evidence:
+                dest = Path(evidence) / cls.root.name
+                def preserve_file(source, target):
+                    import stat
+                    if stat.S_ISFIFO(os.lstat(source).st_mode):
+                        Path(str(target) + '.node.json').write_text('{"type": "fifo", "contents": "not-readable"}\n')
+                        return target
+                    return shutil.copy2(source, target)
+                shutil.copytree(cls.root, dest, symlinks=True, copy_function=preserve_file)
+                print(json.dumps({'retained_configured_fixture': str(dest)}))
+            cls.temp.cleanup()
+        cls.addClassCleanup(retire)
+        cls.original, cls.path, cls.base = fixture.produce(cls.root)
+        cls.original_bytes = {(row['root'], row['path']):
+                              (Path(cls.original['roots'][row['root']]) / row['path']).read_bytes()
+                              for row in cls.original['files']}
+
+    def setUp(self):
+        self.inv = self.copy(self.original)
+        self.changed = []
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        for root, path in self.changed:
+            (Path(self.inv['roots'][root]) / path).write_bytes(self.original_bytes[root, path])
+
+    def repin(self, root, path, value):
+        self.changed.append((root, path))
+        self.fixture.repin(self.inv, root, path, value)
+
+    def document(self, kind):
+        row = next(r for r in self.inv['files'] if r['root'] == 'build' and
+                   Path(r['path']).name.startswith(kind + '-'))
+        return row['path'], json.loads(self.original_bytes['build', row['path']])
+
+    def diagnostic(self, changes=('public.hpp',), expected=None, raw=None, pin=None):
+        raw = self.fixture.encode(self.inv) if raw is None else raw
+        self.path.write_bytes(raw)
+        return self.configured.diagnose(self.path, self.fixture.digest(raw) if pin is None else pin,
+                                       expected or self.inv['source'], [{'path': p} for p in changes])
+
+    def full(self, result):
+        self.assertFalse(result['execution_authorized'])
+        self.assertTrue(result['full_matrix_would_select'])
+        self.assertFalse(result['closure_complete'])
+
+    def unknowns(self, result):
+        return {u['reason'] for u in result['unknowns']}
+
+    def test_real_named_direct_transitive_and_header_oracles(self):
+        result = self.diagnostic()
+        self.assertEqual(result['status'], 'ingested', result)
+        self.full(result)
+        names = {t['id']: t['name'] for t in result['targets']}
+        observed = {(e['file'], names[e['target']]) for e in result['file_target_edges']
+                    if e['evidence'] == 'observed'}
+        self.assertTrue({('core.cpp', 'core'), ('public.hpp', 'core'), ('middle.cpp', 'middle'),
+                         ('main.cpp', 'app'), ('peer.cpp', 'peer')} <= observed)
+        includes = {(e['file'], names[e['target']], e['reason']) for e in result['file_target_edges']
+                    if e['evidence'] == 'conservative-inference'}
+        self.assertIn(('transitive.hpp', 'core', 'literal-include-from:public.hpp'), includes)
+        deps = {(names[e['dependency']], names[e['consumer']]) for e in result['target_target_edges']}
+        self.assertTrue({('core', 'middle'), ('middle', 'app')} <= deps)
+        for path, expected in [('core.cpp', ['app-contract']), ('public.hpp', ['app-contract']),
+                               ('transitive.hpp', ['app-contract']), ('main.cpp', ['app-contract']),
+                               ('peer.cpp', ['peer-contract'])]:
+            with self.subTest(path=path):
+                current = self.diagnostic((path,))
+                self.assertEqual(current['impacted_test_ids'], expected,
+                                 'configured diagnostic dropped a real direct/transitive consumer')
+                self.full(current)
+        reasons = self.unknowns(result)
+        self.assertTrue({'generated-source-unresolved', 'protobuf-or-qml-generation-unresolved',
+                         'test-fixture-or-runtime-dependency-unresolved',
+                         'preprocessor-and-transitive-closure-unqualified',
+                         'dependency-completeness-unqualified'} <= reasons)
+        self.assertEqual(result['source'], self.inv['source'])
+        self.assertEqual(result['configuration'], 'Debug')
+        self.assertEqual(result['generator'], 'Ninja')
+        self.assertEqual({(r['root'], r['path'], r['sha256']) for r in result['input_files']},
+                         {(r['root'], r['path'], r['sha256']) for r in self.inv['files']})
+
+    def test_cli_versioned_composition_read_only_and_no_absolute_paths(self):
+        result = self.diagnostic()
+        before = {key: (self.fixture.digest(data), (Path(self.inv['roots'][key[0]]) / key[1]).stat().st_mtime_ns)
+                  for key, data in self.original_bytes.items()}
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', self.inv['roots']['source'],
+                   '--event', 'push', '--ref', 'refs/heads/develop', '--base', self.base,
+                   '--head', self.inv['source']['commit']]
+        legacy = json.loads(subprocess.run(command, capture_output=True, timeout=10, check=True).stdout)
+        p = subprocess.run(command + ['--configured-inputs', str(self.path), '--configured-inputs-sha256',
+                                     self.fixture.digest(self.path.read_bytes())],
+                           capture_output=True, timeout=10, check=True)
+        self.assertEqual(p.stderr, b'')
+        actual = json.loads(p.stdout)
+        diagnostic = actual.pop('configured_diagnostic')
+        self.assertEqual(diagnostic['status'], 'ingested', diagnostic)
+        self.assertEqual(diagnostic['impacted_test_ids'], ['app-contract'])
+        self.assertEqual(actual.pop('schema'), 'mantis-git-shadow-v2')
+        self.assertEqual(legacy.pop('schema'), 'mantis-git-shadow-v1')
+        self.assertEqual(actual, legacy, 'configured diagnostics changed the unconditional legacy decision')
+        self.full(diagnostic)
+        self.assertTrue(actual['decision']['full_matrix_would_select'])
+        for root in self.inv['roots'].values():
+            self.assertNotIn(root.encode(), p.stdout, 'public diagnostic leaked a private absolute root')
+        after = {key: (self.fixture.digest((Path(self.inv['roots'][key[0]]) / key[1]).read_bytes()),
+                       (Path(self.inv['roots'][key[0]]) / key[1]).stat().st_mtime_ns)
+                 for key in before}
+        self.assertEqual(before, after, 'importer changed an input byte or modification time')
+        self.assertEqual(result['status'], 'ingested')
+        empty = list(command)
+        empty[empty.index('--base') + 1] = self.inv['source']['commit']
+        p = subprocess.run(empty + ['--configured-inputs', str(self.path), '--configured-inputs-sha256',
+                                   self.fixture.digest(self.path.read_bytes())],
+                           capture_output=True, timeout=10, check=True)
+        self.assertEqual(json.loads(p.stdout)['configured_diagnostic']['status'], 'ingested')
+        self.assertTrue(json.loads(p.stdout)['decision']['full_matrix_would_select'])
+        # Real two-parent commit context: only the tested merge identity qualifies.
+        source = self.inv['roots']['source']
+        merge = subprocess.run(['git', '-C', source, '-c', 'user.name=Fixture',
+                                '-c', 'user.email=fixture@example.invalid', 'commit-tree',
+                                self.inv['source']['tree'], '-p', self.base,
+                                '-p', self.inv['source']['commit'], '-m', 'merge fixture'],
+                               capture_output=True, timeout=10, check=True).stdout.decode().strip()
+        def git(*args):
+            return subprocess.run(['git', '-C', source, *args], capture_output=True, timeout=10, check=True)
+        git('update-ref', 'refs/heads/develop', merge)
+        self.addCleanup(git, 'update-ref', 'refs/heads/develop', self.original['source']['commit'])
+        git('update-ref', 'refs/pull/77/merge', merge)
+        pr = list(command)
+        pr[pr.index('push')] = 'pull_request'
+        pr[pr.index('refs/heads/develop')] = 'refs/pull/77/merge'
+        pr += ['--merge', merge, '--configured-inputs', str(self.path), '--configured-inputs-sha256',
+               self.fixture.digest(self.path.read_bytes())]
+        stale = json.loads(subprocess.run(pr, capture_output=True, timeout=10, check=True).stdout)
+        self.assertEqual(stale['configured_diagnostic']['errors'], ['configured-source-identity-mismatch'])
+        self.inv['source']['commit'] = merge
+        self.diagnostic()
+        pr[-1] = self.fixture.digest(self.path.read_bytes())
+        merged = json.loads(subprocess.run(pr, capture_output=True, timeout=10, check=True).stdout)
+        self.assertEqual(merged['configured_diagnostic']['status'], 'ingested', merged)
+        self.assertEqual(merged['configured_diagnostic']['source']['commit'], merge)
+        self.assertEqual(merged['configured_diagnostic']['impacted_test_ids'], ['app-contract'])
+        self.full(merged['configured_diagnostic'])
+
+    def test_identity_pins_configuration_roots_missing_and_stale(self):
+        cases = []
+        for key, value in [('schema', 'future-v9'), ('configuration', 'Release'), ('generator', 'Other')]:
+            inv = self.copy(self.original); inv[key] = value; cases.append(inv)
+        inv = self.copy(self.original); inv['source']['tree'] = '0' * 40; cases.append(inv)
+        # Drop a required codemodel document, not an unrelated optional pin.
+        inv = self.copy(self.original)
+        inv['files'] = [r for r in inv['files'] if not Path(r['path']).name.startswith('codemodel-')]
+        cases.append(inv)
+        inv = self.copy(self.original); inv['files'].append(dict(inv['files'][0])); cases.append(inv)
+        inv = self.copy(self.original); inv['index'] = '../escape.json'; cases.append(inv)
+        inv = self.copy(self.original); inv['files'][0]['path'] = '/private/unsupported'; cases.append(inv)
+        inv = self.copy(self.original); inv['roots']['build'] = self.inv['roots']['source']; cases.append(inv)
+        for inv in cases:
+            with self.subTest(mutation=cases.index(inv)):
+                self.inv = inv
+                result = self.diagnostic(expected=self.original['source'])
+                self.assertEqual(result['status'], 'rejected', result)
+                self.full(result)
+        self.inv = self.copy(self.original)
+        self.assertEqual(self.diagnostic(pin='0' * 64)['status'], 'rejected')
+        self.assertEqual(self.diagnostic(pin='')['status'], 'rejected')
+        path = 'public.hpp'
+        self.changed.append(('source', path))
+        (Path(self.inv['roots']['source']) / path).write_text('// stale source\n')
+        result = self.diagnostic()
+        self.assertEqual(result['errors'], ['configured-file-digest-mismatch'])
+        self.full(result)
+
+    def test_malformed_duplicate_truncated_and_unsupported_documents(self):
+        path, original = self.document('codemodel')
+        for value in (b'{', b'{"duplicate":1,"duplicate":2}', b'[]', b'null',
+                      b'{"value":NaN}', {'version': {'major': 99}, 'kind': 'codemodel'},
+                      {**original, 'configurations': original['configurations'] * 2}):
+            with self.subTest(value=type(value).__name__):
+                self.repin('build', path, value)
+                result = self.diagnostic()
+                self.assertEqual(result['status'], 'rejected', result)
+                self.full(result)
+        self.repin('build', path, original)
+        path, doc = self.document('index')
+        doc['objects'].append(dict(doc['objects'][0]))
+        self.repin('build', path, doc)
+        self.assertEqual(self.diagnostic()['status'], 'rejected')
+        self.repin('build', path, json.loads(self.original_bytes['build', path]))
+        for value in (b'{', b'{"schema":1,"schema":2}', b'[]'):
+            self.assertEqual(self.diagnostic(raw=value)['status'], 'rejected')
+        path, doc = self.fixture.target_document(self.inv, 'core')
+        for mutation in ('duplicate-source', 'duplicate-dependency', 'unsupported-target', 'unsafe-path', 'wrong-target-id'):
+            bad = self.copy(doc)
+            if mutation == 'duplicate-source':
+                bad['sources'].append(dict(bad['sources'][0]))
+            elif mutation == 'duplicate-dependency':
+                bad['dependencies'] = [{'id': doc['id']}, {'id': doc['id']}]
+            elif mutation == 'unsupported-target':
+                bad['type'] = 'FUTURE'
+            elif mutation == 'unsafe-path':
+                bad['sources'][0]['path'] = '../outside.cpp'
+            else:
+                bad['id'] = 'unrelated-id'
+            self.repin('build', path, bad)
+            with self.subTest(mutation=mutation):
+                result = self.diagnostic()
+                self.assertEqual(result['status'], 'rejected', result)
+                self.full(result)
+
+    def test_omitted_dependencies_cycles_unknown_headers_and_missing_commands(self):
+        path, doc = self.fixture.target_document(self.inv, 'middle')
+        original = self.copy(doc)
+        app_path, app = self.fixture.target_document(self.inv, 'app')
+        app_original = self.copy(app)
+        core_path, core = self.fixture.target_document(self.inv, 'core')
+        # CMake may report flattened link dependencies on the executable too.
+        # Omit the boundary from every consumer, not only the middle library.
+        doc['dependencies'] = []
+        app['dependencies'] = [d for d in app['dependencies'] if d['id'] != core['id']]
+        self.repin('build', path, doc)
+        self.repin('build', app_path, app)
+        dropped = self.diagnostic(('core.cpp',))
+        self.assertEqual(dropped['status'], 'ingested')
+        self.assertEqual(dropped['impacted_test_ids'], [])
+        self.assertIn('dependency-completeness-unqualified', self.unknowns(dropped),
+                      'omission was falsely treated as complete closure')
+        self.full(dropped)
+        self.repin('build', path, original)
+        self.repin('build', app_path, app_original)
+        core['dependencies'] = [{'id': app['id']}]
+        self.repin('build', core_path, core)
+        cycle = self.diagnostic(('core.cpp',))
+        self.assertIn('target-dependency-cycle', self.unknowns(cycle))
+        self.assertEqual(cycle['impacted_test_ids'], ['app-contract'])
+        self.full(cycle)
+        self.repin('source', 'public.hpp', b'#include "absent.hpp"\n#include GENERATED_HEADER\n')
+        unknown = self.diagnostic(('never-seen.hpp',))
+        self.assertTrue({'unresolved-literal-include', 'nonliteral-or-unsupported-include',
+                         'changed-path-consumers-unresolved'} <= self.unknowns(unknown))
+        ctest = json.loads(self.original_bytes['build', 'ctest.json'])
+        ctest['tests'][0].pop('command', None)
+        self.repin('build', 'ctest.json', ctest)
+        self.assertIn('missing-ctest-command', self.unknowns(self.diagnostic()))
+        ctest['tests'].append(dict(ctest['tests'][0]))
+        self.repin('build', 'ctest.json', ctest)
+        self.assertEqual(self.diagnostic()['status'], 'rejected')
+
+    def test_ordering_and_imported_commands_never_executed(self):
+        first = self.diagnostic()
+        self.assertEqual(first, self.diagnostic(), 'unchanged pins did not yield byte-stable diagnostics')
+        self.inv['files'].reverse()
+        self.assertEqual({k: v for k, v in first.items() if k != 'manifest_sha256'},
+                         {k: v for k, v in self.diagnostic().items() if k != 'manifest_sha256'})
+        model_path, model = self.document('codemodel')
+        model['configurations'][0]['targets'].reverse()
+        self.repin('build', model_path, model)
+        ctest = json.loads(self.original_bytes['build', 'ctest.json'])
+        ctest['tests'].reverse()
+        self.repin('build', 'ctest.json', ctest)
+        reordered = self.diagnostic()
+        for key in ('file_target_edges', 'target_target_edges', 'target_test_edges', 'target_reasons',
+                    'unknowns', 'impacted_test_ids', 'tests', 'targets'):
+            self.assertEqual(first[key], reordered[key], 'metadata ordering altered ' + key)
+        marker = self.root / 'not-executed'
+        ctest['tests'][0]['command'] = [sys.executable, '-c', 'from pathlib import Path; Path(' + repr(str(marker)) + ').touch()']
+        self.repin('build', 'ctest.json', ctest)
+        result = self.diagnostic()
+        self.assertEqual(result['status'], 'ingested')
+        self.assertFalse(marker.exists(), 'importer executed an untrusted inventory command')
+        self.assertIn('unmapped-test-command', self.unknowns(result))
+        self.full(result)
+
+    def test_missing_source_nonregular_and_bounded_inputs_remain_full(self):
+        self.inv['files'] = [r for r in self.inv['files'] if not
+                             (r['root'] == 'source' and r['path'] == 'core.cpp')]
+        result = self.diagnostic()
+        self.assertEqual(result['status'], 'ingested')
+        self.assertIn('unpinned-target-source', self.unknowns(result))
+        self.full(result)
+        self.inv = self.copy(self.original)
+        with patch.object(self.configured, 'MAX_TOTAL_BYTES', 1):
+            self.assertEqual(self.diagnostic()['errors'], ['configured-total-byte-limit'])
+        with patch.object(self.configured, 'MAX_FILES', 1):
+            self.assertEqual(self.diagnostic()['errors'], ['configured-file-limit'])
+        with patch.object(self.configured, 'MAX_RECORDS', 1):
+            self.assertEqual(self.diagnostic()['status'], 'rejected')
+        for kind in ('missing', 'directory', 'fifo', 'symlink'):
+            path = self.root / ('invalid-' + kind)
+            if kind == 'directory':
+                path.mkdir()
+            elif kind == 'fifo':
+                os.mkfifo(path)
+            elif kind == 'symlink':
+                path.symlink_to(self.path)
+            result = self.configured.diagnose(path, '0' * 64, self.inv['source'], [])
+            self.assertEqual(result['status'], 'rejected', kind)
+            self.full(result)
+
+    def test_real_multi_configuration_is_explicitly_unqualified(self):
+        root = self.root / 'multi'; root.mkdir()
+        inv, path, _ = self.fixture.produce(root, 'Ninja Multi-Config')
+        result = self.configured.diagnose(path, self.fixture.digest(path.read_bytes()), inv['source'],
+                                         [{'path': 'transitive.hpp'}])
+        self.assertEqual(result['status'], 'ingested', result)
+        self.assertEqual(result['impacted_test_ids'], ['app-contract'])
+        self.assertIn('multi-configuration-inventory', self.unknowns(result))
+        self.full(result)
 
 
 if __name__=='__main__':

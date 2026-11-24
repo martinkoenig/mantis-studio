@@ -1,0 +1,1 @@
+int generated_fixture_value() { return 11; }

@@ -195,7 +195,7 @@ def audit(event, args):
         if not isinstance(path, str) or not path.endswith(('.py', '.pyc', '.so')) or flags & writes:
             raise AssertionError('non-module file opened on import')
 sys.addaudithook(audit)
-import ci_shadow, ci_shadow_inventory, ci_shadow_policy
+import ci_shadow, ci_shadow_inventory, ci_shadow_policy, ci_shadow_configured
 '''
         result = subprocess.run([sys.executable, '-I', '-B', '-c', script, str(TOOLS)],
                                 capture_output=True, timeout=5)

@@ -106,8 +106,8 @@ python3 -B tests/ci/shadow_collection_test.py
 python3 -B tests/ci/shadow_resource_test.py
 ```
 
-These use only Python's standard library and small independent local Git
-repositories. They cover actual commit/ref/merge relationships, complete source
+The Git/resource controls use Python's standard library and small independent
+local Git repositories. They cover actual commit/ref/merge relationships, complete source
 changes and transitive consumer oracles, PR checkout mappings, shallow/missing and
 corrupt objects/refs, ambient overrides/replacement objects, rename/deletion/type
 changes/gitlinks, raw paths, empty diffs, resource/error controls and CLI behavior.
@@ -116,8 +116,12 @@ the actual CLI, count dependency visits independently of elapsed time, and verif
 reachable/unreachable cycles, complete reasons and invalid/stale input recovery.
 Resource controls use gated owned Python descendants and real FIFO/symlink/
 descriptor races. Fixture-local subreaper ownership exists only in disposable
-probe processes, with failure unwind reaping their own children. No configure,
-compiler, project binary, CTest, installation or external network is used. Fixture-local commits/config/refs are disposable and never affect the project
+probe processes, with failure unwind reaping their own children. Configured
+diagnostic controls additionally configure and serially compile an owned tiny
+multi-target fixture with Ninja and Ninja Multi-Config, and obtain real CTest JSON
+with `--show-only=json-v1`. They never execute fixture test commands or product
+targets. CMake, CTest, Ninja and a C++ compiler are required for this extension.
+No installation or external network is used. Fixture-local commits/config/refs are disposable and never affect the project
 repository. The same modules are registered as `ci-shadow-collection` and
 `ci-shadow-resources` in Linux CTest configurations with `BUILD_TESTING=ON`,
 including Studio ON/OFF and sanitizers. They use the configured Python interpreter
@@ -125,6 +129,102 @@ and retain their internal bounded fixture deadlines. The collector and reader
 modules acquire no processes, network connections or inventory data on import;
 regressions audit import and ensure uncertain inventory cleanup blocks further
 Git acquisition. These regressions do not replace any applicable native final check.
+
+## Configured dependency diagnostics (opt-in, record-only)
+
+The existing invocation accepts an additional **pair**:
+
+```sh
+python3 -B tools/ci_shadow.py --repository . --event push \
+  --ref refs/heads/develop --base BEFORE_SHA1 --head PUSH_SHA1 \
+  --configured-inputs PRIVATE_INPUT_MANIFEST.json \
+  --configured-inputs-sha256 MANIFEST_SHA256
+```
+
+Without this option the `mantis-git-shadow-v1` envelope and static-inventory
+behavior are unchanged. With it the envelope is explicitly
+`mantis-git-shadow-v2`, containing a `configured_diagnostic` with schema
+`ci110-configured-diagnostic-v1`. Consumers accepting only v1 must reject v2,
+not reinterpret it as permission to select tests. The legacy `decision` remains
+unchanged and FULL remains unconditional, even on a successful ingestion. The
+configured path uses the existing policy's reachability routine, not another
+selection engine. The static `--inventory` remains independent and optional.
+
+### Pinned producer inputs
+
+The importer **does not configure, compile, run CTest or execute any command**
+from metadata. A separate caller-owned producer must create a CMake File API
+query for `codemodel-v2`, `cache-v2` and `cmakeFiles-v1`, configure its own build
+root, and save `ctest --test-dir BUILD -C CONFIG --show-only=json-v1` as a regular
+JSON file. Native test binaries need not exist: missing CTest command expansion
+is an explicit unknown, not a reason to build a product or fabricate a command.
+Pin the exact chosen index rather than discovering a supposedly latest reply.
+A private manifest contains these exact fields:
+
+- `schema`: `ci110-configured-inputs-v1`.
+- `source`: `{ "commit": SHA1, "tree": SHA1 }`, matching the collector's checked
+  **tested** source, including the merge identity on PRs, not the PR head alone.
+- `roots`: `source` and `build`, canonical absolute local directory paths. These
+  are private inputs; output uses root digests and root-relative paths only.
+- `configuration`: exact nonempty codemodel configuration name, e.g. `Debug`.
+- `generator`: exact index generator name, e.g. `Ninja` or `Ninja Multi-Config`.
+- `index`: build-relative pinned `.cmake/api/v1/reply/index-….json` path.
+- `ctest`: build-relative saved CTest JSON path.
+- `files`: unique records `{ "root": "source" | "build", "path": RELATIVE_PATH,
+  "sha256": SHA256 }`. Include the index, every referenced codemodel/cache/
+  cmakeFiles/target reply, CTest JSON, relevant configure inputs and source/header/
+  Protobuf/QML metadata. Pinning `CMakeCache.txt` also binds its raw bytes. All
+  listed files are read and digest-checked; unlisted paths are **never opened**.
+
+All supplied files must be stable regular files. Symlink leaves/ancestry,
+absolute or traversing relative record paths, duplicate JSON keys/records,
+truncation, invalid/nonfinite JSON, unsupported document major versions,
+dangling reply references, duplicate target/test identities, wrong metadata
+roots/configuration/generator/source and changed byte pins fail closed. Missing
+source metadata remains explicitly unresolved. Limits are 2,000,000 bytes per
+file/manifest, 16,000,000 aggregate input-file bytes, 8192 files and 16384 records
+per collection and edges/unknowns per emitted category. The isolated reader has
+the existing five-second command bound and 2,000,000-byte output bound, with owned
+group retirement. No synchronous Python filesystem call claims kernel-I/O
+preemption. Imports remain inert.
+
+The manifest digest binds the exact raw bytes, including private local root
+identities; it is not a signature or authentication. File hashes bind the bytes
+actually consumed. Caller-reported source/configuration context is not proof
+that a particular CMake/CTest invocation generated those bytes, or that dirty
+source matches a Git tree. In particular CTest JSON has no authenticated source
+or configuration binding. These limits remain explicit unknowns even after
+successful ingestion. Freeze raw manifests, producer commands and full outputs
+privately; inspect normalized output before public upload. Raw command strings,
+external absolute paths, environment, cache contents and parser exceptions are
+not emitted. Command values are represented only by a byte digest.
+
+### Edge and uncertainty semantics
+
+- `observed`: codemodel-listed file-to-target and dependency-to-consumer edges,
+  with exact pinned document/target identity. These are **listed observations**,
+  not evidence that CMake listed every semantic dependency.
+- `conservative-inference`: literal quoted include-to-target edges, with the
+  including source in the reason, and target-to-test edges inferred by matching
+  CTest's first command argument to a configured artifact. Include traversal is
+  iterative and uses only pinned source bytes and listed include directories.
+  It is not a preprocessor: conditionals/comments may overapproximate; macros,
+  system/generated/unresolved includes stay unknown. Shared headers flow to
+  downstream target consumers using the existing policy's worklist.
+- `unresolved`: generated sources/configure inputs, Protobuf/QML/resource
+  generation, fixtures/runtime dependencies, external/unpinned sources/includes,
+  unsupported languages, missing/unmapped/ambiguous commands and configuration
+  coverage remain explicit. Cycles terminate and are reported; absent or omitted
+  dependency edges never establish no consumers. Unknown changed paths also
+  remain unresolved. The selected configuration is imported; other configurations
+  are not unioned or silently claimed qualified.
+
+`status=ingested` means the bounded records were parsed, **not** complete product
+closure, historical recall, provider-event authentication, signatures, OS
+isolation, runtime coverage or performance qualification. `closure_complete` and
+`execution_authorized` are always false; `full_matrix_would_select` is always true.
+Every existing required local and remote gate remains binding. No workflow,
+ruleset, scheduler, selection activation or skipped-test policy is changed.
 
 ## Integration boundary
 
