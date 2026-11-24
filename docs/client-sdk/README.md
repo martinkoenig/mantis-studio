@@ -119,6 +119,13 @@ and no stored checkout credentials. A protocol peer is **not `mantisd`**: these
 checks do not qualify live daemon integration, built wheel/sdist integration,
 hardware, non-Linux support, release publishing or whole Issue #75.
 
+The separate [artifact qualifier](../../sdk/python/README.md#installed-job-deadline-qualification)
+now executes selected canonical Job/control cases against actual installed wheel
+and independently rebuilt sdist consumers at both protobuf runtime boundaries.
+It verifies SDK/wire origins in each Job test process and requires an intended
+wrong-installed-late-report-success RED followed by byte-exact restoration GREEN.
+This does not compose PR132 or turn controlled peers into live `mantisd` evidence.
+
 ## C++
 
 Link `mantis-client` and include `<mantis/client.hpp>`:

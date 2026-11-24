@@ -335,6 +335,102 @@ class Artifacts(unittest.TestCase):
                 for script in ('tests/unit/python_calibration.py', 'tests/unit/python_capture.py',
                                'tests/contract/protocol_fields.py'):
                     command([python, '-I', REPO / script, WORK / 'absent-native-build'])
+                command([python, '-I', '-B', PROBE.with_name('installed_job_probe.py')])
+                # Reuse a disposable consumer, not the artifact or checkout SDK.
+                if name == 'wheel-min':
+                    self.installed_job_sensitivity(python, wheel)
+
+    def installed_job_sensitivity(self, python, wheel):
+        package, = python.parent.parent.glob('lib/python*/site-packages/mantis')
+        module = package / '__init__.py'
+        originals = {p: p.read_bytes() for p in package.iterdir() if p.is_file()}
+        checkout = (REPO / 'sdk/python/mantis/__init__.py').read_bytes()
+        artifact = wheel.read_bytes()
+        original = originals[module]
+        needle = b'        self._remaining(deadline)\n        return report'
+        mutant = original.replace(needle, b'        return report')
+        self.assertEqual(original.count(needle), 1, 'late-report mutation target must be unique')
+        self.assertNotEqual(mutant, original)
+        probe = PROBE.with_name('installed_job_probe.py')
+        failure = None
+        restoration_errors = []
+        receipt = {'artifact': str(wheel), 'artifact_sha256': sha(artifact),
+                   'checkout_sdk_sha256': sha(checkout), 'installed_module': str(module),
+                   'original_sha256': sha(original), 'mutant_sha256': sha(mutant),
+                   'original_installed_files': {p.name: sha(data) for p, data in originals.items()}}
+        try:
+            module.write_bytes(mutant)
+            output = command([python, '-I', '-B', probe, '--sensitivity'], expected=1)
+            self.assertIn('AssertionError: TimeoutError not raised', output,
+                          'not the intended late-report assertion RED')
+            self.assertIn('FAILED (failures=1)', output)
+            self.assertNotIn('ERROR:', output)
+            self.assertNotIn('Peer teardown also failed', output)
+            self.assertIn('"phase": "installed-job-origins"', output)
+            self.assertIn('"successful": false', output)
+        except BaseException as error:
+            failure = error
+        finally:
+            try:
+                module.write_bytes(original)
+                restored = {p: p.read_bytes() for p in package.iterdir() if p.is_file()}
+                receipt['restored_sha256'] = sha(restored[module])
+                receipt['restored_installed_files'] = {p.name: sha(data) for p, data in restored.items()}
+                self.assertEqual(restored, originals, 'installed package restoration must be byte-exact')
+                self.assertEqual((REPO / 'sdk/python/mantis/__init__.py').read_bytes(), checkout)
+                self.assertEqual(wheel.read_bytes(), artifact)
+                command([python, '-I', '-B', probe, '--sensitivity'])
+            except BaseException as error:
+                restoration_errors.append(f'{type(error).__name__}: {error}')
+            receipt.update(failure=str(failure) if failure else None, restoration_errors=restoration_errors)
+            try:
+                (WORK / 'installed-job-sensitivity.json').write_text(json.dumps(receipt, indent=2) + '\n')
+            except BaseException as error:
+                restoration_errors.append(f'receipt write failed: {error}')
+        if failure is not None:
+            if restoration_errors:
+                # Keep the initiating category/traceback, including on Python3.10.
+                failure.args = (str(failure) + '\ninstalled Job restoration also failed: ' +
+                                '; '.join(restoration_errors),)
+            raise failure
+        self.assertEqual(restoration_errors, [], 'installed Job restoration failed')
+
+    def test_installed_job_qualifier_regressions(self):
+        command([sys.executable, '-B', PROBE.with_name('installed_job_qualifier_test.py')])
+
+    def test_installed_job_adapter_rejects_unisolated_and_absent_fixtures(self):
+        # Independent of test ordering: use a private malformed-install consumer.
+        python = install(self.wheel, 'job-adapter-failures', '3.20.0')
+        probe = PROBE.with_name('installed_job_probe.py')
+        output = command([python, '-B', probe], expected=1)
+        self.assertIn('installed Job probe requires -I and a private venv', output)
+        absent = WORK / 'absent-fixtures/sdk/installed_job_probe.py'
+        absent.parent.mkdir(parents=True)
+        shutil.copyfile(probe, absent)
+        output = command([python, '-I', '-B', absent], expected=1)
+        self.assertIn('FileNotFoundError', output)
+        self.assertIn('python_control.py', output)
+        module, = python.parent.parent.glob('lib/python*/site-packages/mantis/mantis_pb2.py')
+        original = module.read_bytes()
+        failure = None
+        try:
+            module.unlink()
+            output = command([python, '-I', '-B', probe], expected=1)
+            self.assertIn('mantis_pb2', output)
+            self.assertNotIn('"phase": "installed-job-result"', output)
+        except BaseException as error:
+            failure = error
+        finally:
+            try:
+                module.write_bytes(original)
+            except BaseException as cleanup:
+                if failure is None:
+                    raise
+                failure.args = (str(failure) + '\ninstalled wire restoration also failed: ' + str(cleanup),)
+        if failure is not None:
+            raise failure
+        self.assertEqual(module.read_bytes(), original)
+        command([python, '-I', '-B', probe])
 
     def test_missing_stale_generated_and_missing_changed_schema_fail_closed(self):
         cases = {'missing-generated': 'mantis/mantis_pb2.py',

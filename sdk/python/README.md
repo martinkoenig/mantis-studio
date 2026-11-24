@@ -45,7 +45,33 @@ requires a token (argument or `MANTIS_TOKEN`); actual commands connect only to
 Do not put real tokens in examples/logs. SDK, application, schema and wire protocol
 versions are separate identities: package 0.1.0 does not change wire protocol v1.
 
-Stage A validates packaging only. Live-daemon/fault-protocol tests, whole-Issue75
-qualification, non-Linux support, naming/legal/notice review, distribution checks,
-TestPyPI, signing and production publishing remain separate gates. No publishing
-workflow or remote-network activation is provided.
+## Installed Job deadline qualification
+
+The existing `tests/sdk/artifacts_test.py` matrix additionally runs selected
+canonical Job/control regressions through `tests/sdk/installed_job_probe.py` in
+all four external consumers: wheel and independently rebuilt sdist wheel, each
+with protobuf 3.20.0 and 6.33.5. The probe requires an isolated private venv
+(`-I -B`), loads checkout fixtures by explicit filename without changing
+`sys.path`, and records installed SDK, Client, Job method and wire origins/hashes
+in the actual test process. Fixtures are not the SDK under test. No source
+SDK/generated-binding fallback is allowed.
+
+Owned real loopback peers carry canonical request/response bytes. Phase-observed
+virtual clocks exercise completion/report parsing, shared budgets, trickles,
+late success, exhausted polling, Job/protocol/application errors, legacy client
+call shapes, UNKNOWN outcomes without implicit cancel/retry, and peer/socket
+failure unwind. These are contract checks, not measured real-time guarantees.
+The qualifier also deliberately omits the post-JSON expiry guard in one disposable
+installed consumer, requires the intended assertion/nonzero RED (without a peer
+teardown failure or unrelated unittest ERROR), restores exact
+installed package bytes, and requires GREEN. Original artifacts and checkout SDK
+bytes must remain unchanged; combined stdout/stderr and exits are retained.
+Unisolated invocation, absent fixture, missing installed wire, unrelated negative
+failures and unsuccessful restoration fail closed.
+
+This extension is **not** live `mantisd` integration, PR132 composition, OS-level
+isolation, security, hardware, non-Linux/platform or release readiness. Stage A
+packaging evidence and standalone Job evidence retain their original scopes.
+Live-daemon/fault-protocol tests, whole-Issue75 qualification, naming/legal/notice
+review, distribution checks, TestPyPI, signing and production publishing remain
+separate gates. No publishing workflow or remote-network activation is provided.

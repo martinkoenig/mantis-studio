@@ -14,7 +14,14 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(sys.argv.pop(1)).resolve() / "python"))
+sdk_root = sys.argv.pop(1)
+if sdk_root == '--installed-sdk':
+    # Explicit installed qualification mode: no checkout/build SDK search path.
+    # The installed probe verifies module/class/wire origins in this process.
+    if not sys.flags.isolated or sys.prefix == sys.base_prefix:
+        raise RuntimeError('installed fixture requires -I and a private venv')
+else:
+    sys.path.insert(0, str(Path(sdk_root).resolve() / "python"))
 with patch("socket.socket", side_effect=AssertionError("import opened a socket")), \
         patch("socket.create_connection", side_effect=AssertionError("import connected")):
     import mantis
