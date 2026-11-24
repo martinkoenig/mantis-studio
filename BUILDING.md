@@ -266,6 +266,36 @@ binary-only PyYAML. This checks matrix/interpreter/tool/full-suite/evidence wiri
 real shell argv and failure propagation, and representative wrong-wiring controls;
 its launcher fixture does not execute or qualify the selected hosted runtimes.
 
+### Installed SDK with a real local daemon
+
+The existing five Architecture jobs also run `tests/sdk/live_daemon.py` against
+their matching native output (including strict sanitizer settings), without a
+second native build. This is distinct from the controlled peers above. The
+qualifier uses the same pinned Python build tools and creates fresh installed
+consumers for the canonical wheel and an independently rebuilt sdist at both
+protobuf runtime edges. For an already built, matching Linux runtime:
+
+```bash
+python -B tests/sdk/live_daemon_test.py
+python -B tests/ci/live_daemon_workflow_test.py
+python -B tests/sdk/live_daemon.py --runtime build/headless --work-dir build/live75-consumers
+```
+
+Use an unused work directory. The harness selects only the existing virtual
+scanner, example-points and PLY plugins, a private project and an ephemeral
+loopback endpoint; default token authentication is not disabled. Discovery,
+status, completed pipeline/export Jobs and the 3072-point virtual export have
+contract-derived oracles. Wrong/missing authentication, incompatible protocol,
+invalid recipes and post-shutdown refusal must fail as specified. One deliberate
+post-Job exception must retire the actual daemon tree and endpoint before an
+ordinary success run is restored. Output, startup, exchange and owned cleanup
+remain bounded. Sanitized results include installed code, binary and actual
+daemon mapping hashes; private command logs stay in the work directory.
+A passing run qualifies only its exact Linux/runtime/virtual inputs, not physical
+hardware, remote security, another OS, legal rights or publication readiness.
+Timeouts do not cancel or implicitly retry daemon-owned Jobs; outcomes may remain
+UNKNOWN. TestPyPI/PyPI upload and signing are not performed by this harness.
+
 ## Windows and macOS
 
 These remain architecture targets, not verified releases. The platform layer includes Windows dynamic library, process, mapping, locking and socket branches; macOS uses the POSIX branches. Use a C++23 toolchain with `std::expected`, Qt 6.4+, Protobuf, SQLite and nlohmann-json. Native packaging, Unicode path certification on Windows, platform-specific durability testing, and non-Linux CI still need validation. Do not advertise a platform as supported merely because CMake can configure it.
