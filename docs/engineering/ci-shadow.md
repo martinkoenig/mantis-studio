@@ -211,8 +211,8 @@ not emitted. Command values are represented only by a byte digest.
   It is not a preprocessor: conditionals/comments may overapproximate; macros,
   system/generated/unresolved includes stay unknown. Shared headers flow to
   downstream target consumers using the existing policy's worklist.
-- `unresolved`: generated sources/configure inputs, Protobuf/QML/resource
-  generation, fixtures/runtime dependencies, external/unpinned sources/includes,
+- `unresolved`: generated sources/configure inputs, object-library artifacts,
+  Protobuf/QML/resource generation, fixtures/runtime dependencies, external/unpinned sources/includes,
   unsupported languages, missing/unmapped/ambiguous commands and configuration
   coverage remain explicit. Cycles terminate and are reported; absent or omitted
   dependency edges never establish no consumers. Unknown changed paths also

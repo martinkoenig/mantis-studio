@@ -538,6 +538,7 @@ class ConfiguredInventory(unittest.TestCase):
                 self.full(current)
         reasons = self.unknowns(result)
         self.assertTrue({'generated-source-unresolved', 'protobuf-or-qml-generation-unresolved',
+                         'object-artifacts-unresolved',
                          'test-fixture-or-runtime-dependency-unresolved',
                          'preprocessor-and-transitive-closure-unqualified',
                          'dependency-completeness-unqualified'} <= reasons)
@@ -740,6 +741,13 @@ class ConfiguredInventory(unittest.TestCase):
         self.full(result)
 
     def test_missing_source_nonregular_and_bounded_inputs_remain_full(self):
+        object_path, object_doc = self.fixture.target_document(self.inv, 'objects')
+        object_doc['artifacts'] = [{'path': 'CMakeFiles/objects.dir/./core.cpp.o'}]
+        self.repin('build', object_path, object_doc)
+        object_result = self.diagnostic()
+        self.assertEqual(object_result['status'], 'ingested')
+        self.assertIn('object-artifacts-unresolved', self.unknowns(object_result))
+        self.full(object_result)
         self.inv['files'] = [r for r in self.inv['files'] if not
                              (r['root'] == 'source' and r['path'] == 'core.cpp')]
         result = self.diagnostic()

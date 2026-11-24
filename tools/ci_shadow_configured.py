@@ -189,6 +189,12 @@ def import_inputs(inputs, expected, changes):
         names[name] = tid
         if doc['type'] in ('UTILITY', 'INTERFACE_LIBRARY'):
             unknown('noncompiled-target-closure', tid)
+        if doc['type'] == 'OBJECT_LIBRARY':
+            # Real CMake may retain /./ components in object-artifact names.
+            # They are not executable test artifacts. Do not repair paths or
+            # infer a runnable command from them; retain the target edges only.
+            unknown('object-artifacts-unresolved', tid)
+            continue
         for item in records(doc.get('artifacts', [])):
             loc = i.locate(item['path'], 'build')
             check(loc is not None and loc[0] == 'build', 'configured-external-artifact')
