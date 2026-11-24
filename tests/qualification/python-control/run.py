@@ -203,6 +203,8 @@ def main():
               ROOT / "tests/unit/python_capture.py", ROOT / "tests/unit/python_calibration.py",
               ROOT / "tests/contract/protocol_fields.py", ROOT / "tests/contract/boundaries.py",
               ROOT / "tests/ci/python_control_workflow_test.py",
+              ROOT / "tests/ci/python_sdk_workflow_test.py",
+              ROOT / ".github/workflows/python-sdk.yml",
               ROOT / ".github/workflows/python-control.yml", ROOT / "docs/client-sdk/README.md",
               Path(__file__).resolve()]
     inputs = [p for p in inputs if p.name != "mantis_pb2.py"]
@@ -285,6 +287,7 @@ def main():
         command("protocol-fields", [*python, snapshot / "tests/contract/protocol_fields.py", run])
         command("boundaries", [*python, snapshot / "tests/contract/boundaries.py", ROOT])
         command("workflow", [*python, ROOT / "tests/ci/python_control_workflow_test.py", "-v"])
+        command("artifact-workflow", [*python, ROOT / "tests/ci/python_sdk_workflow_test.py", "-v"])
         # Compile without writing pycache or touching source/generated modules.
         for source in [*snapshot.rglob("*.py"), package / "mantis_pb2.py"]:
             compile(source.read_bytes(), str(source), "exec")

@@ -238,10 +238,10 @@ its generated `mantis_pb2.py` remains build output and is not hand-maintained.
 Do not use that source/build path to qualify installed artifacts. The separate
 read-only [Python artifact workflow](.github/workflows/python-sdk.yml) executes
 `tests/sdk/artifacts_test.py` in isolated installed venvs on Linux x86_64
-Python 3.10/3.12/3.14 and native Linux ARM64 Python 3.12,
+Python 3.10/3.11/3.12/3.13/3.14 and native Linux ARM64 Python 3.12,
 including sdist rebuild, schema/wire, deterministic independent-root and negative
 controls. Direct/unpacked-sdist/pip-overlay wheels also execute the real-loopback
-control suite from clean installed prefixes at both protobuf runtime edges;
+control and Job suites from clean installed prefixes at both protobuf runtime edges;
 source-matched paths/hashes and historical-client RED/exact-restored GREEN
 receipts distinguish artifact containment from source-only testing. Peers are not
 `mantisd`; timeout can leave daemon-owned operation outcomes UNKNOWN.
@@ -257,6 +257,14 @@ the same entry point with `--expected-machine x86_64 --expected-python 3.12`
 the source/build trees and the pinned tools from the workflow. Logs and failures
 are retained there. These packaging checks do not replace the five Architecture
 CI jobs or the later live-daemon/fault-protocol and release gates of Issue #75.
+The matrix is a qualification requirement, not proof that a particular revision
+passed. Python 3.11/3.13 require complete actual hosted artifact-suite evidence;
+they are not locally qualified merely by configuring `setup-python`. Local
+Python 3.12/3.14 execution cannot substitute for either missing interpreter.
+The same job runs `python -B tests/ci/python_sdk_workflow_test.py` with pinned
+binary-only PyYAML. This checks matrix/interpreter/tool/full-suite/evidence wiring,
+real shell argv and failure propagation, and representative wrong-wiring controls;
+its launcher fixture does not execute or qualify the selected hosted runtimes.
 
 ## Windows and macOS
 

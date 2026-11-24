@@ -945,7 +945,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--work-dir', required=True, type=Path)
     parser.add_argument('--expected-machine', required=True, choices=('x86_64', 'aarch64'))
-    parser.add_argument('--expected-python', required=True, choices=('3.10', '3.12', '3.14'))
+    parser.add_argument('--expected-python', required=True, choices=('3.10', '3.11', '3.12', '3.13', '3.14'))
     parser.add_argument('--identity-only', action='store_true')
     args, tests = parser.parse_known_args()
     WORK = args.work_dir.resolve()
@@ -958,6 +958,8 @@ if __name__ == '__main__':
     (WORK / 'execution.json').write_text(json.dumps(identity, indent=2) + '\n')
     inputs = [*sorted((REPO / 'sdk/python').rglob('*')), *sorted((REPO / 'tests/sdk').rglob('*')),
               SCHEMA, REPO / '.github/workflows/python-sdk.yml',
+              REPO / 'tests/ci/python_sdk_workflow_test.py',
+              REPO / 'tests/ci/python_control_workflow_test.py',
               *(REPO / name for name in ('tests/unit/python_calibration.py', 'tests/unit/python_capture.py',
                                          'tests/unit/python_control.py', 'tests/unit/python_job.py',
                                          'tests/integration/acceptance.py',

@@ -46,7 +46,7 @@ class Workflow(unittest.TestCase):
         self.assertNotIn('continue-on-error', job)
         self.assertEqual(job['strategy']['fail-fast'], 'false')
         self.assertEqual(job['strategy']['matrix'], {
-            'python': ['3.10', '3.12', '3.14'], 'runner': ['ubuntu-24.04'],
+            'python': ['3.10', '3.11', '3.12', '3.13', '3.14'], 'runner': ['ubuntu-24.04'],
             'machine': ['x86_64'], 'include': [{'python': '3.12',
                 'runner': 'ubuntu-24.04-arm', 'machine': 'aarch64', 'suffix': ' (native ARM64)'}]})
         steps = job['steps']

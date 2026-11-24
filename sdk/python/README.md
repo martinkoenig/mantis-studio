@@ -49,7 +49,7 @@ An sdist is self-contained: unpack it in a new directory and run `python -m buil
 original checkout is required. See `tests/sdk/artifacts_test.py` for executable
 isolated artifact, descriptor, wire and failure regressions.
 
-The Linux workflow retains x86_64 Python 3.10/3.12/3.14 and adds native
+The Linux workflow covers x86_64 Python 3.10/3.11/3.12/3.13/3.14 and native
 `ubuntu-24.04-arm` Python 3.12. Its expected-platform check verifies Linux,
 Python version/machine and interpreter/compiler ELF architecture, selects the
 distribution's installed executable, validates its RECORD digest and executes
