@@ -191,8 +191,8 @@ Path(sys.argv[1]).write_text(json.dumps({'child':child,'group':os.getpgrp()}))
 print('setup partial stdout',flush=True)
 print('setup partial stderr',file=sys.stderr,flush=True)
 mode=sys.argv[2]
-if mode=='cancel':os.kill(os.getppid(),signal.SIGTERM)
-if mode in ('timeout','cancel'):
+if mode.startswith('cancel'):os.kill(os.getppid(),signal.SIGINT if mode=='cancel-int' else signal.SIGTERM)
+if mode=='timeout' or mode.startswith('cancel'):
     while True:signal.pause()
 os._exit(7 if mode.startswith('nonzero') else 0)
 '''
@@ -253,6 +253,133 @@ os._exit(7 if mode.startswith('nonzero') else 0)
         reap_fixture_children()
 
 
+def setup_boundary_probe(mode, root):
+    """Deliver a real signal inside a transaction, not a fake read/spawn error."""
+    import inspect
+    import select
+    import time
+    import shadow_configured_fixture as fixture
+    libc = ctypes.CDLL(None, use_errno=True)
+    def state():
+        value = ctypes.c_int()
+        assert libc.prctl(37, ctypes.byref(value), 0, 0, 0) == 0
+        return value.value, [signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)]
+    before = state()
+    subreaper(True)  # independent owner also contains rejected-helper failures
+    marker = root / 'boundary-entry.json'
+    gate = root / 'boundary-entry.fifo'
+    os.mkfifo(gate)
+    entry = os.open(gate, os.O_RDONLY | os.O_NONBLOCK)
+    launcher = '''import json,os,signal,sys
+from pathlib import Path
+r,w=os.pipe();child=os.fork()
+if child==0:
+    os.close(r)
+    for fd in (0,1,2):os.close(fd)
+    signal.signal(signal.SIGTERM,signal.SIG_IGN)
+    os.write(w,b'entered');os.close(w)
+    while True:signal.pause()
+os.close(w);assert os.read(r,32)==b'entered';os.close(r)
+Path(sys.argv[1]).write_text(json.dumps({'child':child,'group':os.getpgrp()}))
+print('boundary stdout',flush=True)
+print('boundary stderr',file=sys.stderr,flush=True)
+fd=os.open(sys.argv[2],os.O_WRONLY);os.write(fd,b'entered');os.close(fd)
+while True:signal.pause()
+'''
+    signum = signal.SIGINT if mode.endswith('-int') else signal.SIGTERM
+    seen, captured = {}, {}
+    lines, first = inspect.getsourcelines(fixture.run)
+    record_line = first + next(i for i, line in enumerate(lines) if 'destination.extend(block)' in line)
+    read_line = first + next(i for i, line in enumerate(lines) if 'block = os.read(' in line)
+    entered = []
+    def handshake():
+        if not entered:
+            assert select.select([entry], [], [], 1)[0], 'boundary lacks descendant/output entry'
+            assert os.read(entry, 32) == b'entered', 'boundary handshake missing'
+            entered.append(True)
+    def trace(frame, event, arg):
+        if event == 'return' and frame.f_code is subprocess.Popen.__init__.__code__:
+            process = frame.f_locals['self']
+            if getattr(process, 'pid', None) is not None and not captured:
+                captured['process'] = process
+                if mode.startswith('spawn-'):
+                    handshake()
+                    seen['boundary'] = 'successful-spawn-before-handle-publication'
+                    os.kill(os.getpid(), signum)
+        if event == 'line' and frame.f_code.co_filename == fixture.__file__ and frame.f_code.co_name == 'read_stream' and not seen:
+            block = frame.f_locals.get('block', b'')
+            expected = b'boundary stderr' if mode.startswith('read-stderr-') else b'boundary stdout'
+            if mode.startswith('read-') and frame.f_lineno == record_line and expected in block:
+                handshake()
+                seen['boundary'] = 'consumed-read-before-buffer'
+                seen['consumed'] = block.decode()
+                os.kill(os.getpid(), signum)
+            elif mode.startswith('pre-read-') and frame.f_lineno == read_line:
+                # select readiness is observed by the real helper before entry.
+                handshake()
+                seen['boundary'] = 'before-read'
+                os.kill(os.getpid(), signum)
+        return trace
+    original = None
+    started = time.monotonic()
+    try:
+        try:
+            sys.settrace(trace)
+            fixture.run([sys.executable, '-B', '-c', launcher, str(marker), str(gate)],
+                        root, deadline=time.monotonic() + 2)
+        except BaseException as exc:
+            original = exc
+        finally:
+            sys.settrace(None)
+        assert seen, 'real-signal boundary never reached'
+        assert marker.exists(), 'boundary descendant entry not observed'
+        row = json.loads((root / 'producer-commands.jsonl').read_text())
+        ids = json.loads(marker.read_text())
+        # Independent wait status, not merely the helper's receipt/returncode.
+        leader_reaped = child_reaped = group_absent = False
+        try:
+            os.waitid(os.P_PID, captured['process'].pid, os.WEXITED | os.WNOWAIT | os.WNOHANG)
+        except ChildProcessError:
+            leader_reaped = True
+        try:
+            os.waitpid(ids['child'], os.WNOHANG)
+        except ChildProcessError:
+            child_reaped = True
+        try:
+            os.killpg(ids['group'], 0)
+        except ProcessLookupError:
+            group_absent = True
+        receipt = dict(mode=mode, injection=seen, producer=row, leader_reaped=leader_reaped,
+                       child_reaped=child_reaped, group_absent=group_absent,
+                       primary=type(original).__name__, state_restored=state() == (1, before[1]))
+        (root / 'boundary-result.json').write_text(json.dumps(receipt, sort_keys=True))
+        assert leader_reaped and child_reaped and group_absent, 'F3: cancellation crossed spawn ownership publication'
+        assert 'boundary stdout' in row['stdout'], 'F2: cancellation lost consumed stdout before buffering'
+        assert 'boundary stderr' in row['stderr'], 'boundary cancellation lost stderr'
+        assert isinstance(original, KeyboardInterrupt) and str(signum) in str(original), repr(original)
+        assert row['error'] == 'KeyboardInterrupt' and row['reaped_exit'] == -signal.SIGKILL, row
+        assert row['cleanup_errors'] == [], row
+        assert state() == (1, before[1]), 'helper leaked signal/subreaper state'
+        assert time.monotonic() - started < 3, 'boundary cleanup consumed outer CTest budget'
+        print(json.dumps(receipt, sort_keys=True))
+    finally:
+        sys.settrace(None)
+        os.close(entry)
+        # The negative oracle is allowed to fail; its owned tree is not allowed
+        # to escape. Keep the unreaped leader handle until fallback signalling.
+        try:
+            if captured and captured['process'].returncode is None:
+                errors = shadow._retire_owned_group(captured['process'])
+                assert not errors, errors
+            reap_fixture_children()
+            remaining = (Path('/proc/self/task') / str(os.getpid()) / 'children').read_text().strip()
+            assert not remaining, 'boundary owner left an owned child'
+            (root / 'owner-cleanup.json').write_text(json.dumps({'owned_children_absent': True}))
+        finally:
+            subreaper(bool(before[0]))
+        assert state() == before, 'independent owner leaked local state'
+
+
 class ResourceBounds(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mantis-shadow-resource-')
@@ -275,7 +402,10 @@ class ResourceBounds(unittest.TestCase):
         self.assertEqual(ctypes.CDLL(None).prctl(37, ctypes.byref(previous), 0, 0, 0), 0)
         subreaper(True)
         try:
-            for mode in ('success', 'nonzero', 'success-open', 'nonzero-open', 'timeout', 'cancel'):
+            modes = ('success', 'nonzero', 'success-open', 'nonzero-open', 'timeout', 'cancel', 'cancel-int',
+                     'pre-read-term', 'pre-read-int', 'read-term', 'read-int',
+                     'read-stderr-term', 'read-stderr-int', 'spawn-term', 'spawn-int')
+            for mode in modes:
                 with self.subTest(mode=mode):
                     root = self.root / mode
                     root.mkdir()
@@ -323,6 +453,44 @@ class ResourceBounds(unittest.TestCase):
         self.assertEqual(row['error'], 'TimeoutExpired')
         self.assertIsNone(row['exit'])
         self.assertEqual(row['cleanup_errors'], [])
+        # Cancellation arriving during cleanup must neither vanish on success nor
+        # replace an already established command/timeout error. A second signal
+        # cannot interrupt retirement, output draining or receipt publication.
+        for outcome in ('success', 'nonzero', 'timeout'):
+            with self.subTest(cleanup_cancellation=outcome):
+                root = self.root / ('late-' + outcome)
+                root.mkdir()
+                sent = []
+                def trace(frame, event, arg):
+                    if frame.f_code is shadow._retire_owned_group.__code__ and event == 'return' and not sent:
+                        sent.append(True)
+                        os.kill(os.getpid(), signal.SIGTERM)
+                        os.kill(os.getpid(), signal.SIGINT)
+                    return trace
+                script = "import sys,time;print('late stdout',flush=True);print('late stderr',file=sys.stderr,flush=True);"
+                script += 'time.sleep(10)' if outcome == 'timeout' else 'sys.exit(' + ('7' if outcome == 'nonzero' else '0') + ')'
+                expected = {'success': KeyboardInterrupt, 'nonzero': subprocess.CalledProcessError,
+                            'timeout': subprocess.TimeoutExpired}[outcome]
+                try:
+                    sys.settrace(trace)
+                    with self.assertRaises(expected) as caught:
+                        fixture.run([sys.executable, '-B', '-c', script], root,
+                                    deadline=time.monotonic() + 0.4)
+                finally:
+                    sys.settrace(None)
+                self.assertTrue(sent, 'late cancellation boundary not reached')
+                row = json.loads((root / 'producer-commands.jsonl').read_text())
+                self.assertEqual(row['error'], expected.__name__)
+                self.assertEqual(row['cancellation_signal'], signal.SIGTERM)
+                self.assertEqual(row['cleanup_errors'], [])
+                self.assertIn('late stdout', row['stdout'])
+                self.assertIn('late stderr', row['stderr'])
+                if outcome == 'nonzero':
+                    self.assertEqual(caught.exception.returncode, 7)
+                if outcome != 'success':
+                    self.assertIn(b'late stdout', caught.exception.output)
+                    self.assertIn(b'late stderr', caught.exception.stderr)
+                self.assertEqual(state(), before, 'late cancellation leaked local state')
 
     def test_imports_acquire_no_process_network_or_data_file(self):
         script = '''import os, sys
@@ -473,6 +641,9 @@ if __name__=='__main__':
     elif len(sys.argv)==5 and sys.argv[1]=='--inventory-probe':
         inventory_probe(Path(sys.argv[2]),Path(sys.argv[3]),Path(sys.argv[4]))
     elif len(sys.argv)==4 and sys.argv[1]=='--setup-probe':
-        setup_probe(sys.argv[2], Path(sys.argv[3]))
+        if sys.argv[2].startswith(('pre-read-', 'read-', 'spawn-')):
+            setup_boundary_probe(sys.argv[2], Path(sys.argv[3]))
+        else:
+            setup_probe(sys.argv[2], Path(sys.argv[3]))
     else:
         unittest.main()

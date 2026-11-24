@@ -48,13 +48,22 @@ def run(command, root, *, deadline=None, env=None):
     code = None
     cleanup = []
     handlers = {}
+    cancellation_signal = None
     previous_subreaper = ctypes.c_int()
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.prctl(37, ctypes.byref(previous_subreaper), 0, 0, 0) != 0:
         raise RuntimeError('tiny setup subreaper query failed')
 
     def cancelled(signum, frame):
-        raise KeyboardInterrupt('tiny setup cancelled by signal ' + str(signum))
+        # Never raise across Popen's construction/handle publication or a
+        # destructive read/buffer handoff. Both must finish before unwinding.
+        nonlocal cancellation_signal
+        if cancellation_signal is None:
+            cancellation_signal = signum
+
+    def check_cancelled():
+        if cancellation_signal is not None:
+            raise KeyboardInterrupt('tiny setup cancelled by signal ' + str(cancellation_signal))
 
     def read_stream(stream, destination):
         block = os.read(stream.fileno(), min(8192, MAX_OUTPUT_BYTES + 1 - len(destination)))
@@ -68,11 +77,13 @@ def run(command, root, *, deadline=None, env=None):
             handlers[signum] = signal.signal(signum, cancelled)
         if libc.prctl(36, 1, 0, 0, 0) != 0:
             raise RuntimeError('tiny setup subreaper unavailable')
+        check_cancelled()
         if time.monotonic() >= deadline:
             raise subprocess.TimeoutExpired(command, 0, output=b'', stderr=b'')
         process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    start_new_session=True)
+        check_cancelled()  # ownership is published before observing cancellation
         assert process.stdout is not None and process.stderr is not None
         leader_fd = os.pidfd_open(process.pid)
         with selectors.DefaultSelector() as ready:
@@ -81,16 +92,22 @@ def run(command, root, *, deadline=None, env=None):
                 os.set_blocking(stream.fileno(), False)
                 ready.register(stream, selectors.EVENT_READ, data)
             while code is None:
+                check_cancelled()
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise subprocess.TimeoutExpired(command, deadline - started)
-                for key, _ in ready.select(remaining):
+                # Non-raising Python handlers can restart select (PEP475).
+                # Bound observation latency, not the campaign/cleanup deadline.
+                events = ready.select(min(0.05, remaining))
+                check_cancelled()
+                for key, _ in events:
                     if key.data is None:
                         status = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
                         assert status is not None, 'tiny setup leader status unavailable'
                         code = status.si_status if status.si_code == os.CLD_EXITED else -status.si_status
                     elif not read_stream(key.fileobj, key.data):
                         ready.unregister(key.fileobj)
+                    check_cancelled()  # any consumed bytes are already buffered
             # Leader exit is NOT pipe EOF: descendants may retain either stream.
             # Drain only currently available bounded output, then retire the tree.
             for stream, data in ((process.stdout, output), (process.stderr, diagnostic)):
@@ -98,16 +115,17 @@ def run(command, root, *, deadline=None, env=None):
                     try:
                         if not read_stream(stream, data):
                             break
+                        check_cancelled()
                     except BlockingIOError:
                         break
+        check_cancelled()
         if code:
             raise subprocess.CalledProcessError(code, command, bytes(output), bytes(diagnostic))
     finally:
         primary = sys.exc_info()[1]
-        # A second cancellation must not interrupt retirement; original handlers
-        # are restored below. No signals are sent outside this owned group.
-        for signum in handlers:
-            signal.signal(signum, signal.SIG_IGN)
+        # The non-raising handler remains active through retirement and draining.
+        # Preserve the first error; a late cancellation is recorded, never lost.
+        # No signals are sent outside this owned group.
         if process is not None:
             cleanup.extend(shadow._retire_owned_group(process))
         if leader_fd is not None:
@@ -136,14 +154,17 @@ def run(command, root, *, deadline=None, env=None):
             cleanup.append('tiny-setup-subreaper-restore-failed')
         for signum, handler in handlers.items():
             signal.signal(signum, handler)
-        if isinstance(primary, subprocess.TimeoutExpired):
+        late_cancel = primary is None and cancellation_signal is not None
+        if late_cancel:
+            primary = KeyboardInterrupt('tiny setup cancelled by signal ' + str(cancellation_signal))
+        if isinstance(primary, (subprocess.TimeoutExpired, subprocess.CalledProcessError)):
             primary.output, primary.stderr = bytes(output), bytes(diagnostic)
         row = {'argv': list(map(str, command)), 'exit': code,
                'reaped_exit': process.returncode if process is not None else None,
                'error': type(primary).__name__ if primary else None,
                'stdout': output.decode(errors='replace'), 'stderr': diagnostic.decode(errors='replace'),
                'cleanup_errors': cleanup, 'elapsed_seconds': time.monotonic() - started,
-               'deadline_seconds': deadline - started}
+               'deadline_seconds': deadline - started, 'cancellation_signal': cancellation_signal}
         try:
             with (root / 'producer-commands.jsonl').open('a') as stream:
                 stream.write(json.dumps(row, sort_keys=True) + '\n')
@@ -155,6 +176,9 @@ def run(command, root, *, deadline=None, env=None):
             if primary is None:
                 raise AssertionError('tiny setup retirement unconfirmed: ' + ','.join(cleanup))
             primary.add_note('tiny setup cleanup: ' + ','.join(cleanup))
+        if late_cancel:
+            assert primary is not None
+            raise primary
     return bytes(output)
 
 

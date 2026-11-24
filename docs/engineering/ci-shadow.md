@@ -127,6 +127,18 @@ partial bounded stdout/stderr, exit status, elapsed/budget and separate cleanup
 errors on success, nonzero, timeout and cancellation. Receipt failure cannot
 replace an initiating command error.
 
+The tiny helper's TERM/INT handlers record cancellation without raising inside
+spawn/ownership publication or destructive-read/buffer transactions. Explicit
+safe points observe it only after the handle or bytes have been retained; a
+50 ms maximum selector wait bounds observation of otherwise idle cancellation
+(Python can restart interrupted selectors). This does not extend the campaign
+or cleanup deadline. The handler remains non-raising through retirement/draining:
+late cancellation is reported, but cannot replace an earlier error. Real TERM/INT
+boundary regressions handshake descendant entry and inject at successful spawn
+return before handle assignment and after stdout/stderr consumption before
+buffering. Independent wait/group oracles and exact output markers detect both
+ownership and diagnostic loss, including safe unwind of rejected implementations.
+
 Configured diagnostic controls additionally configure and serially compile an owned tiny
 multi-target fixture with Ninja and Ninja Multi-Config, and obtain real CTest JSON
 with `--show-only=json-v1`. They never execute fixture test commands or product
