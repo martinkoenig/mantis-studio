@@ -115,9 +115,19 @@ Graph controls exercise equivalent favorable/unfavorable chain renamings through
 the actual CLI, count dependency visits independently of elapsed time, and verify
 reachable/unreachable cycles, complete reasons and invalid/stale input recovery.
 Resource controls use gated owned Python descendants and real FIFO/symlink/
-descriptor races. Fixture-local subreaper ownership exists only in disposable
-probe processes, with failure unwind reaping their own children. Configured
-diagnostic controls additionally configure and serially compile an owned tiny
+descriptor races. Probe owners adopt/reap only their own descendants, including
+on assertion failure. The tiny setup helper also scopes Linux subreaper ownership
+and TERM/INT cancellation handlers to each owned command and restores both. It
+observes leader exit without reaping, retires the owned process group before
+releasing its identity, and reaps adopted descendants even when a successful or
+failed leader leaves inherited streams open or closed. Bounded cleanup reuses
+the collector's group-retirement primitive; this is not escaped-session or
+hostile-process containment. Setup receipts retain the initiating exception,
+partial bounded stdout/stderr, exit status, elapsed/budget and separate cleanup
+errors on success, nonzero, timeout and cancellation. Receipt failure cannot
+replace an initiating command error.
+
+Configured diagnostic controls additionally configure and serially compile an owned tiny
 multi-target fixture with Ninja and Ninja Multi-Config, and obtain real CTest JSON
 with `--show-only=json-v1`. They never execute fixture test commands or product
 targets. CMake, CTest, Ninja and a C++ compiler are required for this extension.
@@ -125,7 +135,10 @@ No installation or external network is used. Fixture-local commits/config/refs a
 repository. The same modules are registered as `ci-shadow-collection` and
 `ci-shadow-resources` in Linux CTest configurations with `BUILD_TESTING=ON`,
 including Studio ON/OFF and sanitizers. They use the configured Python interpreter
-and retain their internal bounded fixture deadlines. The collector and reader
+and retain the unchanged outer CTest30. Both configured fixture producers share
+one 12-second campaign deadline (including their intervening diagnostic checks),
+with at most two additional seconds for owned-group cleanup on failure, rather
+than resetting a 30-second timer for every setup command. The collector and reader
 modules acquire no processes, network connections or inventory data on import;
 regressions audit import and ensure uncertain inventory cleanup blocks further
 Git acquisition. These regressions do not replace any applicable native final check.

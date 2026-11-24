@@ -166,6 +166,93 @@ def inventory_probe(tools, path, output):
     output.write_text(json.dumps(result))
 
 
+def setup_probe(mode, root):
+    """Independent owner/oracle around the actual tiny setup helper."""
+    import shadow_configured_fixture as fixture
+    import time
+    subreaper(True)
+    marker = root / 'setup-entry.json'
+    # Child acknowledges closed streams and installed TERM disposition before
+    # the leader publishes identities. No sleep guesses descendant entry.
+    launcher = '''import json,os,signal,sys
+from pathlib import Path
+r,w=os.pipe()
+child=os.fork()
+if child==0:
+    os.close(r)
+    for fd in ((0,) if sys.argv[2].endswith('-open') else (0,1,2)):os.close(fd)
+    signal.signal(signal.SIGTERM,signal.SIG_IGN)
+    os.write(w,b'entered');os.close(w)
+    while True:signal.pause()
+os.close(w)
+assert os.read(r,32)==b'entered'
+os.close(r)
+Path(sys.argv[1]).write_text(json.dumps({'child':child,'group':os.getpgrp()}))
+print('setup partial stdout',flush=True)
+print('setup partial stderr',file=sys.stderr,flush=True)
+mode=sys.argv[2]
+if mode=='cancel':os.kill(os.getppid(),signal.SIGTERM)
+if mode in ('timeout','cancel'):
+    while True:signal.pause()
+os._exit(7 if mode.startswith('nonzero') else 0)
+'''
+    original = None
+    result = None
+    started = time.monotonic()
+    try:
+        try:
+            command = [sys.executable, '-B', '-c', launcher, str(marker), mode]
+            if mode in ('success', 'nonzero', 'success-open', 'nonzero-open'):
+                result = fixture.run(command, root)
+            else:
+                result = fixture.run(command, root, deadline=time.monotonic() + 0.4)
+        except BaseException as exc:
+            original = exc
+        assert marker.exists(), 'setup descendant never entered controlled state'
+        ids = json.loads(marker.read_text())
+        # A reaped child is stronger than kill(pid,0): zombies are not retirement.
+        try:
+            waited, _ = os.waitpid(ids['child'], os.WNOHANG)
+        except ChildProcessError:
+            pass
+        else:
+            raise AssertionError('setup descendant survived or was not reaped: ' + str(waited))
+        try:
+            os.killpg(ids['group'], 0)
+        except ProcessLookupError:
+            pass
+        else:
+            raise AssertionError('setup group still exists after helper return')
+        rows = [json.loads(line) for line in (root / 'producer-commands.jsonl').read_text().splitlines()]
+        assert len(rows) == 1, 'missing or duplicate setup receipt'
+        row = rows[0]
+        assert 'setup partial stdout' in row['stdout'], 'partial stdout lost'
+        assert 'setup partial stderr' in row['stderr'], 'partial stderr lost'
+        assert row['cleanup_errors'] == [], row
+        if mode.startswith('success'):
+            assert original is None and result == b'setup partial stdout\n', repr(original)
+            assert row['exit'] == 0 and row['error'] is None, row
+        elif mode.startswith('nonzero'):
+            assert isinstance(original, subprocess.CalledProcessError) and original.returncode == 7, repr(original)
+            assert row['exit'] == 7 and row['error'] == 'CalledProcessError', row
+        elif mode == 'timeout':
+            assert isinstance(original, subprocess.TimeoutExpired), repr(original)
+            assert row['error'] == 'TimeoutExpired', row
+            assert original.output is not None and b'setup partial stdout' in original.output
+            assert original.stderr is not None and b'setup partial stderr' in original.stderr
+            assert row['reaped_exit'] == -signal.SIGKILL, row
+        else:
+            assert isinstance(original, KeyboardInterrupt), repr(original)
+            assert row['error'] == 'KeyboardInterrupt', row
+        assert time.monotonic() - started < 3, 'cleanup consumed outer CTest budget'
+        print(json.dumps({'setup_control': mode, 'descendant_entry': True, 'group_absent': True,
+                          'child_reaped': True, 'primary': row['error'], 'partial_output': True}))
+    finally:
+        if marker.exists():
+            reap_owned(json.loads(marker.read_text())['child'])
+        reap_fixture_children()
+
+
 class ResourceBounds(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mantis-shadow-resource-')
@@ -183,6 +270,60 @@ class ResourceBounds(unittest.TestCase):
         print(json.dumps({'group_control':receipt},sort_keys=True))
         return receipt
 
+    def test_tiny_setup_owns_descendants_and_retains_failures(self):
+        previous = ctypes.c_int()
+        self.assertEqual(ctypes.CDLL(None).prctl(37, ctypes.byref(previous), 0, 0, 0), 0)
+        subreaper(True)
+        try:
+            for mode in ('success', 'nonzero', 'success-open', 'nonzero-open', 'timeout', 'cancel'):
+                with self.subTest(mode=mode):
+                    root = self.root / mode
+                    root.mkdir()
+                    process = subprocess.run([sys.executable, '-B', str(Path(__file__)),
+                                              '--setup-probe', mode, str(root)],
+                                             capture_output=True, text=True, timeout=5)
+                    self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+                    print(process.stdout, end='')
+        finally:
+            # If a regressed helper exceeds the external bound, run() reaps the
+            # probe, and this independent owner adopts/retires its descendants.
+            # Never leave the negative's grandchildren to the host's PID1.
+            try:
+                reap_fixture_children()
+            finally:
+                subreaper(bool(previous.value))
+
+    def test_tiny_setup_preserves_primary_and_restores_local_state(self):
+        import shadow_configured_fixture as fixture
+        import time
+        libc = ctypes.CDLL(None, use_errno=True)
+        def state():
+            value = ctypes.c_int()
+            self.assertEqual(libc.prctl(37, ctypes.byref(value), 0, 0, 0), 0)
+            return value.value, [signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)]
+        before = state()
+        command = [sys.executable, '-B', '-c', "import sys;print('evidence',flush=True);sys.exit(9)"]
+        # A real logging failure after a real child failure cannot replace it.
+        (self.root / 'producer-commands.jsonl').mkdir()
+        with self.assertRaises(subprocess.CalledProcessError) as caught:
+            fixture.run(command, self.root)
+        self.assertEqual(caught.exception.returncode, 9)
+        self.assertEqual(caught.exception.output, b'evidence\n')
+        self.assertTrue(any('receipt failed' in n for n in caught.exception.__notes__))
+        self.assertEqual(state(), before, 'process-local containment state leaked')
+        (self.root / 'producer-commands.jsonl').rmdir()
+        # Expired campaign budget must not start a fresh command/per-command clock.
+        marker = self.root / 'should-not-launch'
+        with self.assertRaises(subprocess.TimeoutExpired):
+            fixture.run([sys.executable, '-c', 'from pathlib import Path;Path(' + repr(str(marker)) + ').touch()'],
+                        self.root, deadline=time.monotonic() - 1)
+        self.assertFalse(marker.exists())
+        self.assertEqual(state(), before)
+        row = json.loads((self.root / 'producer-commands.jsonl').read_text())
+        self.assertEqual(row['error'], 'TimeoutExpired')
+        self.assertIsNone(row['exit'])
+        self.assertEqual(row['cleanup_errors'], [])
+
     def test_imports_acquire_no_process_network_or_data_file(self):
         script = '''import os, sys
 sys.path.insert(0, sys.argv[1])
@@ -196,8 +337,10 @@ def audit(event, args):
             raise AssertionError('non-module file opened on import')
 sys.addaudithook(audit)
 import ci_shadow, ci_shadow_inventory, ci_shadow_policy, ci_shadow_configured
+sys.path.insert(0, sys.argv[2])
+import shadow_configured_fixture
 '''
-        result = subprocess.run([sys.executable, '-I', '-B', '-c', script, str(TOOLS)],
+        result = subprocess.run([sys.executable, '-I', '-B', '-c', script, str(TOOLS), str(Path(__file__).parent)],
                                 capture_output=True, timeout=5)
         self.assertEqual(result.returncode, 0, result.stderr.decode())
         self.assertEqual(result.stdout, b'')
@@ -329,5 +472,7 @@ if __name__=='__main__':
         group_probe(int(sys.argv[2]),sys.argv[3],Path(sys.argv[4]))
     elif len(sys.argv)==5 and sys.argv[1]=='--inventory-probe':
         inventory_probe(Path(sys.argv[2]),Path(sys.argv[3]),Path(sys.argv[4]))
+    elif len(sys.argv)==4 and sys.argv[1]=='--setup-probe':
+        setup_probe(sys.argv[2], Path(sys.argv[3]))
     else:
         unittest.main()

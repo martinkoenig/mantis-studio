@@ -8,7 +8,16 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
+import sys
+import time
+import selectors
+
+# Both real configurations share this campaign budget, not one deadline per
+# command. Two seconds of bounded retirement remain inside the outer CTest30.
+SETUP_SECONDS = 12
+MAX_OUTPUT_BYTES = 1_048_576
 
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'shadow-configured'
@@ -22,48 +31,161 @@ def encode(value):
     return (json.dumps(value, sort_keys=True, indent=2) + '\n').encode()
 
 
-def run(command, root):
-    completed = subprocess.run(command, capture_output=True, timeout=30)
-    logs = root / 'producer-commands.jsonl'
-    with logs.open('a') as stream:
-        stream.write(json.dumps({'argv': list(map(str, command)), 'exit': completed.returncode,
-                                 'stdout': completed.stdout.decode(), 'stderr': completed.stderr.decode()}) + '\n')
-    if completed.returncode:
-        raise AssertionError('tiny fixture setup failed: ' + completed.stderr.decode())
-    return completed.stdout
+def run(command, root, *, deadline=None, env=None):
+    """Own only trusted tiny setup commands; never imported inventory commands.
+
+    Linux-only like the containing CTests. Keep the leader unreaped until group
+    signalling, adopt/reap its orphans, and restore process-local state. This is
+    cooperative fixture containment, not a hostile-process/security supervisor.
+    """
+    import ctypes
+    import ci_shadow as shadow
+    started = time.monotonic()
+    deadline = started + SETUP_SECONDS if deadline is None else deadline
+    output, diagnostic = bytearray(), bytearray()
+    process = None
+    leader_fd = None
+    code = None
+    cleanup = []
+    handlers = {}
+    previous_subreaper = ctypes.c_int()
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(37, ctypes.byref(previous_subreaper), 0, 0, 0) != 0:
+        raise RuntimeError('tiny setup subreaper query failed')
+
+    def cancelled(signum, frame):
+        raise KeyboardInterrupt('tiny setup cancelled by signal ' + str(signum))
+
+    def read_stream(stream, destination):
+        block = os.read(stream.fileno(), min(8192, MAX_OUTPUT_BYTES + 1 - len(destination)))
+        destination.extend(block)
+        if len(destination) > MAX_OUTPUT_BYTES:
+            raise AssertionError('tiny setup output limit exceeded')
+        return block
+
+    try:
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            handlers[signum] = signal.signal(signum, cancelled)
+        if libc.prctl(36, 1, 0, 0, 0) != 0:
+            raise RuntimeError('tiny setup subreaper unavailable')
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(command, 0, output=b'', stderr=b'')
+        process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   start_new_session=True)
+        assert process.stdout is not None and process.stderr is not None
+        leader_fd = os.pidfd_open(process.pid)
+        with selectors.DefaultSelector() as ready:
+            ready.register(leader_fd, selectors.EVENT_READ, None)
+            for stream, data in ((process.stdout, output), (process.stderr, diagnostic)):
+                os.set_blocking(stream.fileno(), False)
+                ready.register(stream, selectors.EVENT_READ, data)
+            while code is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(command, deadline - started)
+                for key, _ in ready.select(remaining):
+                    if key.data is None:
+                        status = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+                        assert status is not None, 'tiny setup leader status unavailable'
+                        code = status.si_status if status.si_code == os.CLD_EXITED else -status.si_status
+                    elif not read_stream(key.fileobj, key.data):
+                        ready.unregister(key.fileobj)
+            # Leader exit is NOT pipe EOF: descendants may retain either stream.
+            # Drain only currently available bounded output, then retire the tree.
+            for stream, data in ((process.stdout, output), (process.stderr, diagnostic)):
+                while time.monotonic() < deadline:
+                    try:
+                        if not read_stream(stream, data):
+                            break
+                    except BlockingIOError:
+                        break
+        if code:
+            raise subprocess.CalledProcessError(code, command, bytes(output), bytes(diagnostic))
+    finally:
+        primary = sys.exc_info()[1]
+        # A second cancellation must not interrupt retirement; original handlers
+        # are restored below. No signals are sent outside this owned group.
+        for signum in handlers:
+            signal.signal(signum, signal.SIG_IGN)
+        if process is not None:
+            cleanup.extend(shadow._retire_owned_group(process))
+        if leader_fd is not None:
+            try:
+                os.close(leader_fd)
+            except OSError:
+                cleanup.append('tiny-setup-handle-close-failed')
+        if process is not None:
+            for stream, data in ((process.stdout, output), (process.stderr, diagnostic)):
+                if stream is None:
+                    continue
+                try:
+                    os.set_blocking(stream.fileno(), False)
+                    while read_stream(stream, data):
+                        pass
+                except BlockingIOError:
+                    pass
+                except (OSError, AssertionError) as exc:
+                    cleanup.append('tiny-setup-output-drain-failed:' + type(exc).__name__)
+                finally:
+                    try:
+                        stream.close()
+                    except OSError:
+                        cleanup.append('tiny-setup-handle-close-failed')
+        if libc.prctl(36, previous_subreaper.value, 0, 0, 0) != 0:
+            cleanup.append('tiny-setup-subreaper-restore-failed')
+        for signum, handler in handlers.items():
+            signal.signal(signum, handler)
+        if isinstance(primary, subprocess.TimeoutExpired):
+            primary.output, primary.stderr = bytes(output), bytes(diagnostic)
+        row = {'argv': list(map(str, command)), 'exit': code,
+               'reaped_exit': process.returncode if process is not None else None,
+               'error': type(primary).__name__ if primary else None,
+               'stdout': output.decode(errors='replace'), 'stderr': diagnostic.decode(errors='replace'),
+               'cleanup_errors': cleanup, 'elapsed_seconds': time.monotonic() - started,
+               'deadline_seconds': deadline - started}
+        try:
+            with (root / 'producer-commands.jsonl').open('a') as stream:
+                stream.write(json.dumps(row, sort_keys=True) + '\n')
+        except OSError as exc:
+            if primary is None:
+                raise
+            primary.add_note('tiny setup receipt failed: ' + type(exc).__name__)
+        if cleanup:
+            if primary is None:
+                raise AssertionError('tiny setup retirement unconfirmed: ' + ','.join(cleanup))
+            primary.add_note('tiny setup cleanup: ' + ','.join(cleanup))
+    return bytes(output)
 
 
-def produce(root, generator='Ninja'):
+def produce(root, generator='Ninja', *, deadline=None):
+    deadline = time.monotonic() + SETUP_SECONDS if deadline is None else deadline
     source, build = root / 'source', root / 'build'
     shutil.copytree(FIXTURE, source)
     env = dict(os.environ, GIT_AUTHOR_NAME='Fixture', GIT_AUTHOR_EMAIL='fixture@example.invalid',
                GIT_COMMITTER_NAME='Fixture', GIT_COMMITTER_EMAIL='fixture@example.invalid',
                GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
     for args in (['init', '--template=', '-b', 'develop'], ['add', '.'], ['commit', '-m', 'tiny configured source']):
-        p = subprocess.run(['git', '-C', str(source), '-c', 'core.hooksPath=' + os.devnull, *args],
-                           env=env, capture_output=True, timeout=10)
-        if p.returncode:
-            raise AssertionError(p.stderr.decode())
-    base = run(['git', '-C', str(source), 'rev-parse', 'HEAD'], root).decode().strip()
+        run(['git', '-C', str(source), '-c', 'core.hooksPath=' + os.devnull, *args],
+            root, env=env, deadline=deadline)
+    base = run(['git', '-C', str(source), 'rev-parse', 'HEAD'], root, deadline=deadline).decode().strip()
     # Independent real committed diff for the full CLI composition.
     with (source / 'public.hpp').open('a') as stream:
         stream.write('// changed shared interface\n')
     for args in (['add', '.'], ['commit', '-m', 'shared contract change']):
-        p = subprocess.run(['git', '-C', str(source), *args], env=env, capture_output=True, timeout=10)
-        if p.returncode:
-            raise AssertionError(p.stderr.decode())
-    commit = run(['git', '-C', str(source), 'rev-parse', 'HEAD'], root).decode().strip()
-    tree = run(['git', '-C', str(source), 'rev-parse', 'HEAD^{tree}'], root).decode().strip()
+        run(['git', '-C', str(source), *args], root, env=env, deadline=deadline)
+    commit = run(['git', '-C', str(source), 'rev-parse', 'HEAD'], root, deadline=deadline).decode().strip()
+    tree = run(['git', '-C', str(source), 'rev-parse', 'HEAD^{tree}'], root, deadline=deadline).decode().strip()
     query = build / '.cmake/api/v1/query'
     query.mkdir(parents=True)
     for kind in ('codemodel-v2', 'cmakeFiles-v1', 'cache-v2'):
         (query / kind).touch()
     run(['cmake', '-S', str(source), '-B', str(build), '-G', generator,
-         '-DCMAKE_BUILD_TYPE=Debug'], root)
+         '-DCMAKE_BUILD_TYPE=Debug'], root, deadline=deadline)
     # Tiny executable artifacts are needed for CTest's real command expansion.
     # One compiler only; never run these test executables.
-    run(['cmake', '--build', str(build), '--config', 'Debug', '--parallel', '1'], root)
-    ctest = run(['ctest', '--test-dir', str(build), '-C', 'Debug', '--show-only=json-v1'], root)
+    run(['cmake', '--build', str(build), '--config', 'Debug', '--parallel', '1'], root, deadline=deadline)
+    ctest = run(['ctest', '--test-dir', str(build), '-C', 'Debug', '--show-only=json-v1'], root, deadline=deadline)
     (build / 'ctest.json').write_bytes(ctest)
     indexes = list((build / '.cmake/api/v1/reply').glob('index-*.json'))
     if len(indexes) != 1:

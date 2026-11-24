@@ -477,7 +477,9 @@ class ConfiguredInventory(unittest.TestCase):
                 print(json.dumps({'retained_configured_fixture': str(dest)}))
             cls.temp.cleanup()
         cls.addClassCleanup(retire)
-        cls.original, cls.path, cls.base = fixture.produce(cls.root)
+        import time
+        cls.setup_deadline = time.monotonic() + fixture.SETUP_SECONDS
+        cls.original, cls.path, cls.base = fixture.produce(cls.root, deadline=cls.setup_deadline)
         cls.original_bytes = {(row['root'], row['path']):
                               (Path(cls.original['roots'][row['root']]) / row['path']).read_bytes()
                               for row in cls.original['files']}
@@ -775,7 +777,7 @@ class ConfiguredInventory(unittest.TestCase):
 
     def test_real_multi_configuration_is_explicitly_unqualified(self):
         root = self.root / 'multi'; root.mkdir()
-        inv, path, _ = self.fixture.produce(root, 'Ninja Multi-Config')
+        inv, path, _ = self.fixture.produce(root, 'Ninja Multi-Config', deadline=self.setup_deadline)
         result = self.configured.diagnose(path, self.fixture.digest(path.read_bytes()), inv['source'],
                                          [{'path': 'transitive.hpp'}])
         self.assertEqual(result['status'], 'ingested', result)
