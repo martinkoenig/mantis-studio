@@ -759,6 +759,11 @@ class ConfiguredInventory(unittest.TestCase):
             candidates = [self.path, self.root / 'shadow.json', self.root / 'observation.json',
                           self.root / 'peer-observation.json', self.root / 'static.json',
                           *(Path(self.inv['roots'][row['root']]) / row['path'] for row in self.inv['files'])]
+            for case in corpus.get('cases', []):
+                for key in ('shadow', 'configured_inputs', 'observation', 'static_inventory'):
+                    ref = case.get(key)
+                    if isinstance(ref, dict) and self.configured.relative(ref.get('path')):
+                        candidates.append(self.root / ref['path'])
             files = {str(p): retain(p.read_bytes()) for p in candidates
                      if p.exists() and stat.S_ISREG(p.lstat().st_mode)}
             receipt = {'entrypoint': command if cli else 'ci_shadow_corpus.compare',
@@ -853,6 +858,8 @@ class ConfiguredInventory(unittest.TestCase):
                 batch['cases'].append(row)
             result = self.compare_corpus(batch)
             self.assertEqual(result['status'], 'compared', result)
+            self.assertEqual([c['kind'] for c in result['cases']],
+                             ['caller-assertion', 'causally-adjudicated', 'controlled-fixture', 'historical-unadjudicated'])
             for case in result['cases']:
                 with self.subTest(kind=case['kind'], test_ids=test_ids):
                     self.assertEqual(case['diagnostic']['state'], 'HIT' if test_ids else 'UNKNOWN')
