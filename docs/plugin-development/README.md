@@ -37,6 +37,15 @@ implement against today.
 
 The stable boundary is [`sdk/c/include/mantis/plugin.h`](../../sdk/c/include/mantis/plugin.h). The header is compiled by a C-only contract test. [`sdk/cpp/include/mantis/sdk.hpp`](../../sdk/cpp/include/mantis/sdk.hpp) provides RAII buffer ownership and exception containment without exporting C++ objects.
 
+## Standalone installed SDK (internal Stage A)
+
+The [standalone SDK entry point](../../sdk/README.md) provides a header-only,
+relocatable CMake package for private-prefix C/C++ consumers without configuring
+the product or locating Qt/Protobuf. It documents exact-version `find_package`,
+imported targets, install/relocation qualification and the remaining product-host,
+shipping-layout, platform and release gates. This is not production installed-host
+qualification or whole Issue #76 acceptance.
+
 ## Entry and interfaces
 
 Export `mantis_plugin_entry(requested_abi)`. Return `nullptr` for an unsupported ABI. The root table includes its byte size, ABI version, UTF-8 identity/version, initialize/shutdown functions, and `query_interface`.
