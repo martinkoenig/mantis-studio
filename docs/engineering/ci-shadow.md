@@ -160,7 +160,7 @@ repository. The same modules are registered as `ci-shadow-collection` and
 `ci-shadow-resources` in Linux CTest configurations with `BUILD_TESTING=ON`,
 including Studio ON/OFF and sanitizers. They use the configured Python interpreter
 and retain the unchanged outer CTest30. Both configured fixture producers share
-one 12-second campaign deadline (including their intervening diagnostic checks),
+one 12-second setup campaign deadline (including intervening input pinning),
 with at most two additional seconds for owned-group cleanup on failure, rather
 than resetting a 30-second timer for every setup command. The collector and reader
 modules acquire no processes, network connections or inventory data on import;
@@ -262,6 +262,113 @@ isolation, runtime coverage or performance qualification. `closure_complete` and
 `execution_authorized` are always false; `full_matrix_would_select` is always true.
 Every existing required local and remote gate remains binding. No workflow,
 ruleset, scheduler, selection activation or skipped-test policy is changed.
+
+## Pinned impact corpus replay (opt-in, record-only)
+
+```sh
+python3 -B tools/ci_shadow_corpus.py --corpus PRIVATE_CORPUS.json \
+  --corpus-sha256 CORPUS_SHA256
+```
+
+This companion consumes **saved** `mantis-git-shadow-v2` CLI manifests and the
+original pinned configured-input closure. It does not acquire Git history,
+configure/build anything, execute imported commands, run tests, fetch artifacts
+or contact a network. The existing collector CLI and schemas are unchanged.
+The replay explicitly rejects v1/unknown envelopes, incomplete acquisition and
+unsupported comparison/observation schemas. As with the collector, exit zero
+means bounded JSON evidence was emitted, **not** that inputs were admitted or
+any test/qualification passed. Usage errors are nonzero. Inspect `status` and
+`errors`; a rejected corpus emits **no partial cases**.
+
+### Caller-pinned corpus and observations
+
+`ci110-impact-corpus-v1` has exactly `schema` and `cases`. Each case has exactly:
+
+- `id`: unique bounded label.
+- `context`: the exact fields `event`, `ref`, `identities`, `tested_commit`,
+  `configuration`, `generator`, `configured_manifest_sha256` and
+  `test_inventory_sha256`. Copy acquisition event/ref/identities/tested commit
+  from the saved manifest. Identities include commit, tree and ordered parents;
+  a PR must pin base, branch head **and the actual two-parent tested merge**.
+  Pushes pin base and head. Configuration/generator must match the imported
+  codemodel. Pin the raw configured manifest digest and SHA256 of canonical
+  `ci_shadow_policy.canonical(configured_diagnostic['tests'])` bytes.
+- `shadow`, `configured_inputs`, `observation`: each exactly
+  `{ "path": RELATIVE_FILE, "sha256": SHA256 }`, relative to the corpus directory.
+  The configured input manifest and its roots/files retain the preceding schema.
+  Supply the exact original regular files, not a newly discovered latest reply.
+
+`ci110-impact-observation-v1` has exactly `schema`, `context`, `kind`, `origin`,
+`trust`, `test_ids`, `basis`. `context` must equal the case's fully pinned
+context. `test_ids` is a unique list of registered identifiers or `null` for
+unknown; no executable commands are supplied here. `origin` and `basis` are
+bounded labels for the caller's evidence/adjudication reference, not executable
+instructions or a claimed verified signature. Retain supporting evidence with
+the caller's private archive. `trust` must be `caller-asserted-unverified`.
+
+The four `kind` labels are deliberately separate:
+
+- `controlled-fixture`: independently specified controlled consumer expectation.
+- `causally-adjudicated`: caller-reported causal adjudication, **not authenticated
+  or independently adjudicated by this tool**.
+- `caller-assertion`: an assertion without causal qualification.
+- `historical-unadjudicated`: observed failed tests without an established causal
+  relation to this change. A failed CI job alone is not causal ground truth.
+
+All labels remain caller assertions. An available historical case requires the
+actual pinned public source/base/head/tested-merge identities and original
+configured/observation evidence closure; do not synthesize missing history from
+a later green run. This slice supplies controlled fixtures, **not** a historical
+product corpus. Historical recall, dependency completeness and product closure
+remain unqualified when that original context is unavailable.
+
+### Comparison and fail-closed limits
+
+Replay revalidates the raw diff encoding/digest/count, tested source context,
+configured input closure and exact saved diagnostic against the unchanged
+`ci_shadow_configured.diagnose/project` and `ci_shadow_policy.closure` path.
+It never trusts serialized impacted IDs as the answer. Byte/context consistency
+is not proof of producer authenticity, Git-object existence during replay, dirty
+source equivalence, CTest execution or completeness of the supplied evidence.
+The independent expectation must not be derived from the diagnostic being tested.
+
+`ci110-impact-comparison-v1` reports sorted per-case diagnostic `hits`, `misses`,
+`denominator` and `state` (`HIT`, `MISS` or `UNKNOWN`), separately from
+`full_would_select_test_ids` and `full_observation_coverage`. FULL is always
+counterfactual selection, **not executed coverage**. A diagnostic MISS remains a
+MISS even when unconditional FULL would cover the identifier. Nonempty fixture
+and caller-adjudicated expectations alone have a reported `causal_denominator`;
+caller assertions and historical observations never acquire one. Empty and
+unknown expectations have null denominators and UNKNOWN state, never 100%.
+Group hit/miss counts are partitioned by kind; no pooled or historical causal
+recall, precision, safe-omission or speedup percentage is claimed. All group
+`causal_recall` values and `historical_causal_recall` remain UNKNOWN.
+
+Bounds are eight cases, 8192 distinct files, 2,000,000 bytes per file, 16,000,000
+aggregate bytes across the entire corpus/manifest/observation/configured closure,
+and 2,000,000 output bytes. The existing owned worker enforces a five-second
+command deadline and bounded cleanup/output. Symlink ancestry/leaves, unsafe or
+traversing references, nonregular/missing files, duplicate keys/cases/tests,
+unsupported versions, wrong source/configuration/test identities, stale saved
+projections, mutated evidence and oversized/truncated input reject the whole
+corpus. A final whole-input identity and digest recheck detects cooperative
+mutation; this is **not** OS-enforced read-only isolation or hostile-host security.
+Only canonical results and fixed error codes are emitted, never raw paths,
+commands, cache contents, parser exceptions or logs. Screen outputs before
+publication.
+
+The existing collection/resource Python entrypoints cover real Git/CMake/CTest
+metadata, independently named consumer hits, dropped-edge MISS despite FULL,
+unrelated-consumer assertions, PR tested-merge mismatch, all observation kinds,
+empty/unknown/invalid evidence, deterministic multi-case ordering, whole-input
+mutation and read-only/inert-command/import behavior. Both existing tiny
+producers finish together within the unchanged shared setup12 budget before
+replay cases; outer CTest30 and all prior assertions remain unchanged. Exhaustive
+parser variations use the actual worker function, while representative valid,
+invalid, nonregular, stale and restoration cases run the real supervised CLI.
+No additional CTest family, workflow, filtering, local-final-gate change or
+product/native execution is introduced. `execution_authorized=false`,
+`closure_complete=false` and unconditional FULL remain binding.
 
 ## Integration boundary
 

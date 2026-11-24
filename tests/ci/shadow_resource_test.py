@@ -649,7 +649,7 @@ def audit(event, args):
         if not isinstance(path, str) or not path.endswith(('.py', '.pyc', '.so')) or flags & writes:
             raise AssertionError('non-module file opened on import')
 sys.addaudithook(audit)
-import ci_shadow, ci_shadow_inventory, ci_shadow_policy, ci_shadow_configured
+import ci_shadow, ci_shadow_inventory, ci_shadow_policy, ci_shadow_configured, ci_shadow_corpus
 sys.path.insert(0, sys.argv[2])
 import shadow_configured_fixture
 '''

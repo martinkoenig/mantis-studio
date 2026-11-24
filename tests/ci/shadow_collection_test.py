@@ -483,6 +483,10 @@ class ConfiguredInventory(unittest.TestCase):
         cls.original_bytes = {(row['root'], row['path']):
                               (Path(cls.original['roots'][row['root']]) / row['path']).read_bytes()
                               for row in cls.original['files']}
+        # Finish BOTH existing producers under the same unchanged setup12 budget.
+        # Replay/negative cases are not setup and must not delay producer two.
+        multi_root = cls.root / 'multi'; multi_root.mkdir()
+        cls.multi_inputs = fixture.produce(multi_root, 'Ninja Multi-Config', deadline=cls.setup_deadline)
 
     def setUp(self):
         self.inv = self.copy(self.original)
@@ -612,6 +616,287 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(merged['configured_diagnostic']['source']['commit'], merge)
         self.assertEqual(merged['configured_diagnostic']['impacted_test_ids'], ['app-contract'])
         self.full(merged['configured_diagnostic'])
+        corpus, _ = self.corpus_case(shadow_raw=self.fixture.encode(merged))
+        compared = self.compare_corpus(corpus)
+        self.assertEqual(compared['status'], 'compared', compared)
+        self.assertEqual(compared['cases'][0]['context']['tested_commit'], merge)
+        self.assertEqual(compared['cases'][0]['diagnostic']['hits'], ['app-contract'])
+        corpus['cases'][0]['context']['tested_commit'] = self.original['source']['commit']
+        self.assertEqual(self.compare_corpus(corpus)['errors'], ['corpus-evidence-context-mismatch'])
+
+    def corpus_case(self, shadow_raw=None):
+        """Independent app/peer expectations; never derived from impacted IDs."""
+        self.diagnostic()
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', self.inv['roots']['source'],
+                   '--event', 'push', '--ref', 'refs/heads/develop', '--base', self.base,
+                   '--head', self.inv['source']['commit'], '--configured-inputs', str(self.path),
+                   '--configured-inputs-sha256', self.fixture.digest(self.path.read_bytes())]
+        if shadow_raw is None:
+            run = subprocess.run(command, capture_output=True, timeout=10, check=True)
+            self.assertEqual(run.stderr, b'')
+            shadow_raw = run.stdout
+        manifest = json.loads(shadow_raw)
+        (self.root / 'shadow.json').write_bytes(shadow_raw)
+        diag = manifest['configured_diagnostic']
+        context = {'event': manifest['acquisition']['event'], 'ref': manifest['acquisition']['ref'],
+                   'identities': manifest['acquisition']['identities'],
+                   'tested_commit': manifest['acquisition']['tested_commit'],
+                   'configuration': 'Debug', 'generator': 'Ninja',
+                   'configured_manifest_sha256': self.fixture.digest(self.path.read_bytes()),
+                   'test_inventory_sha256': self.fixture.digest(self.fixture.encode(diag['tests']))}
+        observation = {'schema': 'ci110-impact-observation-v1', 'context': context,
+                       'kind': 'controlled-fixture', 'origin': 'owned-tiny-consumer-contract',
+                       'trust': 'caller-asserted-unverified', 'test_ids': ['app-contract'],
+                       'basis': 'independent-cmake-link-consumer-expectation'}
+        def pin(name, raw):
+            (self.root / name).write_bytes(raw)
+            return {'path': name, 'sha256': self.fixture.digest(raw)}
+        case = {'id': 'header-app', 'context': context,
+                'shadow': {'path': 'shadow.json', 'sha256': self.fixture.digest(shadow_raw)},
+                'configured_inputs': {'path': 'inputs.json', 'sha256': self.fixture.digest(self.path.read_bytes())},
+                'observation': pin('observation.json', self.fixture.encode(observation))}
+        return {'schema': 'ci110-impact-corpus-v1', 'cases': [case]}, observation
+
+    def compare_corpus(self, corpus, *, cli=True):
+        raw = self.fixture.encode(corpus)
+        path = self.root / 'corpus.json'; path.write_bytes(raw)
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow_corpus.py'), '--corpus', str(path),
+                   '--corpus-sha256', self.fixture.digest(raw)]
+        if cli:
+            output = self.root / 'corpus-probe.json'
+            run = subprocess.run([sys.executable, '-B', str(Path(__file__)), '--graph-probe', str(output),
+                                  *command], capture_output=True, timeout=15, check=True)
+            self.assertEqual(run.stderr, b'')
+            owned = json.loads(output.read_text())
+            self.assertTrue(owned['owned_children_reaped'])
+            self.assertFalse(owned['timeout'], 'comparison exceeded the owned CLI deadline')
+            self.assertEqual(owned['exit'], 0, 'comparison CLI must emit record-only evidence: ' + owned['stderr'])
+            self.assertEqual(owned['stderr'], '')
+            text = owned['stdout']
+        else:
+            # Exhaustive parser cases share the actual worker entrypoint; real
+            # CLI composition/containment is exercised separately, not mocked.
+            import ci_shadow_corpus as comparison
+            text = self.fixture.encode(comparison.compare(path, self.fixture.digest(raw))).decode()
+        result = json.loads(text)
+        for root in self.inv['roots'].values():
+            self.assertNotIn(root, text)
+        self.full(result)
+        evidence = os.environ.get('MANTIS_SHADOW_CONFIGURED_EVIDENCE')
+        if evidence:
+            archive = Path(evidence) / 'corpus-replays'
+            archive.mkdir(parents=True, exist_ok=True)
+            blob_root = archive / 'blobs'; blob_root.mkdir(exist_ok=True)
+            def retain(data):
+                digest = self.fixture.digest(data)
+                blob = blob_root / digest
+                if not blob.exists():
+                    blob.write_bytes(data)
+                return digest
+            import stat
+            candidates = [self.path, self.root / 'shadow.json', self.root / 'observation.json',
+                          self.root / 'peer-observation.json',
+                          *(Path(self.inv['roots'][row['root']]) / row['path'] for row in self.inv['files'])]
+            files = {str(p): retain(p.read_bytes()) for p in candidates
+                     if p.exists() and stat.S_ISREG(p.lstat().st_mode)}
+            receipt = {'entrypoint': command if cli else 'ci_shadow_corpus.compare',
+                       'corpus_sha256': retain(raw), 'result_sha256': retain(text.encode()),
+                       'input_candidate_snapshots': files,
+                       'snapshot_limit': 'candidate bytes retained after call; not proof all were consumed',
+                       'interpreter': sys.executable}
+            receipt_path = archive / ('replay-%04d.json' % len(list(archive.glob('replay-*.json'))))
+            receipt_path.write_bytes(self.fixture.encode(receipt))
+        return result
+
+    def test_corpus_cli_independent_hit_unrelated_and_full_separation(self):
+        corpus, observation = self.corpus_case()
+        result = self.compare_corpus(corpus)
+        self.assertEqual(result['status'], 'compared', result)
+        case = result['cases'][0]
+        self.assertEqual(case['diagnostic'], {'hits': ['app-contract'], 'misses': [],
+                         'denominator': 1, 'state': 'HIT'})
+        self.assertEqual(case['diagnostic_impacted_test_ids'], ['app-contract'])
+        self.assertEqual(case['full_would_select_test_ids'], ['app-contract', 'fixture-setup', 'peer-contract'])
+        self.assertEqual(result, self.compare_corpus(corpus), 'replay output must be deterministic')
+        # A second independent consumer is unrelated to this header: FULL must
+        # cover it counterfactually, while diagnostics retain the mismatch.
+        other = self.copy(corpus['cases'][0]); other['id'] = 'unrelated-peer'
+        observation.update(test_ids=['peer-contract'], kind='caller-assertion')
+        raw = self.fixture.encode(observation)
+        (self.root / 'peer-observation.json').write_bytes(raw)
+        other['observation'] = {'path': 'peer-observation.json', 'sha256': self.fixture.digest(raw)}
+        corpus['cases'].insert(0, other)
+        mixed = self.compare_corpus(corpus)
+        self.assertEqual([c['id'] for c in mixed['cases']], ['header-app', 'unrelated-peer'])
+        self.assertEqual(mixed['cases'][1]['diagnostic']['misses'], ['peer-contract'])
+        self.assertEqual(mixed['cases'][1]['full_observation_coverage']['hits'], ['peer-contract'])
+        self.assertEqual(mixed['groups']['controlled-fixture']['hits'], 1)
+        self.assertEqual(mixed['groups']['controlled-fixture']['misses'], 0)
+        self.assertEqual(mixed['groups']['caller-assertion']['misses'], 1)
+        self.assertIsNone(mixed['cases'][1]['causal_denominator'])
+        corpus['cases'].reverse()
+        reordered = self.compare_corpus(corpus)
+        self.assertEqual(reordered['cases'], mixed['cases'])
+        self.assertEqual(reordered['groups'], mixed['groups'])
+
+    def test_corpus_dropped_real_edge_miss_is_not_hidden_by_full(self):
+        corpus, _ = self.corpus_case()
+        path, middle = self.fixture.target_document(self.inv, 'middle')
+        app_path, app = self.fixture.target_document(self.inv, 'app')
+        _, core = self.fixture.target_document(self.inv, 'core')
+        middle['dependencies'] = []
+        app['dependencies'] = [d for d in app['dependencies'] if d['id'] != core['id']]
+        self.repin('build', path, middle)
+        self.repin('build', app_path, app)
+        dropped, _ = self.corpus_case()
+        result = self.compare_corpus(dropped)
+        self.assertEqual(result['status'], 'compared', result)
+        case = result['cases'][0]
+        self.assertEqual(case['diagnostic'], {'hits': [], 'misses': ['app-contract'],
+                         'denominator': 1, 'state': 'MISS'},
+                         'FULL conflation concealed the independently known dropped consumer')
+        self.assertEqual(case['full_observation_coverage']['hits'], ['app-contract'])
+        self.assertEqual(case['reason'], 'diagnostic-edge-miss-despite-unconditional-FULL')
+        self.assertEqual(result['groups']['controlled-fixture']['misses'], 1)
+        self.restore(); self.changed = []; self.inv = self.copy(self.original)
+        restored, _ = self.corpus_case()
+        self.assertEqual(restored, corpus, 'exact input restoration changed evidence identities')
+        self.assertEqual(self.compare_corpus(restored)['cases'][0]['diagnostic']['state'], 'HIT')
+
+    def test_corpus_observation_kinds_empty_unknown_and_unknown_test(self):
+        corpus, observation = self.corpus_case()
+        for kind in ('controlled-fixture', 'causally-adjudicated', 'caller-assertion', 'historical-unadjudicated'):
+            for test_ids in (['app-contract'], [], None):
+                with self.subTest(kind=kind, test_ids=test_ids):
+                    observation.update(kind=kind, test_ids=test_ids)
+                    raw = self.fixture.encode(observation)
+                    (self.root / 'observation.json').write_bytes(raw)
+                    corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(raw)
+                    result = self.compare_corpus(corpus)
+                    self.assertEqual(result['status'], 'compared', result)
+                    case = result['cases'][0]
+                    self.assertEqual(case['diagnostic']['state'], 'HIT' if test_ids else 'UNKNOWN')
+                    self.assertEqual(case['causal_denominator'],
+                                     1 if test_ids and kind in ('controlled-fixture', 'causally-adjudicated') else None)
+                    self.assertEqual(result['historical_causal_recall'], 'UNKNOWN')
+                    self.assertTrue(all(g['coverage_claim'] == 'NONE' for g in result['groups'].values()))
+        observation['test_ids'] = ['never-registered']
+        raw = self.fixture.encode(observation); (self.root / 'observation.json').write_bytes(raw)
+        corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(raw)
+        bad = self.compare_corpus(corpus)
+        self.assertEqual(bad['status'], 'rejected')
+        self.assertEqual(bad['cases'], [], 'partial results escaped invalid corpus')
+        self.assertEqual(bad['errors'], ['corpus-unknown-or-duplicate-test'])
+        empty = self.compare_corpus({'schema': 'ci110-impact-corpus-v1', 'cases': []})
+        self.assertEqual(empty['status'], 'compared')
+        self.assertEqual(empty['cases'], [])
+        self.assertTrue(all(g['causal_recall'] == 'UNKNOWN' for g in empty['groups'].values()))
+
+    def test_corpus_rejects_invalid_stale_unsafe_and_partial_evidence(self):
+        import ci_shadow_corpus as comparison
+        corpus, observation = self.corpus_case()
+        original_observation = self.fixture.encode(observation)
+        good = self.compare_corpus(corpus)
+        cases = []
+        bad = self.copy(corpus); bad['schema'] = 'future-v9'; cases.append(bad)
+        bad = self.copy(corpus); bad['cases'] *= 2; cases.append(bad)
+        bad = self.copy(corpus); bad['cases'] *= 9; cases.append(bad)
+        for key, value in [('configuration', 'Release'), ('generator', 'Other'), ('tested_commit', '0' * 40),
+                           ('test_inventory_sha256', '0' * 64), ('configured_manifest_sha256', '0' * 64)]:
+            bad = self.copy(corpus); bad['cases'][0]['context'][key] = value; cases.append(bad)
+        bad = self.copy(corpus); bad['cases'][0]['context']['identities']['head']['tree'] = '0' * 40; cases.append(bad)
+        for path in ('../escape.json', '/absolute.json', 'https://invalid.example/input', 'sub/../shadow.json'):
+            bad = self.copy(corpus); bad['cases'][0]['shadow']['path'] = path; cases.append(bad)
+        bad = self.copy(corpus); bad['cases'][0]['shadow']['sha256'] = '0' * 64; cases.append(bad)
+        bad = self.copy(corpus); bad['cases'][0]['shadow']['path'] = 'missing.json'; cases.append(bad)
+        link = self.root / 'linked.json'; link.symlink_to(self.root / 'shadow.json')
+        bad = self.copy(corpus); bad['cases'][0]['shadow']['path'] = link.name; cases.append(bad)
+        fifo = self.root / 'corpus-fifo'; os.mkfifo(fifo)
+        bad = self.copy(corpus); bad['cases'][0]['shadow']['path'] = fifo.name; cases.append(bad)
+        for index, bad in enumerate(cases):
+            result = self.compare_corpus(bad, cli=index in (0, len(cases) - 3, len(cases) - 2, len(cases) - 1))
+            self.assertEqual(result['status'], 'rejected', bad)
+            self.assertEqual(result['cases'], [], 'partial corpus escaped rejection')
+        for raw in (b'{', b'[]', b'{"schema":1,"schema":2}', b'{"v":NaN}'):
+            path = self.root / 'malformed.json'; path.write_bytes(raw)
+            result = comparison.compare(path, self.fixture.digest(raw))
+            self.assertEqual(result['status'], 'rejected')
+            self.full(result)
+        for change in ('stale-context', 'duplicate-test', 'unsupported-kind', 'missing-basis'):
+            bad = self.copy(observation)
+            if change == 'stale-context': bad['context']['configuration'] = 'Release'
+            elif change == 'duplicate-test': bad['test_ids'] *= 2
+            elif change == 'unsupported-kind': bad['kind'] = 'trusted-history'
+            else: bad.pop('basis')
+            raw = self.fixture.encode(bad); (self.root / 'observation.json').write_bytes(raw)
+            corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(raw)
+            self.assertEqual(self.compare_corpus(corpus)['status'], 'rejected', change)
+        (self.root / 'observation.json').write_bytes(original_observation)
+        corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(original_observation)
+        # Repinned stale serialized projection must be rejected, not trusted.
+        raw = (self.root / 'shadow.json').read_bytes(); saved = json.loads(raw)
+        malformed = []
+        for key, value in [('schema', 'mantis-git-shadow-v1'), ('execution_authorized', True)]:
+            bad = self.copy(saved); bad[key] = value; malformed.append(bad)
+        for key, value in [('tested_commit', '0' * 40), ('errors', ['missing-evidence']),
+                           ('privileged_access', True)]:
+            bad = self.copy(saved); bad['acquisition'][key] = value; malformed.append(bad)
+        for key, value in [('complete', False), ('bytes', True), ('sha256', '0' * 64), ('record_count', 0)]:
+            bad = self.copy(saved); bad['acquisition']['diff'][key] = value; malformed.append(bad)
+        for key, value in [('full_matrix_would_select', False), ('activation_qualified', True),
+                           ('schema', 'future-v9')]:
+            bad = self.copy(saved); bad['decision'][key] = value; malformed.append(bad)
+        for bad in malformed:
+            bad_raw = self.fixture.encode(bad); (self.root / 'shadow.json').write_bytes(bad_raw)
+            corpus['cases'][0]['shadow']['sha256'] = self.fixture.digest(bad_raw)
+            rejected = self.compare_corpus(corpus, cli=False)
+            self.assertEqual(rejected['status'], 'rejected', bad)
+            self.assertEqual(rejected['cases'], [])
+        saved['configured_diagnostic']['impacted_test_ids'] = []
+        stale = self.fixture.encode(saved); (self.root / 'shadow.json').write_bytes(stale)
+        corpus['cases'][0]['shadow']['sha256'] = self.fixture.digest(stale)
+        self.assertEqual(self.compare_corpus(corpus)['errors'], ['corpus-stale-or-mismatched-shadow'])
+        (self.root / 'shadow.json').write_bytes(raw)
+        corpus['cases'][0]['shadow']['sha256'] = self.fixture.digest(raw)
+        self.assertEqual(self.compare_corpus(corpus), good, 'invalid input contaminated restored replay')
+
+    def test_corpus_snapshot_mutation_bounds_read_only_and_inert_data(self):
+        import ci_shadow_corpus as comparison
+        corpus, observation = self.corpus_case()
+        before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in
+                  [self.path, self.root / 'shadow.json', self.root / 'observation.json',
+                   *(Path(self.inv['roots'][row['root']]) / row['path'] for row in self.inv['files'])]}
+        self.compare_corpus(corpus)
+        self.assertEqual(before, {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in before})
+        path = self.root / 'corpus.json'; digest = self.fixture.digest(path.read_bytes())
+        for name, value in (('MAX_TOTAL_BYTES', 1), ('MAX_FILES', 1), ('MAX_CASES', 0)):
+            with patch.object(comparison, name, value):
+                self.assertEqual(comparison.compare(path, digest)['status'], 'rejected', name)
+        with patch.object(shadow, 'MAX_INVENTORY_BYTES', 1):
+            self.assertEqual(comparison.compare(path, digest)['errors'], ['corpus-output-limit'])
+        original = comparison.compare_case
+        def mutate(*args):
+            result = original(*args)
+            p = self.root / 'observation.json'
+            p.write_bytes(p.read_bytes() + b' ')
+            return result
+        with patch.object(comparison, 'compare_case', mutate):
+            result = comparison.compare(path, digest)
+        self.assertEqual(result['status'], 'rejected')
+        self.assertEqual(result['errors'], ['corpus-input-mutated'])
+        self.assertEqual(result['cases'], [])
+        (self.root / 'observation.json').write_bytes(before[self.root / 'observation.json'][0])
+        # Real imported command is inert. Independently expect an unmapped test
+        # to MISS diagnostic impact even though FULL still covers its identifier.
+        ctest = json.loads(self.original_bytes['build', 'ctest.json'])
+        marker = self.root / 'corpus-command-never-ran'
+        next(t for t in ctest['tests'] if t['name'] == 'app-contract')['command'] = [
+            sys.executable, '-c', 'from pathlib import Path; Path(' + repr(str(marker)) + ').touch()']
+        self.repin('build', 'ctest.json', ctest)
+        inert, _ = self.corpus_case()
+        result = self.compare_corpus(inert)
+        self.assertEqual(result['cases'][0]['diagnostic']['misses'], ['app-contract'])
+        self.assertFalse(marker.exists(), 'corpus replay executed an imported command')
 
     def test_identity_pins_configuration_roots_missing_and_stale(self):
         cases = []
@@ -776,8 +1061,7 @@ class ConfiguredInventory(unittest.TestCase):
             self.full(result)
 
     def test_real_multi_configuration_is_explicitly_unqualified(self):
-        root = self.root / 'multi'; root.mkdir()
-        inv, path, _ = self.fixture.produce(root, 'Ninja Multi-Config', deadline=self.setup_deadline)
+        inv, path, _ = self.multi_inputs
         result = self.configured.diagnose(path, self.fixture.digest(path.read_bytes()), inv['source'],
                                          [{'path': 'transitive.hpp'}])
         self.assertEqual(result['status'], 'ingested', result)
