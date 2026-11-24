@@ -38,6 +38,19 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def preserve_secondary(failure, message):
+    """Retain primary identity/errno/traceback and render secondary diagnostics.
+
+    Chaining works on Python3.10 too; mutating args loses OSError diagnostics,
+    while add_note is unavailable on that supported runtime.
+    """
+    diagnostic = RuntimeError(message)
+    diagnostic.__cause__ = failure.__cause__
+    diagnostic.__suppress_context__ = True
+    failure.__cause__ = diagnostic
+    failure.__suppress_context__ = True
+
+
 def _retire_group(process, reaped):
     # The leader may already have exited on TERM. Its owned group still needs
     # escalation, and orphaned descendants adopted by this runner need reaping.
@@ -389,9 +402,8 @@ class Artifacts(unittest.TestCase):
                 restoration_errors.append(f'receipt write failed: {error}')
         if failure is not None:
             if restoration_errors:
-                # Keep the initiating category/traceback, including on Python3.10.
-                failure.args = (str(failure) + '\ninstalled Job restoration also failed: ' +
-                                '; '.join(restoration_errors),)
+                preserve_secondary(failure, 'installed Job restoration also failed: ' +
+                                   '; '.join(restoration_errors))
             raise failure
         self.assertEqual(restoration_errors, [], 'installed Job restoration failed')
 
@@ -426,7 +438,7 @@ class Artifacts(unittest.TestCase):
             except BaseException as cleanup:
                 if failure is None:
                     raise
-                failure.args = (str(failure) + '\ninstalled wire restoration also failed: ' + str(cleanup),)
+                preserve_secondary(failure, 'installed wire restoration also failed: ' + str(cleanup))
         if failure is not None:
             raise failure
         self.assertEqual(module.read_bytes(), original)

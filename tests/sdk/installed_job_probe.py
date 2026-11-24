@@ -30,6 +30,7 @@ CONTROLS = (
     'test_daemon_application_error_retains_all_fields',
     'test_peer_exception_is_propagated',
     'test_assertion_unwind_releases_peer_before_join',
+    'test_primary_and_peer_failures_preserve_rendered_diagnostics',
     'test_transport_failure_survives_socket_close_failure',
     'test_close_failure_is_not_hidden_after_success_or_protocol_failure',
 )

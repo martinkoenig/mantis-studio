@@ -60,7 +60,13 @@ Owned real loopback peers carry canonical request/response bytes. Phase-observed
 virtual clocks exercise completion/report parsing, shared budgets, trickles,
 late success, exhausted polling, Job/protocol/application errors, legacy client
 call shapes, UNKNOWN outcomes without implicit cancel/retry, and peer/socket
-failure unwind. These are contract checks, not measured real-time guarantees.
+failure unwind. A synchronized combined exchange/peer failure checks primary
+identity, errno and traceback plus rendered secondary diagnostics and owned
+socket/listener/thread retirement, including the existing Python3.10 CI consumer.
+Restoration/receipt failure controls use real errno-bearing exceptions and
+rendered exception chains; diagnostics do not depend on Python3.11 `add_note`
+or on changing `OSError.args`. These are contract checks, not measured real-time
+guarantees.
 The qualifier also deliberately omits the post-JSON expiry guard in one disposable
 installed consumer, requires the intended assertion/nonzero RED (without a peer
 teardown failure or unrelated unittest ERROR), restores exact

@@ -2,9 +2,11 @@
 
 These do not substitute for the real installed peer/mutant executions.
 """
+import errno
 import importlib.util
 from pathlib import Path
 import tempfile
+import traceback
 import unittest
 from unittest.mock import patch
 
@@ -32,6 +34,7 @@ class SensitivityFailures(unittest.TestCase):
         self.work.start()
         self.addCleanup(self.work.stop)
         self.qualifier = artifacts.Artifacts()
+        self.qualifier.wheel = self.wheel
 
     def test_primary_and_secondary_failures_survive_exact_restoration(self):
         initiating = PermissionError('primary command failure')
@@ -39,7 +42,8 @@ class SensitivityFailures(unittest.TestCase):
             with self.assertRaises(PermissionError) as caught:
                 self.qualifier.installed_job_sensitivity(self.python, self.wheel)
         self.assertIs(caught.exception, initiating)
-        self.assertIn('restore probe failure', str(caught.exception))
+        self.assertIn('restore probe failure', ''.join(traceback.format_exception(
+            type(caught.exception), caught.exception, caught.exception.__traceback__)))
         self.assertEqual(self.module.read_bytes(), self.original)
         self.assertEqual(self.wheel.read_bytes(), b'synthetic-artifact-identity')
 
@@ -50,8 +54,68 @@ class SensitivityFailures(unittest.TestCase):
             with self.assertRaises(RuntimeError) as caught:
                 self.qualifier.installed_job_sensitivity(self.python, self.wheel)
         self.assertIs(caught.exception, initiating)
-        self.assertIn('receipt failure', str(caught.exception))
+        self.assertIn('receipt failure', ''.join(traceback.format_exception(
+            type(caught.exception), caught.exception, caught.exception.__traceback__)))
         self.assertEqual(self.module.read_bytes(), self.original)
+
+    def test_errno_primary_restore_and_receipt_failures_are_rendered(self):
+        initiating = PermissionError(errno.EACCES, 'primary executable access failure')
+        initiating.__cause__ = ValueError('preceding root cause')
+        original_args = initiating.args
+        calls = []
+        def fail_command(*args, **kwargs):
+            calls.append(args)
+            if len(calls) == 1:
+                raise initiating
+            raise OSError(errno.EIO, 'restore probe failure')
+        with patch.object(artifacts, 'command', side_effect=fail_command), \
+                patch.object(Path, 'write_text', side_effect=OSError(errno.ENOSPC, 'receipt failure')):
+            try:
+                self.qualifier.installed_job_sensitivity(self.python, self.wheel)
+            except PermissionError as caught:
+                self.assertIs(caught, initiating)
+                self.assertEqual(caught.errno, errno.EACCES)
+                self.assertEqual(caught.args, original_args)
+                rendered = ''.join(traceback.format_exception(type(caught), caught, caught.__traceback__))
+                self.assertIn('preceding root cause', rendered)
+                self.assertIn('fail_command', rendered)  # initiating traceback survives
+                self.assertIn('installed Job restoration also failed', rendered)
+                self.assertIn('restore probe failure', rendered)
+                self.assertIn('receipt failure', rendered)
+                self.assertIn('primary executable access failure', rendered)
+            else:
+                self.fail('primary exception was lost')
+        self.assertEqual(self.module.read_bytes(), self.original)
+        self.assertFalse((self.root / 'installed-job-sensitivity.json').exists())
+        self.assertEqual(self.wheel.read_bytes(), b'synthetic-artifact-identity')
+
+    def test_errno_missing_wire_restoration_failure_is_rendered(self):
+        wire = self.package / 'mantis_pb2.py'
+        wire.write_bytes(b'original wire')
+        initiating = PermissionError(errno.EACCES, 'primary installed probe failure')
+        restore = OSError(errno.EIO, 'wire restore failure')
+        write_bytes = Path.write_bytes
+        def fail_restore(path, data):
+            if path == wire:
+                raise restore
+            return write_bytes(path, data)
+        with patch.object(artifacts, 'install', return_value=self.python), \
+                patch.object(artifacts, 'command', side_effect=[
+                    'installed Job probe requires -I and a private venv',
+                    'FileNotFoundError python_control.py', initiating]), \
+                patch.object(Path, 'write_bytes', fail_restore):
+            try:
+                self.qualifier.test_installed_job_adapter_rejects_unisolated_and_absent_fixtures()
+            except PermissionError as caught:
+                self.assertIs(caught, initiating)
+                self.assertEqual(caught.errno, errno.EACCES)
+                rendered = ''.join(traceback.format_exception(type(caught), caught, caught.__traceback__))
+                self.assertIn('installed wire restoration also failed', rendered)
+                self.assertIn('wire restore failure', rendered)
+                self.assertIn('primary installed probe failure', rendered)
+            else:
+                self.fail('primary exception was lost')
+        self.assertFalse(wire.exists())  # Failed restoration is not relabeled GREEN.
 
     def test_unrelated_nonzero_is_not_the_intended_negative(self):
         with patch.object(artifacts, 'command', side_effect=['ImportError: absent fixture', 'restored GREEN']):
