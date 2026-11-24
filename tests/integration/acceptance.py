@@ -35,6 +35,9 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         state = client.snapshot()
         observations.append(capture_evidence(state))
         return state
+    daemon_binary = build / "bin/mantisd"
+    if "--daemon" in sys.argv:
+        daemon_binary = Path(sys.argv[sys.argv.index("--daemon") + 1]).resolve()
     def start():
         def ready(process):
             for _ in range(100):
@@ -46,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
                     return
                 except (OSError, mantis.MantisError): time.sleep(0.05)
             raise AssertionError("Daemon startup timeout")
-        return daemons.start_ready([str(build / "bin/mantisd"), "--project", str(root / "Project.mantis")],
+        return daemons.start_ready([str(daemon_binary), "--project", str(root / "Project.mantis")],
                                    ready=ready, env=env, stdout=log, stderr=log)
     def cli(*args):
         return json.loads(subprocess.check_output([str(build / "bin/mantis-cli"), *args], env=env, text=True))

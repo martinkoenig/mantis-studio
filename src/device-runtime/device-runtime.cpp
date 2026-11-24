@@ -1,4 +1,5 @@
 #include "qualification-test.hpp"
+#include "recorder-diagnostics.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <exception>
@@ -189,6 +190,7 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                  std::function<void(data::Published)> record, LogSink logger)
     : descriptor_(std::move(descriptor)), streams_(std::move(streams)), record_(std::move(record)),
       logger_(std::move(logger)) {
+    MANTIS_RECORDER_OPEN(this, descriptor_);
     try {
         if (streams_.empty())
             fail(Status::invalid_argument, "Capture requires at least one stream");
@@ -199,11 +201,13 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                 throw Failure(result.error());
         }
         timing_.source_paced = streams_.front()->source_paced();
-        writer_ = std::jthread([this](std::stop_token) {
+        writer_ = std::jthread([this MANTIS_RECORDER_CAPTURE](std::stop_token) {
+            MANTIS_RECORDER_WORKER(0);
             WorkerMark worker(*this, true);
             bool first_callback = true;
             try {
-                while (auto frame = recorder_.pop()) {
+                while (auto frame = MANTIS_RECORDER_POP(recorder_)) {
+                    MANTIS_RECORDER_EVENT("callback.begin", frame->get());
                     const auto began = elapsed_ns();
                     if (first_callback) {
                         std::lock_guard lock(mutex_);
@@ -212,6 +216,7 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                     try {
                         record_(*frame);
                     } catch (...) {
+                        MANTIS_RECORDER_EVENT("callback.failed");
                         std::lock_guard lock(mutex_);
                         const auto duration = elapsed_ns() - began;
                         if (first_callback)
@@ -220,6 +225,7 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                         throw;
                     }
                     const auto finished = elapsed_ns();
+                    MANTIS_RECORDER_EVENT("callback.end");
                     uint64_t payload{};
                     const auto &packet = **frame;
                     for (const auto &attribute : packet.attributes)
@@ -227,8 +233,11 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                     for (const auto &child : packet.frames)
                         for (const auto &attribute : child->attributes)
                             payload += attribute.buffer.size();
+                    MANTIS_RECORDER_EVENT("account.lock.begin");
+                    MANTIS_RECORDER_BOUNDARY();
                     {
                         std::lock_guard lock(mutex_);
+                        MANTIS_RECORDER_EVENT("account.lock.acquired");
                         ++committed_;
                         payload_bytes_ += payload;
                         if (first_callback) {
@@ -241,6 +250,9 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                             first_ = *frame;
                         first_ready_.notify_all();
                     }
+                    MANTIS_RECORDER_EVENT("account.end");
+                    MANTIS_RECORDER_RELEASE(frame);
+                    MANTIS_RECORDER_EVENT("cycle.end");
                 }
             } catch (const std::exception &error) {
                 failed(error.what());
@@ -248,25 +260,32 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                 failed("Non-standard recorder exception");
             }
         });
-        producer_ = std::jthread([this](std::stop_token stop) {
+        producer_ = std::jthread([this MANTIS_RECORDER_CAPTURE](std::stop_token stop) {
+            MANTIS_RECORDER_WORKER(1);
             WorkerMark worker(*this, false);
             try {
                 auto next = std::chrono::steady_clock::now();
                 while (!stop.stop_requested() && active_) {
                     for (auto *stream : streams_) {
+                        MANTIS_RECORDER_EVENT("source.next.begin");
                         auto frame = stream->next();
+                        MANTIS_RECORDER_EVENT("source.next.end", frame && *frame ? frame->get() : nullptr);
                         source_diagnostics(*stream, frame && static_cast<bool>(*frame));
                         if (!frame)
                             throw Failure(frame.error());
                         if (!*frame)
                             continue;
+                        MANTIS_RECORDER_SOURCE(**frame, *stream);
                         preview_.push(*frame);
                         // Finish recording an observation already acquired when stop
                         // arrives: cancelling it would silently lose the last FrameSet.
 #ifdef MANTIS_SESSION_QUALIFICATION
                         const auto admission_began = time::MonotonicTimestamp::now().nanoseconds;
 #endif
+                        MANTIS_RECORDER_EVENT("admission.begin", frame->get(), recorder_.metrics().occupancy);
                         const auto accepted = recorder_.push_for(*frame, std::chrono::milliseconds(50));
+                        MANTIS_RECORDER_EVENT(accepted ? "admission.accepted" : "admission.failed",
+                                              frame->get(), recorder_.metrics().occupancy);
 #ifdef MANTIS_SESSION_QUALIFICATION
                         qualification_test::admission(admission_began,
                                                       time::MonotonicTimestamp::now().nanoseconds, accepted);
@@ -338,6 +357,7 @@ void Session::stop() {
             return;
         timing_.cleanup_started = elapsed_ns();
     }
+    MANTIS_RECORDER_CLEANUP(this, false);
     active_ = false;
     producer_.request_stop();
     if (producer_.joinable())
@@ -377,6 +397,7 @@ void Session::stop() {
     }
     if (report)
         report_failure(true);
+    MANTIS_RECORDER_CLEANUP(this, true);
 }
 data::Published Session::first() const {
     std::lock_guard lock(mutex_);

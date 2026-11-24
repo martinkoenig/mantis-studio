@@ -1,4 +1,5 @@
 # No product target, install rule, environment activation or external dependency.
+add_subdirectory(../recorder ${CMAKE_CURRENT_BINARY_DIR}/recorder)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
   return()
 endif()

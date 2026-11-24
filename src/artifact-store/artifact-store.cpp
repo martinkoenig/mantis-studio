@@ -1,3 +1,4 @@
+#include "../device-runtime/recorder-diagnostics.hpp"
 #include "bundle_state.hpp"
 #include "persistence-test.hpp"
 #include "segments.hpp"
@@ -229,10 +230,12 @@ struct Store::Impl {
         int64_t began;
         RawStage(RawTrace *value, size_t index)
             : trace(value), stage(index), began(value ? time::MonotonicTimestamp::now().nanoseconds : 0) {
+            MANTIS_RECORDER_RAW(index, false);
             if (trace)
                 trace->stage = static_cast<int>(index);
         }
         ~RawStage() {
+            MANTIS_RECORDER_RAW(stage, true);
             if (trace)
                 trace->stages[stage] = time::MonotonicTimestamp::now().nanoseconds - began;
         }
@@ -270,6 +273,7 @@ struct Store::Impl {
         platform::durable_directory(file.parent_path());
         commit_chunk(id.value, writer.index, std::filesystem::relative(file, root).generic_string(), hash.hex,
                      bytes);
+        MANTIS_RECORDER_EVENT("store.segment.durable", nullptr, writer.records);
         ++writer.index;
         writer.records = 0;
     }
@@ -1341,7 +1345,10 @@ data::Metadata Store::raw_append_diagnostics(const Id &id) const {
     return out;
 }
 void Store::append(const Id &id, const data::Packet &packet) {
+    MANTIS_RECORDER_STORE(id.value);
+    MANTIS_RECORDER_EVENT("store.lock.begin", &packet);
     std::lock_guard guard(impl_->mutex);
+    MANTIS_RECORDER_EVENT("store.lock.acquired");
     impl_->observation_idle(id);
     if (auto writer = impl_->writers.find(id); writer != impl_->writers.end()) {
         if (writer->second->bundles)
@@ -1368,8 +1375,10 @@ void Store::append(const Id &id, const data::Packet &packet) {
     auto file = impl_->root / rel;
     auto part = file;
     part += ".part";
+    MANTIS_RECORDER_EVENT("store.packet.begin");
     data::write_packet(part, packet);
     platform::durable_file(part);
+    MANTIS_RECORDER_EVENT("store.packet.end");
     auto hash = file_hash(part);
     auto bytes = std::filesystem::file_size(part);
     auto journal = impl_->root / "journal" / (id.value + "_" + std::to_string(index) + ".json");
@@ -1383,14 +1392,19 @@ void Store::append(const Id &id, const data::Packet &packet) {
         if (!out)
             fail(Status::io, "Journal write failed");
     }
+    MANTIS_RECORDER_EVENT("store.journal.begin");
     platform::durable_file(journal_part);
     std::filesystem::rename(journal_part, journal);
     platform::durable_directory(journal.parent_path());
     std::filesystem::rename(part, file);
     platform::durable_directory(file.parent_path());
+    MANTIS_RECORDER_EVENT("store.journal.end");
+    MANTIS_RECORDER_EVENT("store.commit.begin");
     impl_->commit_chunk(id.value, index, rel, hash.hex, bytes);
+    MANTIS_RECORDER_EVENT("store.commit.end");
     std::filesystem::remove(journal);
     platform::durable_directory(journal.parent_path());
+    MANTIS_RECORDER_EVENT("store.schema1.durable");
 }
 ArtifactId Store::begin_laser_observation(Provenance provenance) {
     return begin({"org.mantis.LaserObservation", 1}, std::move(provenance));
