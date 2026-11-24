@@ -120,6 +120,42 @@ def identities(acquisition):
     return {k: tested[k] for k in ('commit', 'tree')}
 
 
+def validate_saved_decision(saved, source):
+    """Rebuild the supported collector request, not a parallel classifier.
+
+    This replay version has no pinned static-inventory input. Accept its normal
+    absence, but explicitly reject supplied/failed inventory evidence instead of
+    trusting an unverifiable serialized legacy projection. The configured graph
+    is independently replayed below. Canonical comparison checks every nested
+    field and distinguishes JSON booleans from integers (unlike dict equality).
+    """
+    check(saved['limits'] == ['all-required-native-local-and-CI-gates-remain',
+          'local-ref-validation-is-not-provider-event-authentication',
+          'historical-failure-recall-unknown', 'dependency-closure-unqualified'], 'corpus-shadow-limits')
+    receipt = saved['inventory_acquisition']
+    policy.keys(receipt, 'status error cleanup_errors', 'corpus-inventory-receipt-fields')
+    check(receipt['status'] == 'not-requested', 'corpus-static-inventory-evidence-unsupported')
+    check(receipt['error'] is None and receipt['cleanup_errors'] == [], 'corpus-inventory-receipt-conflict')
+    acquisition = saved['acquisition']
+    base = {k: acquisition['identities']['base'][k] for k in ('commit', 'tree')}
+    tested = acquisition['tested_commit']
+    request = {'schema': 'ci110-request-v1', 'mode': 'shadow-feedback',
+               'base': base, 'head': source, 'labels': [],
+               'diff': {'base_commit': base['commit'], 'head_commit': tested, 'complete': True,
+                        'shallow': False, 'truncated': False,
+                        'reported_count': acquisition['diff']['record_count'],
+                        'changes': [{k: r[k] for k in ('status', 'path', 'old_path')}
+                                    for r in acquisition['diff']['records']],
+                        'event': 'pr-merge' if acquisition['event'] == 'pull_request' else 'protected-push',
+                        'ref': acquisition['ref'], 'expected_head': tested,
+                        'fork': acquisition['event'] == 'pull_request', 'privilege': 'none'}}
+    # classify also preserves the legitimate empty-diff/missing-inventory errors.
+    # Do not require an optional inventory, authenticated source or full closure.
+    expected = policy.classify(policy.canonical(request), None, None)
+    check(policy.canonical(saved['decision']) == policy.canonical(expected),
+          'corpus-decision-acquisition-mismatch')
+
+
 def compare_case(snapshot, root, case):
     policy.keys(case, 'id context shadow configured_inputs observation', 'corpus-case-fields')
     check(configured.label(case['id']), 'corpus-case-id')
@@ -134,6 +170,7 @@ def compare_case(snapshot, root, case):
           saved['decision']['execution_authorized'] is False, 'corpus-shadow-version-or-authority')
     acquisition = saved['acquisition']
     source = identities(acquisition)
+    validate_saved_decision(saved, source)
     inputs = snapshot.reference(root, case['configured_inputs'])
     # Freeze the entire pinned producer closure before replay, then independently
     # re-read it via the unchanged importer. No command/URI in that data is run.
@@ -148,7 +185,8 @@ def compare_case(snapshot, root, case):
     diagnostic = configured.diagnose(root / case['configured_inputs']['path'],
                                     case['configured_inputs']['sha256'], source, acquisition['diff']['records'])
     check(diagnostic['status'] == 'ingested', 'corpus-configured-evidence-rejected')
-    check(saved['configured_diagnostic'] == diagnostic, 'corpus-stale-or-mismatched-shadow')
+    check(policy.canonical(saved['configured_diagnostic']) == policy.canonical(diagnostic),
+          'corpus-stale-or-mismatched-shadow')
     context = {k: acquisition[k] for k in ('event', 'ref', 'identities', 'tested_commit')}
     context.update(configuration=diagnostic['configuration'], generator=diagnostic['generator'],
                    configured_manifest_sha256=diagnostic['manifest_sha256'],

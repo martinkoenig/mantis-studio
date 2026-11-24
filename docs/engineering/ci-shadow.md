@@ -324,8 +324,29 @@ remain unqualified when that original context is unavailable.
 
 ### Comparison and fail-closed limits
 
-Replay revalidates the raw diff encoding/digest/count, tested source context,
-configured input closure and exact saved diagnostic against the unchanged
+Replay revalidates the complete supported v2 envelope, inventory-acquisition
+receipt and legacy decision, not just its authority flags. It reconstructs the
+collector's canonical request from the validated acquisition (base/tested commit
+and tree, event/ref, raw diff records/count), then calls the unchanged policy
+and compares the **entire** canonical decision, including its request digest,
+source, diff, nested suite/test decisions, obligations and limits. Missing,
+extra, truncated, contradictory or unsupported nested fields reject the whole
+corpus. Canonical comparison distinguishes JSON booleans from integers. Empty
+diffs retain the collector's expected diagnostic error; they are not safe omission.
+
+This corpus version supports the collector's normal **absent optional static
+inventory** (`inventory_acquisition.status=not-requested`, null error, no cleanup
+errors). It does not demand an inventory, trusted signatures or complete closure.
+A supplied/failed static-inventory acquisition is explicitly rejected with
+`corpus-static-inventory-evidence-unsupported`: the corpus schema has no reference
+to pin/re-read its original static inventory, so saved static projections cannot
+be verified. The original collector's optional `--inventory` CLI is unchanged.
+Replaying that additional input would require an explicit future schema extension,
+not silently trusting serialized fields. The configured-input inventory remains
+required and independently replayed for this comparison path.
+
+Replay also revalidates the raw diff encoding/digest/count, tested source context,
+configured input closure and entire canonical saved diagnostic against the unchanged
 `ci_shadow_configured.diagnose/project` and `ci_shadow_policy.closure` path.
 It never trusts serialized impacted IDs as the answer. Byte/context consistency
 is not proof of producer authenticity, Git-object existence during replay, dirty

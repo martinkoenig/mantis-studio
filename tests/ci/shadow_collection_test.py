@@ -589,6 +589,13 @@ class ConfiguredInventory(unittest.TestCase):
                            capture_output=True, timeout=10, check=True)
         self.assertEqual(json.loads(p.stdout)['configured_diagnostic']['status'], 'ingested')
         self.assertTrue(json.loads(p.stdout)['decision']['full_matrix_would_select'])
+        empty_corpus, observation = self.corpus_case(shadow_raw=p.stdout)
+        observation['test_ids'] = None
+        raw = self.fixture.encode(observation); (self.root / 'observation.json').write_bytes(raw)
+        empty_corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(raw)
+        empty_replay = self.compare_corpus(empty_corpus)
+        self.assertEqual(empty_replay['status'], 'compared', empty_replay)
+        self.assertEqual(empty_replay['cases'][0]['diagnostic']['state'], 'UNKNOWN')
         # Real two-parent commit context: only the tested merge identity qualifies.
         source = self.inv['roots']['source']
         merge = subprocess.run(['git', '-C', source, '-c', 'user.name=Fixture',
@@ -621,6 +628,24 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(compared['status'], 'compared', compared)
         self.assertEqual(compared['cases'][0]['context']['tested_commit'], merge)
         self.assertEqual(compared['cases'][0]['diagnostic']['hits'], ['app-contract'])
+        original_merged = self.fixture.encode(merged)
+        # PR branch head cannot replace the actual tested merge in the saved
+        # decision, even if the acquisition and configured graph remain valid.
+        for section, key, value in [
+                ('source', 'head', {k: merged['acquisition']['identities']['head'][k]
+                                    for k in ('commit', 'tree')}),
+                ('diff', 'head_commit', self.original['source']['commit']),
+                ('diff', 'event', 'protected-push'),
+                ('input_sha256', 'request', '0' * 64)]:
+            bad = self.copy(merged); bad['decision'][section][key] = value
+            raw = self.fixture.encode(bad); (self.root / 'shadow.json').write_bytes(raw)
+            corpus['cases'][0]['shadow']['sha256'] = self.fixture.digest(raw)
+            rejected = self.compare_corpus(corpus)
+            self.assertEqual(rejected['errors'], ['corpus-decision-acquisition-mismatch'])
+            self.assertEqual(rejected['cases'], [])
+        (self.root / 'shadow.json').write_bytes(original_merged)
+        corpus['cases'][0]['shadow']['sha256'] = self.fixture.digest(original_merged)
+        self.assertEqual(self.compare_corpus(corpus), compared, 'exact PR restoration changed replay')
         corpus['cases'][0]['context']['tested_commit'] = self.original['source']['commit']
         self.assertEqual(self.compare_corpus(corpus)['errors'], ['corpus-evidence-context-mismatch'])
 
@@ -859,6 +884,96 @@ class ConfiguredInventory(unittest.TestCase):
         (self.root / 'shadow.json').write_bytes(raw)
         corpus['cases'][0]['shadow']['sha256'] = self.fixture.digest(raw)
         self.assertEqual(self.compare_corpus(corpus), good, 'invalid input contaminated restored replay')
+
+    def test_corpus_saved_envelope_provenance_rejection_and_restoration(self):
+        corpus, _ = self.corpus_case()
+        original = (self.root / 'shadow.json').read_bytes()
+        saved = json.loads(original)
+        # Missing OPTIONAL static inventory is normal, not malformed evidence.
+        self.assertEqual(saved['inventory_acquisition'],
+                         {'status': 'not-requested', 'error': None, 'cleanup_errors': []})
+        self.assertEqual(saved['decision']['errors'], ['inventory-missing-inventory-anchor'])
+        good = self.compare_corpus(corpus)
+        self.assertEqual(good['status'], 'compared', good)
+        self.assertEqual(good['cases'][0]['diagnostic']['hits'], ['app-contract'])
+        # A valid first case must not escape when the second envelope is invalid.
+        (self.root / 'original-shadow.json').write_bytes(original)
+        first = self.copy(corpus['cases'][0]); first['id'] = 'valid-first'
+        first['shadow']['path'] = 'original-shadow.json'
+        corpus['cases'].insert(0, first)
+        variants = []
+        bad = self.copy(saved)
+        bad['decision'] = {k: saved['decision'][k] for k in
+                           ('schema', 'policy_version', 'shadow_only', 'execution_authorized',
+                            'activation_qualified', 'full_matrix_would_select')}
+        variants.append(('truncated-decision', bad))
+        for section, key, value in [
+                ('source', 'head', {'commit': '0' * 40, 'tree': '0' * 40}),
+                ('diff', 'changes', []), ('diff', 'reported_count', 0),
+                ('input_sha256', 'request', '0' * 64),
+                ('input_sha256', 'expected_inventory', '0' * 64)]:
+            bad = self.copy(saved); bad['decision'][section][key] = value
+            variants.append((section + '-' + key, bad))
+        for key, value in [('source', None), ('mode', 'shadow-final'), ('extra', None),
+                           ('limits', []), ('inventory', {}), ('suite_decisions', [])]:
+            bad = self.copy(saved); bad['decision'][key] = value; variants.append((key, bad))
+        bad = self.copy(saved); bad['decision']['suite_decisions'][0]['selected'] = 1
+        variants.append(('boolean-is-not-integer', bad))
+        for key, value in [('closure_complete', 0), ('execution_authorized', 0),
+                           ('full_matrix_would_select', 1), ('extra', None)]:
+            bad = self.copy(saved); bad['configured_diagnostic'][key] = value
+            variants.append(('configured-' + key, bad))
+        for key, value in [('inventory_acquisition', None), ('limits', None), ('limits', []),
+                           ('limits', saved['limits'] + ['unsupported-limit'])]:
+            bad = self.copy(saved); bad[key] = value; variants.append((key, bad))
+        for key, value in [('status', 'regular-file'), ('error', 'missing'),
+                           ('cleanup_errors', ['unconfirmed']), ('extra', None)]:
+            bad = self.copy(saved); bad['inventory_acquisition'][key] = value
+            variants.append(('receipt-' + key, bad))
+        for label, bad in variants:
+            with self.subTest(variant=label):
+                raw = self.fixture.encode(bad); (self.root / 'shadow.json').write_bytes(raw)
+                corpus['cases'][1]['shadow']['sha256'] = self.fixture.digest(raw)
+                # Required provenance regressions cross the real supervised CLI;
+                # additional schema/type permutations use its unchanged worker.
+                result = self.compare_corpus(corpus, cli=label in {
+                    'truncated-decision', 'source-head', 'diff-changes', 'input_sha256-request',
+                    'inventory_acquisition', 'limits'})
+                self.assertEqual(result['status'], 'rejected',
+                                 'Malformed or conflicting saved envelope admitted as compared: ' + label)
+                self.assertEqual(result['cases'], [], 'partial case escaped saved-envelope rejection')
+                self.assertEqual(len(result['errors']), 1)
+                self.assertRegex(result['errors'][0], r'^corpus-[a-z-]+$')
+        (self.root / 'shadow.json').write_bytes(original)
+        corpus['cases'].pop(0)
+        corpus['cases'][0]['shadow']['sha256'] = self.fixture.digest(original)
+        self.assertEqual(self.compare_corpus(corpus), good, 'exact saved bytes did not restore GREEN')
+        # The collector still supports a supplied static inventory. This replay
+        # schema cannot re-read its original bytes, so reject that path explicitly
+        # rather than pretend a saved static projection proves input integrity.
+        from types import SimpleNamespace
+        repo = SimpleNamespace(base=self.base, git=lambda *args: subprocess.run(
+            ['git', '-C', self.inv['roots']['source'], *args], capture_output=True,
+            timeout=10, check=True).stdout.decode().strip())
+        static = self.fixture.encode(inventory(repo)); static_path = self.root / 'static.json'
+        static_path.write_bytes(static)
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'),
+                   '--repository', self.inv['roots']['source'], '--event', 'push',
+                   '--ref', 'refs/heads/develop', '--base', self.base, '--head', self.inv['source']['commit'],
+                   '--configured-inputs', str(self.path), '--configured-inputs-sha256',
+                   self.fixture.digest(self.path.read_bytes()), '--inventory', str(static_path),
+                   '--inventory-sha256', self.fixture.digest(static)]
+        supplied = subprocess.run(command, capture_output=True, timeout=10, check=True)
+        self.assertEqual(supplied.stderr, b'')
+        supplied_saved = json.loads(supplied.stdout)
+        self.assertEqual(supplied_saved['inventory_acquisition']['status'], 'regular-file')
+        self.assertIsNotNone(supplied_saved['decision']['inventory'])
+        unsupported, _ = self.corpus_case(shadow_raw=supplied.stdout)
+        result = self.compare_corpus(unsupported)
+        self.assertEqual(result['errors'], ['corpus-static-inventory-evidence-unsupported'])
+        self.assertEqual(result['cases'], [])
+        (self.root / 'shadow.json').write_bytes(original)
+        self.assertEqual(self.compare_corpus(corpus), good, 'static rejection contaminated absent-inventory replay')
 
     def test_corpus_snapshot_mutation_bounds_read_only_and_inert_data(self):
         import ci_shadow_corpus as comparison
