@@ -132,12 +132,24 @@ spawn/ownership publication or destructive-read/buffer transactions. Explicit
 safe points observe it only after the handle or bytes have been retained; a
 50 ms maximum selector wait bounds observation of otherwise idle cancellation
 (Python can restart interrupted selectors). This does not extend the campaign
-or cleanup deadline. The handler remains non-raising through retirement/draining:
-late cancellation is reported, but cannot replace an earlier error. Real TERM/INT
+or cleanup deadline. The handler remains non-raising through retirement, draining,
+receipt publication and secondary-error accounting; caller dispositions are restored
+in an outer `finally` only afterward. Late cancellation is retained as the outcome
+on success or a note on an established command/timeout error. If the first signal
+arrives after receipt serialization, exactly one `publication-cancellation` JSONL
+amendment records the final error/signal for the immediately preceding command;
+it is not another command receipt or a retry. Receipt/amendment I/O errors remain
+secondary to an established primary. This scopes finalization, not cancellation
+immunity after return. Real TERM/INT
 boundary regressions handshake descendant entry and inject at successful spawn
 return before handle assignment and after stdout/stderr consumption before
 buffering. Independent wait/group oracles and exact output markers detect both
 ownership and diagnostic loss, including safe unwind of rejected implementations.
+Final-publication controls additionally deliver real TERM/INT/repeated signals at
+receipt open, after real serialization, at stream close and during error accounting,
+with success/nonzero/timeout and real receipt-open failure controls. They assert
+primary/output retention, bounded receipt/amendment evidence, independent leader/
+group retirement and restored caller dispositions/subreaper state.
 
 Configured diagnostic controls additionally configure and serially compile an owned tiny
 multi-target fixture with Ninja and Ninja Multi-Config, and obtain real CTest JSON

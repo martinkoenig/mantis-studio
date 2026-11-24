@@ -380,6 +380,140 @@ while True:signal.pause()
         assert state() == before, 'independent owner leaked local state'
 
 
+def setup_publication_probe(mode, root):
+    """Real signals at receipt open, serialization and close; no fake I/O."""
+    import inspect
+    import time
+    import shadow_configured_fixture as fixture
+    _, outcome, boundary, delivery, *failure = mode.split('-')
+    receipt_path = root / 'producer-commands.jsonl'
+    if failure:
+        receipt_path.mkdir()  # actual EISDIR after entry to Path.open
+    libc = ctypes.CDLL(None, use_errno=True)
+    def state():
+        value = ctypes.c_int()
+        assert libc.prctl(37, ctypes.byref(value), 0, 0, 0) == 0
+        return value.value, [signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)]
+    before = state()
+    def caller_term(signum, frame):
+        raise KeyboardInterrupt('caller TERM disposition')
+    signal.signal(signal.SIGTERM, caller_term)
+    caller_state = state()
+    lines, first = inspect.getsourcelines(fixture.run)
+    open_line = first + next(i for i, line in enumerate(lines)
+                             if "with (root / 'producer-commands.jsonl').open" in line)
+    accounting_line = first + next(i for i, line in enumerate(lines) if line.strip() == 'if cleanup:')
+    seen, captured = {}, {}
+    open_visits = 0
+    def inject():
+        seen['boundary'] = boundary
+        # Do not read the suspended run frame's f_locals: on Python3.12 the
+        # trace-return locals sync can overwrite a signal handler's changed cell.
+        signals = {'term': (signal.SIGTERM,), 'int': (signal.SIGINT,),
+                   'repeat': (signal.SIGTERM, signal.SIGINT, signal.SIGTERM)}[delivery]
+        for signum in signals:
+            os.kill(os.getpid(), signum)
+    def trace(frame, event, arg):
+        nonlocal open_visits
+        if event == 'return' and frame.f_code is subprocess.Popen.__init__.__code__:
+            if getattr(frame.f_locals['self'], 'pid', None):
+                captured['process'] = frame.f_locals['self']
+        if delivery != 'none' and not seen:
+            if event == 'line' and frame.f_code is fixture.run.__code__ and frame.f_lineno == open_line:
+                open_visits += 1
+                if boundary == ('open' if open_visits == 1 else 'close'):
+                    inject()
+            elif (boundary == 'serialize' and event == 'return' and frame.f_code is json.dumps.__code__
+                  and frame.f_back.f_code is fixture.run.__code__):
+                inject()  # bytes computed, not yet passed to real write
+            elif (boundary == 'accounting' and event == 'line' and frame.f_code is fixture.run.__code__
+                  and frame.f_lineno == accounting_line):
+                inject()
+        return trace
+    script = "import sys,time;print('publication stdout',flush=True);print('publication stderr',file=sys.stderr,flush=True);"
+    script += 'time.sleep(10)' if outcome == 'timeout' else 'sys.exit(' + ('7' if outcome == 'nonzero' else '0') + ')'
+    original, result = None, None
+    started = time.monotonic()
+    try:
+        try:
+            sys.settrace(trace)
+            result = fixture.run([sys.executable, '-B', '-c', script], root,
+                                 deadline=time.monotonic() + 0.4)
+        except BaseException as exc:
+            original = exc
+        finally:
+            sys.settrace(None)
+        assert state() == caller_state, 'publication leaked signal/subreaper state'
+        process = captured['process']
+        try:
+            os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG)
+        except ChildProcessError:
+            pass
+        else:
+            raise AssertionError('publication leader was not reaped')
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            pass
+        else:
+            raise AssertionError('publication group still exists')
+        expected = {'nonzero': subprocess.CalledProcessError, 'timeout': subprocess.TimeoutExpired}.get(outcome)
+        first_signal = signal.SIGINT if delivery == 'int' else signal.SIGTERM
+        observed = dict(mode=mode, injection=seen, primary=type(original).__name__,
+                        notes=getattr(original, '__notes__', []), leader_reaped=True,
+                        group_absent=True, state_restored=True, receipt_exists=receipt_path.is_file())
+        (root / 'publication-result.json').write_text(json.dumps(observed, sort_keys=True))
+        if expected is None and delivery != 'none':
+            expected = KeyboardInterrupt
+        if expected is None and failure:
+            expected = OSError
+        assert (isinstance(original, expected) if expected else original is None), \
+            'F4: publication signal replaced primary outcome: ' + repr(original)
+        if delivery != 'none':
+            assert seen, 'publication signal boundary not reached'
+            first_signal = signal.SIGINT if delivery == 'int' else signal.SIGTERM
+            assert any('signal ' + str(first_signal) in n for n in getattr(original, '__notes__', ())) or \
+                (isinstance(original, KeyboardInterrupt) and str(first_signal) in str(original)), \
+                'publication cancellation disappeared'
+        if outcome in ('nonzero', 'timeout'):
+            assert isinstance(original, (subprocess.CalledProcessError, subprocess.TimeoutExpired))
+            assert original.output is not None and original.stderr is not None
+            assert b'publication stdout' in original.output and b'publication stderr' in original.stderr
+        if outcome == 'nonzero':
+            assert isinstance(original, subprocess.CalledProcessError)
+            assert original.returncode == 7
+        if failure:
+            if expected is not OSError:
+                assert original is not None
+                assert any('receipt failed' in n for n in original.__notes__), 'secondary receipt error lost'
+            rows = []
+        else:
+            rows = [json.loads(line) for line in receipt_path.read_text().splitlines()]
+            assert 1 <= len(rows) <= 2, 'missing/unbounded publication receipts'
+            row = rows[0]
+            assert 'publication stdout' in row['stdout'] and 'publication stderr' in row['stderr']
+            assert row['cleanup_errors'] == []
+            assert row['reaped_exit'] == (-signal.SIGKILL if outcome == 'timeout' else (7 if outcome == 'nonzero' else 0))
+            if delivery != 'none':
+                assert expected is not None
+                assert rows[-1]['cancellation_signal'] == first_signal, 'late signal not retained in receipt'
+                assert rows[-1]['error'] == expected.__name__, 'receipt primary outcome inaccurate'
+            elif outcome == 'success':
+                assert result == b'publication stdout\n' and row['error'] is None
+        assert time.monotonic() - started < 3, 'publication consumed outer CTest budget'
+        print(json.dumps(dict(mode=mode, injection=seen, primary=type(original).__name__,
+                              producer=rows, leader_reaped=True, group_absent=True, state_restored=True)))
+    finally:
+        sys.settrace(None)
+        try:
+            if captured and captured['process'].returncode is None:
+                assert not shadow._retire_owned_group(captured['process'])
+        finally:
+            for signum, handler in zip((signal.SIGTERM, signal.SIGINT), before[1]):
+                signal.signal(signum, handler)
+        assert state() == before, 'publication oracle leaked caller state'
+
+
 class ResourceBounds(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='mantis-shadow-resource-')
@@ -405,7 +539,18 @@ class ResourceBounds(unittest.TestCase):
             modes = ('success', 'nonzero', 'success-open', 'nonzero-open', 'timeout', 'cancel', 'cancel-int',
                      'pre-read-term', 'pre-read-int', 'read-term', 'read-int',
                      'read-stderr-term', 'read-stderr-int', 'spawn-term', 'spawn-int')
-            for mode in modes:
+            # Final publication is a distinct transaction from retirement. Trace
+            # selects real signal timing; commands, reads and receipt I/O stay real.
+            publication = []
+            for outcome in ('success', 'nonzero', 'timeout'):
+                publication.extend('publish-' + outcome + '-open-' + delivery
+                                   for delivery in ('none', 'term', 'int', 'repeat'))
+                publication.extend(('publish-' + outcome + '-serialize-repeat',
+                                    'publish-' + outcome + '-close-repeat',
+                                    'publish-' + outcome + '-accounting-repeat',
+                                    'publish-' + outcome + '-open-repeat-fail',
+                                    'publish-' + outcome + '-open-none-fail'))
+            for mode in (*modes, *publication):
                 with self.subTest(mode=mode):
                     root = self.root / mode
                     root.mkdir()
@@ -641,7 +786,9 @@ if __name__=='__main__':
     elif len(sys.argv)==5 and sys.argv[1]=='--inventory-probe':
         inventory_probe(Path(sys.argv[2]),Path(sys.argv[3]),Path(sys.argv[4]))
     elif len(sys.argv)==4 and sys.argv[1]=='--setup-probe':
-        if sys.argv[2].startswith(('pre-read-', 'read-', 'spawn-')):
+        if sys.argv[2].startswith('publish-'):
+            setup_publication_probe(sys.argv[2], Path(sys.argv[3]))
+        elif sys.argv[2].startswith(('pre-read-', 'read-', 'spawn-')):
             setup_boundary_probe(sys.argv[2], Path(sys.argv[3]))
         else:
             setup_probe(sys.argv[2], Path(sys.argv[3]))

@@ -123,62 +123,97 @@ def run(command, root, *, deadline=None, env=None):
             raise subprocess.CalledProcessError(code, command, bytes(output), bytes(diagnostic))
     finally:
         primary = sys.exc_info()[1]
-        # The non-raising handler remains active through retirement and draining.
-        # Preserve the first error; a late cancellation is recorded, never lost.
-        # No signals are sent outside this owned group.
-        if process is not None:
-            cleanup.extend(shadow._retire_owned_group(process))
-        if leader_fd is not None:
-            try:
-                os.close(leader_fd)
-            except OSError:
-                cleanup.append('tiny-setup-handle-close-failed')
-        if process is not None:
-            for stream, data in ((process.stdout, output), (process.stderr, diagnostic)):
-                if stream is None:
-                    continue
-                try:
-                    os.set_blocking(stream.fileno(), False)
-                    while read_stream(stream, data):
-                        pass
-                except BlockingIOError:
-                    pass
-                except (OSError, AssertionError) as exc:
-                    cleanup.append('tiny-setup-output-drain-failed:' + type(exc).__name__)
-                finally:
-                    try:
-                        stream.close()
-                    except OSError:
-                        cleanup.append('tiny-setup-handle-close-failed')
-        if libc.prctl(36, previous_subreaper.value, 0, 0, 0) != 0:
-            cleanup.append('tiny-setup-subreaper-restore-failed')
-        for signum, handler in handlers.items():
-            signal.signal(signum, handler)
-        late_cancel = primary is None and cancellation_signal is not None
-        if late_cancel:
-            primary = KeyboardInterrupt('tiny setup cancelled by signal ' + str(cancellation_signal))
-        if isinstance(primary, (subprocess.TimeoutExpired, subprocess.CalledProcessError)):
-            primary.output, primary.stderr = bytes(output), bytes(diagnostic)
-        row = {'argv': list(map(str, command)), 'exit': code,
-               'reaped_exit': process.returncode if process is not None else None,
-               'error': type(primary).__name__ if primary else None,
-               'stdout': output.decode(errors='replace'), 'stderr': diagnostic.decode(errors='replace'),
-               'cleanup_errors': cleanup, 'elapsed_seconds': time.monotonic() - started,
-               'deadline_seconds': deadline - started, 'cancellation_signal': cancellation_signal}
+        cancellation_noted = False
+
+        def retain_cancellation(signum):
+            nonlocal primary, cancellation_noted
+            if signum is not None and not cancellation_noted:
+                message = 'tiny setup cancelled by signal ' + str(signum)
+                if primary is None:
+                    primary = KeyboardInterrupt(message)
+                else:
+                    primary.add_note(message)
+                cancellation_noted = True
+            if isinstance(primary, (subprocess.TimeoutExpired, subprocess.CalledProcessError)):
+                primary.output, primary.stderr = bytes(output), bytes(diagnostic)
+
+        # Caller dispositions belong outside the ENTIRE outcome/receipt
+        # transaction, not merely outside process retirement. Never raise a
+        # secondary asynchronous exception during publication/error accounting.
         try:
-            with (root / 'producer-commands.jsonl').open('a') as stream:
-                stream.write(json.dumps(row, sort_keys=True) + '\n')
-        except OSError as exc:
-            if primary is None:
-                raise
-            primary.add_note('tiny setup receipt failed: ' + type(exc).__name__)
-        if cleanup:
-            if primary is None:
-                raise AssertionError('tiny setup retirement unconfirmed: ' + ','.join(cleanup))
-            primary.add_note('tiny setup cleanup: ' + ','.join(cleanup))
-        if late_cancel:
-            assert primary is not None
-            raise primary
+            if process is not None:
+                cleanup.extend(shadow._retire_owned_group(process))
+            if leader_fd is not None:
+                try:
+                    os.close(leader_fd)
+                except OSError:
+                    cleanup.append('tiny-setup-handle-close-failed')
+            if process is not None:
+                for stream, data in ((process.stdout, output), (process.stderr, diagnostic)):
+                    if stream is None:
+                        continue
+                    try:
+                        os.set_blocking(stream.fileno(), False)
+                        while read_stream(stream, data):
+                            pass
+                    except BlockingIOError:
+                        pass
+                    except (OSError, AssertionError) as exc:
+                        cleanup.append('tiny-setup-output-drain-failed:' + type(exc).__name__)
+                    finally:
+                        try:
+                            stream.close()
+                        except OSError:
+                            cleanup.append('tiny-setup-handle-close-failed')
+            if libc.prctl(36, previous_subreaper.value, 0, 0, 0) != 0:
+                cleanup.append('tiny-setup-subreaper-restore-failed')
+            receipt_error = None
+            snapshot_signal = None
+            try:
+                with (root / 'producer-commands.jsonl').open('a') as stream:
+                    snapshot_signal = cancellation_signal
+                    retain_cancellation(snapshot_signal)
+                    row = {'argv': list(map(str, command)), 'exit': code,
+                           'reaped_exit': process.returncode if process is not None else None,
+                           'error': type(primary).__name__ if primary else None,
+                           'stdout': output.decode(errors='replace'), 'stderr': diagnostic.decode(errors='replace'),
+                           'cleanup_errors': cleanup, 'elapsed_seconds': time.monotonic() - started,
+                           'deadline_seconds': deadline - started, 'cancellation_signal': snapshot_signal}
+                    stream.write(json.dumps(row, sort_keys=True) + '\n')
+            except OSError as exc:
+                receipt_error = exc
+            retain_cancellation(cancellation_signal)
+            if receipt_error is not None:
+                if primary is None:
+                    primary = receipt_error
+                else:
+                    primary.add_note('tiny setup receipt failed: ' + type(receipt_error).__name__)
+            if cleanup:
+                if primary is None:
+                    primary = AssertionError('tiny setup retirement unconfirmed: ' + ','.join(cleanup))
+                else:
+                    primary.add_note('tiny setup cleanup: ' + ','.join(cleanup))
+            retain_cancellation(cancellation_signal)
+            if receipt_error is None and cancellation_signal != snapshot_signal:
+                # A first signal during serialization/write/close/accounting
+                # cannot change already-written bytes. Append exactly ONE bounded
+                # amendment to the preceding command receipt, not a retry or
+                # duplicate command. The first signal is immutable even if more
+                # signals arrive during amendment publication/error accounting.
+                amendment = {'event': 'publication-cancellation',
+                             'cancellation_signal': cancellation_signal,
+                             'error': type(primary).__name__}
+                try:
+                    with (root / 'producer-commands.jsonl').open('a') as stream:
+                        stream.write(json.dumps(amendment, sort_keys=True) + '\n')
+                except OSError as exc:
+                    assert primary is not None
+                    primary.add_note('tiny setup receipt failed: ' + type(exc).__name__)
+            if primary is not None:
+                raise primary
+        finally:
+            for signum, handler in handlers.items():
+                signal.signal(signum, handler)
     return bytes(output)
 
 
