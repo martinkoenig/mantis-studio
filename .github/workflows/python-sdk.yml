@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.12", "3.14"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,7 +29,9 @@ jobs:
           PIP_ONLY_BINARY: ":all:"
         run: >-
           python -m pip install pip==25.1.1 build==1.2.2.post1
-          setuptools==75.8.2 wheel==0.45.1 protoc-wheel-0==3.20.1 protobuf==3.20.0
+          setuptools==75.8.2 wheel==0.45.1 protoc-wheel-0==3.20.1 protobuf==3.20.0 PyYAML==6.0.3
+      - name: Check runtime matrix and fail-closed qualification wiring
+        run: python -B tests/ci/python_sdk_workflow_test.py
       - name: Qualify source-matched installed artifacts and negative controls
         run: python -B tests/sdk/artifacts_test.py --work-dir "$RUNNER_TEMP/python-sdk-evidence"
       - name: Retain command receipts and artifact evidence

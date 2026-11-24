@@ -237,12 +237,21 @@ For the existing CMake development route, use `PYTHONPATH=build/debug/python`;
 its generated `mantis_pb2.py` remains build output and is not hand-maintained.
 Do not use that source/build path to qualify installed artifacts. The separate
 read-only [Python artifact workflow](.github/workflows/python-sdk.yml) executes
-`tests/sdk/artifacts_test.py` in isolated installed venvs on Python 3.10/3.12/3.14,
+`tests/sdk/artifacts_test.py` in isolated installed venvs with a Linux x64 matrix
+for Python 3.10/3.11/3.12/3.13/3.14,
 including sdist rebuild, schema/wire, deterministic independent-root and negative
 controls. Locally run the same entry point with an unused `--work-dir` outside
 the source/build trees and the pinned tools from the workflow. Logs and failures
 are retained there. These packaging checks do not replace the five Architecture
 CI jobs or the later live-daemon/fault-protocol and release gates of Issue #75.
+The matrix is a qualification requirement, not proof that a particular revision
+passed. Python 3.11/3.13 require complete actual hosted artifact-suite evidence;
+they are not locally qualified merely by configuring `setup-python`. Local
+Python 3.12/3.14 execution cannot substitute for either missing interpreter.
+The same job runs `python -B tests/ci/python_sdk_workflow_test.py` with pinned
+binary-only PyYAML. This checks matrix/interpreter/tool/full-suite/evidence wiring,
+real shell argv and failure propagation, and representative wrong-wiring controls;
+its launcher fixture does not execute or qualify the selected hosted runtimes.
 
 ## Windows and macOS
 
