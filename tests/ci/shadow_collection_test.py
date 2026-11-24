@@ -487,6 +487,7 @@ class ConfiguredInventory(unittest.TestCase):
         # Replay/negative cases are not setup and must not delay producer two.
         multi_root = cls.root / 'multi'; multi_root.mkdir()
         cls.multi_inputs = fixture.produce(multi_root, 'Ninja Multi-Config', deadline=cls.setup_deadline)
+        cls.collector_cache = {}
 
     def setUp(self):
         self.inv = self.copy(self.original)
@@ -618,16 +619,22 @@ class ConfiguredInventory(unittest.TestCase):
         self.inv['source']['commit'] = merge
         self.diagnostic()
         pr[-1] = self.fixture.digest(self.path.read_bytes())
+        static = self.static_bytes()
+        (self.root / 'static.json').write_bytes(static)
+        pr += ['--inventory', str(self.root / 'static.json'), '--inventory-sha256', self.fixture.digest(static)]
         merged = json.loads(subprocess.run(pr, capture_output=True, timeout=10, check=True).stdout)
         self.assertEqual(merged['configured_diagnostic']['status'], 'ingested', merged)
         self.assertEqual(merged['configured_diagnostic']['source']['commit'], merge)
         self.assertEqual(merged['configured_diagnostic']['impacted_test_ids'], ['app-contract'])
         self.full(merged['configured_diagnostic'])
-        corpus, _ = self.corpus_case(shadow_raw=self.fixture.encode(merged))
+        corpus, _ = self.corpus_case(shadow_raw=self.fixture.encode(merged), static_raw=static)
         compared = self.compare_corpus(corpus)
         self.assertEqual(compared['status'], 'compared', compared)
         self.assertEqual(compared['cases'][0]['context']['tested_commit'], merge)
         self.assertEqual(compared['cases'][0]['diagnostic']['hits'], ['app-contract'])
+        self.assertEqual(compared['cases'][0]['static_inventory_replay']['decision_sha256'],
+                         self.fixture.digest(self.fixture.encode(merged['decision'])))
+        self.assertEqual(merged['decision']['source']['head']['commit'], merge)
         original_merged = self.fixture.encode(merged)
         # PR branch head cannot replace the actual tested merge in the saved
         # decision, even if the acquisition and configured graph remain valid.
@@ -649,17 +656,44 @@ class ConfiguredInventory(unittest.TestCase):
         corpus['cases'][0]['context']['tested_commit'] = self.original['source']['commit']
         self.assertEqual(self.compare_corpus(corpus)['errors'], ['corpus-evidence-context-mismatch'])
 
-    def corpus_case(self, shadow_raw=None):
+    def static_bytes(self):
+        from types import SimpleNamespace
+        repo = SimpleNamespace(base=self.base, git=lambda *args: subprocess.run(
+            ['git', '-C', self.inv['roots']['source'], *args], capture_output=True,
+            timeout=10, check=True).stdout.decode().strip())
+        seed = inventory(repo)
+        seed['files'] = {'public.hpp': seed['files']['src/public.hpp']}
+        seed['targets']['data']['sources'] = ['public.hpp']
+        seed['targets']['storage']['sources'] = []
+        return self.fixture.encode(seed)
+
+    def corpus_case(self, shadow_raw=None, *, static_raw=None):
         """Independent app/peer expectations; never derived from impacted IDs."""
         self.diagnostic()
         command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', self.inv['roots']['source'],
                    '--event', 'push', '--ref', 'refs/heads/develop', '--base', self.base,
                    '--head', self.inv['source']['commit'], '--configured-inputs', str(self.path),
                    '--configured-inputs-sha256', self.fixture.digest(self.path.read_bytes())]
+        if static_raw is not None:
+            (self.root / 'static.json').write_bytes(static_raw)
+            command += ['--inventory', str(self.root / 'static.json'),
+                        '--inventory-sha256', self.fixture.digest(static_raw)]
         if shadow_raw is None:
-            run = subprocess.run(command, capture_output=True, timeout=10, check=True)
-            self.assertEqual(run.stderr, b'')
-            shadow_raw = run.stdout
+            # Reuse only the two pristine fixture collector envelopes with exact
+            # command/configured closure/static-byte identity. Corrupted, omitted
+            # edge, PR and policy-rejected inputs still acquire their own CLI
+            # evidence. Every comparison/restoration still crosses the real CLI.
+            pristine = self.inv == self.original and all(
+                (Path(self.inv['roots'][root]) / path).read_bytes() == raw
+                for (root, path), raw in self.original_bytes.items())
+            key = tuple(command)
+            shadow_raw = self.collector_cache.get(key) if pristine else None
+            if shadow_raw is None:
+                run = subprocess.run(command, capture_output=True, timeout=10, check=True)
+                self.assertEqual(run.stderr, b'')
+                shadow_raw = run.stdout
+                if pristine and (static_raw is None or static_raw == self.static_bytes()):
+                    self.collector_cache[key] = shadow_raw
         manifest = json.loads(shadow_raw)
         (self.root / 'shadow.json').write_bytes(shadow_raw)
         diag = manifest['configured_diagnostic']
@@ -680,12 +714,15 @@ class ConfiguredInventory(unittest.TestCase):
                 'shadow': {'path': 'shadow.json', 'sha256': self.fixture.digest(shadow_raw)},
                 'configured_inputs': {'path': 'inputs.json', 'sha256': self.fixture.digest(self.path.read_bytes())},
                 'observation': pin('observation.json', self.fixture.encode(observation))}
-        return {'schema': 'ci110-impact-corpus-v1', 'cases': [case]}, observation
+        if static_raw is not None:
+            case['static_inventory'] = {'path': 'static.json', 'sha256': self.fixture.digest(static_raw)}
+        return {'schema': 'ci110-impact-corpus-v2' if static_raw is not None else 'ci110-impact-corpus-v1',
+                'cases': [case]}, observation
 
-    def compare_corpus(self, corpus, *, cli=True):
+    def compare_corpus(self, corpus, *, cli=True, tools=TOOLS):
         raw = self.fixture.encode(corpus)
         path = self.root / 'corpus.json'; path.write_bytes(raw)
-        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow_corpus.py'), '--corpus', str(path),
+        command = [sys.executable, '-B', str(tools / 'ci_shadow_corpus.py'), '--corpus', str(path),
                    '--corpus-sha256', self.fixture.digest(raw)]
         if cli:
             output = self.root / 'corpus-probe.json'
@@ -720,7 +757,7 @@ class ConfiguredInventory(unittest.TestCase):
                 return digest
             import stat
             candidates = [self.path, self.root / 'shadow.json', self.root / 'observation.json',
-                          self.root / 'peer-observation.json',
+                          self.root / 'peer-observation.json', self.root / 'static.json',
                           *(Path(self.inv['roots'][row['root']]) / row['path'] for row in self.inv['files'])]
             files = {str(p): retain(p.read_bytes()) for p in candidates
                      if p.exists() and stat.S_ISREG(p.lstat().st_mode)}
@@ -743,6 +780,14 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(case['diagnostic_impacted_test_ids'], ['app-contract'])
         self.assertEqual(case['full_would_select_test_ids'], ['app-contract', 'fixture-setup', 'peer-contract'])
         self.assertEqual(result, self.compare_corpus(corpus), 'replay output must be deterministic')
+        absent = self.copy(corpus); absent['schema'] = 'ci110-impact-corpus-v2'
+        absent['cases'][0]['static_inventory'] = None
+        absent_result = self.compare_corpus(absent)
+        self.assertEqual(absent_result['status'], 'compared', absent_result)
+        absent_case = absent_result['cases'][0]
+        self.assertIsNone(absent_case.pop('static_inventory_replay'))
+        self.assertIsNone(absent_case['evidence_sha256'].pop('static_inventory'))
+        self.assertEqual(absent_case, case, 'explicit v2 absence changed legacy comparison')
         # A second independent consumer is unrelated to this header: FULL must
         # cover it counterfactually, while diagnostics retain the mismatch.
         other = self.copy(corpus['cases'][0]); other['id'] = 'unrelated-peer'
@@ -765,7 +810,8 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(reordered['groups'], mixed['groups'])
 
     def test_corpus_dropped_real_edge_miss_is_not_hidden_by_full(self):
-        corpus, _ = self.corpus_case()
+        static = self.static_bytes()
+        corpus, _ = self.corpus_case(static_raw=static)
         path, middle = self.fixture.target_document(self.inv, 'middle')
         app_path, app = self.fixture.target_document(self.inv, 'app')
         _, core = self.fixture.target_document(self.inv, 'core')
@@ -773,7 +819,7 @@ class ConfiguredInventory(unittest.TestCase):
         app['dependencies'] = [d for d in app['dependencies'] if d['id'] != core['id']]
         self.repin('build', path, middle)
         self.repin('build', app_path, app)
-        dropped, _ = self.corpus_case()
+        dropped, _ = self.corpus_case(static_raw=static)
         result = self.compare_corpus(dropped)
         self.assertEqual(result['status'], 'compared', result)
         case = result['cases'][0]
@@ -783,26 +829,35 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(case['full_observation_coverage']['hits'], ['app-contract'])
         self.assertEqual(case['reason'], 'diagnostic-edge-miss-despite-unconditional-FULL')
         self.assertEqual(result['groups']['controlled-fixture']['misses'], 1)
+        saved = json.loads((self.root / 'shadow.json').read_bytes())
+        self.assertEqual(saved['decision']['impacted_test_ids'],
+                         ['storage-contract', 'ui-contract'], 'static success must not hide configured MISS')
         self.restore(); self.changed = []; self.inv = self.copy(self.original)
-        restored, _ = self.corpus_case()
+        restored, _ = self.corpus_case(static_raw=static)
         self.assertEqual(restored, corpus, 'exact input restoration changed evidence identities')
         self.assertEqual(self.compare_corpus(restored)['cases'][0]['diagnostic']['state'], 'HIT')
 
     def test_corpus_observation_kinds_empty_unknown_and_unknown_test(self):
-        corpus, observation = self.corpus_case()
-        for kind in ('controlled-fixture', 'causally-adjudicated', 'caller-assertion', 'historical-unadjudicated'):
-            for test_ids in (['app-contract'], [], None):
-                with self.subTest(kind=kind, test_ids=test_ids):
-                    observation.update(kind=kind, test_ids=test_ids)
-                    raw = self.fixture.encode(observation)
-                    (self.root / 'observation.json').write_bytes(raw)
-                    corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(raw)
-                    result = self.compare_corpus(corpus)
-                    self.assertEqual(result['status'], 'compared', result)
-                    case = result['cases'][0]
+        corpus, observation = self.corpus_case(static_raw=self.static_bytes())
+        # Batch the four independent labels in one bounded real CLI invocation
+        # per expectation shape, not twelve redundant replays of the same closure.
+        # All twelve semantic cases/assertions and the supervised path remain.
+        for test_ids in (['app-contract'], [], None):
+            batch = self.copy(corpus); batch['cases'] = []
+            for kind in ('controlled-fixture', 'causally-adjudicated', 'caller-assertion', 'historical-unadjudicated'):
+                observation.update(kind=kind, test_ids=test_ids)
+                raw = self.fixture.encode(observation)
+                name = kind + '-observation.json'; (self.root / name).write_bytes(raw)
+                row = self.copy(corpus['cases'][0]); row['id'] = kind
+                row['observation'] = {'path': name, 'sha256': self.fixture.digest(raw)}
+                batch['cases'].append(row)
+            result = self.compare_corpus(batch)
+            self.assertEqual(result['status'], 'compared', result)
+            for case in result['cases']:
+                with self.subTest(kind=case['kind'], test_ids=test_ids):
                     self.assertEqual(case['diagnostic']['state'], 'HIT' if test_ids else 'UNKNOWN')
-                    self.assertEqual(case['causal_denominator'],
-                                     1 if test_ids and kind in ('controlled-fixture', 'causally-adjudicated') else None)
+                    self.assertEqual(case['causal_denominator'], 1 if test_ids and case['kind'] in
+                                     ('controlled-fixture', 'causally-adjudicated') else None)
                     self.assertEqual(result['historical_causal_recall'], 'UNKNOWN')
                     self.assertTrue(all(g['coverage_claim'] == 'NONE' for g in result['groups'].values()))
         observation['test_ids'] = ['never-registered']
@@ -972,14 +1027,120 @@ class ConfiguredInventory(unittest.TestCase):
         result = self.compare_corpus(unsupported)
         self.assertEqual(result['errors'], ['corpus-static-inventory-evidence-unsupported'])
         self.assertEqual(result['cases'], [])
+        # Actual unpinned and failed collector acquisition is still unsupported,
+        # even when a v2 caller supplies bytes or an explicit absence marker.
+        for mode in ('unpinned', 'failed'):
+            bad_command = list(command)
+            if mode == 'unpinned':
+                bad_command = bad_command[:-2]
+            else:
+                bad_command[bad_command.index('--inventory') + 1] = str(self.root)
+            failure = subprocess.run(bad_command, capture_output=True, timeout=10, check=True)
+            actual = json.loads(failure.stdout)
+            self.assertEqual(actual['inventory_acquisition']['status'],
+                             'regular-file' if mode == 'unpinned' else 'failed')
+            unsupported, _ = self.corpus_case(shadow_raw=failure.stdout)
+            unsupported['schema'] = 'ci110-impact-corpus-v2'
+            unsupported['cases'][0]['static_inventory'] = {'path': 'static.json', 'sha256': self.fixture.digest(static)}
+            bad = self.compare_corpus(unsupported)
+            self.assertEqual(bad['errors'], ['corpus-decision-acquisition-mismatch' if mode == 'unpinned' else
+                                            'corpus-static-inventory-evidence-unsupported'])
+            self.assertEqual(bad['cases'], [])
         (self.root / 'shadow.json').write_bytes(original)
         self.assertEqual(self.compare_corpus(corpus), good, 'static rejection contaminated absent-inventory replay')
 
+    def test_corpus_pinned_static_original_bytes_and_receipt_consistency(self):
+        static = self.static_bytes()
+        corpus, _ = self.corpus_case(static_raw=static)
+        saved = json.loads((self.root / 'shadow.json').read_bytes())
+        good = self.compare_corpus(corpus)
+        self.assertEqual(good['status'], 'compared', good)
+        self.assertEqual(good['schema'], 'ci110-impact-comparison-v2')
+        case = good['cases'][0]
+        self.assertEqual(case['static_inventory_replay'], {
+            'decision_sha256': self.fixture.digest(self.fixture.encode(saved['decision'])),
+            'decision_errors': saved['decision']['errors']})
+        self.assertEqual(case['evidence_sha256']['static_inventory'], self.fixture.digest(static))
+        self.assertEqual(case['diagnostic']['hits'], ['app-contract'])
+        self.assertEqual(saved['decision']['impacted_test_ids'], ['storage-contract', 'ui-contract'])
+        self.assertTrue(saved['decision']['unknown_or_error'])
+        self.assertIn('dependency-closure-incomplete', case['static_inventory_replay']['decision_errors'])
+        # A valid first case cannot escape whole-corpus rejection of case two.
+        second = self.copy(corpus['cases'][0]); second['id'] = 'second-static'
+        corpus['cases'].append(second)
+        variants = []
+        for key, value in [('input_sha256', None), ('inventory', None), ('source', None)]:
+            bad = self.copy(saved); bad['decision'][key] = value; variants.append((key, bad))
+        for key in ('inventory', 'expected_inventory', 'request'):
+            bad = self.copy(saved); bad['decision']['input_sha256'][key] = '0' * 64
+            variants.append(('digest-' + key, bad))
+        bad = self.copy(saved); bad['decision']['inventory']['source']['tree'] = '0' * 40
+        variants.append(('wrong-static-source', bad))
+        for key, value in [('status', 'failed'), ('status', 'not-requested'), ('error', 'inventory-read-failed'),
+                           ('cleanup_errors', ['unconfirmed']), ('cleanup_errors', None), ('extra', None),
+                           ('status', True), ('error', False)]:
+            bad = self.copy(saved); bad['inventory_acquisition'][key] = value
+            variants.append(('receipt-' + key, bad))
+        bad = self.copy(saved); bad['decision']['inventory']['closure']['complete'] = 0
+        variants.append(('boolean-not-int', bad))
+        for label, bad in variants:
+            raw = self.fixture.encode(bad); (self.root / 'bad-static-shadow.json').write_bytes(raw)
+            second['shadow'] = {'path': 'bad-static-shadow.json', 'sha256': self.fixture.digest(raw)}
+            result = self.compare_corpus(corpus, cli=label in {
+                'digest-expected_inventory', 'wrong-static-source'})
+            self.assertEqual(result['status'], 'rejected', 'static cross-consistency bypass: ' + label)
+            self.assertEqual(result['cases'], [])
+        corpus['cases'].pop()
+        # Missing/null/extra/unpinned refs cannot borrow the saved projection.
+        variants = []
+        for ref in (None, {}, {'path': 'static.json'}, {'path': 'static.json', 'sha256': None},
+                    {'path': 'static.json', 'sha256': True},
+                    {'path': 'static.json', 'sha256': '0' * 64},
+                    {**corpus['cases'][0]['static_inventory'], 'extra': None}):
+            bad = self.copy(corpus); bad['cases'][0]['static_inventory'] = ref; variants.append(bad)
+        bad = self.copy(corpus); bad['cases'][0].pop('static_inventory'); variants.append(bad)
+        for name in ('../static.json', '/static.json', 'sub/../static.json', 'missing-static.json',
+                     'static-link', 'static-fifo', 'static-dir', 'static-ancestor/static.json', 'static-large'):
+            bad = self.copy(corpus); bad['cases'][0]['static_inventory']['path'] = name; variants.append(bad)
+        (self.root / 'static-link').symlink_to(self.root / 'static.json')
+        os.mkfifo(self.root / 'static-fifo'); (self.root / 'static-dir').mkdir()
+        (self.root / 'static-ancestor').symlink_to(self.root, target_is_directory=True)
+        with (self.root / 'static-large').open('wb') as stream:
+            stream.truncate(2_000_001)
+        for index, bad in enumerate(variants):
+            result = self.compare_corpus(bad, cli=index in (0, 8, 12, 13))
+            self.assertEqual(result['status'], 'rejected', bad)
+            self.assertEqual(result['cases'], [])
+        # A fresh ref digest cannot replay old saved expected/inventory digests.
+        (self.root / 'static.json').write_bytes(static + b' ')
+        self.assertEqual(self.compare_corpus(corpus)['errors'], ['corpus-file-digest-mismatch'])
+        repinned = self.copy(corpus)
+        repinned['cases'][0]['static_inventory']['sha256'] = self.fixture.digest(static + b' ')
+        self.assertEqual(self.compare_corpus(repinned)['errors'], ['corpus-decision-acquisition-mismatch'])
+        (self.root / 'static.json').write_bytes(static)
+        self.assertEqual(self.compare_corpus(corpus), good, 'exact original-byte restoration did not restore GREEN')
+        # Real successful read but rejected policy input remains an exact failure,
+        # not a fabricated acquisition failure or successful complete inventory.
+        for raw, error in [(b'{', 'inventory-invalid-json'),
+                           (self.fixture.encode({**json.loads(static), 'source': self.inv['source']}),
+                            'inventory-base-identity-mismatch')]:
+            rejected_policy, _ = self.corpus_case(static_raw=raw)
+            actual = json.loads((self.root / 'shadow.json').read_bytes())
+            replay = self.compare_corpus(rejected_policy)
+            self.assertEqual(replay['status'], 'compared', replay)
+            self.assertEqual(replay['cases'][0]['static_inventory_replay'], {
+                'decision_sha256': self.fixture.digest(self.fixture.encode(actual['decision'])),
+                'decision_errors': actual['decision']['errors']})
+            self.assertIn(error, replay['cases'][0]['static_inventory_replay']['decision_errors'])
+            self.assertTrue(actual['decision']['unknown_or_error'])
+        restored, _ = self.corpus_case(static_raw=static)
+        self.assertEqual(self.compare_corpus(restored), good)
+
     def test_corpus_snapshot_mutation_bounds_read_only_and_inert_data(self):
         import ci_shadow_corpus as comparison
-        corpus, observation = self.corpus_case()
+        corpus, observation = self.corpus_case(static_raw=self.static_bytes())
         before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in
-                  [self.path, self.root / 'shadow.json', self.root / 'observation.json',
+                  [self.path, self.root / 'shadow.json', self.root / 'observation.json', self.root / 'static.json',
                    *(Path(self.inv['roots'][row['root']]) / row['path'] for row in self.inv['files'])]}
         self.compare_corpus(corpus)
         self.assertEqual(before, {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in before})
@@ -1001,6 +1162,24 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(result['errors'], ['corpus-input-mutated'])
         self.assertEqual(result['cases'], [])
         (self.root / 'observation.json').write_bytes(before[self.root / 'observation.json'][0])
+        # Actual supervised CLI: a disposable source mutation changes the raw
+        # static bytes AFTER all case comparisons, before the whole-input recheck.
+        # No validator/receipt mock, no timing race, and exact restoration below.
+        tools = self.root / 'mutation-tools'; tools.mkdir()
+        for name in ('ci_shadow.py', 'ci_shadow_corpus.py', 'ci_shadow_policy.py',
+                     'ci_shadow_inventory.py', 'ci_shadow_configured.py'):
+            (tools / name).write_bytes((TOOLS / name).read_bytes())
+        worker = tools / 'ci_shadow_corpus.py'; source = worker.read_text()
+        anchor = '    def verify(self):\n'
+        self.assertEqual(source.count(anchor), 1)
+        worker.write_text(source.replace(anchor, anchor +
+            "        p = Path(" + repr(str(self.root / 'static.json')) + ")\n" +
+            "        p.write_bytes(p.read_bytes() + b' ')\n"))
+        mutated = self.compare_corpus(corpus, tools=tools)
+        self.assertEqual(mutated['errors'], ['corpus-input-mutated'])
+        self.assertEqual(mutated['cases'], [])
+        (self.root / 'static.json').write_bytes(before[self.root / 'static.json'][0])
+        self.assertEqual(self.compare_corpus(corpus)['status'], 'compared')
         # Real imported command is inert. Independently expect an unmapped test
         # to MISS diagnostic impact even though FULL still covers its identifier.
         ctest = json.loads(self.original_bytes['build', 'ctest.json'])

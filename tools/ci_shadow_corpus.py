@@ -56,10 +56,13 @@ class Snapshot:
         self.files[path] = (digest, before, raw)
         return raw
 
-    def reference(self, root, ref):
+    def raw_reference(self, root, ref):
         policy.keys(ref, 'path sha256', 'corpus-reference-fields')
         check(configured.relative(ref['path']), 'corpus-unsafe-reference')
-        return policy.strict_json(self.read(root / ref['path'], ref['sha256']))
+        return self.read(root / ref['path'], ref['sha256'])
+
+    def reference(self, root, ref):
+        return policy.strict_json(self.raw_reference(root, ref))
 
     def verify(self):
         for path, (digest, identity, _) in self.files.items():
@@ -120,12 +123,11 @@ def identities(acquisition):
     return {k: tested[k] for k in ('commit', 'tree')}
 
 
-def validate_saved_decision(saved, source):
+def validate_saved_decision(saved, source, inventory_bytes=None, inventory_digest=None):
     """Rebuild the supported collector request, not a parallel classifier.
 
-    This replay version has no pinned static-inventory input. Accept its normal
-    absence, but explicitly reject supplied/failed inventory evidence instead of
-    trusting an unverifiable serialized legacy projection. The configured graph
+    Legacy replay has no pinned static input; v2 supplies original bytes and an
+    independent pin, never a serialized legacy projection. The configured graph
     is independently replayed below. Canonical comparison checks every nested
     field and distinguishes JSON booleans from integers (unlike dict equality).
     """
@@ -134,7 +136,8 @@ def validate_saved_decision(saved, source):
           'historical-failure-recall-unknown', 'dependency-closure-unqualified'], 'corpus-shadow-limits')
     receipt = saved['inventory_acquisition']
     policy.keys(receipt, 'status error cleanup_errors', 'corpus-inventory-receipt-fields')
-    check(receipt['status'] == 'not-requested', 'corpus-static-inventory-evidence-unsupported')
+    check(receipt['status'] == ('regular-file' if inventory_bytes is not None else 'not-requested'),
+          'corpus-static-inventory-evidence-unsupported')
     check(receipt['error'] is None and receipt['cleanup_errors'] == [], 'corpus-inventory-receipt-conflict')
     acquisition = saved['acquisition']
     base = {k: acquisition['identities']['base'][k] for k in ('commit', 'tree')}
@@ -151,13 +154,15 @@ def validate_saved_decision(saved, source):
                         'fork': acquisition['event'] == 'pull_request', 'privilege': 'none'}}
     # classify also preserves the legitimate empty-diff/missing-inventory errors.
     # Do not require an optional inventory, authenticated source or full closure.
-    expected = policy.classify(policy.canonical(request), None, None)
+    expected = policy.classify(policy.canonical(request), inventory_bytes, inventory_digest)
     check(policy.canonical(saved['decision']) == policy.canonical(expected),
           'corpus-decision-acquisition-mismatch')
 
 
-def compare_case(snapshot, root, case):
-    policy.keys(case, 'id context shadow configured_inputs observation', 'corpus-case-fields')
+def compare_case(snapshot, root, case, version='ci110-impact-corpus-v1'):
+    extended = version == 'ci110-impact-corpus-v2'
+    policy.keys(case, 'id context shadow configured_inputs observation' +
+                (' static_inventory' if extended else ''), 'corpus-case-fields')
     check(configured.label(case['id']), 'corpus-case-id')
     policy.keys(case['context'], CONTEXT, 'corpus-context-fields')
     saved = snapshot.reference(root, case['shadow'])
@@ -170,7 +175,11 @@ def compare_case(snapshot, root, case):
           saved['decision']['execution_authorized'] is False, 'corpus-shadow-version-or-authority')
     acquisition = saved['acquisition']
     source = identities(acquisition)
-    validate_saved_decision(saved, source)
+    inventory_bytes, inventory_digest = None, None
+    if extended and case['static_inventory'] is not None:
+        inventory_bytes = snapshot.raw_reference(root, case['static_inventory'])
+        inventory_digest = case['static_inventory']['sha256']
+    validate_saved_decision(saved, source, inventory_bytes, inventory_digest)
     inputs = snapshot.reference(root, case['configured_inputs'])
     # Freeze the entire pinned producer closure before replay, then independently
     # re-read it via the unchanged importer. No command/URI in that data is run.
@@ -210,7 +219,7 @@ def compare_case(snapshot, root, case):
     historical = observation['kind'] == 'historical-unadjudicated'
     comparison = {'hits': hits, 'misses': misses, 'denominator': len(expected) if expected else None,
                   'state': 'UNKNOWN' if not expected else 'MISS' if misses else 'HIT'}
-    return {'id': case['id'], 'context': context, 'kind': observation['kind'],
+    result = {'id': case['id'], 'context': context, 'kind': observation['kind'],
             'origin': observation['origin'], 'basis': observation['basis'], 'trust': observation['trust'],
             'evidence_sha256': {name: case[name]['sha256'] for name in ('shadow', 'configured_inputs', 'observation')},
             'diagnostic': comparison, 'diagnostic_impacted_test_ids': sorted(impacted),
@@ -223,6 +232,16 @@ def compare_case(snapshot, root, case):
                       'no-known-nonempty-expectation' if not expected else
                       'diagnostic-edge-miss-despite-unconditional-FULL' if misses else 'diagnostic-expectation-hit',
             'unknowns': diagnostic['unknowns']}
+    if extended:
+        result['evidence_sha256']['static_inventory'] = inventory_digest
+        # Compared means consistent replay, not policy success. Bind the entire
+        # canonical decision and retain its fixed errors, without re-exporting
+        # caller-authored inventory provenance/origin strings from the policy.
+        result['static_inventory_replay'] = {
+            'decision_sha256': policy.digest(policy.canonical(saved['decision'])),
+            'decision_errors': saved['decision']['errors']
+        } if inventory_bytes is not None else None
+    return result
 
 
 def compare(path, expected_digest):
@@ -232,16 +251,18 @@ def compare(path, expected_digest):
         path = Path(path).absolute()
         corpus = policy.strict_json(snapshot.read(path, expected_digest))
         policy.keys(corpus, 'schema cases', 'corpus-fields')
-        check(corpus['schema'] == 'ci110-impact-corpus-v1', 'corpus-version')
+        check(corpus['schema'] in ('ci110-impact-corpus-v1', 'ci110-impact-corpus-v2'), 'corpus-version')
         check(isinstance(corpus['cases'], list) and len(corpus['cases']) <= MAX_CASES, 'corpus-case-limit')
         cases, seen = [], set()
         for case in corpus['cases']:
-            current = compare_case(snapshot, path.parent, case)
+            current = compare_case(snapshot, path.parent, case, corpus['schema'])
             check(current['id'] not in seen, 'corpus-duplicate-case')
             seen.add(current['id'])
             cases.append(current)
         snapshot.verify()
         result.update(status='compared', corpus_sha256=expected_digest, cases=sorted(cases, key=lambda c: c['id']))
+        if corpus['schema'] == 'ci110-impact-corpus-v2':
+            result['schema'] = 'ci110-impact-comparison-v2'
         # Never pool fixture/assertion denominators with historical CI observations.
         result['groups'] = {kind: {'cases': sum(c['kind'] == kind for c in cases),
             'hits': sum(len(c['diagnostic']['hits']) for c in cases if c['kind'] == kind),

@@ -298,6 +298,18 @@ any test/qualification passed. Usage errors are nonzero. Inspect `status` and
   The configured input manifest and its roots/files retain the preceding schema.
   Supply the exact original regular files, not a newly discovered latest reply.
 
+`ci110-impact-corpus-v2` is an explicit opt-in extension with the same top-level
+fields. Every case additionally **must** contain `static_inventory`: either
+`null` for the normal absent optional input, or exactly
+`{ "path": RELATIVE_FILE, "sha256": SHA256 }` pinning the **original raw bytes**
+read by the collector's `--inventory`. References use the same corpus-relative
+safe-path rules, per-file/aggregate byte and file bounds, Snapshot identity/digest
+checks and final whole-input recheck as the other evidence. Missing, extra,
+unpinned, contradictory or unsafe references reject the entire corpus. The
+independent digest must equal both original inventory digests in the regenerated
+decision; it is never inferred from a saved projection. V1 cases cannot contain
+this field, even when null; neither version implicitly upgrades the other.
+
 `ci110-impact-observation-v1` has exactly `schema`, `context`, `kind`, `origin`,
 `trust`, `test_ids`, `basis`. `context` must equal the case's fully pinned
 context. `test_ids` is a unique list of registered identifiers or `null` for
@@ -334,16 +346,30 @@ extra, truncated, contradictory or unsupported nested fields reject the whole
 corpus. Canonical comparison distinguishes JSON booleans from integers. Empty
 diffs retain the collector's expected diagnostic error; they are not safe omission.
 
-This corpus version supports the collector's normal **absent optional static
+Corpus v1 supports the collector's normal **absent optional static
 inventory** (`inventory_acquisition.status=not-requested`, null error, no cleanup
 errors). It does not demand an inventory, trusted signatures or complete closure.
 A supplied/failed static-inventory acquisition is explicitly rejected with
 `corpus-static-inventory-evidence-unsupported`: the corpus schema has no reference
 to pin/re-read its original static inventory, so saved static projections cannot
 be verified. The original collector's optional `--inventory` CLI is unchanged.
-Replaying that additional input would require an explicit future schema extension,
-not silently trusting serialized fields. The configured-input inventory remains
-required and independently replayed for this comparison path.
+That legacy behavior/output remains unchanged. Corpus v2 can replay a supplied
+static inventory only with the explicit original-byte reference and the exact
+successful receipt (`status=regular-file`, null primary error, empty cleanup
+errors). Explicit null requires the exact not-requested receipt. Failed reads,
+timeouts, unconfirmed cleanup and originally unpinned reads remain unsupported;
+replay never synthesizes old acquisition outcomes. A different digest, receipt,
+saved inventory/source/request projection or tested merge is not repaired by
+repinning the corpus or its saved envelope. The unchanged policy receives the
+actual original bytes and independent reference digest and the entire canonical
+decision must match. The configured-input inventory remains required and
+independently replayed for both versions.
+
+Successful reading is **not** successful policy validation. V2 also supports
+originally read bytes rejected by the policy (including malformed JSON or a
+stale inventory base): only their exact regenerated fail-closed decision is
+replayable. `status=compared` means consistency, not that the inventory was valid,
+complete or authentic. No policy error is removed or relabelled successful.
 
 Replay also revalidates the raw diff encoding/digest/count, tested source context,
 configured input closure and entire canonical saved diagnostic against the unchanged
@@ -365,6 +391,18 @@ Group hit/miss counts are partitioned by kind; no pooled or historical causal
 recall, precision, safe-omission or speedup percentage is claimed. All group
 `causal_recall` values and `historical_causal_recall` remain UNKNOWN.
 
+Successful v2 replay emits `ci110-impact-comparison-v2`, adding per-case
+`evidence_sha256.static_inventory` (the raw-byte pin or null) and
+`static_inventory_replay` (null when absent, otherwise exactly `decision_sha256`
+and `decision_errors`). The digest binds the **entire canonical saved/regenerated
+decision**, while the fixed policy error codes keep its exact failure visible.
+Caller-authored static inventory origin/provenance strings are not re-exported;
+retain the original collector bytes privately for full inspection. The configured
+diagnostic hit/MISS oracle and all denominator/trust semantics are unchanged,
+even if the static policy lists different consumers. Rejections of either corpus
+version retain the existing bounded `ci110-impact-comparison-v1` error envelope,
+with no partial cases or new authority.
+
 Bounds are eight cases, 8192 distinct files, 2,000,000 bytes per file, 16,000,000
 aggregate bytes across the entire corpus/manifest/observation/configured closure,
 and 2,000,000 output bytes. The existing owned worker enforces a five-second
@@ -384,7 +422,15 @@ unrelated-consumer assertions, PR tested-merge mismatch, all observation kinds,
 empty/unknown/invalid evidence, deterministic multi-case ordering, whole-input
 mutation and read-only/inert-command/import behavior. Both existing tiny
 producers finish together within the unchanged shared setup12 budget before
-replay cases; outer CTest30 and all prior assertions remain unchanged. Exhaustive
+replay cases; outer CTest30 and all prior assertions remain unchanged. The twelve
+kind/expectation combinations are batched as four independently pinned cases per
+real supervised CLI invocation, sharing one immutable closure instead of
+relaunching the same replay twelve times. Only the two pristine real collector
+envelopes may be reused after exact command/configured-closure/static-byte
+identity checks; changed graph, PR and policy-rejected inputs still acquire
+fresh collector evidence, and all comparison/restoration cases use the real CLI.
+Static controls reuse these same two producers and existing PR, dropped-edge,
+read-only and mutation routes, not additional builds or CTest families. Exhaustive
 parser variations use the actual worker function, while representative valid,
 invalid, nonregular, stale and restoration cases run the real supervised CLI.
 No additional CTest family, workflow, filtering, local-final-gate change or
