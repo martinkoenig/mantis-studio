@@ -1,4 +1,4 @@
-# Internal recorder writer-cycle diagnostics (v1)
+# Internal recorder writer-cycle diagnostics (v2)
 
 This is an **opt-in software qualification tool**, not product telemetry, a new
 transport, a RawCapture schema, or a causal explanation of historical recorder
@@ -85,6 +85,10 @@ internal consistency, not authenticity of arbitrarily supplied trace files.
 - Source `next` entry/return, delivered source/frame identity and admission
   entry/outcome are matched. Queue occupancy snapshots are observational and may
   change concurrently; they are not claimed as atomic enqueue/pop depths.
+  The return explicitly distinguishes a frame, an empty result, a returned error
+  and a thrown error. A delivered frame must match its returned key. Admission
+  **entry** precedes consumption in the coherent process clock; the outcome read
+  may legitimately follow the pop or even completion of its writer cycle.
 - An actual nonblocking queue pop distinguishes immediately available work from
   an empty queue followed by the existing blocking pop. Only the isolated
   instrumented path uses this extra probe. Its extra queue lock/perturbation is
@@ -111,6 +115,18 @@ acknowledgement merely because callbacks succeeded. Recovery and the verified
 recoverable prefix require actual Store reopen/recovery and two real replays;
 the decoder explicitly reports them UNAVAILABLE. Physical power-loss certification
 remains separate under ADR-019/022.
+
+Version 2 additionally records the actual segment index, configured byte limit,
+post-write byte position and record count. The decoder requires seal/durable
+stages exactly at the existing byte/record boundary, with the matched index and
+record count. An independent qualification oracle scans the **actual Store-indexed
+segment files before finalization**, retaining their size, complete record count
+and last frame key plus actual Store configuration/capture/artifact identity.
+It must agree with the observed acknowledgements; callback totals are not this
+oracle. Absent Store evidence is UNAVAILABLE, not zero durable segments. Offline
+schema-2 decoding therefore requires that oracle as a second JSON-file argument;
+schema-1 needs no segment oracle. A post-Session finalization seal is deliberately
+excluded from both the append-cycle trace and this pre-finalization oracle.
 
 The decoder reports COMPLETE_CHRONOLOGY, never capture success or causal closure.
 Failed callbacks and rejected admissions are explicit outcomes within otherwise
@@ -150,11 +166,29 @@ are retained once, never repeated until favorable. The workload's deliberate
 hard daemon kill must remain visibly incomplete even when earlier finalized
 sessions have complete matched chronology. Every serialized final trace must
 validate; an incomplete sibling cannot be hidden by one successful observation.
-Missing final output is allowed only for an actual owned daemon with a recorded
-SIGKILL exit, and all owned daemon exits must be available after retirement.
+The expected Session roster comes independently from actual runtime snapshots,
+cross-checked against existing Store capture provenance, not from surviving trace
+files. The observer inventory includes markers, finals and partials; an entire
+missing marker+final pair is still rejected by the roster. Observer UNAVAILABLE
+or INCOMPLETE outcomes are retained before temporary daemon-log removal and
+invalidate qualification even when healthy siblings exist. Missing final output
+is allowed only for the **exact active capture** at the workload's deliberate owned
+SIGKILL, not every Session in that killed process. All owned daemon exits must be
+available after retirement.
 Wrong-owner, invalid-sibling and missing-without-kill controls exercise this
 collection oracle separately from the real workload. Any retained private output
 must be screened before public publication.
+
+The controls include impossible returned/delivered keys and admission entry after
+consumption, while retaining legal late admission-outcome interleavings. Whole
+seal-group omission and mispaired segment identity are rejected against real
+Store files. The disposable native omitted-seal observer retains actual Store
+flush/sync/commit behavior and must fail its intended diagnostic assertion;
+the exact observer restoration must be GREEN. A real two-Session control fails
+initialization only for the second observer: both recordings and two replays
+remain healthy, but the missing Session observation makes qualification INCOMPLETE.
+Native mutation helpers have separate `build` and `test` phases so compilation
+does not overlap an exclusive functional test campaign.
 
 Observer-enabled/disabled fixed-workload results are functional equivalence and
 bounded retention/perturbation observations, not universal performance claims.

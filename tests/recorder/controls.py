@@ -8,7 +8,8 @@ import subprocess
 import sys
 import tempfile
 import time
-from decoder import decode, load, Incomplete, require_owned_acceptance
+from decoder import collect, decode, load, Incomplete, require_owned_acceptance
+from oracle_controls import causal_controls, segment_controls
 
 def rejected(data, reason):
     try:
@@ -26,7 +27,7 @@ def main():
                'decoder_sha256': hashlib.sha256(Path(__file__).with_name('decoder.py').read_bytes()).hexdigest(),
                'cases': [], 'negative_controls': []}
     golden = None
-    for mode in ('positive','boundary','segmented','queue','storage','writer','source-observer','serialization','overflow','crash','disabled','product-disabled','unavailable','collision'):
+    for mode in ('positive','boundary','segmented','segmented-unsealed','queue','storage','writer','source-observer','source-error','source-throw','init-sibling','serialization','overflow','crash','disabled','product-disabled','unavailable','collision'):
         case = root / mode
         trace = case / 'trace'
         trace.mkdir(parents=True)
@@ -47,6 +48,25 @@ def main():
         (root/'receipt.json').write_text(json.dumps(receipt, indent=2)+'\n')
         assert result.returncode == (27 if mode == 'crash' else 0), (mode, result.stderr.decode(errors='replace'))
         outputs, markers = list(trace.glob('*.json')), list(trace.glob('*.started'))
+        if mode == 'init-sibling':
+            native = [json.loads(line) for line in result.stdout.splitlines()]
+            assert len(native) == 2 and {n['capture'] for n in native} == {'controlled-positive', 'controlled-init-failed'}
+            assert len(outputs) == len(markers) == 1
+            assert all(n['produced'] == n['admitted'] == n['callbacks'] == n['recovered'] == 8
+                       and not n['primary'] and n['two_replays'] for n in native)
+            assert b'UNAVAILABLE initialization' in result.stderr
+            roster = [{'pid': n['pid'], 'capture': n['capture'], 'allow_missing_final': False} for n in native]
+            try:
+                require_owned_acceptance(collect(trace), [{'pid': native[0]['pid'], 'exit': 0}], roster,
+                                         ['recorder-observer: UNAVAILABLE initialization; capture error unchanged'])
+            except Incomplete as exc:
+                assert str(exc) == 'actual Session/observer roster mismatch'
+                receipt['negative_controls'].append({'control': 'one actual Session initialization fails; both captures healthy',
+                    'status': 'REJECTED', 'diagnostic': str(exc), 'roster': roster, 'native': native})
+            else:
+                raise AssertionError('healthy sibling concealed unavailable observer Session')
+            entry['evidence_status'] = 'INCOMPLETE: one Session observer unavailable; both real replays healthy'
+            continue
         if mode in ('crash','serialization'):
             assert len(markers) == 1 and not outputs, (mode, 'missing incomplete evidence marker')
             if mode == 'serialization':
@@ -86,8 +106,16 @@ def main():
             assert summary['schema1_durable_acknowledgements'] == 3
             entry['evidence_status'] = 'INCOMPLETE: observer boundary callback failed'
             continue
-        summary = decode(data)
         native = json.loads(result.stdout)
+        summary = decode(data, native['segment_oracle'])
+        if mode == 'segmented':
+            assert summary['segment_durable_acknowledgements'], 'fixture did not exercise a real seal'
+            receipt['negative_controls'].extend(segment_controls(data, native['segment_oracle']))
+        if mode == 'segmented-unsealed':
+            assert summary['segment_durable_acknowledgements'] == native['segment_oracle']['segments'] == []
+            assert summary['segment_evidence'].startswith('QUALIFIED:') and native['callbacks'] == 4
+        if mode in ('source-error', 'source-throw'):
+            assert summary['source_failures'] == 1 and native['primary'] == 'source primary'
         assert summary['produced'] == native['produced']
         assert summary['admitted'] == native['admitted']
         assert summary['callback_success'] == native['callbacks']
@@ -123,17 +151,37 @@ def main():
     assert golden is not None
     # A valid sibling must never hide a serialized invalid observation. This is
     # an ownership-oracle negative control, not a replacement daemon workload.
-    good = decode(golden)
+    good = dict(decode(golden), marker_present=True, final_present=True)
+    # Synthetic collection controls only. Actual killed-daemon/whole-Session
+    # absence checks run independently in the real acceptance workload.
+    killed = {'status': 'INCOMPLETE', 'pid': good['pid'] + 1, 'capture': 'oracle-killed',
+              'marker_present': True, 'final_present': False}
+    roster = [{'pid': good['pid'], 'capture': good['capture'], 'allow_missing_final': False},
+              {'pid': killed['pid'], 'capture': killed['capture'], 'allow_missing_final': True}]
+    exits = [{'pid': good['pid'], 'exit': 0}, {'pid': killed['pid'], 'exit': -9}]
+    require_owned_acceptance([good, killed], exits, roster, [])
     for name, sibling in (
-        ('serialized incomplete sibling', {'status':'INCOMPLETE','pid':good['pid'],'final_present':True}),
-        ('unowned sibling', dict(good, pid=good['pid']+1)),
-        ('missing final without owned kill', {'status':'INCOMPLETE','pid':good['pid'],'final_present':False})):
+        ('serialized incomplete sibling', dict(good, status='INCOMPLETE')),
+        ('unowned sibling', dict(good, pid=good['pid']+2)),
+        ('missing final without owned kill', dict(good, status='INCOMPLETE', final_present=False)),
+        ('missing marker with surviving final', dict(good, marker_present=False))):
         try:
-            require_owned_acceptance([good, sibling], [{'pid':good['pid'],'exit':0}])
+            require_owned_acceptance([sibling, killed], exits, roster, [])
         except Incomplete as exc:
             receipt['negative_controls'].append({'control':name,'status':'REJECTED','diagnostic':str(exc)})
         else:
             raise AssertionError('invalid acceptance collection accepted: '+name)
+    for name, rows, expected_roster, statuses in (
+        ('entire complete sibling absent', [killed], roster, []),
+        ('wrong capture given owned kill exception', [good, killed], [dict(r, allow_missing_final=not r['allow_missing_final']) for r in roster], []),
+        ('retained unavailable outcome despite complete sibling', [good, killed], roster, ['UNAVAILABLE initialization'])):
+        try:
+            require_owned_acceptance(rows, exits, expected_roster, statuses)
+        except Incomplete as exc:
+            receipt['negative_controls'].append({'control':name,'status':'REJECTED','diagnostic':str(exc)})
+        else:
+            raise AssertionError('invalid acceptance roster accepted: '+name)
+    receipt['negative_controls'].extend(causal_controls(golden))
     mutations = []
     for stage in ('cycle.end','account.lock.acquired','store.packet.end','store.packet.begin','source.frame','admission.accepted'):
         bad = copy.deepcopy(golden)

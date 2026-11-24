@@ -355,6 +355,8 @@ struct Store::Impl {
                     MANTIS_STORAGE_POINT("raw-first-directory-sync-before", root, id.value);
                 platform::durable_directory(writer.part.parent_path());
             }
+            MANTIS_RECORDER_EVENT("raw.segment.index", nullptr, writer.index);
+            MANTIS_RECORDER_EVENT("raw.segment.limit", nullptr, writer.limit);
             {
                 RawStage stage(trace, 4);
                 if (initial)
@@ -364,6 +366,8 @@ struct Store::Impl {
             }
             writer.last_sequence = packet.header.sequence.value;
             ++writer.records;
+            MANTIS_RECORDER_EVENT("raw.segment.bytes", nullptr, static_cast<int64_t>(writer.output.tellp()));
+            MANTIS_RECORDER_EVENT("raw.segment.records", nullptr, writer.records);
             if (static_cast<uint64_t>(writer.output.tellp()) >= writer.limit || writer.records >= 100000) {
                 RawStage stage(trace, 5);
                 seal(id, writer);

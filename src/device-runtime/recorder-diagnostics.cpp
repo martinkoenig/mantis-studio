@@ -131,7 +131,7 @@ Trace *open(const void *owner, const device::CaptureDescriptor &descriptor) noex
         }
         if (descriptor.id.value.size() >= text_limit)
             throw std::runtime_error("diagnostic capture identity capacity");
-        t->header = {{"version", 1},
+        t->header = {{"version", 2},
                      {"capture", descriptor.id.value},
                      {"sources", sources},
                      {"pid", getpid()},
@@ -219,6 +219,21 @@ std::optional<data::Published> pop(pipeline::BoundedQueue<data::Published> &queu
         event(frame ? "pop.woke" : "pop.closed", frame ? frame->get() : nullptr);
     }
     return frame;
+}
+Result<data::Published> next(device::ImageStream &stream) {
+    if (!current)
+        return stream.next();
+    event("source.next.begin");
+    try {
+        auto frame = stream.next();
+        // Outcome is explicit: a null packet must not masquerade as the last
+        // returned frame through the lane's retained key. Preserve error/throw.
+        event("source.next.end", frame && *frame ? frame->get() : nullptr, !frame ? -1 : *frame ? 1 : 0);
+        return frame;
+    } catch (...) {
+        event("source.next.threw");
+        throw;
+    }
 }
 void cleanup(const void *owner, bool done) noexcept {
     try {

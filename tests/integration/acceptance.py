@@ -140,6 +140,8 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         # Hard daemon termination leaves a genuinely provisional capture, then startup recovers it.
         raw = active.raw_artifact
         prior_ids = {a.id for a in client.artifacts.list() if a.state == "FINALIZED"}
+        if checkpoint := globals().get("_recorder_checkpoint"):
+            checkpoint("before-owned-kill", root, daemon.pid, client.snapshot(), active.id, log)
         daemon.kill(); daemon.wait(timeout=5)
         daemon = start()
         assert prior_ids <= {a.id for a in client.artifacts.list()}
@@ -148,6 +150,8 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
         recovered = client.artifacts.recover(raw)
         assert recovered.state == "FINALIZED"
         client.pipeline.run(raw_artifact=raw).wait()
+        if checkpoint := globals().get("_recorder_checkpoint"):
+            checkpoint("before-shutdown", root, daemon.pid, client.snapshot(), None, log)
         client.shutdown(); assert daemon.wait(timeout=8) == 0
         print("PASS: Python, CLI, " + ("Studio/viewport/UI restart, " if studio_bin.exists() else "headless client reconnect, ") + "deterministic replay, isolated crash, capture continuity, daemon crash recovery")
     except BaseException:
@@ -161,5 +165,7 @@ with tempfile.TemporaryDirectory(prefix="mantis-acceptance-") as directory:
     finally:
         studios.close()
         daemons.close()
+        if checkpoint := globals().get("_recorder_checkpoint"):
+            checkpoint("retired", root, None, None, None, log)
         if ui_log and not ui_log.closed: ui_log.close()
         log.close()

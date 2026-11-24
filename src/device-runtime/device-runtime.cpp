@@ -267,9 +267,7 @@ Session::Session(CaptureDescriptor descriptor, std::vector<ImageStream *> stream
                 auto next = std::chrono::steady_clock::now();
                 while (!stop.stop_requested() && active_) {
                     for (auto *stream : streams_) {
-                        MANTIS_RECORDER_EVENT("source.next.begin");
-                        auto frame = stream->next();
-                        MANTIS_RECORDER_EVENT("source.next.end", frame && *frame ? frame->get() : nullptr);
+                        auto frame = MANTIS_RECORDER_NEXT(*stream);
                         source_diagnostics(*stream, frame && static_cast<bool>(*frame));
                         if (!frame)
                             throw Failure(frame.error());

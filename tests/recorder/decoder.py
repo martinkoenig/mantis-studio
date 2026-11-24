@@ -1,4 +1,4 @@
-"""Strict, bounded offline decoder for internal recorder diagnostics v1.
+"""Strict, bounded offline decoder for internal recorder diagnostics v2.
 
 Not an authenticity or scheduler profiler. A complete trace of a failed capture is
 not a successful capture; callback, schema-1 durable acknowledgement and recovered
@@ -28,16 +28,16 @@ def load(path):
         marker = json.loads(marker_path.read_bytes())
     except (ValueError, OSError) as exc:
         raise Incomplete('truncated/missing trace or start marker') from exc
-    require(type(marker) is dict and marker.get('version') == 1 and marker.get('retired') is False
+    require(type(marker) is dict and marker.get('version') == 2 and marker.get('retired') is False
             and {'capture','sources','pid','generation','opened_ns','clock','build'} <= marker.keys(), 'incomplete start identity')
     for key, value in marker.items():
         if key != 'retired':
             require(data.get(key) == value, 'start/final identity mismatch: ' + key)
     return data
 
-def decode(data):
+def decode(data, segment_oracle=None):
     require(type(data) is dict, 'invalid trace object')
-    require(data.get('version') == 1, 'unsupported version')
+    require(data.get('version') == 2, 'unsupported version')
     require(data.get('clock') == 'process-steady-ns', 'wrong clock domain')
     require(data.get('retired') is True, 'observer did not retire')
     require(type(data.get('dropped')) is int and data['dropped'] == 0, 'observer overflow/dropped records')
@@ -71,32 +71,43 @@ def decode(data):
         require(len(lane) >= 2 and lane[0]['stage'] == 'worker.begin' and lane[-1]['stage'] == 'worker.end', 'worker retirement missing')
     require([e['stage'] for e in lanes[2]] == ['cleanup.begin','cleanup.end'], 'cleanup boundaries missing')
     require(all(e['ns'] <= lanes[2][-1]['ns'] for lane in lanes[:2] for e in lane), 'cleanup before worker retirement')
-    produced, admitted, rejected = {}, {}, {}
-    pstate, candidate = 'next', None
+    produced, admitted, rejected, admission_begins = {}, {}, {}, {}
+    source_failures, source_empty = 0, 0
+    pstate, candidate, returned = 'next', None, None
     for e in lanes[1][1:-1]:
         s, k = e['stage'], tuple(e['key'])
         if pstate == 'next':
             require(s == 'source.next.begin', 'source next begin missing')
             pstate = 'returned'
         elif pstate == 'returned':
-            require(s == 'source.next.end', 'source next end missing')
-            pstate = 'frame-or-next'
-        elif pstate == 'frame-or-next' and s == 'source.next.begin':
-            pstate = 'returned'
-        elif pstate == 'frame-or-next':
-            require(s == 'source.frame' and e['source'] in sources and k not in produced and k[3], 'wrong/duplicated source frame/clock')
+            require(s in ('source.next.end', 'source.next.threw'), 'source next end missing')
+            if s == 'source.next.threw':
+                source_failures += 1
+                pstate = 'terminal'
+            else:
+                require(e['value'] in (-1, 0, 1), 'source return outcome unavailable')
+                returned = k if e['value'] == 1 else None
+                source_failures += int(e['value'] == -1)
+                source_empty += int(e['value'] == 0)
+                pstate = 'frame' if returned is not None else 'next' if e['value'] == 0 else 'terminal'
+        elif pstate == 'frame':
+            require(s == 'source.frame' and k == returned, 'source return/delivered identity mismatch')
+            require(e['source'] in sources and k not in produced and k[3], 'wrong/duplicated source frame/clock')
             produced[k] = e
             candidate, pstate = k, 'admission'
         elif pstate == 'admission':
             require(s == 'admission.begin' and k == candidate and 0 <= e['value'] <= 32, 'admission begin/identity missing')
+            admission_begins[k] = e
             pstate = 'outcome'
-        else:
+        elif pstate == 'outcome':
             require(s in ('admission.accepted','admission.failed') and k == candidate and 0 <= e['value'] <= 32, 'admission outcome/identity missing')
             (admitted if s == 'admission.accepted' else rejected)[k] = e
             pstate = 'next'
-    require(pstate in ('next','frame-or-next'), 'incomplete producer stage')
+        else:
+            raise Incomplete('source work after terminal next outcome')
+    require(pstate in ('next','terminal'), 'incomplete producer stage')
     successful, failures, durable, cycles = [], [], [], []
-    raw_artifacts = set()
+    raw_artifacts, segment_acks = {}, []
     w = lanes[0][1:-1]
     i = 0
     while i < len(w):
@@ -114,7 +125,7 @@ def decode(data):
             break
         k = tuple(pop_end['key'])
         require(k in admitted and k not in successful and k not in failures, 'unmatched/duplicate writer identity')
-        require(produced[k]['ns'] <= pop_end['ns'] and pop_begin['ns'] <= pop_end['ns'], 'producer/pop chronology')
+        require(admission_begins[k]['ns'] <= pop_end['ns'] and pop_begin['ns'] <= pop_end['ns'], 'admission-entry/pop chronology')
         require(i < len(w) and w[i]['stage'] == 'callback.begin' and tuple(w[i]['key']) == k, 'callback begin missing/mispaired')
         callback_begin = w[i]; i += 1
         store_events = []
@@ -141,6 +152,8 @@ def decode(data):
                     durable.append(k)
                 elif s == 'store.segment.durable':
                     require(e['value'] > 0, 'invalid segment acknowledgement')
+                elif s in ('raw.segment.index', 'raw.segment.limit', 'raw.segment.bytes', 'raw.segment.records'):
+                    require(e['value'] >= 0, 'invalid segment state')
                 else:
                     raise Incomplete('unknown Store stage: ' + s)
             if store_events[-1]['stage'] == 'store.end':
@@ -153,13 +166,28 @@ def decode(data):
                         'store.journal.begin','store.journal.end','store.commit.begin','store.commit.end',
                         'store.schema1.durable'], 'missing/reordered schema-1 I/O/commit stage')
                 else:
-                    required = ['raw.write.begin','raw.write.end']
-                    if aid not in raw_artifacts:
-                        required = ['raw.provenance.begin','raw.provenance.end','raw.init.begin','raw.init.end',
-                            'raw.open.begin','raw.open.end','raw.directory.begin','raw.directory.end'] + required
-                    require(all(s in names for s in required), 'missing RawTrace stage')
-                    require([names.index(s) for s in required] == sorted(names.index(s) for s in required), 'reordered RawTrace stages')
-                    raw_artifacts.add(aid)
+                    first = aid not in raw_artifacts
+                    state = raw_artifacts.setdefault(aid, {'index': 0, 'records': 0, 'bytes': 0, 'limit': None})
+                    required = ['raw.provenance.begin','raw.provenance.end','raw.init.begin','raw.init.end'] if first else []
+                    if state['records'] == 0:
+                        required += ['raw.open.begin','raw.open.end','raw.directory.begin','raw.directory.end']
+                    required += ['raw.segment.index', 'raw.segment.limit', 'raw.write.begin', 'raw.write.end',
+                                 'raw.segment.bytes', 'raw.segment.records']
+                    values = {e['stage']: e['value'] for e in store_events}
+                    require(all(s in values for s in required), 'missing RawTrace stage')
+                    require(values['raw.segment.index'] == state['index'], 'mispaired segment identity')
+                    limit, size, records = (values['raw.segment.' + s] for s in ('limit', 'bytes', 'records'))
+                    require(4096 <= limit <= 64 * 1024 * 1024 and state['limit'] in (None, limit), 'segment configuration mismatch')
+                    require(size > state['bytes'] and records == state['records'] + 1, 'segment record/size discontinuity')
+                    sealed = size >= limit or records >= 100000
+                    if sealed:
+                        required += ['raw.seal.begin', 'store.segment.durable', 'raw.seal.end']
+                        require(values.get('store.segment.durable') == records, 'required segment seal/durable evidence missing')
+                        segment_acks.append({'artifact': aid, 'index': state['index'], 'records': records,
+                                             'bytes': size, 'last_key': list(k)})
+                    require(names[3:-1] == required, 'missing/reordered RawTrace or conditional seal stage')
+                    state.update(index=state['index'] + int(sealed), records=0 if sealed else records,
+                                 bytes=0 if sealed else size, limit=limit)
         if callback_end['stage'] == 'callback.failed':
             failures.append(k)
             require(i == len(w), 'writer continued after failure')
@@ -181,35 +209,92 @@ def decode(data):
     if not failures:
         require(len(admitted) == len(successful), 'admitted callback evidence missing')
     require(successful or failures, 'no actual callback evidence')
+    if raw_artifacts:
+        require(type(segment_oracle) is dict, 'segment durability evidence UNAVAILABLE: independent Store oracle required')
+        assert isinstance(segment_oracle, dict)
+        require(segment_oracle.get('capture') == data['capture'] and segment_oracle.get('schema') == 2
+                and set(raw_artifacts) == {segment_oracle.get('artifact')}, 'independent Store/capture identity mismatch')
+        require(all(s['limit'] == segment_oracle.get('segment_max_bytes') for s in raw_artifacts.values()), 'independent Store configuration mismatch')
+        require(segment_oracle.get('segments') == segment_acks, 'persisted segment/seal evidence mismatch')
     return {'status': 'COMPLETE_CHRONOLOGY', 'capture': data['capture'], 'build': data['build'],
             'pid': data['pid'], 'generation': data['generation'],
             'produced': len(produced), 'admitted': len(admitted), 'rejected': len(rejected),
+            'source_failures': source_failures, 'source_empty_returns': source_empty,
             'callback_success': len(successful), 'callback_failure': len(failures),
             'schema1_durable_acknowledgements': len(durable),
+            'segment_durable_acknowledgements': segment_acks,
+            'segment_evidence': 'QUALIFIED: matched independent indexed segment scan' if raw_artifacts else 'NOT_APPLICABLE: schema-1',
             'recoverable_prefix': 'UNAVAILABLE: verify actual Store/replay separately',
             'residual_wall_time_attribution': 'UNKNOWN', 'cycles': cycles}
 
-def require_owned_acceptance(summaries, exits):
-    """Every serialized trace must validate; only an owned SIGKILL may lack a final."""
+def collect(directory):
+    """Inspect the union of markers/finals/partials, not just surviving markers.
+
+    Absence of a WHOLE observation is detected separately by the runtime roster.
+    """
+    paths = list(Path(directory).iterdir())
+    require(len(paths) <= 8 * 16 * 3, 'observation inventory bound')
+    stems = set()
+    for path in paths:
+        require(re.fullmatch(r'[1-9][0-9]*-[1-8]\.(started|json|json\.part)', path.name), 'unexpected observer output')
+        stems.add(path.name.split('.')[0])
+    result = []
+    for stem in sorted(stems):
+        marker, final, partial = (Path(directory) / (stem + suffix) for suffix in ('.started', '.json', '.json.part'))
+        identity = {'pid': int(stem.split('-')[0]), 'generation': int(stem.split('-')[1]),
+                    'capture': None, 'marker_present': marker.is_file(), 'final_present': final.is_file()}
+        try:
+            require(marker.is_file() and marker.stat().st_size <= 65536, 'missing/oversize start marker')
+            start = json.loads(marker.read_bytes())
+            identity['capture'] = start['capture']
+            require((start['pid'], start['generation']) == (identity['pid'], identity['generation']), 'filename/marker identity mismatch')
+            require(not partial.exists(), 'partial serialization retained')
+            summary = decode(load(final))
+            summary.update(marker_present=True, final_present=True)
+            result.append(summary)
+        except (Incomplete, ValueError, KeyError, OSError, TypeError) as exc:
+            result.append(dict(identity, status='INCOMPLETE', reason=str(exc)))
+    return result
+
+
+def require_owned_acceptance(summaries, exits, roster, observer_statuses):
+    """Reconcile every actual Session; only its exact owned SIGKILL may lack a final."""
     require(isinstance(summaries, list) and 0 < len(summaries) <= 16, 'acceptance trace bound')
     require(isinstance(exits, list) and 0 < len(exits) <= 8, 'owned daemon bound')
     owned = {p['pid']: p['exit'] for p in exits}
     require(len(owned) == len(exits) and all(type(p) is int and p > 0 and type(rc) is int
             for p, rc in owned.items()), 'owned daemon not retired/identity unavailable')
+    require(isinstance(roster, list) and 0 < len(roster) <= 16, 'actual Session roster unavailable')
+    expected = {(r['pid'], r['capture']): r for r in roster}
+    require(len(expected) == len(roster) and all(pid in owned and isinstance(capture, str) and capture
+            and type(r.get('allow_missing_final')) is bool for (pid, capture), r in expected.items()), 'invalid/duplicate actual Session roster')
+    actual = {(s.get('pid'), s.get('capture')) for s in summaries}
+    require(len(actual) == len(summaries) and actual == set(expected), 'actual Session/observer roster mismatch')
+    require(isinstance(observer_statuses, list) and not observer_statuses, 'retained UNAVAILABLE/INCOMPLETE observer outcome')
     for summary in summaries:
         require(summary.get('pid') in owned, 'trace from unowned daemon')
+        entry = expected[(summary['pid'], summary['capture'])]
+        require(summary.get('marker_present') is True, 'observer start marker unavailable')
         if summary['status'] != 'COMPLETE_CHRONOLOGY':
             require(summary['status'] == 'INCOMPLETE' and summary.get('final_present') is False,
                     'serialized observer evidence invalid/incomplete')
-            require(owned[summary['pid']] == -9, 'missing trace without owned SIGKILL')
+            require(owned[summary['pid']] == -9 and entry['allow_missing_final'], 'missing trace without exact owned capture SIGKILL')
+        else:
+            require(summary.get('final_present') is True and not entry['allow_missing_final'], 'killed Session falsely complete')
     require(any(s['status'] == 'COMPLETE_CHRONOLOGY' and s['callback_success'] > 0 for s in summaries),
             'no real completed Session/Store trace')
     require(any(s['status'] == 'INCOMPLETE' for s in summaries), 'hard-killed observer falsely complete')
+    require(sum(r['allow_missing_final'] for r in roster) == 1, 'exact owned killed capture unavailable')
 
 if __name__ == '__main__':
     import sys
     try:
-        print(json.dumps(decode(load(sys.argv[1])), indent=2))
+        oracle = None
+        if len(sys.argv) == 3:
+            path = Path(sys.argv[2])
+            require(path.is_file() and path.stat().st_size <= MAX_BYTES, 'missing/oversize Store oracle')
+            oracle = json.loads(path.read_bytes())
+        print(json.dumps(decode(load(sys.argv[1]), oracle), indent=2))
     except (Incomplete, OSError, KeyError, TypeError, ValueError) as exc:
         print('INCOMPLETE: ' + str(exc), file=sys.stderr)
         raise SystemExit(2)

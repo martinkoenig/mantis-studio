@@ -18,6 +18,7 @@ class Worker {
 };
 void event(const char *, const data::Packet * = nullptr, int64_t = -1, std::string_view = {}) noexcept;
 void source(const data::Packet &, const device::ImageStream &) noexcept;
+Result<data::Published> next(device::ImageStream &);
 std::optional<data::Published> pop(pipeline::BoundedQueue<data::Published> &);
 void cleanup(const void *, bool) noexcept;
 void raw_stage(size_t, bool) noexcept;
@@ -41,6 +42,7 @@ void boundary(std::mutex &) noexcept;
     ::mantis::recorder_diagnostics::Worker diagnostic_worker(observation, lane)
 #define MANTIS_RECORDER_EVENT(...) ::mantis::recorder_diagnostics::event(__VA_ARGS__)
 #define MANTIS_RECORDER_SOURCE(packet, stream) ::mantis::recorder_diagnostics::source(packet, stream)
+#define MANTIS_RECORDER_NEXT(stream) ::mantis::recorder_diagnostics::next(stream)
 #define MANTIS_RECORDER_POP(queue) ::mantis::recorder_diagnostics::pop(queue)
 #define MANTIS_RECORDER_CLEANUP(owner, done) ::mantis::recorder_diagnostics::cleanup(owner, done)
 #define MANTIS_RECORDER_BOUNDARY() ::mantis::recorder_diagnostics::boundary(mutex_)
@@ -53,6 +55,7 @@ void boundary(std::mutex &) noexcept;
 #define MANTIS_RECORDER_WORKER(lane) ((void)0)
 #define MANTIS_RECORDER_EVENT(...) ((void)0)
 #define MANTIS_RECORDER_SOURCE(packet, stream) ((void)0)
+#define MANTIS_RECORDER_NEXT(stream) (stream).next()
 #define MANTIS_RECORDER_POP(queue) queue.pop()
 #define MANTIS_RECORDER_CLEANUP(owner, done) ((void)0)
 #define MANTIS_RECORDER_BOUNDARY() ((void)0)

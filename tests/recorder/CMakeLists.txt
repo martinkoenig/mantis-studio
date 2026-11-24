@@ -6,7 +6,7 @@ set(recorder_inputs
   src/device-runtime/device-runtime.cpp src/device-runtime/recorder-diagnostics.hpp
   src/device-runtime/recorder-diagnostics.cpp src/artifact-store/artifact-store.cpp
   src/artifact-store/segments.cpp src/pipeline-api/include/mantis/pipeline_api.hpp)
-set(recorder_identity "recorder-internal-v1")
+set(recorder_identity "recorder-internal-v2")
 foreach(input IN LISTS recorder_inputs)
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/${input})
   file(SHA256 ${PROJECT_SOURCE_DIR}/${input} digest)

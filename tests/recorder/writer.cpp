@@ -1,3 +1,4 @@
+#include "../../src/artifact-store/segments.hpp"
 #include "../../src/device-runtime/recorder-diagnostics.hpp"
 #include <fstream>
 #include <future>
@@ -32,6 +33,7 @@ struct Control {
     std::atomic_uint callbacks{};
     std::atomic_int64_t entered_ns{}, released_ns{};
     bool hold{}, noisy{}, descriptor_fault{};
+    std::string terminal;
     void release() {
         produce.open();
         finish.open();
@@ -90,6 +92,10 @@ class Source : public device::ImageStream {
         if (calls_ == count_) {
             c_.ended.open();
             c_.finish.wait();
+            if (c_.terminal == "source-throw")
+                throw std::runtime_error("source primary");
+            if (c_.terminal == "source-error")
+                return std::unexpected(Error{Status::io, "source primary", "fixture"});
             return data::Published{};
         }
         if (calls_ > count_)
@@ -136,12 +142,23 @@ std::string replay(const std::shared_ptr<artifact::Store> &store, const Id &raw,
     return bytes;
 }
 } // namespace
-int main(int argc, char **argv) {
+int run_case(const std::string &mode, const std::filesystem::path &root) {
     try {
-        CHECK(argc == 3);
-        const std::string mode = argv[1];
-        const std::filesystem::path root = argv[2];
         std::filesystem::create_directories(root);
+        if (mode == "init-sibling") {
+            // Real sequential Sessions: only the second observer loses its
+            // output directory. Neither the source nor Store operation fails.
+            const auto *directory = std::getenv("MANTIS_RECORDER_OBSERVE_DIR");
+            CHECK(directory);
+            const std::string original(directory);
+            CHECK(run_case("positive", root / "first") == 0);
+            const auto missing = (std::filesystem::path(original) / "missing").string();
+            CHECK(setenv("MANTIS_RECORDER_OBSERVE_DIR", missing.c_str(), 1) == 0);
+            const auto result = run_case("init-failed", root / "second");
+            CHECK(setenv("MANTIS_RECORDER_OBSERVE_DIR", original.c_str(), 1) == 0);
+            CHECK(result == 0);
+            return 0;
+        }
         if (mode == "overflow" || mode == "crash") {
             auto *trace =
                 recorder_diagnostics::open(&root, {{"observer-control"}, {{"controlled-camera"}}, {}});
@@ -170,11 +187,14 @@ int main(int argc, char **argv) {
         c.hold = mode == "boundary";
         c.noisy = mode == "storage" || mode == "writer";
         c.descriptor_fault = mode == "source-observer";
+        if (mode == "source-throw" || mode == "source-error")
+            c.terminal = mode;
         control = &c;
         recorder_diagnostics::boundary_hook(boundary);
         const bool queue = mode == "queue";
-        const bool segmented = mode == "segmented";
-        Source source(c, queue ? 40 : segmented ? 24 : 8, segmented);
+        const bool segmented = mode == "segmented" || mode == "segmented-unsealed";
+        const auto count = queue ? 40 : mode == "segmented" ? 24 : mode == "segmented-unsealed" ? 4 : 8;
+        Source source(c, count, segmented);
         auto store = std::make_shared<artifact::Store>(root / "Fixture.mantis");
         artifact::Provenance provenance;
         if (segmented)
@@ -267,10 +287,39 @@ int main(int argc, char **argv) {
             CHECK(session->error().find(mode == "storage" ? "writer storage primary" : "writer primary") !=
                   std::string::npos);
             CHECK(callbacks == 3 && d.at("recorder_secondary_error") == "cleanup secondary failure");
+        } else if (!c.terminal.empty()) {
+            CHECK(session->error() == "source primary" && produced == 8 && callbacks == 8);
         } else {
-            CHECK(session->error().empty() && produced == (segmented ? 24 : 8) && callbacks == produced);
+            CHECK(session->error().empty() && produced == static_cast<unsigned>(count) &&
+                  callbacks == produced);
         }
+        nlohmann::json segment_oracle;
         if (segmented) {
+            // Independent Store oracle BEFORE finalize: only the actual indexed
+            // segment files are scanned. No callback count implies durability.
+            const auto descriptor = store->get(raw);
+            segment_oracle = {
+                {"capture", "controlled-" + mode},
+                {"artifact", raw.value},
+                {"schema", 2},
+                {"segment_max_bytes", std::stoull(descriptor.provenance.parameters.at("segment_max_bytes"))},
+                {"segments", nlohmann::json::array()}};
+            for (uint64_t index = 0; index < descriptor.chunks; ++index) {
+                const auto path = store->object_path(raw, index);
+                const auto scan = artifact::segments::scan(path);
+                CHECK(scan.corruption.empty() && !scan.incomplete && !scan.records.empty());
+                CHECK(scan.complete_bytes == std::filesystem::file_size(path));
+                const auto last = artifact::segments::packet(scan, scan.records.size() - 1);
+                const auto &h = last->header;
+                segment_oracle["segments"].push_back(
+                    {{"artifact", raw.value},
+                     {"index", index},
+                     {"records", scan.records.size()},
+                     {"bytes", scan.complete_bytes},
+                     {"last_key",
+                      {h.sequence.value, h.timestamp.nanoseconds, h.received.nanoseconds,
+                       h.timestamp.domain.id.value}}});
+            }
             store->finalize(raw);
             CHECK(store->record_count(raw) == callbacks);
         } else
@@ -302,6 +351,9 @@ int main(int argc, char **argv) {
         const auto first = replay(store, raw, recovered_count);
         CHECK(replay(store, raw, recovered_count) == first);
         nlohmann::json out{{"mode", mode},
+                           {"pid", getpid()},
+                           {"capture", "controlled-" + mode},
+                           {"segment_oracle", segment_oracle},
                            {"produced", produced},
                            {"callbacks", callbacks},
                            {"admitted", admitted},
@@ -318,4 +370,9 @@ int main(int argc, char **argv) {
         std::cerr << "writer diagnostic regression: " << e.what() << '\n';
         return 1;
     }
+}
+int main(int argc, char **argv) {
+    if (argc != 3)
+        return 1;
+    return run_case(argv[1], argv[2]);
 }
