@@ -322,6 +322,8 @@ def main(argv=None):
     parser.add_argument('--merge', help='Exact two-parent PR merge SHA1, required for pull_request')
     parser.add_argument('--inventory', type=Path, help='Optional pinned static diagnostic inventory')
     parser.add_argument('--inventory-sha256', help='Independent byte-integrity anchor, not authenticity proof')
+    parser.add_argument('--configured-inputs', type=Path, help='Optional pinned configured diagnostic input manifest')
+    parser.add_argument('--configured-inputs-sha256', help='Byte-integrity anchor for configured inputs, not authenticity')
     args = parser.parse_args(argv)
     data = None
     inventory_receipt = {'status': 'not-requested', 'error': None, 'cleanup_errors': []}
@@ -340,6 +342,35 @@ def main(argv=None):
     result = manifest(args.repository, args.event, args.ref, args.base, args.head,
                       args.merge, data, args.inventory_sha256, inventory_receipt['cleanup_errors'])
     result['inventory_acquisition'] = inventory_receipt
+    if args.configured_inputs is not None:
+        # Explicit opt-in v2 envelope; the legacy v1 shape/path is unchanged.
+        # Source is the ACTUAL tested checkout (PR merge, not PR branch head).
+        result['schema'] = 'mantis-git-shadow-v2'
+        diagnostic = {'schema': 'ci110-configured-diagnostic-v1', 'status': 'rejected',
+                      'errors': ['configured-source-context-unavailable'], 'closure_complete': False,
+                      'execution_authorized': False, 'full_matrix_would_select': True}
+        endpoint = result['acquisition']['identities'].get('merge' if args.event == 'pull_request' else 'head')
+        source = {k: endpoint[k] for k in ('commit', 'tree')} if endpoint else None
+        if source is not None and not result['acquisition']['errors']:
+            worker = ('import sys; sys.path.insert(0, sys.argv.pop(1)); '
+                      'import ci_shadow_configured; raise SystemExit(ci_shadow_configured.main())')
+            command = [sys.executable, '-I', '-B', '-c', worker, str(Path(__file__).resolve().parent),
+                       str(args.configured_inputs), args.configured_inputs_sha256 or '',
+                       source['commit'], source['tree']]
+            try:
+                raw = _run_owned(command, dict(os.environ), limit=MAX_INVENTORY_BYTES,
+                                 seconds=COMMAND_SECONDS, kind='configured')
+                diagnostic = policy.strict_json(raw)
+                import ci_shadow_configured as configured
+                configured.project(diagnostic, result['acquisition']['diff']['records'])
+            except AcquisitionError as exc:
+                diagnostic.update(status='rejected', execution_authorized=False, full_matrix_would_select=True)
+                diagnostic['errors'] = [str(exc), *exc.cleanup_errors]
+            except (ValueError, KeyError, TypeError):
+                diagnostic = {'schema': 'ci110-configured-diagnostic-v1', 'status': 'rejected',
+                              'closure_complete': False, 'execution_authorized': False, 'full_matrix_would_select': True}
+                diagnostic['errors'] = ['configured-worker-invalid-output']
+        result['configured_diagnostic'] = diagnostic
     sys.stdout.buffer.write(policy.canonical(result))
     # Zero means a shadow manifest was emitted, never admission or qualification.
     return 0

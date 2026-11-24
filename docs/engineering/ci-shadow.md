@@ -106,8 +106,8 @@ python3 -B tests/ci/shadow_collection_test.py
 python3 -B tests/ci/shadow_resource_test.py
 ```
 
-These use only Python's standard library and small independent local Git
-repositories. They cover actual commit/ref/merge relationships, complete source
+The Git/resource controls use Python's standard library and small independent
+local Git repositories. They cover actual commit/ref/merge relationships, complete source
 changes and transitive consumer oracles, PR checkout mappings, shallow/missing and
 corrupt objects/refs, ambient overrides/replacement objects, rename/deletion/type
 changes/gitlinks, raw paths, empty diffs, resource/error controls and CLI behavior.
@@ -115,16 +115,336 @@ Graph controls exercise equivalent favorable/unfavorable chain renamings through
 the actual CLI, count dependency visits independently of elapsed time, and verify
 reachable/unreachable cycles, complete reasons and invalid/stale input recovery.
 Resource controls use gated owned Python descendants and real FIFO/symlink/
-descriptor races. Fixture-local subreaper ownership exists only in disposable
-probe processes, with failure unwind reaping their own children. No configure,
-compiler, project binary, CTest, installation or external network is used. Fixture-local commits/config/refs are disposable and never affect the project
+descriptor races. Probe owners adopt/reap only their own descendants, including
+on assertion failure. The tiny setup helper also scopes Linux subreaper ownership
+and TERM/INT cancellation handlers to each owned command and restores both. It
+observes leader exit without reaping, retires the owned process group before
+releasing its identity, and reaps adopted descendants even when a successful or
+failed leader leaves inherited streams open or closed. Bounded cleanup reuses
+the collector's group-retirement primitive; this is not escaped-session or
+hostile-process containment. Setup receipts retain the initiating exception,
+partial bounded stdout/stderr, exit status, elapsed/budget and separate cleanup
+errors on success, nonzero, timeout and cancellation. Receipt failure cannot
+replace an initiating command error.
+
+The tiny helper's TERM/INT handlers record cancellation without raising inside
+spawn/ownership publication or destructive-read/buffer transactions. Explicit
+safe points observe it only after the handle or bytes have been retained; a
+50 ms maximum selector wait bounds observation of otherwise idle cancellation
+(Python can restart interrupted selectors). This does not extend the campaign
+or cleanup deadline. The handler remains non-raising through retirement, draining,
+receipt publication and secondary-error accounting; caller dispositions are restored
+in an outer `finally` only afterward. Late cancellation is retained as the outcome
+on success or a note on an established command/timeout error. If the first signal
+arrives after receipt serialization, exactly one `publication-cancellation` JSONL
+amendment records the final error/signal for the immediately preceding command;
+it is not another command receipt or a retry. Receipt/amendment I/O errors remain
+secondary to an established primary. This scopes finalization, not cancellation
+immunity after return. Real TERM/INT
+boundary regressions handshake descendant entry and inject at successful spawn
+return before handle assignment and after stdout/stderr consumption before
+buffering. Independent wait/group oracles and exact output markers detect both
+ownership and diagnostic loss, including safe unwind of rejected implementations.
+Final-publication controls additionally deliver real TERM/INT/repeated signals at
+receipt open, after real serialization, at stream close and during error accounting,
+with success/nonzero/timeout and real receipt-open failure controls. They assert
+primary/output retention, bounded receipt/amendment evidence, independent leader/
+group retirement and restored caller dispositions/subreaper state.
+
+Configured diagnostic controls additionally configure and serially compile an owned tiny
+multi-target fixture with Ninja and Ninja Multi-Config, and obtain real CTest JSON
+with `--show-only=json-v1`. They never execute fixture test commands or product
+targets. CMake, CTest, Ninja and a C++ compiler are required for this extension.
+No installation or external network is used. Fixture-local commits/config/refs are disposable and never affect the project
 repository. The same modules are registered as `ci-shadow-collection` and
 `ci-shadow-resources` in Linux CTest configurations with `BUILD_TESTING=ON`,
 including Studio ON/OFF and sanitizers. They use the configured Python interpreter
-and retain their internal bounded fixture deadlines. The collector and reader
+and retain the unchanged outer CTest30. Both configured fixture producers share
+one 12-second setup campaign deadline (including intervening input pinning),
+with at most two additional seconds for owned-group cleanup on failure, rather
+than resetting a 30-second timer for every setup command. The collector and reader
 modules acquire no processes, network connections or inventory data on import;
 regressions audit import and ensure uncertain inventory cleanup blocks further
 Git acquisition. These regressions do not replace any applicable native final check.
+
+## Configured dependency diagnostics (opt-in, record-only)
+
+The existing invocation accepts an additional **pair**:
+
+```sh
+python3 -B tools/ci_shadow.py --repository . --event push \
+  --ref refs/heads/develop --base BEFORE_SHA1 --head PUSH_SHA1 \
+  --configured-inputs PRIVATE_INPUT_MANIFEST.json \
+  --configured-inputs-sha256 MANIFEST_SHA256
+```
+
+Without this option the `mantis-git-shadow-v1` envelope and static-inventory
+behavior are unchanged. With it the envelope is explicitly
+`mantis-git-shadow-v2`, containing a `configured_diagnostic` with schema
+`ci110-configured-diagnostic-v1`. Consumers accepting only v1 must reject v2,
+not reinterpret it as permission to select tests. The legacy `decision` remains
+unchanged and FULL remains unconditional, even on a successful ingestion. The
+configured path uses the existing policy's reachability routine, not another
+selection engine. The static `--inventory` remains independent and optional.
+
+### Pinned producer inputs
+
+The importer **does not configure, compile, run CTest or execute any command**
+from metadata. A separate caller-owned producer must create a CMake File API
+query for `codemodel-v2`, `cache-v2` and `cmakeFiles-v1`, configure its own build
+root, and save `ctest --test-dir BUILD -C CONFIG --show-only=json-v1` as a regular
+JSON file. Native test binaries need not exist: missing CTest command expansion
+is an explicit unknown, not a reason to build a product or fabricate a command.
+Pin the exact chosen index rather than discovering a supposedly latest reply.
+A private manifest contains these exact fields:
+
+- `schema`: `ci110-configured-inputs-v1`.
+- `source`: `{ "commit": SHA1, "tree": SHA1 }`, matching the collector's checked
+  **tested** source, including the merge identity on PRs, not the PR head alone.
+- `roots`: `source` and `build`, canonical absolute local directory paths. These
+  are private inputs; output uses root digests and root-relative paths only.
+- `configuration`: exact nonempty codemodel configuration name, e.g. `Debug`.
+- `generator`: exact index generator name, e.g. `Ninja` or `Ninja Multi-Config`.
+- `index`: build-relative pinned `.cmake/api/v1/reply/index-….json` path.
+- `ctest`: build-relative saved CTest JSON path.
+- `files`: unique records `{ "root": "source" | "build", "path": RELATIVE_PATH,
+  "sha256": SHA256 }`. Include the index, every referenced codemodel/cache/
+  cmakeFiles/target reply, CTest JSON, relevant configure inputs and source/header/
+  Protobuf/QML metadata. Pinning `CMakeCache.txt` also binds its raw bytes. All
+  listed files are read and digest-checked; unlisted paths are **never opened**.
+
+All supplied files must be stable regular files. Symlink leaves/ancestry,
+absolute or traversing relative record paths, duplicate JSON keys/records,
+truncation, invalid/nonfinite JSON, unsupported document major versions,
+dangling reply references, duplicate target/test identities, wrong metadata
+roots/configuration/generator/source and changed byte pins fail closed. Missing
+source metadata remains explicitly unresolved. Limits are 2,000,000 bytes per
+file/manifest, 16,000,000 aggregate input-file bytes, 8192 files and 16384 records
+per collection and edges/unknowns per emitted category. The isolated reader has
+the existing five-second command bound and 2,000,000-byte output bound, with owned
+group retirement. No synchronous Python filesystem call claims kernel-I/O
+preemption. Imports remain inert.
+
+The manifest digest binds the exact raw bytes, including private local root
+identities; it is not a signature or authentication. File hashes bind the bytes
+actually consumed. Caller-reported source/configuration context is not proof
+that a particular CMake/CTest invocation generated those bytes, or that dirty
+source matches a Git tree. In particular CTest JSON has no authenticated source
+or configuration binding. These limits remain explicit unknowns even after
+successful ingestion. Freeze raw manifests, producer commands and full outputs
+privately; inspect normalized output before public upload. Raw command strings,
+external absolute paths, environment, cache contents and parser exceptions are
+not emitted. Command values are represented only by a byte digest.
+
+### Edge and uncertainty semantics
+
+- `observed`: codemodel-listed file-to-target and dependency-to-consumer edges,
+  with exact pinned document/target identity. These are **listed observations**,
+  not evidence that CMake listed every semantic dependency.
+- `conservative-inference`: literal quoted include-to-target edges, with the
+  including source in the reason, and target-to-test edges inferred by matching
+  CTest's first command argument to a configured artifact. Include traversal is
+  iterative and uses only pinned source bytes and listed include directories.
+  It is not a preprocessor: conditionals/comments may overapproximate; macros,
+  system/generated/unresolved includes stay unknown. Shared headers flow to
+  downstream target consumers using the existing policy's worklist.
+- `unresolved`: generated sources/configure inputs, object-library artifacts,
+  Protobuf/QML/resource generation, fixtures/runtime dependencies, external/unpinned sources/includes,
+  unsupported languages, missing/unmapped/ambiguous commands and configuration
+  coverage remain explicit. Cycles terminate and are reported; absent or omitted
+  dependency edges never establish no consumers. Unknown changed paths also
+  remain unresolved. The selected configuration is imported; other configurations
+  are not unioned or silently claimed qualified.
+
+`status=ingested` means the bounded records were parsed, **not** complete product
+closure, historical recall, provider-event authentication, signatures, OS
+isolation, runtime coverage or performance qualification. `closure_complete` and
+`execution_authorized` are always false; `full_matrix_would_select` is always true.
+Every existing required local and remote gate remains binding. No workflow,
+ruleset, scheduler, selection activation or skipped-test policy is changed.
+
+## Pinned impact corpus replay (opt-in, record-only)
+
+```sh
+python3 -B tools/ci_shadow_corpus.py --corpus PRIVATE_CORPUS.json \
+  --corpus-sha256 CORPUS_SHA256
+```
+
+This companion consumes **saved** `mantis-git-shadow-v2` CLI manifests and the
+original pinned configured-input closure. It does not acquire Git history,
+configure/build anything, execute imported commands, run tests, fetch artifacts
+or contact a network. The existing collector CLI and schemas are unchanged.
+The replay explicitly rejects v1/unknown envelopes, incomplete acquisition and
+unsupported comparison/observation schemas. As with the collector, exit zero
+means bounded JSON evidence was emitted, **not** that inputs were admitted or
+any test/qualification passed. Usage errors are nonzero. Inspect `status` and
+`errors`; a rejected corpus emits **no partial cases**.
+
+### Caller-pinned corpus and observations
+
+`ci110-impact-corpus-v1` has exactly `schema` and `cases`. Each case has exactly:
+
+- `id`: unique bounded label.
+- `context`: the exact fields `event`, `ref`, `identities`, `tested_commit`,
+  `configuration`, `generator`, `configured_manifest_sha256` and
+  `test_inventory_sha256`. Copy acquisition event/ref/identities/tested commit
+  from the saved manifest. Identities include commit, tree and ordered parents;
+  a PR must pin base, branch head **and the actual two-parent tested merge**.
+  Pushes pin base and head. Configuration/generator must match the imported
+  codemodel. Pin the raw configured manifest digest and SHA256 of canonical
+  `ci_shadow_policy.canonical(configured_diagnostic['tests'])` bytes.
+- `shadow`, `configured_inputs`, `observation`: each exactly
+  `{ "path": RELATIVE_FILE, "sha256": SHA256 }`, relative to the corpus directory.
+  The configured input manifest and its roots/files retain the preceding schema.
+  Supply the exact original regular files, not a newly discovered latest reply.
+
+`ci110-impact-corpus-v2` is an explicit opt-in extension with the same top-level
+fields. Every case additionally **must** contain `static_inventory`: either
+`null` for the normal absent optional input, or exactly
+`{ "path": RELATIVE_FILE, "sha256": SHA256 }` pinning the **original raw bytes**
+read by the collector's `--inventory`. References use the same corpus-relative
+safe-path rules, per-file/aggregate byte and file bounds, Snapshot identity/digest
+checks and final whole-input recheck as the other evidence. Missing, extra,
+unpinned, contradictory or unsafe references reject the entire corpus. The
+independent digest must equal both original inventory digests in the regenerated
+decision; it is never inferred from a saved projection. V1 cases cannot contain
+this field, even when null; neither version implicitly upgrades the other.
+
+`ci110-impact-observation-v1` has exactly `schema`, `context`, `kind`, `origin`,
+`trust`, `test_ids`, `basis`. `context` must equal the case's fully pinned
+context. `test_ids` is a unique list of registered identifiers or `null` for
+unknown; no executable commands are supplied here. `origin` and `basis` are
+bounded labels for the caller's evidence/adjudication reference, not executable
+instructions or a claimed verified signature. Retain supporting evidence with
+the caller's private archive. `trust` must be `caller-asserted-unverified`.
+
+The four `kind` labels are deliberately separate:
+
+- `controlled-fixture`: independently specified controlled consumer expectation.
+- `causally-adjudicated`: caller-reported causal adjudication, **not authenticated
+  or independently adjudicated by this tool**.
+- `caller-assertion`: an assertion without causal qualification.
+- `historical-unadjudicated`: observed failed tests without an established causal
+  relation to this change. A failed CI job alone is not causal ground truth.
+
+All labels remain caller assertions. An available historical case requires the
+actual pinned public source/base/head/tested-merge identities and original
+configured/observation evidence closure; do not synthesize missing history from
+a later green run. This slice supplies controlled fixtures, **not** a historical
+product corpus. Historical recall, dependency completeness and product closure
+remain unqualified when that original context is unavailable.
+
+### Comparison and fail-closed limits
+
+Replay revalidates the complete supported v2 envelope, inventory-acquisition
+receipt and legacy decision, not just its authority flags. It reconstructs the
+collector's canonical request from the validated acquisition (base/tested commit
+and tree, event/ref, raw diff records/count), then calls the unchanged policy
+and compares the **entire** canonical decision, including its request digest,
+source, diff, nested suite/test decisions, obligations and limits. Missing,
+extra, truncated, contradictory or unsupported nested fields reject the whole
+corpus. Canonical comparison distinguishes JSON booleans from integers. Empty
+diffs retain the collector's expected diagnostic error; they are not safe omission.
+
+Corpus v1 supports the collector's normal **absent optional static
+inventory** (`inventory_acquisition.status=not-requested`, null error, no cleanup
+errors). It does not demand an inventory, trusted signatures or complete closure.
+A supplied/failed static-inventory acquisition is explicitly rejected with
+`corpus-static-inventory-evidence-unsupported`: the corpus schema has no reference
+to pin/re-read its original static inventory, so saved static projections cannot
+be verified. The original collector's optional `--inventory` CLI is unchanged.
+That legacy behavior/output remains unchanged. Corpus v2 can replay a supplied
+static inventory only with the explicit original-byte reference and the exact
+successful receipt (`status=regular-file`, null primary error, empty cleanup
+errors). Explicit null requires the exact not-requested receipt. Failed reads,
+timeouts, unconfirmed cleanup and originally unpinned reads remain unsupported;
+replay never synthesizes old acquisition outcomes. A different digest, receipt,
+saved inventory/source/request projection or tested merge is not repaired by
+repinning the corpus or its saved envelope. The unchanged policy receives the
+actual original bytes and independent reference digest and the entire canonical
+decision must match. The configured-input inventory remains required and
+independently replayed for both versions.
+
+Successful reading is **not** successful policy validation. V2 also supports
+originally read bytes rejected by the policy (including malformed JSON or a
+stale inventory base): only their exact regenerated fail-closed decision is
+replayable. `status=compared` means consistency, not that the inventory was valid,
+complete or authentic. No policy error is removed or relabelled successful.
+
+Replay also revalidates the raw diff encoding/digest/count, tested source context,
+configured input closure and entire canonical saved diagnostic against the unchanged
+`ci_shadow_configured.diagnose/project` and `ci_shadow_policy.closure` path.
+It never trusts serialized impacted IDs as the answer. Byte/context consistency
+is not proof of producer authenticity, Git-object existence during replay, dirty
+source equivalence, CTest execution or completeness of the supplied evidence.
+The independent expectation must not be derived from the diagnostic being tested.
+
+`ci110-impact-comparison-v1` reports sorted per-case diagnostic `hits`, `misses`,
+`denominator` and `state` (`HIT`, `MISS` or `UNKNOWN`), separately from
+`full_would_select_test_ids` and `full_observation_coverage`. FULL is always
+counterfactual selection, **not executed coverage**. A diagnostic MISS remains a
+MISS even when unconditional FULL would cover the identifier. Nonempty fixture
+and caller-adjudicated expectations alone have a reported `causal_denominator`;
+caller assertions and historical observations never acquire one. Empty and
+unknown expectations have null denominators and UNKNOWN state, never 100%.
+Group hit/miss counts are partitioned by kind; no pooled or historical causal
+recall, precision, safe-omission or speedup percentage is claimed. All group
+`causal_recall` values and `historical_causal_recall` remain UNKNOWN.
+
+Successful v2 replay emits `ci110-impact-comparison-v2`, adding per-case
+`evidence_sha256.static_inventory` (the raw-byte pin or null) and
+`static_inventory_replay` (null when absent, otherwise exactly `decision_sha256`
+and `decision_errors`). The digest binds the **entire canonical saved/regenerated
+decision**, while the fixed policy error codes keep its exact failure visible.
+Caller-authored static inventory origin/provenance strings are not re-exported;
+retain the original collector bytes privately for full inspection. The configured
+diagnostic hit/MISS oracle and all denominator/trust semantics are unchanged,
+even if the static policy lists different consumers. Rejections of either corpus
+version retain the existing bounded `ci110-impact-comparison-v1` error envelope,
+with no partial cases or new authority.
+
+Bounds are eight cases, 8192 distinct files, 2,000,000 bytes per file, 16,000,000
+aggregate bytes across the entire corpus/manifest/observation/configured closure,
+and 2,000,000 output bytes. The existing owned worker enforces a five-second
+command deadline and bounded cleanup/output. Symlink ancestry/leaves, unsafe or
+traversing references, nonregular/missing files, duplicate keys/cases/tests,
+unsupported versions, wrong source/configuration/test identities, stale saved
+projections, mutated evidence and oversized/truncated input reject the whole
+corpus. A final whole-input identity and digest recheck detects cooperative
+mutation; this is **not** OS-enforced read-only isolation or hostile-host security.
+Only canonical results and fixed error codes are emitted, never raw paths,
+commands, cache contents, parser exceptions or logs. Screen outputs before
+publication.
+
+The existing collection/resource Python entrypoints cover real Git/CMake/CTest
+metadata, independently named consumer hits, dropped-edge MISS despite FULL,
+unrelated-consumer assertions, PR tested-merge mismatch, all observation kinds,
+empty/unknown/invalid evidence, deterministic multi-case ordering, whole-input
+mutation and read-only/inert-command/import behavior. Both existing tiny
+producers finish together within the unchanged shared setup12 budget before
+replay cases; outer CTest30 and all prior assertions remain unchanged. The twelve
+kind/expectation combinations are batched as four independently pinned cases per
+real supervised CLI invocation, sharing one immutable closure instead of
+relaunching the same replay twelve times. Only the two pristine real collector
+envelopes may be reused after exact command/configured-closure/static-byte
+identity checks; changed graph, PR and policy-rejected inputs still acquire
+fresh collector evidence, and all comparison/restoration cases use the real CLI.
+Static controls reuse these same two producers and existing PR, dropped-edge,
+read-only and mutation routes, not additional builds or CTest families. Exhaustive
+parser variations use the actual worker function, while representative valid,
+invalid, nonregular, stale and restoration cases run the real supervised CLI.
+For corpus comparisons the single-threaded Linux test parent forks only the
+existing disposable subreaper fixture owner, avoiding a fresh interpreter import
+of the entire test module per replay. The owner still execs the real corpus CLI,
+which still execs its isolated supervised worker; no inherited Python validator
+or cached result substitutes for either process. The inner10/outer15 deadlines,
+primary stdout/stderr/exit, child-reaping checks and all comparison assertions
+remain. A failed real command with an acknowledged closed-stream child checks
+actual group/child disappearance and unchanged parent subreaper state. The
+original exec-based graph-renaming probes and resource/F4 helpers are unchanged.
+No additional CTest family, workflow, filtering, local-final-gate change or
+product/native execution is introduced. `execution_authorized=false`,
+`closure_complete=false` and unconditional FULL remain binding.
 
 ## Integration boundary
 
