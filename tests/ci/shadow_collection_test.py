@@ -41,6 +41,46 @@ def graph_cli_probe(command, output):
     output.write_text(json.dumps(result))
 
 
+def inherited_graph_cli_probe(command, output, stdout, stderr):
+    """Fork only the single-threaded fixture owner, never the production worker.
+
+    The real CLI is still exec'd by graph_cli_probe and execs its isolated owned
+    worker. Avoid importing this entire test module in a fresh interpreter for
+    each replay; subreaper state and child retirement stay in the disposable owner.
+    """
+    with stdout.open('wb') as out, stderr.open('wb') as err:
+        os.dup2(out.fileno(), 1)
+        os.dup2(err.fileno(), 2)
+        graph_cli_probe(command, output)
+
+
+def run_inherited_graph_probe(command, output):
+    import multiprocessing
+    import threading
+    if threading.active_count() != 1:
+        raise AssertionError('graph probe fork requires a single-threaded fixture parent')
+    stdout = output.with_suffix('.stdout')
+    stderr = output.with_suffix('.stderr')
+    owner = multiprocessing.get_context('fork').Process(
+        target=inherited_graph_cli_probe, args=(command, output, stdout, stderr))
+    owner.start()
+    try:
+        owner.join(timeout=15)  # unchanged outer probe deadline; inner remains10
+        if owner.is_alive():
+            raise subprocess.TimeoutExpired(command, 15)
+        code = owner.exitcode
+        if code is None:
+            raise AssertionError('disposable graph probe owner has no terminal exit')
+        return subprocess.CompletedProcess(command, code, stdout.read_bytes(), stderr.read_bytes())
+    finally:
+        if owner.is_alive():
+            owner.kill()
+            owner.join(timeout=1)
+        if owner.is_alive():
+            raise AssertionError('disposable graph probe owner retirement unconfirmed')
+        owner.close()
+
+
 class Repository:
     def __init__(self, root):
         self.root = root
@@ -726,8 +766,8 @@ class ConfiguredInventory(unittest.TestCase):
                    '--corpus-sha256', self.fixture.digest(raw)]
         if cli:
             output = self.root / 'corpus-probe.json'
-            run = subprocess.run([sys.executable, '-B', str(Path(__file__)), '--graph-probe', str(output),
-                                  *command], capture_output=True, timeout=15, check=True)
+            run = run_inherited_graph_probe(command, output)
+            self.assertEqual(run.returncode, 0, 'disposable comparison probe failed: ' + run.stderr.decode())
             self.assertEqual(run.stderr, b'')
             owned = json.loads(output.read_text())
             self.assertTrue(owned['owned_children_reaped'])
@@ -1198,6 +1238,45 @@ class ConfiguredInventory(unittest.TestCase):
         result = self.compare_corpus(inert)
         self.assertEqual(result['cases'][0]['diagnostic']['misses'], ['app-contract'])
         self.assertFalse(marker.exists(), 'corpus replay executed an imported command')
+        # Independent negative for the inherited fixture owner: a real failed
+        # command leaves a closed-stream child. Only the disposable subreaper may
+        # adopt/kill/reap it; preserve stdout/stderr/primary exit and parent state.
+        import ctypes
+        before_subreaper = ctypes.c_int()
+        libc = ctypes.CDLL(None, use_errno=True)
+        self.assertEqual(libc.prctl(37, ctypes.byref(before_subreaper), 0, 0, 0), 0)
+        identities = self.root / 'inherited-owner-child.json'
+        launcher = '''import json,os,signal,sys
+from pathlib import Path
+r,w=os.pipe()
+child=os.fork()
+if child==0:
+    os.close(r)
+    for fd in (0,1,2):os.close(fd)
+    os.write(w,b'entered');os.close(w)
+    while True:signal.pause()
+os.close(w)
+assert os.read(r,32)==b'entered'
+os.close(r)
+Path(sys.argv[1]).write_text(json.dumps({'child':child,'group':os.getpgrp()}))
+print('primary stdout',flush=True)
+print('primary stderr',file=sys.stderr,flush=True)
+sys.exit(7)
+'''
+        output = self.root / 'inherited-owner-probe.json'
+        probe = run_inherited_graph_probe([sys.executable, '-B', '-c', launcher, str(identities)], output)
+        self.assertEqual((probe.returncode, probe.stdout, probe.stderr), (0, b'', b''))
+        observed = json.loads(output.read_text())
+        self.assertEqual(observed, {'timeout': False, 'exit': 7, 'stdout': 'primary stdout\n',
+                                   'stderr': 'primary stderr\n', 'owned_children_reaped': True})
+        ids = json.loads(identities.read_text())
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(ids['group'], 0)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(ids['child'], 0)
+        after_subreaper = ctypes.c_int()
+        self.assertEqual(libc.prctl(37, ctypes.byref(after_subreaper), 0, 0, 0), 0)
+        self.assertEqual(after_subreaper.value, before_subreaper.value, 'fixture changed parent subreaper state')
 
     def test_identity_pins_configuration_roots_missing_and_stale(self):
         cases = []

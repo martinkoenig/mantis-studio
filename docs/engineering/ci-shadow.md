@@ -433,6 +433,15 @@ Static controls reuse these same two producers and existing PR, dropped-edge,
 read-only and mutation routes, not additional builds or CTest families. Exhaustive
 parser variations use the actual worker function, while representative valid,
 invalid, nonregular, stale and restoration cases run the real supervised CLI.
+For corpus comparisons the single-threaded Linux test parent forks only the
+existing disposable subreaper fixture owner, avoiding a fresh interpreter import
+of the entire test module per replay. The owner still execs the real corpus CLI,
+which still execs its isolated supervised worker; no inherited Python validator
+or cached result substitutes for either process. The inner10/outer15 deadlines,
+primary stdout/stderr/exit, child-reaping checks and all comparison assertions
+remain. A failed real command with an acknowledged closed-stream child checks
+actual group/child disappearance and unchanged parent subreaper state. The
+original exec-based graph-renaming probes and resource/F4 helpers are unchanged.
 No additional CTest family, workflow, filtering, local-final-gate change or
 product/native execution is introduced. `execution_authorized=false`,
 `closure_complete=false` and unconditional FULL remain binding.
