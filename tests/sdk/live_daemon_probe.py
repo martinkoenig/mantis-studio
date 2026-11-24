@@ -10,6 +10,7 @@ import ctypes
 import hashlib
 import inspect
 import json
+import math
 import os
 from pathlib import Path
 import selectors
@@ -39,6 +40,59 @@ def secondary(primary, error):
 
 class InjectedFailure(RuntimeError):
     """Qualification-only initiating failure after a successful real daemon Job."""
+
+
+class ExportValidationError(AssertionError):
+    """The virtual export violates an independently derived fixture invariant."""
+
+
+def validate_export(path):
+    # Bound the actual read, not only a racy stat or the declared vertex count.
+    with path.open('rb') as stream:
+        payload = stream.read(1024 * 1024)
+    if not 0 < len(payload) < 1024 * 1024:
+        raise ExportValidationError('unexpected export size')
+    try:
+        lines = payload.decode('ascii').splitlines()
+    except UnicodeDecodeError as error:
+        raise ExportValidationError('non-ASCII PLY') from error
+    # This fixture targets ply-exporter.cpp, not every legal PLY dialect. Exact
+    # format/property/units declarations prevent misinterpreting reordered data,
+    # extra elements, binary bodies or a header count as actual point records.
+    header = ['ply', 'format ascii 1.0', 'comment units millimeters',
+              'element vertex 3072', 'property float x', 'property float y',
+              'property float z', 'end_header']
+    if lines[:len(header)] != header:
+        raise ExportValidationError('invalid PLY header/properties')
+    body = lines[len(header):]
+    if len(body) != 3072:
+        raise ExportValidationError('PLY vertex count mismatch')
+    points = []
+    for line in body:
+        fields = line.split()
+        if len(fields) != 3:
+            raise ExportValidationError('invalid PLY XYZ record')
+        try:
+            point = tuple(float(field) for field in fields)
+        except ValueError as error:
+            raise ExportValidationError('invalid PLY XYZ number') from error
+        if not all(math.isfinite(value) for value in point):
+            raise ExportValidationError('nonfinite PLY XYZ')
+        points.append(point)
+    # recipes/example.json selects example-points.cpp: (x-32,y-24,pixel/16).
+    # virtual-scanner.cpp supplies 64x48 pixels, (3*x+5*y+sequence)%256.
+    # Sequence is capture-timing dependent; derive only its phase from the first
+    # intensity and check independent spatial relationships at corners, adjacent
+    # pixels, a row boundary and the centre. No observed export hash is an oracle.
+    phase = points[0][2] * 16
+    if not phase.is_integer() or not 0 <= phase <= 255:
+        raise ExportValidationError('invalid virtual intensity phase')
+    for index in (0, 1, 63, 64, 24 * 64 + 32, 3071):
+        y, x = divmod(index, 64)
+        expected = (x - 32, y - 24, (3 * x + 5 * y + phase) % 256 / 16)
+        if not all(math.isclose(actual, wanted, rel_tol=0, abs_tol=1e-6)
+                   for actual, wanted in zip(points[index], expected)):
+            raise ExportValidationError('virtual PLY geometry mismatch')
 
 
 class OwnedDaemon:
@@ -110,67 +164,97 @@ class OwnedDaemon:
 
     def __exit__(self, kind, primary, traceback):
         errors = []
-        try:
-            if self.process is not None:
-                process = self.process
+
+        def attempt(action):
+            # Each independently owned resource must get its release attempt even
+            # when an earlier cleanup operation raises (including BaseException).
+            try:
+                action()
+            except BaseException as error:
+                errors.append(error)
+
+        if self.process is not None:
+            process = self.process
+
+            def signal_group(number):
                 try:
-                    if primary is None:
-                        if process.poll() is None:
-                            errors.append(RuntimeError('daemon was not shut down by the consumer'))
-                        else:
-                            try:
-                                os.killpg(process.pid, 0)
-                            except ProcessLookupError:
-                                pass
-                            else:
-                                errors.append(RuntimeError('descendants outlived ordinary daemon shutdown'))
+                    os.killpg(process.pid, number)
+                except ProcessLookupError:
+                    pass
+
+            def ordinary_shutdown():
+                if primary is None:
                     if process.poll() is None:
-                        os.killpg(process.pid, signal.SIGTERM)
-                        try:
-                            process.wait(timeout=1)
-                        except subprocess.TimeoutExpired:
-                            pass
-                    # A leader exit does not prove descendant retirement.
-                    try:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    process.wait(timeout=5)
-                    deadline = time.monotonic() + 5
-                    while True:
-                        try:
-                            pid, _ = os.waitpid(-process.pid, os.WNOHANG)
-                        except ChildProcessError:
-                            break
-                        if not pid:
-                            if time.monotonic() >= deadline:
-                                raise RuntimeError('daemon descendant reaping timeout')
-                            time.sleep(0.01)
+                        raise RuntimeError('daemon was not shut down by the consumer')
                     try:
                         os.killpg(process.pid, 0)
                     except ProcessLookupError:
                         pass
                     else:
-                        raise RuntimeError('daemon group survived cleanup')
-                except BaseException as error:
-                    errors.append(error)
-        finally:
-            self.stop.set()
-            if self.reader is not None:
+                        raise RuntimeError('descendants outlived ordinary daemon shutdown')
+
+            def terminate():
+                if process.poll() is None:
+                    signal_group(signal.SIGTERM)
+                    try:
+                        process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        pass
+
+            def reap_descendants():
+                deadline = time.monotonic() + 5
+                while True:
+                    try:
+                        pid, _ = os.waitpid(-process.pid, os.WNOHANG)
+                    except ChildProcessError:
+                        break
+                    if not pid:
+                        if time.monotonic() >= deadline:
+                            raise RuntimeError('daemon descendant reaping timeout')
+                        time.sleep(0.01)
+                try:
+                    os.killpg(process.pid, 0)
+                except ProcessLookupError:
+                    pass
+                else:
+                    raise RuntimeError('daemon group survived cleanup')
+
+            attempt(ordinary_shutdown)
+            attempt(terminate)
+            # Neither a leader exit nor a failed TERM/wait proves retirement.
+            attempt(lambda: signal_group(signal.SIGKILL))
+            attempt(lambda: process.wait(timeout=5))
+            attempt(reap_descendants)
+
+        attempt(self.stop.set)
+
+        def join_reader():
+            # Thread construction is not thread acquisition. ident also covers
+            # a start wrapper that starts the real thread and then raises.
+            if self.reader is not None and self.reader.ident is not None:
                 self.reader.join(timeout=1)
                 if self.reader.is_alive():
-                    errors.append(RuntimeError('daemon reader survived cleanup'))
-            if self.process is not None:
-                self.process.stdout.close()
-            if self.read_error is not None:
-                errors.append(self.read_error)
+                    raise RuntimeError('daemon reader survived cleanup')
+
+        def restore_subreaper():
             if self.previous is not None and self.libc.prctl(36, self.previous, 0, 0, 0):
-                errors.append(OSError(ctypes.get_errno(), 'restore subreaper'))
+                raise OSError(ctypes.get_errno(), 'restore subreaper')
+
+        attempt(join_reader)
+        def close_stream():
+            if self.process is not None and self.process.stdout is not None:
+                self.process.stdout.close()
+
+        attempt(close_stream)
+        if self.read_error is not None:
+            errors.append(self.read_error)
+        attempt(restore_subreaper)
         if errors:
+            first = errors[0] if primary is None else primary
+            for error in errors[1:] if primary is None else errors:
+                secondary(first, error)
             if primary is None:
-                raise errors[0]
-            for error in errors:
-                secondary(primary, error)
+                raise first
         return False
 
 
@@ -180,15 +264,16 @@ def owned_session(argv, env, state, ready, client):
     try:
         with owner:
             yield owner
-    except InjectedFailure as primary:
+    except (InjectedFailure, ExportValidationError) as primary:
         # Only the dedicated isolated probe has no unrelated children. A cleanup
-        # diagnostic disqualifies this sensitivity control, never a negative PASS.
+        # diagnostic disqualifies sensitivity, never an expected-negative PASS.
         if primary.__cause__ is None:
             try:
                 assert not Path(f'/proc/self/task/{os.getpid()}/children').read_text().split()
                 require_error(client.snapshot, ConnectionRefusedError)
-                print(json.dumps({'phase': 'installed-live-daemon-injected-failure',
-                                  'successful': False, 'retired': True}), flush=True)
+                phase = ('installed-live-daemon-invalid-export' if isinstance(primary, ExportValidationError)
+                         else 'installed-live-daemon-injected-failure')
+                print(json.dumps({'phase': phase, 'successful': False, 'retired': True}), flush=True)
             except BaseException as error:
                 secondary(primary, error)
         raise
@@ -338,11 +423,16 @@ def smoke(args):
         assert type(export) is mantis.Job and export.client is client
         export.wait(timeout=5)
         output = args.state / 'points.ply'
-        assert 0 < output.stat().st_size < 1024 * 1024, 'unexpected export size'
-        # Independent 64x48 virtual image -> one point per pixel, not an observed
-        # output digest sealed as the expected answer.
-        text = output.read_text()
-        assert text.startswith('ply\n') and '\nelement vertex 3072\n' in text
+        validate_export(output)
+        if args.truncate_export:
+            # Only our completed private export is modified, never production,
+            # schema, the stored artifact or a retained prior qualification file.
+            # A real validator rejection (not an unconditional throw) must retire
+            # the daemon; the driver then restores an ordinary installed run.
+            payload = output.read_bytes()
+            output.write_bytes(payload[:payload.rstrip(b'\n').rfind(b'\n') + 1])
+            validate_export(output)
+            raise AssertionError('truncated export unexpectedly accepted')
         daemon.check()
         client.shutdown()
         assert daemon.process.wait(timeout=5) == 0, 'daemon shutdown failed'
@@ -361,8 +451,11 @@ def smoke(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--fail-after-job', action='store_true',
-                        help='qualifier-only exception/owned retirement sensitivity control')
+    controls = parser.add_mutually_exclusive_group()
+    controls.add_argument('--fail-after-job', action='store_true',
+                          help='qualifier-only exception/owned retirement sensitivity control')
+    controls.add_argument('--truncate-export', action='store_true',
+                          help='qualifier-only malformed real export/retirement sensitivity control')
     for name in ('daemon', 'plugins', 'plugin-host', 'recipes', 'state', 'identity'):
         parser.add_argument('--' + name, required=True, type=lambda value: Path(value).resolve())
     smoke(parser.parse_args())

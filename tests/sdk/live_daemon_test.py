@@ -135,6 +135,128 @@ else:
         self.assertEqual(primary.errno, 28)
         self.assertIn('cleanup failed', str(primary.__cause__))
 
+    def assert_retired(self, owner):
+        self.assertIsNotNone(owner.process.poll())
+        self.assertTrue(owner.process.stdout.closed)
+        self.assertFalse(owner.reader.is_alive())
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(owner.process.pid, 0)
+        current = ctypes.c_int()
+        self.assertEqual(self.libc.prctl(37, ctypes.byref(current), 0, 0, 0), 0)
+        self.assertEqual(current.value, self.previous.value)
+
+    def check_fault(self, owner, operation, primary):
+        # Preserve the actual traceback, not assertRaises' cleared traceback.
+        def initiating_boundary():
+            operation()
+        caught, names = None, []
+        expected_args = primary.args
+        expected_errno = getattr(primary, 'errno', None)
+        try:
+            initiating_boundary()
+        except BaseException as error:
+            caught = error
+            names = []
+            traceback = error.__traceback__
+            while traceback is not None:
+                names.append(traceback.tb_frame.f_code.co_name)
+                traceback = traceback.tb_next
+        try:
+            self.assertIs(caught, primary)
+            assert caught is not None
+            self.assertIn('initiating_boundary', names)
+            self.assertIn('operation', names)
+            self.assertEqual(caught.args, expected_args)
+            self.assertEqual(getattr(caught, 'errno', None), expected_errno)
+            self.assert_retired(owner)
+        finally:
+            # Even the rejected implementation must not contaminate later tests.
+            try:
+                if owner.process is not None:
+                    stream = owner.process.stdout
+                    getattr(stream, 'stream', stream).close()
+            finally:
+                self.assertEqual(self.libc.prctl(36, self.previous.value, 0, 0, 0), 0)
+
+    def test_partial_reader_start_preserves_primary_and_restores_resources(self):
+        owner = self.fixture('import signal\nsignal.pause()\n')
+        primary = RuntimeError("can't start new thread")
+        def operation():
+            with patch.object(probe.threading.Thread, 'start', side_effect=primary):
+                with owner:
+                    self.fail('accepted failed thread start')
+        self.check_fault(owner, operation, primary)
+
+    def test_reader_started_then_start_throws_is_still_joined(self):
+        owner = self.fixture('import signal\nsignal.pause()\n')
+        primary = OSError(11, 'thread startup interrupted')
+        start = probe.threading.Thread.start
+        def interrupted(thread):
+            start(thread)
+            raise primary
+        def operation():
+            with patch.object(probe.threading.Thread, 'start', interrupted):
+                with owner:
+                    self.fail('accepted interrupted thread start')
+        self.check_fault(owner, operation, primary)
+
+    def test_throwing_stream_close_preserves_enospc_and_restores_resources(self):
+        owner = self.fixture('import signal\nprint("fixture ready",flush=True)\nsignal.pause()\n')
+        primary = OSError(28, 'original ENOSPC')
+        class CloseFault:
+            def __init__(self, stream):
+                self.stream = stream
+            def __getattr__(self, name):
+                return getattr(self.stream, name)
+            def close(self):
+                self.stream.close()
+                raise OSError(5, 'pipe close EIO')
+        def operation():
+            with owner:
+                owner.process.stdout = CloseFault(owner.process.stdout)
+                raise primary
+        # Unwrap only in the test's emergency cleanup, after checking the result.
+        try:
+            self.check_fault(owner, operation, primary)
+            self.assertEqual(primary.errno, 28)
+            self.assertIn('cleanup failed: OSError', str(primary.__cause__))
+        finally:
+            owner.process.stdout = owner.process.stdout.stream
+
+    def test_join_failure_does_not_skip_stream_and_state_restoration(self):
+        owner = self.fixture('import signal\nprint("fixture ready",flush=True)\nsignal.pause()\n')
+        primary = OSError(28, 'original ENOSPC')
+        def operation():
+            with owner:
+                join = owner.reader.join
+                def interrupted(*args, **kwargs):
+                    join(*args, **kwargs)
+                    raise OSError(4, 'join interrupted after retirement')
+                owner.reader.join = interrupted
+                raise primary
+        self.check_fault(owner, operation, primary)
+        self.assertIn('cleanup failed: InterruptedError', str(primary.__cause__))
+
+    def test_close_error_without_primary_is_not_swallowed(self):
+        owner = self.fixture('import signal\nprint("fixture ready",flush=True)\nsignal.pause()\n')
+        failure = OSError(5, 'pipe close EIO')
+        owner.__enter__()
+        try:
+            owner.process.terminate()
+            owner.process.wait(timeout=5)
+            close = owner.process.stdout.close
+            def failing_close():
+                close()
+                raise failure
+            with patch.object(owner.process.stdout, 'close', failing_close):
+                with self.assertRaises(OSError) as caught:
+                    owner.__exit__(None, None, None)
+            self.assertIs(caught.exception, failure)
+            self.assert_retired(owner)
+        finally:
+            owner.process.stdout.close()
+            self.assertEqual(self.libc.prctl(36, self.previous.value, 0, 0, 0), 0)
+
     def test_injected_exception_retirement_and_receipt(self):
         owner = self.fixture('import signal\nprint("fixture ready",flush=True)\nsignal.pause()\n')
         primary = probe.InjectedFailure('Injected installed-daemon post-Job failure')
@@ -236,6 +358,82 @@ class Oracle(unittest.TestCase):
         self.assertEqual(primary.args, (5, 'original'))
         self.assertEqual(primary.errno, 5)
         self.assertNotIn('private secondary', str(primary.__cause__))
+
+
+class ExportOracle(unittest.TestCase):
+    # Independent analytic grid, not a saved producer payload/digest or a call to
+    # the validator to generate its own expected points. Different sequence phases
+    # must all remain valid (capture timing is deliberately not fixed).
+    HEADER = ('ply\nformat ascii 1.0\ncomment units millimeters\nelement vertex 3072\n'
+              'property float x\nproperty float y\nproperty float z\nend_header\n')
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='live75-export-')
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name) / 'points.ply'
+        self.rows = [f'{column - 32} {row - 24} {((column * 3 + row * 5 + 7) % 256) / 16}\n'
+                     for row in range(48) for column in range(64)]
+
+    def validate(self, text):
+        self.path.write_text(text, encoding='ascii')
+        probe.validate_export(self.path)
+
+    def test_analytic_grid_and_capture_phase(self):
+        self.validate(self.HEADER + ''.join(self.rows))
+        other = [f'{x - 32} {y - 24} {((3*x + 5*y + 253) % 256) / 16}\n'
+                 for y in range(48) for x in range(64)]
+        self.validate(self.HEADER + ''.join(other))
+
+    def test_empty_one_truncated_extra_and_garbage_bodies(self):
+        for rows in ([], self.rows[:1], self.rows[:-1], self.rows + self.rows[:1],
+                     ['garbage xyz\n'] * 3072, ['1 2\n'] * 3072, ['1 2 3 4\n'] * 3072):
+            with self.subTest(length=len(rows)), self.assertRaises(probe.ExportValidationError):
+                self.validate(self.HEADER + ''.join(rows))
+        self.validate(self.HEADER + ''.join(self.rows))  # Exact restoration.
+
+    def test_nonfinite_anywhere_in_body_is_rejected(self):
+        for value in ('nan', 'inf', '-inf', '1e999'):
+            rows = list(self.rows)
+            rows[123] = '1 2 ' + value + '\n'  # Not one of the geometry samples.
+            with self.subTest(value=value), self.assertRaisesRegex(probe.ExportValidationError, 'nonfinite'):
+                self.validate(self.HEADER + ''.join(rows))
+
+    def test_structure_properties_units_and_size_are_checked(self):
+        body = ''.join(self.rows)
+        for header in (self.HEADER.replace('3072', '1'),
+                       self.HEADER.replace('ascii', 'binary_little_endian'),
+                       self.HEADER.replace('property float x\n', ''),
+                       self.HEADER.replace('property float y', 'property float x'),
+                       self.HEADER.replace('millimeters', 'meters'),
+                       self.HEADER.replace('end_header', 'element face 0\nend_header')):
+            with self.subTest(header=header), self.assertRaisesRegex(probe.ExportValidationError, 'header'):
+                self.validate(header + body)
+        with self.assertRaisesRegex(probe.ExportValidationError, 'export size'):
+            self.validate('x' * (1024 * 1024))
+        self.path.write_bytes(b'\xff')
+        with self.assertRaisesRegex(probe.ExportValidationError, 'non-ASCII'):
+            probe.validate_export(self.path)
+
+    def test_finite_but_wrong_grid_or_intensity_is_rejected(self):
+        for index, line in ((0, '-32 -24 0.01\n'), (64, '-32 -23 0\n'),
+                            (24*64+32, '0 1 0\n'), (3071, '31 23 0\n')):
+            rows = list(self.rows)
+            rows[index] = line
+            with self.subTest(index=index), self.assertRaises(probe.ExportValidationError):
+                self.validate(self.HEADER + ''.join(rows))
+
+    def test_invalid_export_exit_error_and_retirement_oracle(self):
+        record = {'phase': 'installed-live-daemon-invalid-export', 'successful': False, 'retired': True}
+        text = json.dumps(record) + '\nExportValidationError: PLY vertex count mismatch\n'
+        self.assertEqual(driver.require_invalid_export(1, text), record)
+        for status, output in ((0, text), (2, text), (-9, text),
+                               (1, text + 'live-daemon cleanup failed'),
+                               (1, text.replace('count mismatch', 'unrelated failure')),
+                               (1, text.replace('"retired": true', '"retired": false'))):
+            with self.subTest(status=status, output=output), self.assertRaises(AssertionError):
+                driver.require_invalid_export(status, output)
+        with self.assertRaises(ValueError):
+            driver.require_invalid_export(1, 'ExportValidationError: PLY vertex count mismatch')
 
 
 class VirtualFixture(unittest.TestCase):

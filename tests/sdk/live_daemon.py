@@ -91,6 +91,17 @@ def require_injected_failure(status, text):
     return failure
 
 
+def require_invalid_export(status, text):
+    assert status == 1, 'invalid export did not exit exactly 1'
+    records = [json.loads(line) for line in text.splitlines() if line.startswith('{')]
+    failure, = [r for r in records if r.get('phase') == 'installed-live-daemon-invalid-export']
+    assert failure == {'phase': 'installed-live-daemon-invalid-export',
+                       'successful': False, 'retired': True}, 'unconfirmed invalid-export retirement'
+    assert 'ExportValidationError: PLY vertex count mismatch' in text, 'wrong invalid-export error'
+    assert 'live-daemon cleanup failed' not in text, 'cleanup failed during invalid-export control'
+    return failure
+
+
 def qualify(runtime, work):
     work.mkdir(mode=0o700, parents=False, exist_ok=False)
     capture = load_capture()
@@ -100,7 +111,7 @@ def qualify(runtime, work):
     plugins, recipes, plugin_identity = virtual_fixture(runtime, work)
     wheels = prepare(work / 'package')
     results = []
-    sensitivity = None
+    sensitivity = invalid_export = None
     for label, wheel in wheels:
         for protobuf in ('3.20.0', '6.33.5'):
             name = label + '-' + protobuf
@@ -128,6 +139,11 @@ def qualify(runtime, work):
                 status = capture.capture_command(negative_argv + ['--fail-after-job'], negative_log, budget, cwd=work)
                 sensitivity = {'exit': status, 'result': require_injected_failure(status, negative_log.read_text()),
                                'log_sha256': capture.digest(negative_log)}
+                negative_argv[negative_argv.index('--state') + 1] = str(work / (name + '-invalid-export-state'))
+                export_log = work / (name + '-invalid-export.log')
+                status = capture.capture_command(negative_argv + ['--truncate-export'], export_log, budget, cwd=work)
+                invalid_export = {'exit': status, 'result': require_invalid_export(status, export_log.read_text()),
+                                  'log_sha256': capture.digest(export_log)}
             exit_code = capture.capture_command(argv, log, budget, cwd=work)
             assert exit_code == 0, 'installed real-daemon consumer failed; see private bounded log'
             records = [json.loads(line) for line in log.read_text().splitlines() if line.startswith('{')]
@@ -137,7 +153,8 @@ def qualify(runtime, work):
             results.append({'consumer': name, 'exit': exit_code, 'result': result,
                             'log_sha256': capture.digest(log)})
             (work / 'results.json').write_text(json.dumps({'runtime_binaries': binaries,
-                'plugins': plugin_identity, 'injected_failure': sensitivity, 'consumers': results}, indent=2) + '\n')
+                'plugins': plugin_identity, 'injected_failure': sensitivity,
+                'invalid_export': invalid_export, 'consumers': results}, indent=2) + '\n')
             budget.check()
     assert capture.digest(daemon) == binaries['daemon'] and capture.digest(host) == binaries['host']
     print('PASS: four installed local-mantisd virtual consumers; not hardware/platform/release acceptance')

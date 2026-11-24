@@ -284,12 +284,15 @@ python -B tests/sdk/live_daemon.py --runtime build/headless --work-dir build/liv
 Use an unused work directory. The harness selects only the existing virtual
 scanner, example-points and PLY plugins, a private project and an ephemeral
 loopback endpoint; default token authentication is not disabled. Discovery,
-status, completed pipeline/export Jobs and the 3072-point virtual export have
-contract-derived oracles. Wrong/missing authentication, incompatible protocol,
-invalid recipes and post-shutdown refusal must fail as specified. One deliberate
-post-Job exception must retire the actual daemon tree and endpoint before an
-ordinary success run is restored. Output, startup, exchange and owned cleanup
-remain bounded. Sanitized results include installed code, binary and actual
+status and completed pipeline/export Jobs have contract-derived oracles. The
+bounded ASCII PLY check requires the declared XYZ properties/units, exactly 3072
+actual finite triples and selected source-derived grid/intensity relationships.
+Wrong/missing authentication, incompatible protocol, invalid recipes and
+post-shutdown refusal must fail as specified. A deliberate post-Job exception
+and a separately truncated real export must each retire the actual daemon tree
+and endpoint before an ordinary success run is restored. Output, startup,
+exchange and owned cleanup remain bounded. Sanitized results include installed
+code, binary and actual
 daemon mapping hashes; private command logs stay in the work directory.
 A passing run qualifies only its exact Linux/runtime/virtual inputs, not physical
 hardware, remote security, another OS, legal rights or publication readiness.
