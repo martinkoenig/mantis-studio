@@ -64,6 +64,8 @@ requires a token (argument or `MANTIS_TOKEN`); actual commands connect only to
 Do not put real tokens in examples/logs. SDK, application, schema and wire protocol
 versions are separate identities: package 0.1.0 does not change wire protocol v1.
 
+## Installed control qualification
+
 The integrated artifact qualifier also runs the existing real-loopback control
 suite from clean installed prefixes (`python -I`, no source-tree `PYTHONPATH`).
 Direct wheels, wheels rebuilt from an unpacked sdist without its original source
@@ -91,3 +93,47 @@ Timeout or disconnection does not cancel daemon-owned work: its outcome may be
 whole-Issue75 qualification, non-Linux support, naming/legal/notice review,
 distribution checks, TestPyPI, signing and production publishing remain separate
 gates. No publishing workflow or remote-network activation is provided.
+
+## Installed Job deadline qualification
+
+The existing `tests/sdk/artifacts_test.py` matrix additionally runs selected
+canonical Job/control regressions through `tests/sdk/installed_job_probe.py` in
+all four external consumers: wheel and independently rebuilt sdist wheel, each
+with protobuf 3.20.0 and 6.33.5. The probe requires an isolated private venv
+(`-I -B`), loads checkout fixtures by explicit filename without changing
+`sys.path`, and records installed SDK, Client, Job method and wire origins/hashes
+in the actual test process. Fixtures are not the SDK under test. No source
+SDK/generated-binding fallback is allowed.
+
+Owned real loopback peers carry canonical request/response bytes. Phase-observed
+virtual clocks exercise completion/report parsing, shared budgets, trickles,
+late success, exhausted polling, Job/protocol/application errors, legacy client
+call shapes, UNKNOWN outcomes without implicit cancel/retry, and peer/socket
+failure unwind. A synchronized combined exchange/peer failure checks primary
+identity, errno and traceback plus rendered secondary diagnostics and owned
+socket/listener/thread retirement, including the existing Python3.10 CI consumer.
+Restoration/receipt failure controls use real errno-bearing exceptions and
+rendered exception chains; diagnostics do not depend on Python3.11 `add_note`
+or on changing `OSError.args`. These are contract checks, not measured real-time
+guarantees.
+The qualifier also deliberately omits the post-JSON expiry guard in one disposable
+installed consumer, requires the intended assertion/nonzero RED (without a peer
+teardown failure or unrelated unittest ERROR), restores exact
+installed package bytes, and requires GREEN. Original artifacts and checkout SDK
+bytes must remain unchanged; combined stdout/stderr and exits are retained.
+Unisolated invocation, absent fixture, missing installed wire, unrelated negative
+failures and unsuccessful restoration fail closed.
+
+The combined qualifier preserves the installed control/native-ARM stage and the
+installed Job stage in one source candidate. It additionally runs both suites in
+the same installed SDK process and rejects a disposable installed implementation
+that ignores remaining receive time inside the outer budget after a preceding
+control failure. The original
+parent verdicts qualify only their respective sources, not this composition.
+
+This is **not** live `mantisd` integration, OS-level isolation, security, hardware,
+non-Linux/platform or release readiness. Stage A packaging evidence and standalone
+Job evidence retain their original scopes.
+Live-daemon/fault-protocol tests, whole-Issue75 qualification, naming/legal/notice
+review, distribution checks, TestPyPI, signing and production publishing remain
+separate gates. No publishing workflow or remote-network activation is provided.

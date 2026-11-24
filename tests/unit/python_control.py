@@ -7,6 +7,7 @@ Virtual monotonic time advances only at observed I/O; real sockets still carry
 all request/response bytes. Timeouts are hang bounds, not ordering evidence.
 """
 import ast
+import errno
 import hashlib
 import json
 from pathlib import Path
@@ -14,15 +15,16 @@ import socket
 import struct
 import sys
 import threading
+import traceback
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 mode = sys.argv.pop(1)
-installed = mode == "--installed"
+installed = mode in ("--installed", "--installed-sdk")
 if installed:
-    if not sys.flags.isolated:
-        raise RuntimeError("Installed control qualification requires python -I")
+    if not sys.flags.isolated or sys.prefix == sys.base_prefix:
+        raise RuntimeError("Installed control qualification requires python -I and a private venv")
 else:
     sys.path.insert(0, str(Path(mode).resolve() / "python"))
 with patch("socket.socket", side_effect=AssertionError("import opened a socket")), \
@@ -131,7 +133,13 @@ class Peer:
         except BaseException as cleanup:
             if error is None:
                 raise
-            error.add_note(f"Peer teardown also failed: {type(cleanup).__name__}")
+            # Do not replace the primary on supported Python3.10 (no add_note),
+            # or mutate errno-bearing args that OSError.__str__ ignores.
+            diagnostic = RuntimeError(f"Peer teardown also failed: {type(cleanup).__name__}: {cleanup}")
+            diagnostic.__cause__ = error.__cause__
+            diagnostic.__suppress_context__ = True
+            error.__cause__ = diagnostic
+            error.__suppress_context__ = True
         finally:
             self.listener.close()
 
@@ -468,6 +476,59 @@ class Control(unittest.TestCase):
         self.assertEqual(peer.errors, [])
         self.assertFalse(peer.thread.is_alive())
         self.assertEqual(peer.listener.fileno(), -1)
+
+    def test_primary_and_peer_failures_preserve_rendered_diagnostics(self):
+        class LegacyPrimary(PermissionError):
+            # Also challenge modern interpreters with the supported 3.10 API.
+            def __getattribute__(self, name):
+                if name == 'add_note':
+                    raise AttributeError('add_note unavailable (Python3.10 API model)')
+                return super().__getattribute__(name)
+
+        for primary_type in (PermissionError, LegacyPrimary):
+            with self.subTest(primary_type=primary_type.__name__):
+                primary = primary_type(errno.EACCES, 'initiating test failure')
+                secondary = OSError(errno.EIO, 'secondary owned peer failure')
+                received = threading.Event()
+                connections = []
+                def reply(peer, conn, request):
+                    connections.append(conn)
+                    received.set()
+                    if not peer.release.wait(2):
+                        raise AssertionError('peer: unwind did not release gate')
+                    raise secondary
+                peer = Peer(reply)
+                try:
+                    with peer:
+                        # Actual installed Client/serialization, not a fabricated
+                        # Job result. Peer waits for this primary's unwind.
+                        # Raising from recv avoids waiting for a reply from the
+                        # intentionally gated handler; SDK closes its real socket.
+                        class FailingReceive(ClockSocket):
+                            def recv(self, size):
+                                if not received.wait(2):
+                                    raise AssertionError('peer did not read canonical request')
+                                raise primary
+                        def connect(address, timeout):
+                            return FailingReceive(REAL_CONNECT(address, timeout), [0.0], {})
+                        with patch.object(mantis.socket, 'create_connection', side_effect=connect):
+                            mantis.Client(port=peer.port, token=TOKEN).snapshot()
+                except primary_type as caught:
+                    self.assertIs(caught, primary)
+                    self.assertEqual(caught.errno, errno.EACCES)
+                    rendered = ''.join(traceback.format_exception(type(caught), caught, caught.__traceback__))
+                    self.assertIn('recv', rendered)
+                    self.assertIn('initiating test failure', rendered)
+                    self.assertIn('secondary owned peer failure', rendered)
+                    self.assertIn('Peer teardown also failed', rendered)
+                else:
+                    self.fail('primary failure was lost')
+                self.assertEqual(peer.errors, [secondary])
+                self.assertEqual(len(peer.requests), 1)
+                self.assertFalse(peer.thread.is_alive())
+                self.assertEqual(peer.listener.fileno(), -1)
+                self.assertEqual(len(connections), 1)
+                self.assertEqual(connections[0].fileno(), -1)
 
     def test_malformed_protobuf_is_a_bounded_protocol_error(self):
         def reply(peer, conn, request):

@@ -68,6 +68,20 @@ def write_frozen_input_export(work, hashes):
     (work / 'frozen-inputs.zip').write_bytes(output.getvalue())
 
 
+def preserve_secondary(failure, message):
+    """Retain primary identity/errno/traceback and render secondary diagnostics.
+
+    Chaining works on Python3.10 too; mutating args loses OSError diagnostics,
+    while add_note is unavailable on that supported runtime.
+    """
+    diagnostic = RuntimeError(message)
+    diagnostic.__cause__ = failure.__cause__
+    diagnostic.__suppress_context__ = True
+    failure.__cause__ = diagnostic
+    failure.__suppress_context__ = True
+
+
+
 def _retire_group(process, reaped):
     # The leader may already have exited on TERM. Its owned group still needs
     # escalation, and orphaned descendants adopted by this runner need reaping.
@@ -382,6 +396,26 @@ def installed_control(python, runtime, *, source=None, test=None, diagnostic=Non
     return identity
 
 
+def installed_jobs(python, wheel):
+    """Bind SAME-process control/Job execution to independently verified payloads."""
+    output = command([python, '-I', '-B', PROBE.with_name('installed_job_probe.py')])
+    records = [json.loads(line) for line in output.splitlines() if line.startswith('{')]
+    identity, = [r for r in records if r.get('phase') == 'installed-job-origins']
+    result, = [r for r in records if r.get('phase') == 'installed-job-result']
+    assert result['successful'] and not result['leaked_threads'], 'combined installed suite failed'
+    assert Path(identity['prefix']).resolve() == python.parent.parent.resolve()
+    with zipfile.ZipFile(wheel) as archive:
+        expected_client = sha(archive.read('mantis/__init__.py'))
+        expected_wire = sha(archive.read('mantis/mantis_pb2.py'))
+    for name, entry in identity['origins'].items():
+        assert entry['sha256'] == (expected_wire if name == 'wire' else expected_client), name
+    for name, entry in identity['fixtures'].items():
+        assert entry['sha256'] == sha((REPO / 'tests/unit' / (name + '.py')).read_bytes()), name
+    with (WORK / 'installed-combined.jsonl').open('a', encoding='utf-8') as out:
+        out.write(json.dumps({'wheel_sha256': sha(wheel.read_bytes()),
+                              'identity': identity, 'result': result}) + '\n')
+
+
 class Artifacts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -470,8 +504,10 @@ class Artifacts(unittest.TestCase):
         self.assertEqual(wheel.read_bytes(), self.wheel.read_bytes())
         python = install(wheel, 'pip-sdist-wheel', '3.20.0')
         installed_control(python, '3.20.0')
+        installed_jobs(python, wheel)
         python = install(wheel, 'pip-sdist-wheel-max', '6.33.5')
         installed_control(python, '6.33.5')
+        installed_jobs(python, wheel)
 
     def test_archives_and_independent_root_reproducibility(self):
         self.assertEqual(self.wheel.read_bytes(), next(self.out_b.glob('*.whl')).read_bytes())
@@ -507,6 +543,108 @@ class Artifacts(unittest.TestCase):
                 for script in ('tests/unit/python_calibration.py', 'tests/unit/python_capture.py',
                                'tests/contract/protocol_fields.py'):
                     command([python, '-I', REPO / script, WORK / 'absent-native-build'])
+                installed_jobs(python, wheel)
+                # Reuse a disposable consumer, not the artifact or checkout SDK.
+                if name == 'wheel-min':
+                    self.installed_job_sensitivity(python, wheel)
+                    self.installed_job_sensitivity(python, wheel, interaction=True)
+
+    def installed_job_sensitivity(self, python, wheel, *, interaction=False):
+        package, = python.parent.parent.glob('lib/python*/site-packages/mantis')
+        module = package / '__init__.py'
+        originals = {p: p.read_bytes() for p in package.iterdir() if p.is_file()}
+        checkout = (REPO / 'sdk/python/mantis/__init__.py').read_bytes()
+        artifact = wheel.read_bytes()
+        original = originals[module]
+        needle = (b'            sock.settimeout(Client._remaining(deadline))' if interaction else
+                  b'        self._remaining(deadline)\n        return report')
+        replacement = b'            sock.settimeout(5)' if interaction else b'        return report'
+        mutant = original.replace(needle, replacement)
+        self.assertEqual(original.count(needle), 1, 'late-report mutation target must be unique')
+        self.assertNotEqual(mutant, original)
+        probe = PROBE.with_name('installed_job_probe.py')
+        mode = '--interaction-sensitivity' if interaction else '--sensitivity'
+        diagnostic = ('combined Job/control receive exceeded outer budget' if interaction else
+                      'AssertionError: TimeoutError not raised')
+        receipt_name = 'installed-interaction-sensitivity.json' if interaction else 'installed-job-sensitivity.json'
+        failure = None
+        restoration_errors = []
+        receipt = {'artifact': str(wheel), 'artifact_sha256': sha(artifact),
+                   'checkout_sdk_sha256': sha(checkout), 'installed_module': str(module),
+                   'original_sha256': sha(original), 'mutant_sha256': sha(mutant),
+                   'original_installed_files': {p.name: sha(data) for p, data in originals.items()}}
+        try:
+            module.write_bytes(mutant)
+            output = command([python, '-I', '-B', probe, mode], expected=1)
+            self.assertIn(diagnostic, output,
+                          'not the intended late-report assertion RED')
+            self.assertIn('FAILED (failures=1)', output)
+            self.assertNotIn('ERROR:', output)
+            self.assertNotIn('Peer teardown also failed', output)
+            self.assertIn('"phase": "installed-job-origins"', output)
+            self.assertIn('"successful": false', output)
+        except BaseException as error:
+            failure = error
+        finally:
+            try:
+                module.write_bytes(original)
+                restored = {p: p.read_bytes() for p in package.iterdir() if p.is_file()}
+                receipt['restored_sha256'] = sha(restored[module])
+                receipt['restored_installed_files'] = {p.name: sha(data) for p, data in restored.items()}
+                self.assertEqual(restored, originals, 'installed package restoration must be byte-exact')
+                self.assertEqual((REPO / 'sdk/python/mantis/__init__.py').read_bytes(), checkout)
+                self.assertEqual(wheel.read_bytes(), artifact)
+                command([python, '-I', '-B', probe, mode])
+            except BaseException as error:
+                restoration_errors.append(f'{type(error).__name__}: {error}')
+            receipt.update(failure=str(failure) if failure else None, restoration_errors=restoration_errors)
+            try:
+                (WORK / receipt_name).write_text(json.dumps(receipt, indent=2) + '\n')
+            except BaseException as error:
+                restoration_errors.append(f'receipt write failed: {error}')
+        if failure is not None:
+            if restoration_errors:
+                preserve_secondary(failure, 'installed Job restoration also failed: ' +
+                                   '; '.join(restoration_errors))
+            raise failure
+        self.assertEqual(restoration_errors, [], 'installed Job restoration failed')
+
+    def test_installed_job_qualifier_regressions(self):
+        command([sys.executable, '-B', PROBE.with_name('installed_job_qualifier_test.py')])
+
+    def test_installed_job_adapter_rejects_unisolated_and_absent_fixtures(self):
+        # Independent of test ordering: use a private malformed-install consumer.
+        python = install(self.wheel, 'job-adapter-failures', '3.20.0')
+        probe = PROBE.with_name('installed_job_probe.py')
+        output = command([python, '-B', probe], expected=1)
+        self.assertIn('installed Job probe requires -I and a private venv', output)
+        absent = WORK / 'absent-fixtures/sdk/installed_job_probe.py'
+        absent.parent.mkdir(parents=True)
+        shutil.copyfile(probe, absent)
+        output = command([python, '-I', '-B', absent], expected=1)
+        self.assertIn('FileNotFoundError', output)
+        self.assertIn('python_control.py', output)
+        module, = python.parent.parent.glob('lib/python*/site-packages/mantis/mantis_pb2.py')
+        original = module.read_bytes()
+        failure = None
+        try:
+            module.unlink()
+            output = command([python, '-I', '-B', probe], expected=1)
+            self.assertIn('mantis_pb2', output)
+            self.assertNotIn('"phase": "installed-job-result"', output)
+        except BaseException as error:
+            failure = error
+        finally:
+            try:
+                module.write_bytes(original)
+            except BaseException as cleanup:
+                if failure is None:
+                    raise
+                preserve_secondary(failure, 'installed wire restoration also failed: ' + str(cleanup))
+        if failure is not None:
+            raise failure
+        self.assertEqual(module.read_bytes(), original)
+        command([python, '-I', '-B', probe])
 
     def test_pre353_installed_control_red_exact_restored_green(self):
         # This is the actual ca04 client, not a replacement/fake Client. Keep only
@@ -515,10 +653,18 @@ class Artifacts(unittest.TestCase):
         source = copy_source('control-causal')
         client = source / 'mantis/__init__.py'
         original = client.read_bytes()
-        start = original.index(b'    @staticmethod\n    def _remaining(')
+        client_start = original.index(b'class Client:')
+        start = original.index(b'    @staticmethod\n    def _remaining(', client_start)
         end = original.index(b'    def preview(', start)
         legacy = (original[:start] + (REPO / 'tests/sdk/fixtures/control-before353.txt').read_bytes() +
                   original[end:]).replace(b'from google.protobuf.message import DecodeError\n', b'')
+        # Job composition changes another portion of the whole-module oracle.
+        # Reconstruct the ORIGINAL historical bytes, never reseal that oracle to
+        # a hybrid of the old control methods and the current Job implementation.
+        job_start = legacy.index(b'@dataclass(frozen=True)\nclass Job:')
+        job_end = legacy.index(b'@dataclass(frozen=True)\nclass Preview:', job_start)
+        legacy = (legacy[:job_start] + (REPO / 'tests/sdk/fixtures/job-before-deadlines.txt').read_bytes() + b'\n' +
+                  legacy[job_end:]).replace(b'import math\n', b'')
         self.assertEqual(sha(legacy), 'ef9625080a80d1e5c8ca2ca9887d53e55aa160a6aeaf327e28a54a9865b71e20',
                          'ca04 historical client reconstruction changed')
         client.write_bytes(legacy)
@@ -813,7 +959,8 @@ if __name__ == '__main__':
     inputs = [*sorted((REPO / 'sdk/python').rglob('*')), *sorted((REPO / 'tests/sdk').rglob('*')),
               SCHEMA, REPO / '.github/workflows/python-sdk.yml',
               *(REPO / name for name in ('tests/unit/python_calibration.py', 'tests/unit/python_capture.py',
-                                         'tests/unit/python_control.py', 'tests/integration/acceptance.py',
+                                         'tests/unit/python_control.py', 'tests/unit/python_job.py',
+                                         'tests/integration/acceptance.py',
                                          'tests/contract/protocol_fields.py'))]
     hashes = {str(path.relative_to(REPO)): sha(path.read_bytes()) for path in inputs
               if path.is_file() and '__pycache__' not in path.parts}

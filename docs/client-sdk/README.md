@@ -20,7 +20,28 @@ studio.export(artifact, "output.ply")
 second = studio.pipeline.run(raw_artifact=capture.raw_artifact).wait()
 ```
 
-`Job.wait(timeout=30)` returns an immutable artifact reference. A wait timeout does not cancel runtime work. `job.cancel()` requests cancellation; `export(..., wait=False)` returns a Job. Callbacks and long-running operations do not occur in the Python interpreter inside the daemon.
+`Job.wait(timeout=30)` returns an immutable artifact reference when the completed
+Job has a result artifact, otherwise `None`. `Job.wait_report(timeout=30)` waits
+for completion and retrieves/parses the Job's JSON status report. Each public
+wait uses **one monotonic outer budget**, including all snapshot exchanges,
+connect/send/header/body I/O, polling sleeps and (for `wait_report`) the subsequent
+report exchange and JSON handling. No nested call renews that budget; every
+exchange is capped at the smaller of five seconds and the remaining outer time.
+Late completion is rejected, not returned as success. An absent Job ID keeps
+waiting; Failed/Cancelled Jobs retain `MantisError(component="job")` diagnostics.
+Malformed report JSON still raises `json.JSONDecodeError`.
+
+Timeouts are finite numeric seconds. NaN/infinity raise `ValueError`; nonnumeric
+values raise `TypeError`. Zero and negative finite values raise `TimeoutError`
+before any connection. Expiry raises `TimeoutError`, **does not cancel runtime
+work**, and can leave the daemon outcome **UNKNOWN**. There is no retry or
+implicit cancellation. `job.cancel()` explicitly requests cancellation;
+`export(..., wait=False)` returns a Job. Custom/duck-typed clients and overridden
+no-argument `snapshot()`/`_call()` retain their existing call shapes; custom
+transports must bound their own blocking I/O, and the wait rejects late returns.
+These are software deadline checks, not a hard real-time scheduling guarantee
+or preemption of CPU work. Callbacks and long-running operations do not occur in
+the Python interpreter inside the daemon.
 
 `studio.snapshot()`, `studio.artifacts.list()`, `studio.events(after=sequence)`, `studio.enable_plugin(id, enabled)`, `studio.artifacts.recover(id)`, and `studio.project(path, create=True)` expose the other service operations.
 
@@ -35,8 +56,8 @@ Each synchronous control exchange has **one monotonic five-second I/O budget**
 shared by connect, request send, response header and response body. Each blocking
 operation uses the remaining budget; fragmented/trickling progress does not
 restart it. Expired completion is rejected, including the final response read.
-This is a bounded socket-exchange policy, not a hard real-time scheduling guarantee
-or a new deadline for the entire multi-call `Job.wait()` operation.
+Ordinary control callers retain that five-second policy; nested Job snapshots
+shorten it to the remaining outer wait budget.
 
 Transport failures retain their Python `TimeoutError`, `ConnectionError` or other
 `OSError` categories. Invalid frame lengths and version/request-correlation
@@ -65,19 +86,49 @@ It requires installed `protoc`, Python `protobuf` and `PyYAML` (Ubuntu packages
 bindings from the canonical schema under the ignored build directory, checks exact
 source/descriptor and independent golden request bytes, runs real owned loopback
 protocol peers plus existing capture/calibration/protocol/boundary tests, and
-proves existing two-argument receive-caller compatibility, deadline-guard and
-blocking-budget sensitivity in disposable SDK copies. The compatibility regression
+proves existing two-argument receive-caller compatibility, deadline-guard,
+blocking-budget and outer Job-budget sensitivity in disposable SDK copies. The compatibility regression
 executes the unchanged acceptance test's `raw_request` function with real sockets,
 not its surrounding product scenario. The private `_receive(sock, count)` form
 gets one five-second budget for that standalone read; normal `_call` exchanges
 always pass their single explicit shared deadline across header and body.
 Logs, exact input/tool hashes, commands, exits and source restorations are retained
 per run; insufficient disk reserve or an unexpected timeout fails qualification.
+On these native Linux runners the default cumulative output allowance is 128 MiB
+with a hard 1 GiB free-space reserve. A caller may explicitly select
+`--output-budget-bytes 524288` (integer range 1–134217728); the default and reserve
+are not reduced. Admission reserves the selected allowance; input copies,
+generated files, command captures and the receipt count toward it. An allowance
+too small for complete qualification fails closed, never omits a gate or converts
+a truncated failure into PASS. Captures are streamed/bounded. A dedicated Linux
+cleanup owner establishes subreaping **before** admitting each fixed command;
+it retires/reaps that command's actual descendants (including nested budget-test
+runners/emitters) on exhaustion, timeout/cancellation and leader exit. Only that
+dedicated process reaps its adopted children; unrelated caller children and the
+caller's subreaper state are untouched. The existing 30-second command and
+five-second failure-cleanup bounds are retained; incomplete retirement is an
+explicit failure, not PASS. Phase-observed real-emitter composition regressions
+and a direct-launch bypass mutant check this boundary. The fixed two-file
+canonical protoc generation also has a kernel file-size bound. Receipt,
+restoration and cleanup failures do not mask an initiating error. This contains
+the fixed cooperative qualification workload, not arbitrary hostile processes,
+OS-enforced isolation, or external killing of the cleanup authority.
 No generated module is committed. The dedicated `python-control` workflow runs
 this command on native Ubuntu x86_64 and ARM64 with read-only repository permissions
 and no stored checkout credentials. A protocol peer is **not `mantisd`**: these
 checks do not qualify live daemon integration, built wheel/sdist integration,
 hardware, non-Linux support, release publishing or whole Issue #75.
+
+The separate [artifact qualifier](../../sdk/python/README.md#installed-job-deadline-qualification)
+now executes selected canonical Job/control cases against actual installed wheel
+and independently rebuilt sdist consumers at both protobuf runtime boundaries.
+It verifies SDK/wire origins in each Job test process and requires an intended
+wrong-installed-late-report-success RED followed by byte-exact restoration GREEN.
+The combined candidate also preserves the full installed control suite and its
+historical-client negative gates. Same-process control failure, Job report and
+ordinary-control recovery check that outer deadlines neither renew nor leak.
+Controlled peers are not live `mantisd` evidence; parent acceptances alone do not
+qualify the composition.
 
 ## C++
 

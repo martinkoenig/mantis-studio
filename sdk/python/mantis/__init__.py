@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import json
+import math
 from pathlib import Path
 import socket
 import struct
@@ -41,22 +42,52 @@ class Job:
     id: str
     def cancel(self):
         self.client._call(job_cancel=wire.Id(id=self.id))
-    def wait_report(self, timeout=30.0):
-        self.wait(timeout)
-        return json.loads(next(j.status for j in self.client.snapshot().jobs if j.id == self.id))
-    def wait(self, timeout=30.0):
+    @staticmethod
+    def _deadline(timeout):
+        if not math.isfinite(timeout):
+            raise ValueError("Job timeout must be finite")
         deadline = time.monotonic() + timeout
+        if not math.isfinite(deadline):
+            raise ValueError("Job deadline must be finite")
+        Job._remaining(deadline)
+        return deadline
+    @staticmethod
+    def _remaining(deadline):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Job remains owned by mantisd; waiting timed out; outcome may be unknown")
+        return remaining
+    def _snapshot(self, deadline):
+        self._remaining(deadline)
+        # Preserve no-argument snapshot overrides and duck-typed clients. Custom
+        # transports own their blocking policy; the SDK rejects late returns.
+        if (getattr(self.client.snapshot, "__func__", None) is Client.snapshot
+                and getattr(self.client._call, "__func__", None) is Client._call):
+            result = self.client._call(_deadline=deadline, snapshot=wire.Empty())
+        else:
+            result = self.client.snapshot()
+        self._remaining(deadline)
+        return result
+    def wait_report(self, timeout=30.0):
+        deadline = self._deadline(timeout)
+        self._wait(deadline)
+        report = json.loads(next(j.status for j in self._snapshot(deadline).jobs if j.id == self.id))
+        self._remaining(deadline)
+        return report
+    def wait(self, timeout=30.0):
+        job = self._wait(self._deadline(timeout))
+        return Artifact(job.result_artifact) if job.result_artifact else None
+    def _wait(self, deadline):
         while True:
-            for job in self.client.snapshot().jobs:
+            for job in self._snapshot(deadline).jobs:
                 if job.id != self.id:
                     continue
+                self._remaining(deadline)
                 if job.state == "Completed":
-                    return Artifact(job.result_artifact) if job.result_artifact else None
+                    return job
                 if job.state in ("Failed", "Cancelled"):
                     raise MantisError(job.diagnostics or job.state, component="job")
-            if time.monotonic() >= deadline:
-                raise TimeoutError("Job remains owned by mantisd; waiting timed out")
-            time.sleep(0.025)
+            time.sleep(min(0.025, self._remaining(deadline)))
 
 @dataclass(frozen=True)
 class Preview:
@@ -170,12 +201,14 @@ class Client:
             result.extend(part)
         Client._remaining(deadline)
         return bytes(result)
-    def _call(self, **command):
+    def _call(self, *, _deadline=None, **command):
         request = wire.Request(protocol_version=1, request_id=str(uuid.uuid4()), token=self.token, **command)
         payload = request.SerializeToString()
         if len(payload) > 4 * 1024 * 1024:
             raise ValueError("Control message exceeds limit")
         deadline = time.monotonic() + 5
+        if _deadline is not None:
+            deadline = min(deadline, _deadline)
         sock = socket.create_connection(("127.0.0.1", self.port), timeout=self._remaining(deadline))
         try:
             sock.settimeout(self._remaining(deadline))
