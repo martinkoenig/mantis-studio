@@ -167,6 +167,23 @@ modules acquire no processes, network connections or inventory data on import;
 regressions audit import and ensure uncertain inventory cleanup blocks further
 Git acquisition. These regressions do not replace any applicable native final check.
 
+For a local grant requiring BUILD to retire before an active CTest campaign, the
+same test-only helper can hoist **exactly the existing two** tiny producer setups:
+`python3 -B tests/ci/shadow_configured_fixture.py --prepare OWNED_FIXTURE_ROOT`.
+Its private receipt pins both original manifests, actual producer/fixture source,
+interpreter and aggregate setup cost under the unchanged single setup12 budget;
+normal command receipts retain actual compilation and metadata-query retirement.
+Supply the completed receipt's digest as `MANTIS_SHADOW_PREPARED_SHA256` and the
+unchanged original root as `MANTIS_SHADOW_PREPARED_FIXTURE` to the existing suite.
+The suite rejects a changed receipt, source, interpreter, relocated manifest or
+changed original input bytes and **never rebuilds/falls back** under the active
+CTest parent. All real diagnostic/collector/replay assertions still execute;
+changed graph/PR/policy-rejected inputs still acquire fresh collector evidence.
+The outer CTest30 remains unchanged, and the separately measured setup12 cost is
+not hidden or reset. Default CI still creates precisely these two fixtures when
+no prepared root is supplied. This is only test setup sequencing, not a production
+configured-input producer framework, cached validator or extra test fixture.
+
 ## Configured dependency diagnostics (opt-in, record-only)
 
 The existing invocation accepts an additional **pair**:
@@ -448,16 +465,50 @@ product/native execution is introduced. `execution_authorized=false`,
 
 ## Integration boundary
 
-The workflow owner may add a reviewed record-only invocation and artifact capture;
-this change does not edit or activate a workflow. Supply event values through
-quoted environment variables, never interpolation of untrusted text into shell
-code. Preserve checkout's PR merge semantics, all existing tests, all five jobs,
-required names and permissions. Do not use collector results as `if`, paths filters,
-job matrices, test expressions, admission criteria or aggregation gates. Shallow
-checkout currently yields an explicit full fallback; this tool never fetches or
-changes checkout depth. Any later acquisition/fetch policy needs its own review.
+Architecture's existing five jobs now invoke `tools/ci_shadow_observation.py`
+(record-only, static invocation with no inventory) after their existing gates and
+cache actions. The final existing cache summary still runs under its original
+condition. Observation runs with `always()`; its failure is a real step failure,
+not `continue-on-error`, and cannot prevent earlier full validation from running.
+Only a successful observation step uploads the exact newly created
+`build/ci-shadow/observation.json`, with missing-file failure and 14-day retention.
+No collector output is used as `if`, paths filters, job matrices, test expressions,
+admission criteria or aggregation gates. Required names, permissions, fork trust,
+checkout, full tests, sanitizer controls and UI repetitions are unchanged.
 
-Run the disposable regression command as an additional source check when integrating
-this interface. Applicable actual full local qualification and exact PR/push CI
-remain required before publication/acceptance. Historical precision/recall require
-labelled actual outcomes; all-green jobs and seeded oracles cannot supply them.
+Event values are supplied through environment variables, never interpolated into
+shell code. `ci110-workflow-observation-v1` keeps an explicitly **asserted** event
+context (base, PR head, tested merge/push SHA, run/attempt/job/profile) separate from
+locally checked commit/tree/parent identities and acquisition completeness. A PR's
+`GITHUB_SHA` is the tested merge, never substituted for missing PR head evidence.
+Push head is `GITHUB_SHA`; its base is the supplied event `before`, not an invented
+parent. Manual dispatch is recorded as unsupported acquisition/FULL. Local checks
+are not provider authentication or dirty-worktree attestation. The actual three
+static implementation files are separately SHA256-bound. Ref text is represented
+only by a digest; untrusted branch names are not exported.
+
+The public document is a closed typed projection: checked identities, diff
+completeness/digest/size/count, allowlisted fixed errors, and the existing static
+FULL suite decisions/explicit unknowns. It contains no changed paths, raw diffs,
+Git version/diagnostics, inventory/provenance strings, configured manifests/cache,
+commands, environment or private paths/logs. The entire canonical document is
+screened before exclusive file creation (32 KiB maximum); unexpected diagnostics,
+invalid context, stale files or publication errors reject publication with a fixed
+nonzero diagnostic and no raw exception. No raw collector JSON is logged/uploaded.
+The upload condition tests publication success, **not** a classification decision.
+
+Shallow checkout still yields explicit `shallow-repository`/FULL, empty checked
+identities and null acquired tested commit; asserted SHA context is retained but
+never relabelled checked. No fetch/depth/acquisition policy changes are made.
+Absent static inventory remains an error/unknown, not complete dependency closure.
+This is a diagnostic/decision **observation**, not evidence of producer authenticity,
+recall, executed coverage, dependency completeness, safe omission, OS isolation,
+speedup or whole-Issue110 qualification. `execution_authorized=false`,
+`closure_complete=false` and FULL remain unconditional.
+
+Run the disposable regression commands as additional source checks when changing
+this interface; workflow contracts live in `compiler_cache_test.py`'s existing
+`WorkflowPolicy` class. Applicable actual full local qualification and exact
+PR/push CI remain required before publication/acceptance. Historical precision/
+recall require labelled actual outcomes; all-green jobs and seeded oracles cannot
+supply them.
