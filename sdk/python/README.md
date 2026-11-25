@@ -58,6 +58,20 @@ then the actual selected binary must pass again. These are bounded identity and
 integrity checks, not source authenticity, emulation detection or OS isolation.
 ARM success requires the completed native job; x86_64 execution cannot prove it.
 
+Package classifiers reflect only this exercised **Linux CPython** matrix:
+3.10–3.14 on x86_64, and 3.12 on native ARM64. The `py3-none-any` wheel tag
+and `Requires-Python >=3.10` are not evidence for other OSes, PyPy, other CPU/
+Python combinations, future Python releases, security, hardware or metrology.
+No development-maturity or license classifier is inferred from these tests;
+existing license/rights and provisional-name/release gates are unchanged.
+Canonical [source](https://github.com/martinkoenig/mantis-studio),
+[SDK documentation](https://github.com/martinkoenig/mantis-studio/blob/develop/sdk/python/README.md)
+and [issue tracker](https://github.com/martinkoenig/mantis-studio/issues) links
+are also serialized as project URLs in wheel and sdist metadata. Qualification
+checks those fields in actual archives, including rebuilt-sdist wheels, and
+rejects source-built missing/incorrect classifiers and missing/wrong URLs before
+requiring byte-exact source restoration and positive rebuilds.
+
 Importing `mantis` or `mantis.calibration` performs no connection. `mantis.Client`
 requires a token (argument or `MANTIS_TOKEN`); actual commands connect only to
 `127.0.0.1`, with the existing local daemon authentication and timeout semantics.
