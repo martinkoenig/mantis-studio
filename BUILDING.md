@@ -237,12 +237,67 @@ For the existing CMake development route, use `PYTHONPATH=build/debug/python`;
 its generated `mantis_pb2.py` remains build output and is not hand-maintained.
 Do not use that source/build path to qualify installed artifacts. The separate
 read-only [Python artifact workflow](.github/workflows/python-sdk.yml) executes
-`tests/sdk/artifacts_test.py` in isolated installed venvs on Python 3.10/3.12/3.14,
+`tests/sdk/artifacts_test.py` in isolated installed venvs on Linux x86_64
+Python 3.10/3.11/3.12/3.13/3.14 and native Linux ARM64 Python 3.12,
 including sdist rebuild, schema/wire, deterministic independent-root and negative
-controls. Locally run the same entry point with an unused `--work-dir` outside
+controls. Direct/unpacked-sdist/pip-overlay wheels also execute the real-loopback
+control and Job suites from clean installed prefixes at both protobuf runtime edges;
+source-matched paths/hashes and historical-client RED/exact-restored GREEN
+receipts distinguish artifact containment from source-only testing. Peers are not
+`mantisd`; timeout can leave daemon-owned operation outcomes UNKNOWN.
+Compiler distribution `protoc-wheel-0==21.11` and executed
+`libprotoc 3.21.11` are distinct identities in provenance format 2. The artifact
+workflow retains manifest-listed qualified input bytes in `frozen-inputs.zip`,
+including the hidden `.github` workflow path; downloaded bundles must match every
+`inputs.json` entry to the corresponding archived bytes and SHA-256. This is an
+allowlisted evidence export, not permission to upload arbitrary hidden files.
+Locally run
+the same entry point with `--expected-machine x86_64 --expected-python 3.12`
+(or the actual qualified native combination), and an unused `--work-dir` outside
 the source/build trees and the pinned tools from the workflow. Logs and failures
 are retained there. These packaging checks do not replace the five Architecture
 CI jobs or the later live-daemon/fault-protocol and release gates of Issue #75.
+The matrix is a qualification requirement, not proof that a particular revision
+passed. Python 3.11/3.13 require complete actual hosted artifact-suite evidence;
+they are not locally qualified merely by configuring `setup-python`. Local
+Python 3.12/3.14 execution cannot substitute for either missing interpreter.
+The same job runs `python -B tests/ci/python_sdk_workflow_test.py` with pinned
+binary-only PyYAML. This checks matrix/interpreter/tool/full-suite/evidence wiring,
+real shell argv and failure propagation, and representative wrong-wiring controls;
+its launcher fixture does not execute or qualify the selected hosted runtimes.
+
+### Installed SDK with a real local daemon
+
+The existing five Architecture jobs also run `tests/sdk/live_daemon.py` against
+their matching native output (including strict sanitizer settings), without a
+second native build. This is distinct from the controlled peers above. The
+qualifier uses the same pinned Python build tools and creates fresh installed
+consumers for the canonical wheel and an independently rebuilt sdist at both
+protobuf runtime edges. For an already built, matching Linux runtime:
+
+```bash
+python -B tests/sdk/live_daemon_test.py
+python -B tests/ci/live_daemon_workflow_test.py
+python -B tests/sdk/live_daemon.py --runtime build/headless --work-dir build/live75-consumers
+```
+
+Use an unused work directory. The harness selects only the existing virtual
+scanner, example-points and PLY plugins, a private project and an ephemeral
+loopback endpoint; default token authentication is not disabled. Discovery,
+status and completed pipeline/export Jobs have contract-derived oracles. The
+bounded ASCII PLY check requires the declared XYZ properties/units, exactly 3072
+actual finite triples and selected source-derived grid/intensity relationships.
+Wrong/missing authentication, incompatible protocol, invalid recipes and
+post-shutdown refusal must fail as specified. A deliberate post-Job exception
+and a separately truncated real export must each retire the actual daemon tree
+and endpoint before an ordinary success run is restored. Output, startup,
+exchange and owned cleanup remain bounded. Sanitized results include installed
+code, binary and actual
+daemon mapping hashes; private command logs stay in the work directory.
+A passing run qualifies only its exact Linux/runtime/virtual inputs, not physical
+hardware, remote security, another OS, legal rights or publication readiness.
+Timeouts do not cancel or implicitly retry daemon-owned Jobs; outcomes may remain
+UNKNOWN. TestPyPI/PyPI upload and signing are not performed by this harness.
 
 ## Windows and macOS
 

@@ -66,6 +66,26 @@ jobs:
         run: python3 tools/ci_ccache.py build cmake --build build/ci --parallel 4
       - name: Test
         run: ctest --test-dir build/ci --output-on-failure
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare installed local-daemon SDK tooling
+        run: |
+          python -m venv build/live75-tools
+          build/live75-tools/bin/python -m pip install --only-binary=:all: pip==25.1.1 build==1.2.2.post1 setuptools==75.8.2 wheel==0.45.1 protoc-wheel-0==21.11 protobuf==3.20.0 PyYAML==6.0.3
+      - name: Check installed daemon fixture and workflow controls
+        run: |
+          build/live75-tools/bin/python -B tests/sdk/live_daemon_test.py
+          build/live75-tools/bin/python -B tests/ci/live_daemon_workflow_test.py
+      - name: Qualify installed SDK against real local mantisd
+        run: build/live75-tools/bin/python -B tests/sdk/live_daemon.py --runtime build/ci --work-dir build/live75-consumers
+      - name: Retain installed daemon results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-sdk-${{ matrix.runner }}-${{ matrix.studio }}
+          path: build/live75-consumers/results.json
+          if-no-files-found: error
       - name: Record exact review revision
         if: ${{ matrix.studio == 'ON' }}
         run: |
@@ -196,6 +216,29 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: halt_on_error=1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare installed local-daemon SDK tooling
+        run: |
+          python -m venv build/live75-tools
+          build/live75-tools/bin/python -m pip install --only-binary=:all: pip==25.1.1 build==1.2.2.post1 setuptools==75.8.2 wheel==0.45.1 protoc-wheel-0==21.11 protobuf==3.20.0 PyYAML==6.0.3
+      - name: Check installed daemon fixture and workflow controls
+        run: |
+          build/live75-tools/bin/python -B tests/sdk/live_daemon_test.py
+          build/live75-tools/bin/python -B tests/ci/live_daemon_workflow_test.py
+      - name: Qualify installed SDK against real local mantisd
+        run: build/live75-tools/bin/python -B tests/sdk/live_daemon.py --runtime build/sanitizers --work-dir build/live75-consumers
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1
+      - name: Retain installed daemon results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-sdk-sanitizers
+          path: build/live75-consumers/results.json
+          if-no-files-found: error
       - name: Upload project capability diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

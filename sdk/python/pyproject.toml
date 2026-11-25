@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools==75.8.2", "wheel==0.45.1", "protoc-wheel-0==3.20.1", "protobuf==3.20.0"]
+requires = ["setuptools==75.8.2", "wheel==0.45.1", "protoc-wheel-0==21.11", "protobuf==3.20.0"]
 build-backend = "_build_backend"
 backend-path = ["."]
 [project]

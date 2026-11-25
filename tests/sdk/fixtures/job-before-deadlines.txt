@@ -1,0 +1,22 @@
+@dataclass(frozen=True)
+class Job:
+    client: Client
+    id: str
+    def cancel(self):
+        self.client._call(job_cancel=wire.Id(id=self.id))
+    def wait_report(self, timeout=30.0):
+        self.wait(timeout)
+        return json.loads(next(j.status for j in self.client.snapshot().jobs if j.id == self.id))
+    def wait(self, timeout=30.0):
+        deadline = time.monotonic() + timeout
+        while True:
+            for job in self.client.snapshot().jobs:
+                if job.id != self.id:
+                    continue
+                if job.state == "Completed":
+                    return Artifact(job.result_artifact) if job.result_artifact else None
+                if job.state in ("Failed", "Cancelled"):
+                    raise MantisError(job.diagnostics or job.state, component="job")
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Job remains owned by mantisd; waiting timed out")
+            time.sleep(0.025)

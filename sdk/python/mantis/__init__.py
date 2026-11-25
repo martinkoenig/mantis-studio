@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import json
+import math
 from pathlib import Path
 import socket
 import struct
 import time
 import uuid
+from google.protobuf.message import DecodeError
 from . import mantis_pb2 as wire
 
 class MantisError(RuntimeError):
@@ -40,22 +42,52 @@ class Job:
     id: str
     def cancel(self):
         self.client._call(job_cancel=wire.Id(id=self.id))
-    def wait_report(self, timeout=30.0):
-        self.wait(timeout)
-        return json.loads(next(j.status for j in self.client.snapshot().jobs if j.id == self.id))
-    def wait(self, timeout=30.0):
+    @staticmethod
+    def _deadline(timeout):
+        if not math.isfinite(timeout):
+            raise ValueError("Job timeout must be finite")
         deadline = time.monotonic() + timeout
+        if not math.isfinite(deadline):
+            raise ValueError("Job deadline must be finite")
+        Job._remaining(deadline)
+        return deadline
+    @staticmethod
+    def _remaining(deadline):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Job remains owned by mantisd; waiting timed out; outcome may be unknown")
+        return remaining
+    def _snapshot(self, deadline):
+        self._remaining(deadline)
+        # Preserve no-argument snapshot overrides and duck-typed clients. Custom
+        # transports own their blocking policy; the SDK rejects late returns.
+        if (getattr(self.client.snapshot, "__func__", None) is Client.snapshot
+                and getattr(self.client._call, "__func__", None) is Client._call):
+            result = self.client._call(_deadline=deadline, snapshot=wire.Empty())
+        else:
+            result = self.client.snapshot()
+        self._remaining(deadline)
+        return result
+    def wait_report(self, timeout=30.0):
+        deadline = self._deadline(timeout)
+        self._wait(deadline)
+        report = json.loads(next(j.status for j in self._snapshot(deadline).jobs if j.id == self.id))
+        self._remaining(deadline)
+        return report
+    def wait(self, timeout=30.0):
+        job = self._wait(self._deadline(timeout))
+        return Artifact(job.result_artifact) if job.result_artifact else None
+    def _wait(self, deadline):
         while True:
-            for job in self.client.snapshot().jobs:
+            for job in self._snapshot(deadline).jobs:
                 if job.id != self.id:
                     continue
+                self._remaining(deadline)
                 if job.state == "Completed":
-                    return Artifact(job.result_artifact) if job.result_artifact else None
+                    return job
                 if job.state in ("Failed", "Cancelled"):
                     raise MantisError(job.diagnostics or job.state, component="job")
-            if time.monotonic() >= deadline:
-                raise TimeoutError("Job remains owned by mantisd; waiting timed out")
-            time.sleep(0.025)
+            time.sleep(min(0.025, self._remaining(deadline)))
 
 @dataclass(frozen=True)
 class Preview:
@@ -149,29 +181,59 @@ class Client:
         self.x1_roles = _X1Roles(self)
         self.calibration = Calibration(self)
     @staticmethod
-    def _receive(sock, count):
+    def _remaining(deadline):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Control exchange timed out; daemon outcome may be unknown")
+        return remaining
+    @staticmethod
+    def _receive(sock, count, deadline=None):
+        # Legacy standalone readers get one bounded read, not a fresh budget
+        # per recv. _call always supplies its shared exchange deadline.
+        if deadline is None:
+            deadline = time.monotonic() + 5
         result = bytearray()
         while len(result) < count:
+            sock.settimeout(Client._remaining(deadline))
             part = sock.recv(count - len(result))
             if not part:
                 raise ConnectionError("mantisd closed the control connection")
             result.extend(part)
+        Client._remaining(deadline)
         return bytes(result)
-    def _call(self, **command):
+    def _call(self, *, _deadline=None, **command):
         request = wire.Request(protocol_version=1, request_id=str(uuid.uuid4()), token=self.token, **command)
         payload = request.SerializeToString()
         if len(payload) > 4 * 1024 * 1024:
             raise ValueError("Control message exceeds limit")
-        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as sock:
+        deadline = time.monotonic() + 5
+        if _deadline is not None:
+            deadline = min(deadline, _deadline)
+        sock = socket.create_connection(("127.0.0.1", self.port), timeout=self._remaining(deadline))
+        try:
+            sock.settimeout(self._remaining(deadline))
             sock.sendall(struct.pack("!I", len(payload)) + payload)
-            size, = struct.unpack("!I", self._receive(sock, 4))
+            size, = struct.unpack("!I", self._receive(sock, 4, deadline))
             if not 0 < size <= 4 * 1024 * 1024:
                 raise MantisError("Invalid control response length")
-            response = wire.Response.FromString(self._receive(sock, size))
-        if response.protocol_version != 1 or response.request_id != request.request_id:
-            raise MantisError("Response version/correlation mismatch")
-        if response.HasField("error"):
-            raise MantisError(response.error.message, response.error.code, response.error.component)
+            body = self._receive(sock, size, deadline)
+            try:
+                response = wire.Response.FromString(body)
+            except DecodeError:
+                raise MantisError("Malformed control response protobuf", component="protocol") from None
+            if response.protocol_version != 1 or response.request_id != request.request_id:
+                raise MantisError("Response version/correlation mismatch")
+            if response.HasField("error"):
+                raise MantisError(response.error.message, response.error.code, response.error.component)
+        except BaseException:
+            # Preserve the initiating failure, including cancellation, if close fails.
+            try:
+                sock.close()
+            except OSError:
+                pass
+            raise
+        else:
+            sock.close()
         return response
     def preview(self, capture_or_replay):
         ident = capture_or_replay if isinstance(capture_or_replay, str) else capture_or_replay.id
