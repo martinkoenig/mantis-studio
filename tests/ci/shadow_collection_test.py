@@ -176,6 +176,121 @@ class RealGit(unittest.TestCase):
         self.assertEqual(names, {'linux (ubuntu-24.04, ON)','linux (ubuntu-24.04, OFF)',
                                  'linux (ubuntu-24.04-arm, ON)','linux (ubuntu-24.04-arm, OFF)','sanitizers'})
 
+    def observation(self, event, head, tested, *, base=None, profile='ubuntu-24.04-OFF', ok=True):
+        env = dict(self.repo.env, GITHUB_EVENT_NAME=event, GITHUB_SHA=tested,
+                   GITHUB_REF='refs/pull/7/merge' if event == 'pull_request' else 'refs/heads/develop',
+                   GITHUB_JOB='sanitizers' if profile.endswith('-san') else 'linux',
+                   GITHUB_RUN_ID='123', GITHUB_RUN_ATTEMPT='2', SHADOW_PROFILE=profile,
+                   SHADOW_BASE=base if base is not None else self.repo.base, SHADOW_HEAD=head,
+                   PRIVATE_OBSERVATION_CANARY='never-publish-environment')
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow_observation.py')]
+        completed = subprocess.run(command, cwd=self.repo.root, env=env, capture_output=True, timeout=10)
+        self.assertEqual(completed.returncode, 0 if ok else 1, completed.stderr)
+        self.assertEqual(completed.stdout, b'', 'raw classifier data entered the public log')
+        if not ok:
+            self.assertEqual(completed.stderr,
+                             b'ci-shadow observation unavailable or unsafe; publication rejected\n')
+            return None
+        self.assertEqual(completed.stderr, b'')
+        path = self.repo.root / 'build/ci-shadow/observation.json'
+        raw = path.read_bytes()
+        result = json.loads(raw)
+        self.assertEqual(raw, shadow.policy.canonical(result))
+        self.assertLessEqual(len(raw), 32768)
+        for private in (str(self.repo.root), 'never-publish-environment', 'private-path-canary'):
+            self.assertNotIn(private.encode(), raw, 'unsafe observation publication')
+        self.assertFalse(result['execution_authorized'])
+        self.assertFalse(result['closure_complete'])
+        self.assertTrue(result['decision']['full_matrix_would_select'])
+        self.assertTrue(result['decision']['unknown_or_error'])
+        self.assertEqual({s['job'] for s in result['decision']['suite_decisions'] if 'job' in s},
+                         {'linux (ubuntu-24.04, ON)', 'linux (ubuntu-24.04, OFF)',
+                          'linux (ubuntu-24.04-arm, ON)', 'linux (ubuntu-24.04-arm, OFF)', 'sanitizers'})
+        self.assertTrue(all(s['selected'] for s in result['decision']['suite_decisions']))
+        import hashlib
+        self.assertEqual(set(result['implementation_sha256']),
+                         {'ci_shadow_observation.py', 'ci_shadow.py', 'ci_shadow_policy.py'})
+        for name, digest in result['implementation_sha256'].items():
+            self.assertEqual(digest, hashlib.sha256((TOOLS / name).read_bytes()).hexdigest())
+        evidence = os.environ.get('MANTIS_SHADOW_CONFIGURED_EVIDENCE')
+        if evidence:
+            destination = Path(evidence) / 'workflow-observations'
+            destination.mkdir(parents=True, exist_ok=True)
+            saved = destination / (hashlib.sha256(raw).hexdigest() + '.json')
+            if saved.exists():
+                self.assertEqual(saved.read_bytes(), raw)
+            else:
+                saved.write_bytes(raw)
+        path.unlink()  # Fixture-owned output only; each real CLI creates exclusively.
+        return result
+
+    def test_workflow_observation_real_pr_merge_is_not_branch_head(self):
+        head, merge = self.repo.pr()
+        r = self.observation('pull_request', head, merge)
+        context = r['asserted_context']
+        self.assertEqual((context['base'], context['head'], context['merge'], context['tested_commit']),
+                         (self.repo.base, head, merge, merge), 'PR head was mislabeled as tested merge')
+        self.assertNotEqual(context['head'], context['tested_commit'])
+        self.assertEqual(r['acquisition']['tested_commit'], merge)
+        self.assertEqual(r['acquisition']['identities']['merge']['parents'], [self.repo.base, head])
+        self.assertTrue(r['acquisition']['diff']['complete'])
+        self.assertEqual(r['acquisition']['errors'], [])
+        self.assertEqual(r['decision']['errors'], ['inventory-missing-inventory-anchor'])
+        self.assertEqual((context['job'], context['profile'], context['run_id'], context['run_attempt']),
+                         ('linux', 'x86_64-off', '123', '2'))
+        # A wrong tested assertion is not silently repaired to the real checkout.
+        wrong = self.observation('pull_request', head, head)
+        self.assertIn('merge-parent-mismatch', wrong['acquisition']['errors'])
+        self.assertIsNone(wrong['acquisition']['tested_commit'])
+        missing = self.observation('pull_request', '', merge)
+        self.assertIsNone(missing['asserted_context']['head'])
+        self.assertEqual(missing['asserted_context']['tested_commit'], merge)
+        self.assertIn('immutable-sha1-required', missing['acquisition']['errors'])
+        self.assertIsNone(missing['acquisition']['tested_commit'])
+
+    def test_workflow_observation_push_missing_shallow_and_private_paths(self):
+        self.repo.write('private-path-canary\nsecret.txt', 'private-content-canary')
+        head = self.repo.change()
+        r = self.observation('push', head, head, profile='ubuntu-24.04-san')
+        self.assertEqual(r['asserted_context']['head'], head)
+        self.assertIsNone(r['asserted_context']['merge'])
+        self.assertEqual(r['asserted_context']['profile'], 'x86_64-san')
+        self.assertTrue(r['acquisition']['diff']['complete'])
+        self.assertEqual(r['acquisition']['diff']['record_count'], 3)
+        self.assertNotIn('private-content-canary', json.dumps(r))
+        missing = self.observation('push', head, head, base='1' * 40)
+        self.assertFalse(missing['acquisition']['diff']['complete'])
+        self.assertIn('git-command-failed', missing['acquisition']['errors'])
+        self.repo.root.joinpath('.git/shallow').write_text(head + '\n')
+        shallow = self.observation('push', head, head)
+        self.assertEqual(shallow['acquisition']['errors'], ['shallow-repository'])
+        self.assertEqual(shallow['acquisition']['identities'], {})
+        self.assertIsNone(shallow['acquisition']['tested_commit'])
+        self.assertEqual(shallow['asserted_context']['tested_commit'], head)
+        self.assertEqual(shallow['decision']['errors'], ['invalid-json', 'inventory-missing-inventory-anchor'])
+
+    def test_workflow_observation_screening_and_stale_publication_fail(self):
+        import ci_shadow_observation as observation
+        head = self.repo.change()
+        r = self.collect(head)
+        asserted = observation.context(dict(GITHUB_EVENT_NAME='push', GITHUB_SHA=head,
+            GITHUB_REF='refs/heads/develop', GITHUB_JOB='linux', GITHUB_RUN_ID='1',
+            GITHUB_RUN_ATTEMPT='1', SHADOW_PROFILE='ubuntu-24.04-ON',
+            SHADOW_BASE=self.repo.base, SHADOW_HEAD=head))
+        r['acquisition']['errors'].append('private-path-canary')
+        with self.assertRaisesRegex(ValueError, 'observation-invalid-or-unsafe'):
+            observation.project(r, asserted)
+        r['acquisition']['errors'].clear()
+        r['decision']['suite_decisions'][0]['selected'] = False
+        with self.assertRaisesRegex(ValueError, 'observation-invalid-or-unsafe'):
+            observation.project(r, asserted)
+        output = self.repo.root / 'build/ci-shadow/observation.json'
+        output.parent.mkdir(parents=True)
+        output.write_text('stale-private-path-canary')
+        self.observation('push', head, head, ok=False)
+        self.assertEqual(output.read_text(), 'stale-private-path-canary')
+        self.observation('push', head, head, profile='unsafe-private-path-canary', ok=False)
+
     def test_complete_diff_observes_all_consumers(self):
         head=self.repo.change();inv=shadow.policy.canonical(inventory(self.repo))
         r=self.collect(head,inventory=inv,inventory_sha256=shadow.policy.digest(inv))
@@ -501,8 +616,13 @@ class ConfiguredInventory(unittest.TestCase):
         import ci_shadow_configured as configured
         cls.fixture, cls.configured = fixture, configured
         cls.copy = staticmethod(copy.deepcopy)
-        cls.temp = tempfile.TemporaryDirectory(prefix='mantis-configured-')
-        cls.root = Path(cls.temp.name)
+        prepared = os.environ.get('MANTIS_SHADOW_PREPARED_FIXTURE')
+        if prepared:
+            cls.temp = None
+            cls.root = Path(prepared)
+        else:
+            cls.temp = tempfile.TemporaryDirectory(prefix='mantis-configured-')
+            cls.root = Path(cls.temp.name)
         def retire():
             evidence = os.environ.get('MANTIS_SHADOW_CONFIGURED_EVIDENCE')
             if evidence:
@@ -515,18 +635,19 @@ class ConfiguredInventory(unittest.TestCase):
                     return shutil.copy2(source, target)
                 shutil.copytree(cls.root, dest, symlinks=True, copy_function=preserve_file)
                 print(json.dumps({'retained_configured_fixture': str(dest)}))
-            cls.temp.cleanup()
+            if cls.temp is not None:
+                cls.temp.cleanup()
         cls.addClassCleanup(retire)
-        import time
-        cls.setup_deadline = time.monotonic() + fixture.SETUP_SECONDS
-        cls.original, cls.path, cls.base = fixture.produce(cls.root, deadline=cls.setup_deadline)
+        # Optional local hoisting is strict: invalid/stale input never triggers a
+        # compiler under the active CTest parent. Default CI still produces exactly
+        # the same two fixtures under their single unchanged setup12 budget.
+        cls.prepared_sha256 = (os.environ.get('MANTIS_SHADOW_PREPARED_SHA256') if prepared
+                               else fixture.prepare(cls.root))
+        first, cls.multi_inputs = fixture.load_prepared(cls.root, cls.prepared_sha256)
+        cls.original, cls.path, cls.base = first
         cls.original_bytes = {(row['root'], row['path']):
                               (Path(cls.original['roots'][row['root']]) / row['path']).read_bytes()
                               for row in cls.original['files']}
-        # Finish BOTH existing producers under the same unchanged setup12 budget.
-        # Replay/negative cases are not setup and must not delay producer two.
-        multi_root = cls.root / 'multi'; multi_root.mkdir()
-        cls.multi_inputs = fixture.produce(multi_root, 'Ninja Multi-Config', deadline=cls.setup_deadline)
         cls.collector_cache = {}
 
     def setUp(self):
@@ -596,6 +717,21 @@ class ConfiguredInventory(unittest.TestCase):
                          {(r['root'], r['path'], r['sha256']) for r in self.inv['files']})
 
     def test_cli_versioned_composition_read_only_and_no_absolute_paths(self):
+        # Real produced/frozen bytes, not a mocked producer's own expected answer.
+        with patch.object(self.fixture, 'produce', side_effect=AssertionError('native setup during TEST')):
+            loaded = self.fixture.load_prepared(self.root, self.prepared_sha256)
+            self.assertEqual([entry[0]['generator'] for entry in loaded], ['Ninja', 'Ninja Multi-Config'])
+            with self.assertRaisesRegex(AssertionError, 'prepared receipt byte mismatch'):
+                self.fixture.load_prepared(self.root, '0' * 64)
+            public = Path(self.original['roots']['source']) / 'public.hpp'
+            pristine = public.read_bytes()
+            try:
+                public.write_bytes(pristine + b'// changed after native retirement\n')
+                with self.assertRaisesRegex(AssertionError, 'prepared input byte mismatch'):
+                    self.fixture.load_prepared(self.root, self.prepared_sha256)
+            finally:
+                public.write_bytes(pristine)
+            self.assertEqual(self.fixture.load_prepared(self.root, self.prepared_sha256)[0][0], self.original)
         result = self.diagnostic()
         before = {key: (self.fixture.digest(data), (Path(self.inv['roots'][key[0]]) / key[1]).stat().st_mtime_ns)
                   for key, data in self.original_bytes.items()}

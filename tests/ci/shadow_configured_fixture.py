@@ -279,3 +279,92 @@ def target_document(manifest, name):
             path = row['path']
             return path, json.loads((Path(manifest['roots']['build']) / path).read_bytes())
     raise AssertionError('missing owned target ' + name)
+
+
+def producer_inputs():
+    """Exact local fixture/source identity, not producer authentication."""
+    paths = [Path(__file__), Path(__file__).with_name('shadow_collection_test.py'),
+             *sorted(FIXTURE.rglob('*'))]
+    return {str(p.relative_to(Path(__file__).parent)): digest(p.read_bytes())
+            for p in paths if p.is_file()}
+
+
+def prepare(root):
+    """Produce exactly the two existing fixtures before local CTest starts.
+
+    Keep a single setup12 budget, including pinning/sealing. Command receipts
+    retain actual argv/output/elapsed/retirement. No validator result is cached.
+    """
+    started = time.monotonic()
+    deadline = started + SETUP_SECONDS
+    original, path, base = produce(root, deadline=deadline)
+    # Preserve the original input-pinning work inside the same setup budget.
+    for row in original['files']:
+        data = (Path(original['roots'][row['root']]) / row['path']).read_bytes()
+        assert digest(data) == row['sha256'], 'pristine producer input changed'
+    multi_root = root / 'multi'
+    multi_root.mkdir()
+    multi, multi_path, multi_base = produce(multi_root, 'Ninja Multi-Config', deadline=deadline)
+    receipt = {'schema': 'ci110-tiny-prepared-v1', 'producer_inputs': producer_inputs(),
+               'python': {'executable': str(Path(sys.executable).resolve()), 'version': sys.version},
+               'producers': [
+                   {'directory': '.', 'manifest_sha256': digest(path.read_bytes()), 'base': base},
+                   {'directory': 'multi', 'manifest_sha256': digest(multi_path.read_bytes()), 'base': multi_base}]}
+    receipt['setup_seconds'] = time.monotonic() - started
+    assert receipt['setup_seconds'] <= SETUP_SECONDS, 'aggregate tiny setup12 exceeded'
+    raw = encode(receipt)
+    with (root / 'prepared.json').open('xb') as stream:
+        stream.write(raw)
+    assert time.monotonic() <= deadline, 'aggregate tiny setup12 publication exceeded'
+    return digest(raw)
+
+
+def load_prepared(root, expected):
+    """Read the exact original closure in place; reject, never rebuild/fallback.
+
+    The independent digest must come from the caller's completed setup receipt.
+    Each test still runs the real diagnostic/collector/replay against its current
+    inputs. Existing changed graph/PR/policy-rejected cases acquire fresh evidence.
+    """
+    raw = (root / 'prepared.json').read_bytes()
+    assert len(raw) <= MAX_OUTPUT_BYTES and digest(raw) == expected, 'prepared receipt byte mismatch'
+    receipt = json.loads(raw)
+    assert receipt['schema'] == 'ci110-tiny-prepared-v1'
+    assert receipt['producer_inputs'] == producer_inputs(), 'prepared producer source changed'
+    assert receipt['python'] == {'executable': str(Path(sys.executable).resolve()), 'version': sys.version}, \
+        'prepared interpreter changed'
+    assert type(receipt['setup_seconds']) in (int, float) and 0 <= receipt['setup_seconds'] <= SETUP_SECONDS
+    assert [r['directory'] for r in receipt['producers']] == ['.', 'multi']
+    results = []
+    for row, generator in zip(receipt['producers'], ('Ninja', 'Ninja Multi-Config')):
+        directory = root if row['directory'] == '.' else root / 'multi'
+        manifest_path = directory / 'inputs.json'
+        raw = manifest_path.read_bytes()
+        assert len(raw) <= MAX_OUTPUT_BYTES and digest(raw) == row['manifest_sha256'], \
+            'prepared manifest byte mismatch'
+        manifest = json.loads(raw)
+        assert manifest['generator'] == generator and manifest['configuration'] == 'Debug'
+        assert manifest['roots'] == {'source': str(directory / 'source'), 'build': str(directory / 'build')}, \
+            'prepared fixture relocated'
+        assert isinstance(row['base'], str) and len(row['base']) == 40
+        for item in manifest['files']:
+            path_parts = Path(item['path']).parts
+            assert item['root'] in ('source', 'build') and path_parts and not Path(item['path']).is_absolute()
+            assert '..' not in path_parts, 'prepared unsafe path'
+            file = Path(manifest['roots'][item['root']]) / item['path']
+            assert file.is_file() and not file.is_symlink(), 'prepared nonregular input'
+            data = file.read_bytes()
+            assert len(data) <= MAX_OUTPUT_BYTES and digest(data) == item['sha256'], \
+                'prepared input byte mismatch'
+        results.append((manifest, manifest_path, row['base']))
+    return results
+
+
+if __name__ == '__main__':
+    import argparse
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+    parser = argparse.ArgumentParser(description='Prepare the existing two tiny test fixtures before CTest')
+    parser.add_argument('--prepare', type=Path, required=True)
+    args = parser.parse_args()
+    args.prepare.mkdir(parents=True, exist_ok=False)
+    print(json.dumps({'prepared_sha256': prepare(args.prepare.resolve())}, sort_keys=True))
