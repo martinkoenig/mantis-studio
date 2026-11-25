@@ -298,6 +298,11 @@ A passing run qualifies only its exact Linux/runtime/virtual inputs, not physica
 hardware, remote security, another OS, legal rights or publication readiness.
 Timeouts do not cancel or implicitly retry daemon-owned Jobs; outcomes may remain
 UNKNOWN. TestPyPI/PyPI upload and signing are not performed by this harness.
+The separate [SDK publication-gate definition](docs/engineering/python-sdk-publication-gate.md)
+sets out required owner inputs, independent qualification, TestPyPI compatibility
+and a later least-privilege OIDC production decision. It does not configure or
+authorize publication; naming/rights, actual TestPyPI evidence and release approval
+remain separate gates.
 
 ## Windows and macOS
 
