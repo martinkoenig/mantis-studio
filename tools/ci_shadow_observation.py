@@ -82,7 +82,11 @@ def context(env):
         require(re.fullmatch(r'refs/pull/[1-9][0-9]{0,19}/merge', env['GITHUB_REF']))
         merge = tested
     else:
-        require(env['GITHUB_REF'].startswith('refs/heads/'))
+        # Manual dispatch supports branches AND tags; the existing collector
+        # records either as unsupported-event/FULL, without acquired identities.
+        # Push observations remain restricted to the existing branch workflow.
+        pattern = r'refs/heads/.+' if event == 'push' else r'refs/(?:heads|tags)/.+'
+        require(re.fullmatch(pattern, env['GITHUB_REF']))
         require(not head or head == tested)
         merge = None
     return {'event': event, 'base': base or None, 'head': head or None,

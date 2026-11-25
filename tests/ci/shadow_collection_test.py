@@ -176,9 +176,11 @@ class RealGit(unittest.TestCase):
         self.assertEqual(names, {'linux (ubuntu-24.04, ON)','linux (ubuntu-24.04, OFF)',
                                  'linux (ubuntu-24.04-arm, ON)','linux (ubuntu-24.04-arm, OFF)','sanitizers'})
 
-    def observation(self, event, head, tested, *, base=None, profile='ubuntu-24.04-OFF', ok=True):
+    def observation(self, event, head, tested, *, base=None, profile='ubuntu-24.04-OFF',
+                    ref=None, ok=True):
         env = dict(self.repo.env, GITHUB_EVENT_NAME=event, GITHUB_SHA=tested,
-                   GITHUB_REF='refs/pull/7/merge' if event == 'pull_request' else 'refs/heads/develop',
+                   GITHUB_REF=ref if ref is not None else (
+                       'refs/pull/7/merge' if event == 'pull_request' else 'refs/heads/develop'),
                    GITHUB_JOB='sanitizers' if profile.endswith('-san') else 'linux',
                    GITHUB_RUN_ID='123', GITHUB_RUN_ATTEMPT='2', SHADOW_PROFILE=profile,
                    SHADOW_BASE=base if base is not None else self.repo.base, SHADOW_HEAD=head,
@@ -268,6 +270,42 @@ class RealGit(unittest.TestCase):
         self.assertIsNone(shallow['acquisition']['tested_commit'])
         self.assertEqual(shallow['asserted_context']['tested_commit'], head)
         self.assertEqual(shallow['decision']['errors'], ['invalid-json', 'inventory-missing-inventory-anchor'])
+
+    def test_workflow_observation_manual_branch_and_tag_are_unsupported_full(self):
+        import hashlib
+        head = self.repo.change()
+        # Inert workflow environment only: no tag creation or remote dispatch.
+        for ref in ('refs/heads/private-path-canary', 'refs/tags/private-path-canary'):
+            with self.subTest(ref=ref):
+                r = self.observation('workflow_dispatch', head, head, ref=ref)
+                context = r['asserted_context']
+                self.assertEqual((context['event'], context['head'], context['tested_commit']),
+                                 ('workflow_dispatch', head, head))
+                self.assertIsNone(context['merge'])
+                self.assertEqual(context['ref_sha256'], hashlib.sha256(ref.encode()).hexdigest())
+                self.assertEqual(r['acquisition']['errors'], ['unsupported-event'])
+                self.assertEqual(r['acquisition']['identities'], {})
+                self.assertIsNone(r['acquisition']['tested_commit'])
+                self.assertFalse(r['acquisition']['diff']['complete'])
+                self.assertEqual(r['decision']['errors'],
+                                 ['invalid-json', 'inventory-missing-inventory-anchor'])
+                self.assertNotIn(ref, json.dumps(r))
+
+    def test_workflow_observation_invalid_event_ref_rejects_without_publication(self):
+        head = self.repo.change()
+        for event, ref in (('workflow_dispatch', 'refs/pull/7/merge'),
+                           ('workflow_dispatch', 'refs/heads/'),
+                           ('workflow_dispatch', 'refs/tags/'),
+                           ('workflow_dispatch', 'refs/tags/private-path-canary\n'),
+                           ('push', 'refs/tags/private-path-canary'),
+                           ('push', 'refs/heads/'),
+                           ('pull_request', 'refs/heads/develop'),
+                           ('pull_request', 'refs/pull/7/head'),
+                           ('unknown-private-path-canary', 'refs/heads/develop')):
+            with self.subTest(event=event, ref=ref):
+                self.observation(event, head, head, ref=ref, ok=False)
+                self.assertFalse((self.repo.root / 'build/ci-shadow/observation.json').exists(),
+                                 'invalid context published an observation')
 
     def test_workflow_observation_screening_and_stale_publication_fail(self):
         import ci_shadow_observation as observation
