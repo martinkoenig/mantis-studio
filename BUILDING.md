@@ -213,6 +213,53 @@ Run the focused helper/event regressions with ccache, GCC/G++, and `python3-yaml
 installed: `python3 -B tests/ci/compiler_cache_test.py`. They supplement the full
 project tests; they do not replace them.
 
+### Isolated incremental correctness regression (Linux)
+
+The [configured-toolchain workflow](.github/workflows/toolchain-provenance.yml)
+adds a real Ninja build to the standalone checks on both native runners. This
+[probe](tests/ci/fixtures/incremental/CMakeLists.txt) needs Python 3.11+, CMake
+3.25+, Ninja, GCC C++ and ccache 4.9. Use a trusted existing parent outside
+this checkout, and an **unused** campaign directory. Do not inherit `CCACHE_*`
+overrides. Nothing is restored, shared, published or automatically removed.
+
+```bash
+# BUILD only: two private source/build/cache roots, one compile at a time.
+root=/path/to/private-parent/incremental
+python3 -B tests/ci/incremental_cache.py build "$root"
+```
+
+After the producer exits successfully and its owned processes retire, the
+separately admitted TEST consumer launches only staged binaries:
+
+```bash
+set -e
+status=0
+python3 -B tests/ci/incremental_cache.py test-broken "$root" || status=$?
+test "$status" -eq 3
+python3 -B tests/ci/incremental_cache.py test-restored "$root"
+```
+
+The broken source copy omits only the generator's `DEPENDS` edge. Its cold
+binary prints `7 11 3`; after the generator input edit, Ninja does no work and
+the **same output** fails the expected `7 29 3` assertion (exit 3). Setup,
+launch, timeout and evidence failures are not that diagnostic. With the exact
+repository rule restored in the other root, the assertions are:
+
+| Step | ccache misses / hits (delta) | Executed binary stdout |
+| --- | --- | --- |
+| Cold | 1 / 0 | `7 11 3` |
+| Unchanged; empty Ninja work list, unchanged build log | 0 / 0 | `7 11 3` |
+| Warm; move object aside, keep cache | 0 / 1 | `7 11 3` |
+| Generated input edit | 1 / 0 | `7 29 3` |
+| Transitive header edit | 1 / 0 | `17 29 3` |
+| Reconfigure target definition in the same build directory | 1 / 0 | `17 29 5` |
+
+`ready.json` binds the staged binary copies for the two phases. Verbose commands,
+Ninja deps/logs, binaries, cache metadata and failure details stay private to
+that campaign. This is a trusted single-owner fixture, not authentication,
+product provenance or a speed benchmark. It supplements the existing direct
+compiler/policy regression and does not select or skip any final product gate.
+
 ## Python packaging
 
 Build the standalone pure-Python Client SDK with PEP 517; no CMake build or manual
