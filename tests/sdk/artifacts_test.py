@@ -312,6 +312,48 @@ def unpack(sdist, name):
     return roots[0]
 
 
+def verify_project_metadata(data):
+    """Check serialized Core Metadata, independently of pyproject/backend inputs.
+
+    Exact sets reject missing, duplicate and unsupported support claims; order is
+    not a Core Metadata contract. These classifiers describe the exercised Linux
+    CPython matrix, not artifact portability, maturity or release authorization.
+    """
+    metadata = BytesParser().parsebytes(data)
+    assert metadata['Name'] == 'mantis-studio-client'
+    assert metadata['Version'] == '0.1.0'
+    assert metadata['Requires-Python'] == '>=3.10'
+    assert metadata.get_all('Requires-Dist') == ['protobuf<7,>=3.20']
+    classifiers = [
+        'Operating System :: POSIX :: Linux',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3 :: Only',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
+        'Programming Language :: Python :: Implementation :: CPython',
+    ]
+    assert sorted(metadata.get_all('Classifier', [])) == sorted(classifiers), 'project classifiers mismatch'
+    urls = [
+        'Source, https://github.com/martinkoenig/mantis-studio',
+        'Documentation, https://github.com/martinkoenig/mantis-studio/blob/develop/sdk/python/README.md',
+        'Issues, https://github.com/martinkoenig/mantis-studio/issues',
+    ]
+    assert sorted(metadata.get_all('Project-URL', [])) == sorted(urls), 'project URLs mismatch'
+
+
+def verify_sdist_metadata(path):
+    with tarfile.open(path, 'r:gz') as archive:
+        name = 'mantis_studio_client-0.1.0/PKG-INFO'
+        members = [m for m in archive.getmembers() if m.name == name]
+        assert len(members) == 1 and members[0].isfile(), 'missing/duplicate sdist PKG-INFO'
+        member = archive.extractfile(members[0])
+        assert member is not None, 'unreadable sdist PKG-INFO'
+        verify_project_metadata(member.read())
+
+
 def verify_wheel(path, *, client_source=None):
     """Independent strict artifact oracle, not a signature/authenticity scheme."""
     with zipfile.ZipFile(path) as archive:
@@ -326,11 +368,7 @@ def verify_wheel(path, *, client_source=None):
     expected_client = (REPO / 'sdk/python/mantis/__init__.py').read_bytes() if client_source is None else client_source
     assert content['mantis/__init__.py'] == expected_client, 'wheel client differs from qualified source'
     assert content['mantis/calibration.py'] == (REPO / 'sdk/python/mantis/calibration.py').read_bytes(), 'wheel calibration differs from qualified source'
-    metadata = BytesParser().parsebytes(content[dist + 'METADATA'])
-    assert metadata['Name'] == 'mantis-studio-client'
-    assert metadata['Version'] == '0.1.0'
-    assert metadata['Requires-Python'] == '>=3.10'
-    assert metadata.get_all('Requires-Dist') == ['protobuf<7,>=3.20']
+    verify_project_metadata(content[dist + 'METADATA'])
     wheel = BytesParser().parsebytes(content[dist + 'WHEEL'])
     assert wheel['Root-Is-Purelib'] == 'true' and wheel['Tag'] == 'py3-none-any'
     assert wheel['Generator'] == 'setuptools (75.8.2)'
@@ -438,8 +476,9 @@ class Artifacts(unittest.TestCase):
         cls.rebuilt_source = unpack(cls.sdist, 'unpacked-without-checkout')
         # Prove no relative traversal back to root-a is needed for the rebuild.
         cls.a.parents[1].rename(WORK / 'original-checkout-unavailable')
-        build(cls.rebuilt_source, WORK / 'rebuilt', kind='wheel', isolated=True)
+        build(cls.rebuilt_source, WORK / 'rebuilt', isolated=True)
         cls.rebuilt = next((WORK / 'rebuilt').glob('*.whl'))
+        cls.rebuilt_sdist = next((WORK / 'rebuilt').glob('*.tar.gz'))
         receipts = {str(p.relative_to(WORK)): sha(p.read_bytes()) for directory in
                     (cls.out_a, cls.out_b, WORK / 'rebuilt') for p in directory.iterdir()}
         (WORK / 'artifacts.json').write_text(json.dumps(receipts, indent=2) + '\n')
@@ -508,6 +547,92 @@ class Artifacts(unittest.TestCase):
         python = install(wheel, 'pip-sdist-wheel-max', '6.33.5')
         installed_control(python, '6.33.5')
         installed_jobs(python, wheel)
+
+    def test_project_metadata_in_wheel_and_sdist(self):
+        # Check both serialized boundaries even if one fails; don't substitute
+        # TOML inspection or successful twine rendering for semantic correctness.
+        for artifact, checker in ((self.wheel, verify_wheel),
+                                  (self.sdist, verify_sdist_metadata),
+                                  (self.rebuilt, verify_wheel),
+                                  (self.rebuilt_sdist, verify_sdist_metadata)):
+            with self.subTest(artifact=str(artifact)):
+                checker(artifact)
+
+    def test_source_built_metadata_negatives_and_exact_restoration(self):
+        # Genuine backend-built archives remain internally checksum-consistent:
+        # a broken ZIP/RECORD or TOML-only check cannot satisfy these controls.
+        source = copy_source('metadata-causal')
+        project = source / 'pyproject.toml'
+        original = project.read_bytes()
+        original_artifacts = {p: p.read_bytes() for p in
+                              (self.wheel, self.sdist, self.rebuilt, self.rebuilt_sdist)}
+        classifier = b'    "Programming Language :: Python :: Implementation :: CPython",\n'
+        linux = b'"Operating System :: POSIX :: Linux"'
+        cases = [
+            ('missing-classifier', classifier, b'', 'project classifiers mismatch'),
+            ('wrong-classifier', linux, b'"Operating System :: OS Independent"', 'project classifiers mismatch'),
+        ]
+        for label, url in (
+                ('Source', 'https://github.com/martinkoenig/mantis-studio'),
+                ('Documentation', 'https://github.com/martinkoenig/mantis-studio/blob/develop/sdk/python/README.md'),
+                ('Issues', 'https://github.com/martinkoenig/mantis-studio/issues')):
+            line = (label + ' = "' + url + '"\n').encode()
+            cases.append(('missing-' + label, line, b'', 'project URLs mismatch'))
+            cases.append(('wrong-' + label, line,
+                          (label + ' = "https://example.invalid/not-the-project"\n').encode(),
+                          'project URLs mismatch'))
+        results = []
+        failure = None
+        try:
+            for name, needle, replacement, diagnostic in cases:
+                with self.subTest(case=name):
+                    self.assertEqual(original.count(needle), 1, 'metadata mutation target must be unique')
+                    changed = original.replace(needle, replacement)
+                    self.assertNotEqual(changed, original)
+                    project.write_bytes(changed)
+                    out = WORK / ('metadata-' + name)
+                    build(source, out)
+                    wheel = next(out.glob('*.whl'))
+                    sdist = next(out.glob('*.tar.gz'))
+                    rebuilt_source = unpack(sdist, 'metadata-unpacked-' + name)
+                    rebuilt_out = WORK / ('metadata-rebuilt-' + name)
+                    build(rebuilt_source, rebuilt_out)
+                    artifacts = ((wheel, verify_wheel), (sdist, verify_sdist_metadata),
+                                 (next(rebuilt_out.glob('*.whl')), verify_wheel),
+                                 (next(rebuilt_out.glob('*.tar.gz')), verify_sdist_metadata))
+                    for artifact, checker in artifacts:
+                        with self.assertRaisesRegex(AssertionError, '^' + diagnostic + '$') as rejected:
+                            checker(artifact)
+                        results.append({'case': name, 'artifact': str(artifact.relative_to(WORK)),
+                                        'sha256': sha(artifact.read_bytes()),
+                                        'project_sha256': sha(changed), 'diagnostic': str(rejected.exception)})
+        except BaseException as error:
+            failure = error
+        finally:
+            try:
+                project.write_bytes(original)
+                self.assertEqual(project.read_bytes(), original, 'metadata source restoration differs')
+                for artifact, data in original_artifacts.items():
+                    self.assertEqual(artifact.read_bytes(), data, 'qualified artifact changed')
+            except BaseException as cleanup:
+                if failure is None:
+                    raise
+                preserve_secondary(failure, 'metadata restoration also failed: ' + str(cleanup))
+        if failure is not None:
+            raise failure
+        restored_out = WORK / 'metadata-restored'
+        build(source, restored_out)
+        restored_wheel = next(restored_out.glob('*.whl'))
+        restored_sdist = next(restored_out.glob('*.tar.gz'))
+        verify_wheel(restored_wheel)
+        verify_sdist_metadata(restored_sdist)
+        self.assertEqual(restored_wheel.read_bytes(), self.wheel.read_bytes())
+        self.assertEqual(restored_sdist.read_bytes(), self.sdist.read_bytes())
+        self.assertEqual(len(results), len(cases) * 4, 'missing metadata rejection')
+        (WORK / 'metadata-sensitivity.json').write_text(json.dumps({
+            'original_project_sha256': sha(original), 'restored_project_sha256': sha(project.read_bytes()),
+            'rejections': results, 'restored_artifacts': {
+                p.name: sha(p.read_bytes()) for p in (restored_wheel, restored_sdist)}}, indent=2) + '\n')
 
     def test_archives_and_independent_root_reproducibility(self):
         self.assertEqual(self.wheel.read_bytes(), next(self.out_b.glob('*.whl')).read_bytes())
