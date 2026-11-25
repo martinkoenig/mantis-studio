@@ -5,6 +5,8 @@ runs tests, grants selected-only admission or changes any gate. Every decision
 retains the five native Architecture profiles and all applicable local final
 suites, sanitizer/detector controls and original UI repetitions. Current source
 closure, runtime safety and historical failure recall remain unqualified.
+For the proposed conditions for ever omitting work, see the
+[future selective-CI design](selective-ci-proposal.md). It is not activated.
 
 ## Local interface
 
