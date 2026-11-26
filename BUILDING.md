@@ -51,6 +51,7 @@ sudo apt install build-essential cmake ninja-build libsqlite3-dev \
 
 Review the package manager's confirmation prompt. The Python interpreter used for tests must have `google.protobuf` installed; the Ubuntu package supplies it to `/usr/bin/python3`.
 Run the build and test commands from the repository root.
+In a linked Git worktree, each preset writes to that checkout's own `build/` directory. Save test logs or artifacts you need to retain before removing the worktree.
 
 ```bash
 cmake --preset linux-debug -DPython3_EXECUTABLE=/usr/bin/python3
