@@ -662,16 +662,68 @@ void actual_alg02(artifact::Store &s, const Graph &g) {
     b.observation = persist(s, corrupt);
     rejects(a3::prepare(s, b), Status::incompatible);
 }
+// Exercise the current typed reader on a finalized, generically readable result
+// whose only difference is a canonical, same-length prior implementation stamp.
+void result_build_identity(artifact::Store &s, const Graph &g, const std::string &expected_digest) {
+    CHECK(expected_digest.size() == 64);
+    auto source = observation(g, 1);
+    auto prepared = get(a3::prepare(s, bind(s, g, source, plane(g), policy())));
+    auto current = get(a3::process(prepared, source));
+    const std::string prefix = std::string(build_version) + ";alg03-source-sha256:";
+    CHECK(manifest(*current).at("algorithm").at("build") == prefix + expected_digest);
+    auto ref = get(a3::persist_result(s, prepared, *current));
+    const auto current_bytes = encoded(*current);
+    CHECK(encoded(*get(a3::load_result(s, ref.id))) == current_bytes);
+
+    auto prior = *current;
+    auto mapped = get(prior.attributes.at(0).buffer.map_read());
+    const std::string text(reinterpret_cast<const char *>(mapped.data()), mapped.size());
+    auto doc = Json::parse(text);
+    CHECK(doc.dump() == text);
+    // Actual source digest of the preserved pre-recorder implementation. If
+    // that source is ever restored exactly, use this integration's stamp instead.
+    const std::string archived = "5511fca4db65cb3abce166a70c9c7608ab6cbdda581852931b78b66d7c63f8b1";
+    const std::string alternate = expected_digest == archived
+                                      ? "62b2ba240c0781e65c38225ce85da1cff0a83ab18ec9e4afd1c62a0262876b94"
+                                      : archived;
+    doc.at("payload").at("algorithm").at("build") = prefix + alternate;
+    const auto changed = doc.dump();
+    CHECK(changed.size() == text.size() && changed != text);
+    prior.attributes[0].buffer = memory::copy(std::as_bytes(std::span(changed)));
+    const auto old_bytes = encoded(prior);
+    auto id = s.begin(a3::result_type, s.get(ref.id).provenance);
+    s.append(id, prior);
+    auto finalized = s.finalize(id);
+    CHECK(finalized.hash != ref.hash);
+    CHECK(encoded(*s.packet(id)) == old_bytes);
+    const auto count = s.list().size();
+    auto invalid = a3::validate_result(prepared, prior);
+    rejects(invalid, Status::incompatible);
+    CHECK(invalid.error().message == "Attribute byte mismatch");
+    auto unreadable = a3::load_result(s, id);
+    rejects(unreadable, Status::incompatible);
+    CHECK(unreadable.error().message == "Attribute byte mismatch");
+    CHECK(s.get(id).state == artifact::ArtifactState::finalized && s.get(id).hash == finalized.hash);
+    CHECK(encoded(*s.packet(id)) == old_bytes);
+    CHECK(encoded(*get(a3::load_result(s, ref.id))) == current_bytes && s.list().size() == count);
+    std::cout << "current=" << expected_digest << " prior=" << alternate
+              << " current_artifact=" << ref.hash.hex << " prior_artifact=" << finalized.hash.hex << '\n';
+}
 int main(int argc, char **argv) {
     try {
         const bool artifact_regressions = argc == 2 && std::string_view(argv[1]) == "--artifact-regressions";
         const bool geometry_regressions = argc == 2 && std::string_view(argv[1]) == "--geometry-regressions";
-        CHECK(argc == 1 || artifact_regressions || geometry_regressions);
-        if (!artifact_regressions && !geometry_regressions)
+        const bool identity = argc == 3 && std::string_view(argv[1]) == "--result-build-identity";
+        CHECK(argc == 1 || artifact_regressions || geometry_regressions || identity);
+        if (argc == 1)
             metadata_comparison_regression();
         Temp temp;
         auto store = std::make_unique<artifact::Store>(temp.path);
         auto geometry = graph(*store);
+        if (identity) {
+            result_build_identity(*store, geometry, argv[2]);
+            return 0;
+        }
         if (geometry_regressions) {
             // The new metadata/recursive-schema controls get an independent
             // fixture, not a larger deadline. All integration limits stay 60s.
