@@ -61,32 +61,18 @@ source defect, fixture/oracle defect, unclear contract and environment limitatio
 Retain the original failure and investigate it; a later green run is no causal
 explanation. Correct the cause within authorized scope, or report a focused blocker.
 
-## Before PR handoff
+## Validation by phase
 
-Perform adversarial implementer self-review: **Can a realistic incorrect
-implementation pass these tests?** Inspect the production path and test code,
-including failure unwind; challenge the oracle and the demonstrated negative
-case. Compare existing coverage and justify additions and CI cost.
+- During implementation, use the narrowest checks that give reliable feedback. Reuse existing coverage.
+- Before a draft PR, check the changed scope sufficiently to explain the candidate; explicitly disclose failed, pending or unavailable checks. Draft publication does not imply acceptance.
+- Before independent acceptance, perform risk-appropriate verification. R3 usually needs static/content/link checks; R2 needs relevant functional and integration tests; R1 needs affected critical paths, representative negative/recovery/teardown cases and relevant sanitizer or performance evidence. Run full local suites when a specific risk, uncertainty or unique required evidence warrants it. Mandatory CI supplies the complete configured platform matrix; do not mechanically duplicate equivalent results locally.
+- Independent reviewers inspect actual production and test code, examine meaningful outcomes and the required exact-candidate CI. Reuse valid evidence when the tested property, relevant source/configuration, fixtures, executable/runtime and conditions remain applicable; document the scope and rerun affected checks when they change. Do not present an old run as a new run.
+- Do not waive an explicit substantive acceptance requirement. Hardware, physical timing, accuracy, scale, release and other unique requirements remain separately evidenced. No unperformed test is PASS.
 
-Complete all applicable local checks required by CONTRIBUTING, BUILDING and the
-assignment before commit/push: Studio ON/OFF, full configured suites, relevant
-sanitizers, regressions, UI repetitions, platform and performance checks. Use
-focused checks while iterating; right-sizing never omits an applicable required
-gate. Record actual registrations/modes, source/input identity, commands, exits
-and relevant timings rather than historical test counts. Report unavailable or
-failed requirements explicitly; never call running, skipped or missing proof PASS.
+## Failure handling and handoff
 
-Keep a concise handoff mapping selected invariants to production paths,
-registered tests/fixture modes, decisive assertions, realistic wrong behavior,
-negative outcomes/restoration and evidence limits. Distinguish source inspection,
-runtime execution, synthetic verifier regression and measured platform evidence.
-State GPU/HIL, Qt runtime, x86/ARM, non-Linux, proprietary-driver, physical timing,
-calibration and long-soak limits explicitly where applicable.
+Classify the failure: product, fixture/oracle, performance regression, invalid measurement, infrastructure, missing prerequisite or unclear requirement. Investigate the first meaningful failure; retain it and test a concrete changed hypothesis, not retry-until-green. After two consecutive cycles without meaningful new evidence/progress, reconsider scope and method; continue productive investigation when justified, otherwise report a concise blocker and allow other work. An issue does not authorize recursive infrastructure development. Never invent extra mandatory gates, weaken assertions or silently modify acceptance thresholds.
 
-Implementer self-review, green CTest, generated fixtures and worker/AO reports
-are not independent acceptance. External review must inspect production **and
-test** code and verify required exact-SHA CI and applicable evidence gates.
-Preserve the existing single nonblocking CI handoff; this contract introduces no
-new CI job, live AO rule activation, merge permission or release qualification.
-Checked-in reference/adoption checks do not prove a fresh worker loaded the
-instructions; record operational propagation OPEN until separately demonstrated.
+Report a short mapping of requirements to tests/results, exact head, pending CI, and remaining evidence limits. Independently verify before ACCEPT; a green test suite alone does not establish test quality. Preserve the single nonblocking CI handoff. This contract does not add CI jobs, alter branch protection, authorize release or configure the runtime.
+
+The risk-based delivery rules replace generic historic AO-era instructions requiring a universal full local matrix before every commit/push. Specific product validation, owner-approved thresholds and protected decisions still apply. Reconcile stale issue text before dispatch; escalate genuine substantive conflicts rather than assuming a waiver.

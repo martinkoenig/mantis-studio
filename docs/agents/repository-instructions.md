@@ -1,5 +1,7 @@
 # ENG-EFF-2A — Repository instruction integration
 
+> **Historical evidence — superseded operational guidance.** This document records earlier AO investigations and evidence. Its runtime proposals, loading claims and old delivery policy are not current instructions. Follow [AGENTS.md](../../AGENTS.md) and the [test-quality contract](../engineering/test-quality.md) after the engineering reset; historical findings remain scoped to their original inputs.
+
 Base: independently accepted PR #6 integration
 `664544d38c6418ba21c5f90449f311174ef69987`. All seven accepted file blobs and
 the complete base tree were compared with the original accepted head

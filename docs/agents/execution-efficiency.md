@@ -1,5 +1,7 @@
 # ENG-EFF-1A: execution efficiency evidence and unactivated proposal
 
+> **Historical evidence — superseded operational guidance.** This document records earlier AO investigations and evidence. Its runtime proposals, loading claims and old delivery policy are not current instructions. Follow [AGENTS.md](../../AGENTS.md) and the [test-quality contract](../engineering/test-quality.md) after the engineering reset; historical findings remain scoped to their original inputs.
+
 Scope: developer analysis and guidance only, based on
 `d2614b96304ff5fd45db8f09076da058afb9230d` on
 `feature/eng-eff-1a-agent-efficiency`. Production acquisition, calibration,
