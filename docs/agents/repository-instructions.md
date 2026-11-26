@@ -1,5 +1,10 @@
 # ENG-EFF-2A — Repository instruction integration
 
+> **Historical record, not current instructions.** AO-specific rules, adoption
+> results and validation describe their original revision. Current engineering
+> follows [AGENTS.md](../../AGENTS.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md).
+> Do not reactivate or copy the old runtime procedures.
+
 Base: independently accepted PR #6 integration
 `664544d38c6418ba21c5f90449f311174ef69987`. All seven accepted file blobs and
 the complete base tree were compared with the original accepted head

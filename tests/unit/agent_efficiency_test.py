@@ -425,30 +425,20 @@ def worker_instruction_closure(source, root):
 
 
 class RepositoryInstructionTests(unittest.TestCase):
-    def test_root_worker_reference_is_scoped_and_resolves(self):
+    def test_current_worker_reference_is_scoped_and_resolves(self):
         root = SCRIPT.parents[1]
-        text = (root / "AGENTS.md").read_text()
-        heading = "## Implementation worker execution\n"
-        self.assertEqual(text.count(heading), 1)
-        before, section = text.split(heading)
-        section = section.split("\n## ", 1)[0]
-        worker = root / "docs/agents/worker-execution-rules.md"
-        self.assertIn(worker, instruction_references(root / "AGENTS.md", root))
-        # The new mandatory reference is confined to its worker section. No
-        # orchestrator proposal or live-configuration file is bootstrapped.
-        self.assertNotIn("docs/agents/worker-execution-rules.md", before)
-        self.assertEqual(re.findall(r"\]\(([^)]+)\)", section),
-                         ['docs/agents/worker-execution-rules.md "worker-instruction"'])
-        closure = instruction_closure(root / "AGENTS.md", root)
-        self.assertTrue({worker, root / "CONTRIBUTING.md",
-                         root / "docs/adr/033-reliability-performance-release-gates.md"} <= closure)
-        # Knowledge/handoff legitimately links to the other role's proposal.
-        # Markdown reachability validates references; it is not adoption evidence.
-        self.assertIn(root / "docs/agents/orchestrator-execution-rules.md", closure)
+        agents = root / "AGENTS.md"
         quality = root / "docs/engineering/test-quality.md"
-        self.assertEqual(worker_instruction_closure(root / "AGENTS.md", root),
-                         {root / "AGENTS.md", worker, quality})
-        self.assertIn(quality, instruction_references(root / "CONTRIBUTING.md", root))
+        contributing = root / "CONTRIBUTING.md"
+        legacy = {root / "docs/agents/worker-execution-rules.md",
+                  root / "docs/agents/orchestrator-execution-rules.md"}
+        self.assertTrue(legacy.isdisjoint(instruction_references(agents, root)))
+        self.assertEqual(worker_instruction_closure(agents, root), {agents, quality})
+        closure = instruction_closure(agents, root)
+        self.assertTrue({quality, contributing,
+                         root / "docs/adr/033-reliability-performance-release-gates.md"} <= closure)
+        self.assertTrue(legacy.isdisjoint(closure))
+        self.assertIn(quality, instruction_references(contributing, root))
 
     def test_reference_navigation_does_not_adopt_other_role(self):
         with tempfile.TemporaryDirectory() as directory:

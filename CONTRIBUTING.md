@@ -1,45 +1,60 @@
 # Contributing
 
-Read the frozen architecture and relevant ADR before changing a public contract. Preserve the distinction between the Plugin SDK and the Client SDK.
+Follow [AGENTS.md](AGENTS.md), the
+[reliability, performance and validation standard](docs/architecture/reliability-performance-and-validation.md)
+and [test-quality contract](docs/engineering/test-quality.md). Keep changes
+focused; match validation to actual risk.
 
-For all new work, also follow the binding
-[reliability, performance and validation standard](docs/architecture/reliability-performance-and-validation.md).
-Measurement-critical and hot-path code is not accepted on happy-path functionality
-alone: failure semantics, bounded resources, diagnostics and relevant performance
-evidence are part of the feature contract.
+## Validation and delivery
 
-Before implementation and PR handoff, follow the binding
-[test-quality contract](docs/engineering/test-quality.md). It defines
-risk-proportionate test design and adversarial implementer self-review;
-the required checks below remain applicable.
+| Risk | Local feedback before handoff | Integration evidence |
+| --- | --- | --- |
+| R3 — isolated documentation or non-semantic change | Accuracy, links, formatting, directly affected checks | Required CI; review actual diff and policy impact |
+| R2 — service, SDK, configuration, ordinary UI/feature | Affected build, focused regression and integration tests; relevant UI/negative checks | Required CI and independent source/test review |
+| R1 — acquisition, storage, calibration, provenance, ABI, security, concurrency or other critical path | Relevant integration, negative/recovery and sanitizer checks; affected modes and relevant performance evidence | Required CI and independent source/test review, all explicit critical-feature gates |
 
-## Required checks
+Escalate risk when changing a critical contract, validation or CI behavior.
+Choose the cheapest test layer that proves the property. Use
+[BUILDING.md](BUILDING.md) for actual presets and procedures. Preserve required
+native x86_64/ARM64, Qt-enabled/headless, sanitizer and other CI coverage.
+Run locally the configurations necessary to diagnose and verify the change;
+complete duplication of the CI matrix is not a universal pre-push gate.
+Explicit technical requirements and genuine hardware/release gates remain
+binding. Format changed C/C++ code using repository style. Do not weaken tests
+or change thresholds just to pass.
 
-1. Build Studio and run `ctest --preset linux-debug`.
-2. Build with Qt disabled and run the headless tests.
-3. Use the sanitizer build for changes to ownership, threads, ABI handling or storage.
-4. Keep Linux ARM64 in the native CI matrix; avoid CPU-specific dependencies in public headers.
-5. Run `clang-format -i` on changed C/C++ files using the repository style.
-6. Add a focused regression test for a bug or architectural behavior. Do not add tests that merely repeat implementation constants.
-7. For changes to critical streaming/hot paths, document or update the relevant throughput/latency/memory/copy/queue evidence and reject material unexplained regressions.
-8. For changes to recovery, distributed ownership or persistent state, test negative paths and interrupted transitions; never infer production/HA readiness from a happy-path fixture.
-
-Foundation headers must not expose Qt, SQLite, OpenCV, Eigen, CUDA or Vulkan types. First-party plugins may include only the public SDK plus their own dependencies. Studio and CLI must not link to runtime implementation libraries. The boundary contract test checks includes, while the Qt-disabled build proves dependency separation.
+A draft PR may be opened with clearly marked incomplete checks. Implementation
+handoff identifies tested revision, scope, commands, outcomes, risks and pending
+CI. Independent review inspects actual code/tests and verifies required exact-head
+CI and explicit issue gates. Reuse qualified evidence when relevant inputs are
+unchanged; justify scope of reuse. Repeat affected checks or checks whose validity
+is uncertain. Authorized integration respects branch protections, verifies actual
+merged source and required integration checks; closure requires the whole scope.
 
 ## Compatibility
 
-ABI structures use size/version prefixes, fixed-width integers, UTF-8, opaque handles and explicit ownership. Never throw across C callbacks. Append compatible fields only with size-aware handling; incompatible changes require a new queried interface version. Application, ABI, schema, recipe, project and algorithm versions are independent.
+Preserve Plugin SDK/Client SDK separation. Foundation headers must not expose
+Qt, SQLite, OpenCV, Eigen, CUDA or Vulkan types. First-party plugins may include
+only public SDK and their own dependencies. Studio and CLI must not link to
+runtime implementation libraries.
 
-Reserve removed Protobuf field numbers and names. Do not reassign them. Protocol messages describe services, not screens or widgets.
+ABI structures use size/version prefixes, fixed-width integers, UTF-8, opaque
+handles and explicit ownership. Never throw across C callbacks. Append compatible
+fields only with size-aware handling; incompatible changes require a new queried
+interface version. Application, ABI, schema, recipe, project and algorithm
+versions are independent. Reserve removed Protobuf field numbers/names; never
+reassign them. Protocol messages describe services, not screens.
 
-Architectural changes require a new ADR describing the problem, inadequate extension points, alternatives, compatibility impact and migration path. Feature convenience alone is insufficient.
+Architectural changes require an ADR describing the problem, inadequate extension
+points, alternatives, compatibility and migration. Feature convenience alone is
+insufficient. Software integration does not imply hardware or release qualification.
 
-## Issue memory and public engineering records
+## Issues and pull requests
 
-For each substantive authorized work package, maintain a work issue. Its description records current scope, verified status, blockers and acceptance gates; material findings, disproven hypotheses, exact-SHA CI and independent review decisions belong in **new chronological comments**. The coordinator synchronizes the issue body when current status changes. Update hub [#14](https://github.com/martinkoenig/mantis-studio/issues/14) and add one concise link-bearing comment only for material project-wide changes. Write all new GitHub issues, PR descriptions, comments, review decisions and repository documentation **in English**. Screen every public write for secrets, private infrastructure details and raw logs. Avoid closing keywords for PRs targeting `develop` when `main` is the default branch; close only after independent ACCEPT and authorized integration. See [ENG-KNOW-1](docs/engineering/knowledge-and-handoff.md).
-
-## Pull requests
-
-Explain the problem, behavior change and verification. Include a reproducible fixture for storage or plugin crashes. State which platforms were actually tested. Keep dependency updates separate from semantic changes where practical.
+Use the [issue and handoff guide](docs/engineering/knowledge-and-handoff.md).
+Explain the problem, behavior change and verification; link the issue, include a
+reproducible fixture for relevant storage/plugin crashes, state actual platform
+coverage. Keep dependency upgrades separate from semantic changes where practical.
+Public records are concise, sanitized and in English.
 
 The repository is licensed under Apache-2.0; see [LICENSE](LICENSE).

@@ -1,92 +1,61 @@
 # Test design and implementer self-review
 
-Status: Binding implementation and self-verification contract, adopted by
-[AGENTS.md](../../AGENTS.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md).
-This extends [ADR-033](../adr/033-reliability-performance-release-gates.md) and the
+Status: Binding implementation and review contract. Adopted by
+[AGENTS.md](../../AGENTS.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md);
+extends [ADR-033](../adr/033-reliability-performance-release-gates.md) and the
 [reliability standard](../architecture/reliability-performance-and-validation.md).
-Architecture, security, Plugin SDK/Client SDK boundaries, ABI/schema compatibility
-and hardware acceptance requirements retain their authority.
 
-## Before implementation
+## Plan by risk
 
-Classify behavioral risk and identify the binding invariant, realistic failure
-model, actual production control/data/ownership path and decisive test oracle.
-Use existing coverage where it proves the property; close a specific gap rather
-than multiplying test families or imposing test-count quotas.
+Use R1 (high consequence), R2 (elevated) or R3 (scoped) from CONTRIBUTING.
+Identify affected invariants, realistic failure models, production paths,
+decisive test oracles and existing coverage. A short plan suffices. Escalate
+when a critical boundary changes, including documentation that changes
+execution or acceptance rules.
 
-| Risk | Design and evidence depth |
-| --- | --- |
-| R1 — high consequence | Data integrity, acquisition/storage/recovery, ownership/lifetime, concurrency/cancellation/thread affinity, plugin ABI, security/authority and calibration/provenance. Trace relevant boundaries and test negative, recovery and teardown behavior. |
-| R2 — elevated | Service/protocol, configuration and UI behavior. Verify realistic integration and failure cases; promote to R1 where a critical boundary is crossed. |
-| R3 — scoped | Isolated documentation, presentation or non-semantic changes. Check accuracy, links and policy interactions; promote when execution or acceptance gates can change. |
+## Tests must detect incorrect behavior
 
-Scale validation to the consequences and affected contracts. A short risk and
-check plan is sufficient; a documentation edit must not silently weaken an R1 gate.
+- Exercise actual production control/data/ownership paths and required
+  end-to-end composition. Use independent golden data or contract-derived
+  expectations, not implementation constants or mock self-assertions.
+- For R1, demonstrate representative negative sensitivity with existing
+  decisive controls or bounded fault injection/disposable mutation. Observe
+  intended failure and restoration; avoid redundant mutations/tests.
+- For concurrency use explicit gates/barriers or observable state before
+  injecting cancellation/failure. Timeouts bound hangs, not ordering. Release
+  gates before joining threads/futures, transport exceptions, retire callbacks
+  safely. Preserve initiating errors during cleanup.
+- Cover applicable partial I/O, corruption, ENOSPC/EIO, interrupted commits,
+  replay, backpressure, bounded resources, cancellation, recovery and teardown.
+  Assert explicit contained failure or deterministic recovery and provenance.
+- For consequential asynchronous, storage, multiprocess or concurrency tests,
+  retain actionable failed predicates and bounded diagnostics; no blanket
+  success-path tracing or new framework.
 
-## Design tests that detect incorrect behavior
+## Performance and failures
 
-- Execute the intended production path, including relevant ownership/integration
-  boundaries. Use independently meaningful outcomes, recorded/golden data or
-  contract-derived expectations; do not merely repeat implementation constants
-  or assert a mock's own behavior. Preserve necessary end-to-end composition.
-- For R1, demonstrate representative negative sensitivity: reuse strong existing
-  negative controls or apply bounded fault injection/disposable mutation to an
-  independently selected realistic regression. Identify the intended assertion
-  and primary diagnostic, observe the nonzero failure and prove restoration.
-  Assertion existence and green execution alone do not prove effectiveness.
-  Mutating every function or adding duplicate permanent CTests is unnecessary.
-- For concurrent work, observe entry into the intended state using controlled
-  gates, barriers or explicit observables before cancellation/failure/recovery.
-  Timeouts bound hangs; they do not prove scheduler ordering. Do not use sleeps,
-  retry-until-green or larger deadlines/queues to conceal incorrect behavior.
-- Make assertion-failure unwind safe: release gates before thread/future joins,
-  transport worker exceptions, retire callbacks and preserve resource ownership
-  through teardown. Secondary cleanup/logging failures must not replace the
-  initiating error. Prove bounded cleanup for representative failure controls.
-- Exercise applicable partial I/O, EIO/ENOSPC, interrupted commits, corruption,
-  durable prefixes/replay, backpressure/capacity, cancellation/shutdown and
-  resource exhaustion. Verify explicit contained failure or deterministic recovery,
-  retained provenance and bounded resources; never fabricate continuity or loss.
+Use existing workloads/tools and a method appropriate to the claim, as defined
+in the reliability standard. Define workload, inputs, metric, platform,
+configuration and applicable budgets before timing. Retain all attempts and
+uncertainty. Distinguish invalid measurement from product regression.
 
-For consequential asynchronous, multiprocess, storage/recovery, Qt and concurrency
-tests, expose where feasible the specific failed predicate and phase with the
-smallest bounded, safe, actionable state/metrics needed to distinguish likely
-causes. Preserve the initiating error when evidence or cleanup fails. An ordinary
-deterministic unit test generally needs only an expressive assertion and source
-location. This is a proportionate design/review criterion, not blanket logging,
-success-path tracing, a mass retrofit, a new framework or an additional CI gate.
+Inspect production and test paths on failure; classify and retain original
+evidence. Do not repeatedly run unchanged failures, weaken assertions, inflate
+timeouts to conceal defects or infer causality from a later green run. After
+two no-progress cycles, reassess. Record genuine out-of-scope or unavailable
+prerequisites as blockers instead of opening recursive infrastructure work.
+A failed mandatory gate remains failed or blocked.
 
-Inspect production and test code independently when a test fails. Distinguish a
-source defect, fixture/oracle defect, unclear contract and environment limitation.
-Retain the original failure and investigate it; a later green run is no causal
-explanation. Correct the cause within authorized scope, or report a focused blocker.
+## Handoff and independent review
 
-## Before PR handoff
+Perform adversarial self-review: could a realistic incorrect implementation
+pass? Verify the applicable local plan in CONTRIBUTING and the issue's actual
+technical requirements. Record checks, modes, source identity, outcomes and
+limitations. Draft PRs may carry unfinished checks; handoff identifies them.
 
-Perform adversarial implementer self-review: **Can a realistic incorrect
-implementation pass these tests?** Inspect the production path and test code,
-including failure unwind; challenge the oracle and the demonstrated negative
-case. Compare existing coverage and justify additions and CI cost.
-
-Complete all applicable local checks required by CONTRIBUTING, BUILDING and the
-assignment before commit/push: Studio ON/OFF, full configured suites, relevant
-sanitizers, regressions, UI repetitions, platform and performance checks. Use
-focused checks while iterating; right-sizing never omits an applicable required
-gate. Record actual registrations/modes, source/input identity, commands, exits
-and relevant timings rather than historical test counts. Report unavailable or
-failed requirements explicitly; never call running, skipped or missing proof PASS.
-
-Keep a concise handoff mapping selected invariants to production paths,
-registered tests/fixture modes, decisive assertions, realistic wrong behavior,
-negative outcomes/restoration and evidence limits. Distinguish source inspection,
-runtime execution, synthetic verifier regression and measured platform evidence.
-State GPU/HIL, Qt runtime, x86/ARM, non-Linux, proprietary-driver, physical timing,
-calibration and long-soak limits explicitly where applicable.
-
-Implementer self-review, green CTest, generated fixtures and worker/AO reports
-are not independent acceptance. External review must inspect production **and
-test** code and verify required exact-SHA CI and applicable evidence gates.
-Preserve the existing single nonblocking CI handoff; this contract introduces no
-new CI job, live AO rule activation, merge permission or release qualification.
-Checked-in reference/adoption checks do not prove a fresh worker loaded the
-instructions; record operational propagation OPEN until separately demonstrated.
+Independent review assesses actual production/test changes, meaningful negative
+controls, relevant input identity and required exact-head CI. Reuse valid
+evidence rather than repeat campaigns; reproduce when concrete risk, changed
+input or insufficient evidence warrants it. Distinguish source inspection,
+executed tests, synthetic reference evidence and physical qualification. No
+self-acceptance, missing/failed check called PASS, or readiness claims beyond evidence.

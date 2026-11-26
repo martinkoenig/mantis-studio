@@ -114,6 +114,23 @@ CI can use stable synthetic/regression benchmarks; hardware acceptance supplies
 the hardware-specific evidence. Thresholds must be based on measured platforms,
 not invented marketing targets.
 
+Use an existing representative benchmark or standard measurement tooling.
+Define claim, workload, relevant source/build inputs, platform/environment,
+output checks and applicable budget first. Use suitable warm-up and repeat
+counts (three warmups and eleven samples are a useful default for repeated
+reference timings); report dispersion, attempts and invalidations. Control
+affinity and unrelated load when necessary for comparability; preserve explicit
+approved workload-specific thresholds and conditions.
+
+Invalid measurement or infrastructure failure does not prove product regression.
+Retain the failure, correct a specific cause in scope or report the affected
+gate blocked. Do not introduce exhaustive runtime attestation, per-VMA hashing,
+continuous process-identity checks or new measurement infrastructure unless an
+actual requirement justifies its cost. Do not retry until a favorable sample
+appears. Reuse qualified unchanged-input evidence with original identity and
+limitations. Synthetic/guest reference evidence is not hardware accuracy or
+production throughput evidence.
+
 ## 7. Verification layers
 
 Use the cheapest layer that can prove a property, but do not let a cheaper layer

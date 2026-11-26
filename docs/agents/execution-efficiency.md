@@ -1,5 +1,10 @@
 # ENG-EFF-1A: execution efficiency evidence and unactivated proposal
 
+> **Historical record, not current instructions.** AO-specific rules, adoption
+> results and validation describe their original revision. Current engineering
+> follows [AGENTS.md](../../AGENTS.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md).
+> Do not reactivate or copy the old runtime procedures.
+
 Scope: developer analysis and guidance only, based on
 `d2614b96304ff5fd45db8f09076da058afb9230d` on
 `feature/eng-eff-1a-agent-efficiency`. Production acquisition, calibration,

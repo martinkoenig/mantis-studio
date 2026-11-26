@@ -1,46 +1,11 @@
-# Proposed orchestrator execution supplement
+# Legacy AO orchestrator execution supplement — superseded
 
-This is an **unactivated proposal** for AO's supported `orchestratorRules`
-string. It supplements existing rules and the repository contracts; it is not a
-new configuration field or permission grant.
+Historical AO-specific proposal, not an instruction source for current agents.
+Current engineering follows [AGENTS.md](../../AGENTS.md) and
+[CONTRIBUTING.md](../../CONTRIBUTING.md); records follow the
+[issue guide](../engineering/knowledge-and-handoff.md). Runtime dispatch,
+supervision, scheduling and recovery belong to the authorized installed runtime.
+Do not reactivate legacy AO rules or duplicate the current instruction chain.
 
-- Delegate a scoped assignment once, with acceptance criteria, publishing scope,
-  required gates, expected reports and protected boundaries. Retain its session
-  identity. Do not duplicate implementation or start extra workers without a
-  concrete need and existing authorization.
-- End the idle turn after delegation. Resume for an AO-delivered report,
-  completion, failure, blocker, decision/question, review result or user input.
-  Do not use model sleep loops, unchanged session/status checks, repeated log
-  reads, or repeated "still running" messages to supervise an unchanged task.
-- Use AO's existing durable worker-report delivery and `ao send` communication.
-  Reports can be batched; `needs-input` and `stuck` have their documented delivery
-  semantics. This mechanism wakes a conversation for worker events; it does not
-  provide completion notifications for arbitrary worker shell processes. Report
-  a missing completion interface as a technical limitation rather than filling
-  the gap with model-driven polling or undocumented APIs.
-- Respond to actionable worker failures and decisions. Keep implementation and
-  independent review separate, preserve all mandatory local/remote gates, and
-  never self-approve, auto-merge, or waive security or hardware requirements.
-- Respect the exact-SHA, single nonblocking CI handoff in AGENTS.md. Do not add
-  Actions wait/poll loops after a worker reports pending CI. Obtain final CI
-  evidence at the independent review decision; pending is not PASS.
-
-## Knowledge-state checkpoint before issue closure or next assignment (proposal)
-
-Prior to a newly authorized worker package, resolve its issue, priority, milestone, canonical docs and exact starting SHA. For AO worker handoff, supply an issue link and accepted constraints rather than re-sending whole prior chat histories. Collect summarized evidence from Codex and separate AO review; deliver to the independent Planning & Review owner for issue and hub reconciliation. **No automatic issue dispatch, next task, acceptance, milestone completion or merge** follows from an AO worker's final message. The owner updates [Engineering Status #14](https://github.com/martinkoenig/mantis-studio/issues/14) only for material changes, with live GitHub verification. See [ENG-KNOW-1](../engineering/knowledge-and-handoff.md).
-
-### Per-issue label transitions during authorized AO work (proposal)
-
-Follow the canonical [per-issue label lifecycle](../engineering/knowledge-and-handoff.md#mandatory-issue-label-lifecycle-per-issue). For each owner-authorized work issue, independently confirm actual worker start before setting `status:active`; use `status:review` at implementation handoff, `status:blocked` for evidenced inability to proceed, and `status:active` again only when authorized correction/execution resumes. Creation and material issue edits must also preserve valid type, priority, relevant milestone and an accurate single workflow label.
-
-**Only one workflow label per issue, not per repository.** Multiple separately authorized issues can be `status:active` concurrently; labels do not restrict parallel workers or grant permissions to dispatch work. Preserve other labels through a fresh read/targeted update/readback; never clobber concurrent label edits. Record real workflow transitions in the issue's current state and material chronological comments, not heartbeat updates.
-
-Issue closure and removal of all `status:*` labels are reserved for the independent Planning & Review owner after verified required gates; the orchestrator must not self-ACCEPT or auto-close based on a worker result. If label-write privileges are missing, report the mismatch without pretending a write succeeded. This checked-in supplement is not automatically installed in a live AO project's inline `orchestratorRules`; apply and verify it separately before claiming runtime activation.
-
-## AO new-worker injection and public issue safety (proposal)
-
-**Not auto-applied merely by committing this file.** Before relying on issue-driven memory, inspect the *actual live* AO project settings and ensure its `defaultBranch` is explicitly `develop` (AO's `auto` otherwise follows Git remote default `main`), then ensure worker `agentRules`/`agentRulesFile` and orchestrator `orchestratorRules`/`orchestratorRulesFile` inject concise issue-handoff guidance for **new sessions**. Confirm the worker's assigned issue number, verified start SHA, accepted `AGENTS.md`/ADR constraints, and public-data redaction rule appear in the **freshly spawned** session; a previously running worker will not retroactively receive new injected rules. Avoid injecting the entirety of `AGENTS.md` twice when Codex already loads it from its checkout; preserve existing model/effort/settings. AO `set-config` replaces the whole project config and may discard effort; prefer an audited full-config daemon-API update and readback (the deployed desktop UI did not expose editable rules). Do **not** enable `trackerIntake`/`AO_TRACKER_INTAKE` by default: issue intake can launch workers and currently does not close/comment/update issues after completion. No automatic launch, accept, merge or issue closure is authorized. Before posting any AO worker finding to a public GitHub issue, independently scrub secrets, private paths, identifying data and full logs; if uncertain, mark BLOCKED and use restricted channels.
-
-## English-only issue ledger and hub maintenance
-
-Every new GitHub-facing issue, PR, review note and comment must be **in English**. For any authorized new task or review, read the **current description of issue #14 first**, then the relevant work issue's current body and only material comments/PR/CI evidence. Route significant independently checked findings and exact-SHA results into **new chronological comments on the responsible work issue**, and keep that issue's short description synchronized with its actual current state. For a material project-wide change, update **#14's compact current-state description plus one short hub comment** linking to the work issue; otherwise leave #14 untouched. Do not duplicate full technical findings or write periodic progress noise. Any content proposed for public GitHub must be screened for secrets, sensitive local/private infrastructure and raw logs before posting. Worker reports remain unverified until independent review, and no comment or issue text authorizes automatic worker launch, merge or ACCEPT.
+Original text and evidence: [repository history](https://github.com/martinkoenig/mantis-studio/blob/5304d957d54018411b5bd0c25201e0eaf0db7b60/docs/agents/orchestrator-execution-rules.md).
+Technical requirements and genuine owner holds remain binding.
