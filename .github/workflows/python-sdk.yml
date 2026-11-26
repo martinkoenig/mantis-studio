@@ -1,0 +1,66 @@
+name: python-sdk-artifacts
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main, "integration/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  artifacts:
+    name: python-artifacts (${{ matrix.python }})${{ matrix.suffix }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        runner: [ubuntu-24.04]
+        machine: [x86_64]
+        include:
+          - python: "3.12"
+            runner: ubuntu-24.04-arm
+            machine: aarch64
+            suffix: " (native ARM64)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install bounded binary-only qualification tools
+        env:
+          PIP_ONLY_BINARY: ":all:"
+        run: >-
+          python -m pip install pip==25.1.1 build==1.2.2.post1
+          setuptools==75.8.2 wheel==0.45.1 protoc-wheel-0==21.11 protobuf==3.20.0 PyYAML==6.0.3
+      - name: Check runtime matrix and fail-closed qualification wiring
+        run: python -B tests/ci/python_sdk_workflow_test.py
+
+      - name: Qualify source-matched installed artifacts and negative controls
+        run: >-
+          python -B tests/sdk/artifacts_test.py --work-dir "$RUNNER_TEMP/python-sdk-evidence"
+          --expected-machine ${{ matrix.machine }} --expected-python ${{ matrix.python }}
+      - name: Retain command receipts and artifact evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-sdk-${{ matrix.python }}-${{ matrix.machine }}
+          # Manifest-only ZIP preserves .github input without broad hidden-file upload.
+          path: |
+            ${{ runner.temp }}/python-sdk-evidence/*.log
+            ${{ runner.temp }}/python-sdk-evidence/*.json
+            ${{ runner.temp }}/python-sdk-evidence/*.jsonl
+            ${{ runner.temp }}/python-sdk-evidence/command-regressions/
+            ${{ runner.temp }}/python-sdk-evidence/dist-a/*
+            ${{ runner.temp }}/python-sdk-evidence/dist-b/*
+            ${{ runner.temp }}/python-sdk-evidence/rebuilt/*
+            ${{ runner.temp }}/python-sdk-evidence/pip-sdist-wheel/*
+            ${{ runner.temp }}/python-sdk-evidence/control-before353/*
+            ${{ runner.temp }}/python-sdk-evidence/control-restored/*
+            ${{ runner.temp }}/python-sdk-evidence/frozen-inputs.zip
+          if-no-files-found: error

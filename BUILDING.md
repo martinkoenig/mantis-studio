@@ -213,19 +213,143 @@ Run the focused helper/event regressions with ccache, GCC/G++, and `python3-yaml
 installed: `python3 -B tests/ci/compiler_cache_test.py`. They supplement the full
 project tests; they do not replace them.
 
-## Python packaging
+### Isolated incremental correctness regression (Linux)
 
-For development, use `PYTHONPATH=build/debug/python`. The install example also
-requires Ubuntu's `python3-venv` package. To install a wheel/package, first
-generate the wire module in the package source:
+The [configured-toolchain workflow](.github/workflows/toolchain-provenance.yml)
+adds a real Ninja build to the standalone checks on both native runners. This
+[probe](tests/ci/fixtures/incremental/CMakeLists.txt) needs Python 3.11+, CMake
+3.25+, Ninja, GCC C++ and ccache 4.9. Use a trusted existing parent outside
+this checkout, and an **unused** campaign directory. Do not inherit `CCACHE_*`
+overrides. Nothing is restored, shared, published or automatically removed.
 
 ```bash
-protoc -I protocol/protobuf --python_out=sdk/python/mantis protocol/protobuf/mantis.proto
-python3 -m venv .venv
-.venv/bin/python -m pip install ./sdk/python
+# BUILD only: two private source/build/cache roots, one compile at a time.
+root=/path/to/private-parent/incremental
+python3 -B tests/ci/incremental_cache.py build "$root"
 ```
 
-The generated `mantis_pb2.py` is build output and is not hand-maintained.
+After the producer exits successfully and its owned processes retire, the
+separately admitted TEST consumer launches only staged binaries:
+
+```bash
+set -e
+status=0
+python3 -B tests/ci/incremental_cache.py test-broken "$root" || status=$?
+test "$status" -eq 3
+python3 -B tests/ci/incremental_cache.py test-restored "$root"
+```
+
+The broken source copy omits only the generator's `DEPENDS` edge. Its cold
+binary prints `7 11 3`; after the generator input edit, Ninja does no work and
+the **same output** fails the expected `7 29 3` assertion (exit 3). Setup,
+launch, timeout and evidence failures are not that diagnostic. With the exact
+repository rule restored in the other root, the assertions are:
+
+| Step | ccache misses / hits (delta) | Executed binary stdout |
+| --- | --- | --- |
+| Cold | 1 / 0 | `7 11 3` |
+| Unchanged; empty Ninja work list, unchanged build log | 0 / 0 | `7 11 3` |
+| Warm; move object aside, keep cache | 0 / 1 | `7 11 3` |
+| Generated input edit | 1 / 0 | `7 29 3` |
+| Transitive header edit | 1 / 0 | `17 29 3` |
+| Reconfigure target definition in the same build directory | 1 / 0 | `17 29 5` |
+
+`ready.json` binds the staged binary copies for the two phases. Verbose commands,
+Ninja deps/logs, binaries, cache metadata and failure details stay private to
+that campaign. This is a trusted single-owner fixture, not authentication,
+product provenance or a speed benchmark. It supplements the existing direct
+compiler/policy regression and does not select or skip any final product gate.
+
+## Python packaging
+
+Build the standalone pure-Python Client SDK with PEP 517; no CMake build or manual
+source generation is required. In a Python >=3.10 venv containing
+`build==1.2.2.post1`, run from the repository root:
+
+```bash
+SOURCE_DATE_EPOCH=1700000000 python -m build --outdir dist sdk/python
+python -m pip install dist/mantis_studio_client-0.1.0-py3-none-any.whl
+```
+
+The isolated backend uses exact binary-only compatible tooling declared in
+`sdk/python/pyproject.toml`. Set `PIP_ONLY_BINARY=:all:` when installing build
+dependencies to fail explicitly where compiler wheels are unavailable. It always
+generates from `protocol/protobuf/mantis.proto`, not a preexisting generated
+module. The sdist carries the canonical schema, generated module and integrity
+provenance; unpack it outside the checkout and run `python -m build --wheel` to
+rebuild independently. See [SDK packaging details](sdk/python/README.md).
+The distribution/import names and version remain internal/provisional.
+
+For the existing CMake development route, use `PYTHONPATH=build/debug/python`;
+its generated `mantis_pb2.py` remains build output and is not hand-maintained.
+Do not use that source/build path to qualify installed artifacts. The separate
+read-only [Python artifact workflow](.github/workflows/python-sdk.yml) executes
+`tests/sdk/artifacts_test.py` in isolated installed venvs on Linux x86_64
+Python 3.10/3.11/3.12/3.13/3.14 and native Linux ARM64 Python 3.12,
+including sdist rebuild, schema/wire, deterministic independent-root and negative
+controls. Direct/unpacked-sdist/pip-overlay wheels also execute the real-loopback
+control and Job suites from clean installed prefixes at both protobuf runtime edges;
+source-matched paths/hashes and historical-client RED/exact-restored GREEN
+receipts distinguish artifact containment from source-only testing. Peers are not
+`mantisd`; timeout can leave daemon-owned operation outcomes UNKNOWN.
+Compiler distribution `protoc-wheel-0==21.11` and executed
+`libprotoc 3.21.11` are distinct identities in provenance format 2. The artifact
+workflow retains manifest-listed qualified input bytes in `frozen-inputs.zip`,
+including the hidden `.github` workflow path; downloaded bundles must match every
+`inputs.json` entry to the corresponding archived bytes and SHA-256. This is an
+allowlisted evidence export, not permission to upload arbitrary hidden files.
+Locally run
+the same entry point with `--expected-machine x86_64 --expected-python 3.12`
+(or the actual qualified native combination), and an unused `--work-dir` outside
+the source/build trees and the pinned tools from the workflow. Logs and failures
+are retained there. These packaging checks do not replace the five Architecture
+CI jobs or the later live-daemon/fault-protocol and release gates of Issue #75.
+The matrix is a qualification requirement, not proof that a particular revision
+passed. Python 3.11/3.13 require complete actual hosted artifact-suite evidence;
+they are not locally qualified merely by configuring `setup-python`. Local
+Python 3.12/3.14 execution cannot substitute for either missing interpreter.
+The same job runs `python -B tests/ci/python_sdk_workflow_test.py` with pinned
+binary-only PyYAML. This checks matrix/interpreter/tool/full-suite/evidence wiring,
+real shell argv and failure propagation, and representative wrong-wiring controls;
+its launcher fixture does not execute or qualify the selected hosted runtimes.
+
+### Installed SDK with a real local daemon
+
+The existing five Architecture jobs also run `tests/sdk/live_daemon.py` against
+their matching native output (including strict sanitizer settings), without a
+second native build. This is distinct from the controlled peers above. The
+qualifier uses the same pinned Python build tools and creates fresh installed
+consumers for the canonical wheel and an independently rebuilt sdist at both
+protobuf runtime edges. For an already built, matching Linux runtime:
+
+```bash
+python -B tests/sdk/live_daemon_test.py
+python -B tests/ci/live_daemon_workflow_test.py
+python -B tests/sdk/live_daemon.py --runtime build/headless --work-dir build/live75-consumers
+```
+
+Use an unused work directory. The harness selects only the existing virtual
+scanner, example-points and PLY plugins, a private project and an ephemeral
+loopback endpoint; default token authentication is not disabled. Discovery,
+status and completed pipeline/export Jobs have contract-derived oracles. The
+bounded ASCII PLY check requires the declared XYZ properties/units, exactly 3072
+actual finite triples and selected source-derived grid/intensity relationships.
+Wrong/missing authentication, incompatible protocol, invalid recipes and
+post-shutdown refusal must fail as specified. A deliberate post-Job exception
+and a separately truncated real export must each retire the actual daemon tree
+and endpoint before an ordinary success run is restored. Output, startup,
+exchange and owned cleanup remain bounded. Sanitized results include installed
+code, binary and actual
+daemon mapping hashes; private command logs stay in the work directory.
+A passing run qualifies only its exact Linux/runtime/virtual inputs, not physical
+hardware, remote security, another OS, legal rights or publication readiness.
+Timeouts do not cancel or implicitly retry daemon-owned Jobs; outcomes may remain
+UNKNOWN. TestPyPI/PyPI upload and signing are not performed by this harness.
+The separate [SDK publication-gate definition](docs/engineering/python-sdk-publication-gate.md)
+sets out required owner inputs, independent qualification, TestPyPI compatibility
+and a later least-privilege OIDC production decision. It does not configure or
+authorize publication; naming/rights, actual TestPyPI evidence and release approval
+remain separate gates.
 
 ## Windows and macOS
 

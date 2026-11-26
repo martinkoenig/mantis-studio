@@ -1,0 +1,49 @@
+name: configured-toolchain
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  configured-toolchain:
+    name: configured-toolchain (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Real standalone C and C++ capture and frozen verification
+        env:
+          MANTIS_PROVENANCE_TEST_ROOT: ${{ runner.temp }}/configured provenance
+          MANTIS_PROVENANCE_REVISION: ${{ github.sha }}
+        run: |
+          # Trusted fixture setup only; the collector never resolves cache paths via PATH.
+          export MANTIS_PROVENANCE_CMAKE="$(command -v cmake)"
+          export MANTIS_PROVENANCE_CTEST="$(command -v ctest)"
+          export MANTIS_PROVENANCE_NINJA="$(command -v ninja)"
+          python3 -B tests/ci/toolchain_provenance_test.py
+      - name: Install compiler cache for isolated incremental regression
+        run: |
+          sudo apt-get update
+          sudo apt-get install --assume-yes --no-install-recommends ccache
+      - name: Produce isolated Ninja rebuilds
+        run: python3 -B tests/ci/incremental_cache.py build "$RUNNER_TEMP/incremental"
+      - name: Reject stale generated output and verify restored snapshots
+        run: |
+          status=0
+          python3 -B tests/ci/incremental_cache.py test-broken "$RUNNER_TEMP/incremental" || status=$?
+          test "$status" -eq 3
+          python3 -B tests/ci/incremental_cache.py test-restored "$RUNNER_TEMP/incremental"
+      # Private command receipts/cache metadata are deliberately not uploaded.
+      # This is not integration into Architecture or a product toolchain report.

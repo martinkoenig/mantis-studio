@@ -1,0 +1,37 @@
+name: standalone-plugin-sdk
+on:
+  pull_request:
+  push:
+    branches: [develop, main, "integration/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-sdk:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Qualifier failure and owned-child cleanup controls
+        run: python3 -B tests/sdk/test_qualifier.py --output "$RUNNER_TEMP/sdk-qualifier-controls"
+      - name: Standalone install, relocation, C/C++ contracts and strict sanitizers
+        run: python3 -B tests/sdk/qualify.py --output "$RUNNER_TEMP/sdk-installed-evidence"
+      - name: Retain command, origin, inventory and failure receipts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: standalone-sdk-${{ matrix.runner }}
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/sdk-qualifier-controls/*.json
+            ${{ runner.temp }}/sdk-qualifier-controls/*.log
+            ${{ runner.temp }}/sdk-installed-evidence/*.json
+            ${{ runner.temp }}/sdk-installed-evidence/*.log
+            ${{ runner.temp }}/sdk-installed-evidence/*/origins.txt
+            ${{ runner.temp }}/sdk-installed-evidence/*/compile_commands.json
+            ${{ runner.temp }}/sdk-installed-evidence/*/Testing/Temporary/LastTest.log

@@ -1,0 +1,3 @@
+include _build_backend.py README.md LICENSE
+include _schema/mantis.proto _schema/provenance.json
+include mantis/mantis_pb2.py mantis/mantis.proto mantis/_provenance.json

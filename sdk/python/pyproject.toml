@@ -1,11 +1,31 @@
 [build-system]
-requires = ["setuptools>=65"]
-build-backend = "setuptools.build_meta"
+requires = ["setuptools==75.8.2", "wheel==0.45.1", "protoc-wheel-0==21.11", "protobuf==3.20.0"]
+build-backend = "_build_backend"
+backend-path = ["."]
 [project]
 name = "mantis-studio-client"
 version = "0.1.0"
 description = "Local protocol client for the Mantis Studio architecture skeleton"
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 dependencies = ["protobuf>=3.20,<7"]
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+[project.urls]
+Source = "https://github.com/martinkoenig/mantis-studio"
+Documentation = "https://github.com/martinkoenig/mantis-studio/blob/develop/sdk/python/README.md"
+Issues = "https://github.com/martinkoenig/mantis-studio/issues"
 [tool.setuptools]
 packages = ["mantis"]
+[tool.setuptools.package-data]
+mantis = ["mantis.proto", "_provenance.json"]

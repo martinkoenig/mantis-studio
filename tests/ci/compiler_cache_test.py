@@ -92,6 +92,37 @@ class WorkflowPolicy(unittest.TestCase):
                 if "cache-hit" in step.get("if", ""):
                     self.assertTrue(step.get("id") == "cache-save" or step == trim)
 
+    def test_record_only_observation_is_after_gates_and_exact_file_only(self):
+        for name, job in WORKFLOW['jobs'].items():
+            steps = job['steps']
+            record = [s for s in steps if s.get('id') == 'ci-shadow-observation']
+            self.assertEqual(len(record), 1, 'missing per-job classifier observation')
+            record = record[0]
+            upload = [s for s in steps if s.get('name') == 'Retain screened classifier observation']
+            self.assertEqual(len(upload), 1, 'missing canonical observation artifact')
+            upload = upload[0]
+            self.assertEqual(record['if'], '${{ always() }}')
+            self.assertEqual(record['run'], 'python3 -B tools/ci_shadow_observation.py')
+            self.assertEqual(record['env'], {
+                'SHADOW_BASE': '${{ github.event.pull_request.base.sha || github.event.before }}',
+                'SHADOW_HEAD': '${{ github.event.pull_request.head.sha }}',
+                'SHADOW_PROFILE': '${{ matrix.runner }}-${{ matrix.studio }}' if name == 'linux'
+                                  else 'ubuntu-24.04-san'})
+            self.assertEqual(upload['if'],
+                             "${{ always() && steps.ci-shadow-observation.outcome == 'success' }}")
+            self.assertEqual(upload['uses'], 'actions/upload-artifact@v4')
+            self.assertEqual(upload['with'], {
+                'name': 'ci110-observation-${{ matrix.runner }}-${{ matrix.studio }}' if name == 'linux'
+                        else 'ci110-observation-sanitizers',
+                'path': 'build/ci-shadow/observation.json', 'if-no-files-found': 'error',
+                'retention-days': '14'})
+            self.assertEqual(steps[-3:-1], [record, upload],
+                             'observation must not precede or suppress existing gates/cache actions')
+            for step in steps:
+                if step not in (record, upload):
+                    self.assertNotIn('ci-shadow', json.dumps(step), 'classifier-dependent validation gate')
+            self.assertEqual(WORKFLOW['permissions'], {'contents': 'read'})
+
     def test_concurrency_distinguishes_prs_branches_events_and_manual_runs(self):
         group = WORKFLOW["concurrency"]["group"]
         def render(event, ref, pr=0, run=1):
