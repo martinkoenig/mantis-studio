@@ -687,26 +687,29 @@ struct Store::Impl {
             if (metadata_version < 2) {
                 Transaction migration(db);
                 if (metadata_version == 0)
-                    exec(db,
-                         "CREATE TABLE artifacts(id TEXT PRIMARY KEY,type TEXT NOT NULL,version INTEGER NOT NULL,"
-                         "state INTEGER NOT NULL,provenance TEXT NOT NULL,hash TEXT NOT NULL DEFAULT '',"
-                         "bytes INTEGER NOT NULL DEFAULT 0,chunks INTEGER NOT NULL DEFAULT 0);"
-                         "CREATE TABLE chunks(artifact TEXT NOT NULL REFERENCES artifacts(id),idx INTEGER NOT NULL,"
-                         "path TEXT NOT NULL,hash TEXT NOT NULL,bytes INTEGER NOT NULL,PRIMARY KEY(artifact,idx));");
-                exec(db,
-                     "CREATE TABLE calibration_revisions("
-                     "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),"
-                     "artifact_id TEXT NOT NULL UNIQUE REFERENCES artifacts(id),kind TEXT NOT NULL,"
-                     "PRIMARY KEY(calibration_id,revision),UNIQUE(calibration_id,revision,artifact_id));"
-                     "CREATE TABLE active_calibrations(logical_device_id TEXT PRIMARY KEY NOT NULL,"
-                     "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL,artifact_id TEXT NOT NULL,"
-                     "FOREIGN KEY(calibration_id,revision,artifact_id) "
-                     "REFERENCES calibration_revisions(calibration_id,revision,artifact_id));"
-                     "CREATE TRIGGER calibration_revision_immutable_update BEFORE UPDATE ON calibration_revisions "
-                     "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
-                     "CREATE TRIGGER calibration_revision_immutable_delete BEFORE DELETE ON calibration_revisions "
-                     "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
-                     "PRAGMA user_version=2;");
+                    exec(db, "CREATE TABLE artifacts(id TEXT PRIMARY KEY,type TEXT NOT NULL,version INTEGER "
+                             "NOT NULL,"
+                             "state INTEGER NOT NULL,provenance TEXT NOT NULL,hash TEXT NOT NULL DEFAULT '',"
+                             "bytes INTEGER NOT NULL DEFAULT 0,chunks INTEGER NOT NULL DEFAULT 0);"
+                             "CREATE TABLE chunks(artifact TEXT NOT NULL REFERENCES artifacts(id),idx "
+                             "INTEGER NOT NULL,"
+                             "path TEXT NOT NULL,hash TEXT NOT NULL,bytes INTEGER NOT NULL,PRIMARY "
+                             "KEY(artifact,idx));");
+                exec(db, "CREATE TABLE calibration_revisions("
+                         "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),"
+                         "artifact_id TEXT NOT NULL UNIQUE REFERENCES artifacts(id),kind TEXT NOT NULL,"
+                         "PRIMARY KEY(calibration_id,revision),UNIQUE(calibration_id,revision,artifact_id));"
+                         "CREATE TABLE active_calibrations(logical_device_id TEXT PRIMARY KEY NOT NULL,"
+                         "calibration_id TEXT NOT NULL,revision INTEGER NOT NULL,artifact_id TEXT NOT NULL,"
+                         "FOREIGN KEY(calibration_id,revision,artifact_id) "
+                         "REFERENCES calibration_revisions(calibration_id,revision,artifact_id));"
+                         "CREATE TRIGGER calibration_revision_immutable_update BEFORE UPDATE ON "
+                         "calibration_revisions "
+                         "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
+                         "CREATE TRIGGER calibration_revision_immutable_delete BEFORE DELETE ON "
+                         "calibration_revisions "
+                         "BEGIN SELECT RAISE(ABORT,'Calibration revisions are immutable'); END;"
+                         "PRAGMA user_version=2;");
                 migration.commit();
             }
             replay_journal();
@@ -721,12 +724,72 @@ struct Store::Impl {
         if (db)
             sqlite3_close(db);
     }
-    ArtifactDescriptor get(const Id &id) const {
+    ArtifactDescriptor get(const Id &id, uint64_t *remaining = nullptr,
+                           const CancellationToken &token = {}) const {
         Statement s(db,
                     "SELECT id,type,version,state,provenance,hash,bytes,chunks FROM artifacts WHERE id=?");
         s.text(1, id.value);
         if (!s.row())
             fail(Status::not_found, "Artifact not found");
+        if (remaining) {
+            // SQLite owns these views until the statement advances/finalizes.
+            // No std::string, JSON DOM or typed provenance exists before this
+            // conservative reservation. Escapes cannot expand decoded text.
+            uint64_t amount{};
+            auto add = [&](uint64_t bytes) {
+                if (bytes > *remaining - amount)
+                    fail(Status::busy, "Descriptor predecode admission", "store");
+                amount += bytes;
+            };
+            add(8 * sizeof(ArtifactDescriptor));
+            for (int column : {0, 1, 4, 5}) {
+                token.check();
+                const auto *data = sqlite3_column_text(s.s, column);
+                const auto size = static_cast<size_t>(sqlite3_column_bytes(s.s, column));
+                if (!data && size)
+                    fail(Status::busy, "Descriptor SQLite view unavailable", "store");
+                if (size > (*remaining - amount) / 32)
+                    fail(Status::busy, "Descriptor predecode admission", "store");
+                add(32 * size);
+                if (column != 4)
+                    continue;
+                const std::string_view text(data ? reinterpret_cast<const char *>(data) : "", size);
+                unsigned depth{};
+                for (size_t i = 0; i < text.size();) {
+                    token.check();
+                    const char c = text[i++];
+                    if (c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == ',' || c == ':')
+                        continue;
+                    if (c == '}' || c == ']') {
+                        if (depth)
+                            --depth;
+                        continue;
+                    }
+                    // Covers map links, DOM/typed vector growth, parser stack
+                    // and simultaneously held descriptor/cache/return copies.
+                    add(512);
+                    if (c == '{' || c == '[') {
+                        if (++depth > 64)
+                            fail(Status::busy, "Descriptor predecode depth", "store");
+                    } else if (c == '"') {
+                        while (i < text.size()) {
+                            token.check();
+                            const char next = text[i++];
+                            if (next == '"')
+                                break;
+                            if (next == '\\' && i < text.size())
+                                ++i;
+                        }
+                    } else {
+                        while (i < text.size() && text[i] != ',' && text[i] != '}' && text[i] != ']' &&
+                               text[i] != ':' && text[i] != ' ' && text[i] != '\n' && text[i] != '\r' &&
+                               text[i] != '\t' && text[i] != '"' && text[i] != '[' && text[i] != '{')
+                            ++i;
+                    }
+                }
+            }
+            *remaining -= amount;
+        }
         ArtifactDescriptor result{{s.text(0)},
                                   {s.text(1), static_cast<uint32_t>(s.integer(2))},
                                   static_cast<ArtifactState>(s.integer(3)),
@@ -1649,9 +1712,25 @@ ArtifactDescriptor Store::get(const Id &id) const {
     std::lock_guard guard(impl_->mutex);
     auto result = impl_->get(id);
     impl_->verify_projected_identity(result);
-    if (auto writer = impl_->writers.find(id); writer != impl_->writers.end() && writer->second->output.is_open()) {
+    if (auto writer = impl_->writers.find(id);
+        writer != impl_->writers.end() && writer->second->output.is_open()) {
         auto position = writer->second->output.tellp();
-        if (position >= 0) result.bytes += static_cast<uint64_t>(position);
+        if (position >= 0)
+            result.bytes += static_cast<uint64_t>(position);
+    }
+    return result;
+}
+ArtifactDescriptor Store::get_bounded(const Id &id, uint64_t &remaining,
+                                      const CancellationToken &token) const {
+    token.check();
+    std::lock_guard guard(impl_->mutex);
+    auto result = impl_->get(id, &remaining, token);
+    impl_->verify_projected_identity(result);
+    if (auto writer = impl_->writers.find(id);
+        writer != impl_->writers.end() && writer->second->output.is_open()) {
+        auto position = writer->second->output.tellp();
+        if (position >= 0)
+            result.bytes += static_cast<uint64_t>(position);
     }
     return result;
 }
@@ -1676,8 +1755,10 @@ data::Published Store::packet(const Id &id, uint64_t chunk) const {
     if (artifact.type.name == "org.mantis.RawCapture" && artifact.type.schema_version == 2) {
         for (uint64_t i = 0; i < artifact.chunks; ++i) {
             auto scanned = segments::scan(object_path(id, i));
-            if (!scanned.corruption.empty() || scanned.incomplete) fail(Status::corrupt, "Invalid RawCapture segment");
-            if (chunk < scanned.records.size()) return segments::packet(scanned, static_cast<size_t>(chunk));
+            if (!scanned.corruption.empty() || scanned.incomplete)
+                fail(Status::corrupt, "Invalid RawCapture segment");
+            if (chunk < scanned.records.size())
+                return segments::packet(scanned, static_cast<size_t>(chunk));
             chunk -= scanned.records.size();
         }
         fail(Status::not_found, "RawCapture record not found");
@@ -1688,7 +1769,8 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
     std::unique_lock guard(impl_->mutex);
     impl_->observation_idle(id);
     const auto a = impl_->get(id);
-    if (a.state != ArtifactState::recoverable) fail(Status::invalid_argument, "Artifact is not recoverable");
+    if (a.state != ArtifactState::recoverable)
+        fail(Status::invalid_argument, "Artifact is not recoverable");
     Impl::JournalReservation operation(*impl_, id);
     // Retry journal publication while still RECOVERABLE. An operational replay
     // failure must not require a second, potentially failing state transaction.
@@ -1698,7 +1780,9 @@ ArtifactDescriptor Store::recover(const Id &id, const CancellationToken &token) 
         return finalize_impl(id, token, true, operation.generation);
     }
     {
-        Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
+        Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?");
+        update.text(1, id.value);
+        update.row();
     }
     guard.unlock();
     try {
@@ -1749,16 +1833,22 @@ void Store::prepare_finalize(const Id &id) {
         }
         throw;
     }
-    Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?"); update.text(1, id.value); update.row();
+    Statement update(impl_->db, "UPDATE artifacts SET state=1 WHERE id=?");
+    update.text(1, id.value);
+    update.row();
 }
 void Store::abandon(const Id &id) {
     std::lock_guard guard(impl_->mutex);
     impl_->observation_idle(id);
-    if (impl_->get(id).state == ArtifactState::finalized) fail(Status::invalid_argument, "Finalized captures are immutable");
+    if (impl_->get(id).state == ArtifactState::finalized)
+        fail(Status::invalid_argument, "Finalized captures are immutable");
     impl_->writers.erase(id);
-    Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?"); update.text(1, id.value); update.row();
+    Statement update(impl_->db, "UPDATE artifacts SET state=3 WHERE id=?");
+    update.text(1, id.value);
+    update.row();
 }
-void Store::replay(const Id &id, const std::function<void(data::Published)> &emit, const CancellationToken &token) const {
+void Store::replay(const Id &id, const std::function<void(data::Published)> &emit,
+                   const CancellationToken &token) const {
     auto a = get(id);
     if (a.state != ArtifactState::finalized || a.type.name != "org.mantis.RawCapture")
         fail(Status::incompatible, "Replay requires finalized RawCapture");
@@ -1768,20 +1858,29 @@ void Store::replay(const Id &id, const std::function<void(data::Published)> &emi
     for (uint64_t i = 0; i < a.chunks; ++i) {
         token.check();
         auto path = object_path(id, i);
-        if (a.type.schema_version == 1) { emit(data::read_packet(path)); continue; }
-        if (a.type.schema_version != 2) fail(Status::incompatible, "Unsupported RawCapture schema");
+        if (a.type.schema_version == 1) {
+            emit(data::read_packet(path));
+            continue;
+        }
+        if (a.type.schema_version != 2)
+            fail(Status::incompatible, "Unsupported RawCapture schema");
         auto scanned = segments::scan(path);
-        if (scanned.incomplete || !scanned.corruption.empty()) fail(Status::corrupt, "RawCapture integrity failure");
+        if (scanned.incomplete || !scanned.corruption.empty())
+            fail(Status::corrupt, "RawCapture integrity failure");
         for (size_t n = 0; n < scanned.records.size(); ++n) {
-            token.check(); auto packet = segments::packet(scanned, n);
-            if (sequence && packet->header.sequence.value != *sequence + 1) fail(Status::corrupt, "Replay sequence discontinuity");
-            sequence = packet->header.sequence.value; emit(std::move(packet));
+            token.check();
+            auto packet = segments::packet(scanned, n);
+            if (sequence && packet->header.sequence.value != *sequence + 1)
+                fail(Status::corrupt, "Replay sequence discontinuity");
+            sequence = packet->header.sequence.value;
+            emit(std::move(packet));
         }
     }
 }
 uint64_t Store::record_count(const Id &id) const {
     uint64_t count{};
-    replay(id, [&](data::Published) { ++count; }); return count;
+    replay(id, [&](data::Published) { ++count; });
+    return count;
 }
 struct CaptureReader::Impl {
     std::shared_ptr<const Store> store;
@@ -1795,18 +1894,23 @@ struct CaptureReader::Impl {
             fail(Status::incompatible, "CaptureReader requires finalized supported RawCapture");
     }
 };
-CaptureReader::CaptureReader(std::shared_ptr<const Store> s, Id id) : impl_(std::make_unique<Impl>(std::move(s), std::move(id))) {}
+CaptureReader::CaptureReader(std::shared_ptr<const Store> s, Id id)
+    : impl_(std::make_unique<Impl>(std::move(s), std::move(id))) {}
 CaptureReader::~CaptureReader() = default;
 data::Published CaptureReader::next() {
     auto &r = *impl_;
     if (r.artifact.type.schema_version == 1) {
-        if (r.segment == r.artifact.chunks) return {};
+        if (r.segment == r.artifact.chunks)
+            return {};
         return r.store->packet(r.artifact.id, r.segment++);
     }
     while (!r.scan || r.record == r.scan->records.size()) {
-        if (r.segment == r.artifact.chunks) return {};
-        r.scan = segments::scan(r.store->object_path(r.artifact.id, r.segment++)); r.record = 0;
-        if (r.scan->incomplete || !r.scan->corruption.empty()) fail(Status::corrupt, "Replay segment integrity failure");
+        if (r.segment == r.artifact.chunks)
+            return {};
+        r.scan = segments::scan(r.store->object_path(r.artifact.id, r.segment++));
+        r.record = 0;
+        if (r.scan->incomplete || !r.scan->corruption.empty())
+            fail(Status::corrupt, "Replay segment integrity failure");
     }
     return segments::packet(*r.scan, r.record++);
 }
@@ -1832,7 +1936,9 @@ struct BundleCaptureReader::Impl {
 BundleCaptureReader::BundleCaptureReader(std::shared_ptr<const Store> s, Id id)
     : impl_(std::make_unique<Impl>(std::move(s), std::move(id))) {}
 BundleCaptureReader::~BundleCaptureReader() = default;
-const data::ProjectedCaptureHeader &BundleCaptureReader::header() const { return impl_->state.header; }
+const data::ProjectedCaptureHeader &BundleCaptureReader::header() const {
+    return impl_->state.header;
+}
 const std::optional<data::ProjectedRunOutcome> &BundleCaptureReader::final_outcome() const {
     return impl_->final;
 }

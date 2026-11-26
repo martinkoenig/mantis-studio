@@ -77,6 +77,13 @@ class Store {
     ArtifactDescriptor finalize(const ArtifactId &, const CancellationToken & = {});
     std::vector<ArtifactDescriptor> list() const;
     ArtifactDescriptor get(const ArtifactId &) const;
+    // Additive internal-runtime lookup. Admit descriptor strings, serialized
+    // provenance, DOM nodes and typed/cached copies BEFORE decoding or copying
+    // SQLite column views. Decrements remaining only on successful admission.
+    // This bounds application metadata, not SQLite's page cache or file I/O.
+    // Existing get/list semantics and the persisted format are unchanged.
+    ArtifactDescriptor get_bounded(const ArtifactId &, uint64_t &remaining,
+                                   const CancellationToken & = {}) const;
     data::Published packet(const ArtifactId &, uint64_t chunk = 0) const;
     std::filesystem::path object_path(const ArtifactId &, uint64_t chunk = 0) const;
     // Startup classifies provisional state; explicit recovery finalizes only verified, committed chunks.
