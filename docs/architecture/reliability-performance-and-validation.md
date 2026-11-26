@@ -114,6 +114,10 @@ CI can use stable synthetic/regression benchmarks; hardware acceptance supplies
 the hardware-specific evidence. Thresholds must be based on measured platforms,
 not invented marketing targets.
 
+Use the simplest reproducible method adequate for the claim: a defined workload and input/configuration, suitable environment, warm-up and sample count, correctness checks, relevant timing/resource metrics and dispersion. Retain failures and invalid samples with their reasons. Compare like-for-like conditions; rerun invalid measurements only after a concrete correction or changed relevant conditions. An instrumentation or environment failure is not evidence of a product regression.
+
+Exact runtime attestation, per-mapping file hashing, continuous actor/descendant tracking and collector-internal timing constraints are not generic benchmark acceptance requirements. Use such mechanisms only when a specific approved claim genuinely requires them. Existing substantive acceptance criteria and owner-approved measurement gates remain binding for their stated scope. Keep reference software measurements distinct from physical accuracy and production throughput. If the available environment cannot qualify a required measurement, report the specific blocker rather than expanding product scope into measurement-infrastructure engineering.
+
 ## 7. Verification layers
 
 Use the cheapest layer that can prove a property, but do not let a cheaper layer

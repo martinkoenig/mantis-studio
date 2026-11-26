@@ -13,16 +13,11 @@ Before implementation and PR handoff, follow the binding
 risk-proportionate test design and adversarial implementer self-review;
 the required checks below remain applicable.
 
-## Required checks
+## Validation and delivery
 
-1. Build Studio and run `ctest --preset linux-debug`.
-2. Build with Qt disabled and run the headless tests.
-3. Use the sanitizer build for changes to ownership, threads, ABI handling or storage.
-4. Keep Linux ARM64 in the native CI matrix; avoid CPU-specific dependencies in public headers.
-5. Run `clang-format -i` on changed C/C++ files using the repository style.
-6. Add a focused regression test for a bug or architectural behavior. Do not add tests that merely repeat implementation constants.
-7. For changes to critical streaming/hot paths, document or update the relevant throughput/latency/memory/copy/queue evidence and reject material unexplained regressions.
-8. For changes to recovery, distributed ownership or persistent state, test negative paths and interrupted transitions; never infer production/HA readiness from a happy-path fixture.
+Use the risk-based [test-quality contract](docs/engineering/test-quality.md) to choose local checks and identify unique evidence requirements. Build and run affected Studio or headless targets as relevant; use sanitizers for affected ownership, threads, ABI and storage, focused regression tests, and repository formatting on changed C/C++ code. Critical streaming/hot-path changes require relevant performance evidence; recovery and persistent-state changes require realistic negative/interruption tests.
+
+Do not duplicate the complete platform/configuration matrix locally by default. Required GitHub CI (including native x86_64/ARM64, Studio ON/OFF and applicable sanitizer and additional jobs) remains unchanged and must pass for the reviewed candidate. Run full local suites when the task's risk, a concrete concern or unique acceptance evidence justifies them. Equivalent CI evidence may satisfy the same property; unique required local/hardware/measurement evidence must still be obtained. Draft publication may precede final qualification if incomplete/failed checks are disclosed. Independent source/test review and applicable mandatory checks precede authorized integration.
 
 Foundation headers must not expose Qt, SQLite, OpenCV, Eigen, CUDA or Vulkan types. First-party plugins may include only the public SDK plus their own dependencies. Studio and CLI must not link to runtime implementation libraries. The boundary contract test checks includes, while the Qt-disabled build proves dependency separation.
 
