@@ -4,7 +4,8 @@
 #include <QElapsedTimer>
 #include <QPointer>
 #include <QThread>
-#include <atomic>
+#include <algorithm>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #define CHECK(x)                                                                                             \
@@ -14,14 +15,16 @@
                                      ": " + #x);                                                             \
     } while (false)
 namespace w = mantis::wire::v1;
-void until(const std::function<bool()> &condition) {
+void until(const QString &phase, const std::function<bool()> &condition,
+           const std::function<QString()> &details) {
     QElapsedTimer timer;
     timer.start();
     while (!condition()) {
         QCoreApplication::processEvents();
         QThread::msleep(1);
         if (timer.elapsed() > 10000)
-            throw std::runtime_error("Presentation timeout");
+            throw std::runtime_error(
+                QString("Presentation timeout: %1 (%2)").arg(phase, details()).toStdString());
     }
     QCoreApplication::processEvents();
 }
@@ -34,9 +37,103 @@ QVariantMap jobs(const CalibrationController &c) {
 QVariantMap errors(const CalibrationController &c) {
     return c.state()["errors"].toMap();
 }
+QVariantMap jobIn(const QVariantMap &state, const QString &slot) {
+    return state.value("jobs").toMap().value(slot).toMap();
+}
+QString describeJob(const QVariantMap &job) {
+    return QString("id=%1 state=%2 diagnostics=%3 result=%4")
+        .arg(job.value("id").toString().left(48), job.value("state").toString().left(24),
+             job.value("diagnostics").toString().left(48), job.value("result").toString().left(48));
+}
+void waitFor(const CalibrationController &c, const QString &slot, const QString &phase,
+             const std::function<bool()> &condition, const std::function<QString()> &extra = {}) {
+    until(phase, condition, [&] {
+        const auto state = c.state();
+        return QString("generation=%1 confirmed=%2 pending=%3 error=%4 %5 %6")
+            .arg(state.value("projectGeneration").toString())
+            .arg(state.value("projectConfirmed").toBool())
+            .arg(state.value("pending").toMap().value(slot).toBool())
+            .arg(state.value("errors").toMap().value(slot).toMap().value("status").toString().left(32),
+                 describeJob(jobIn(state, slot)), extra ? extra() : QString{});
+    });
+}
 using namespace calibration_test;
+std::string checkSubmittedJob(const CalibrationController &c, const Fake &fake, const char *slot) {
+    const auto id = fake.submittedJob(slot);
+    CHECK(!id.empty());
+    CHECK(jobIn(c.state(), slot).value("id") == QString::fromStdString(id));
+    return id;
+}
+
+// React to the actual Queued publication, before its automatic refresh or any other event can run.
+// Both deliveries use the same snapshot; only the control copy lacks the predecessor's terminal row.
+std::string submitWithPredecessor(CalibrationController &c, const Fake &fake, const char *slot,
+                                  const std::string &predecessor, const char *terminal,
+                                  const std::function<void()> &submit,
+                                  const std::function<QString()> &requestDetails) {
+    QVariantMap before, afterControl, afterStale;
+    int predecessorRows{};
+    std::string predecessorState;
+    QObject observer;
+    QObject::connect(
+        &c, &CalibrationController::changed, &observer,
+        [&] {
+            if (!before.empty()) // observeSnapshot emits changed synchronously, too.
+                return;
+            const auto state = c.state();
+            if (jobIn(state, slot).value("state") != "Queued")
+                return;
+            before = state;
+            const auto snapshot = fake.snapshot();
+            auto control = snapshot;
+            auto *rows = control.mutable_jobs();
+            for (int i = rows->size(); i-- > 0;)
+                if (rows->Get(i).id() == predecessor) {
+                    ++predecessorRows;
+                    predecessorState = rows->Get(i).state();
+                    rows->DeleteSubrange(i, 1);
+                }
+            c.observeSnapshot(control);
+            afterControl = c.state();
+            c.observeSnapshot(snapshot);
+            afterStale = c.state();
+        },
+        Qt::DirectConnection);
+    const QString phase = QString("%1 retry: publish Queued before stale %2 row").arg(slot, terminal);
+    CHECK(jobIn(c.state(), slot).value("state") == terminal);
+    submit();
+    waitFor(c, slot, phase, [&] { return !before.empty(); }, requestDetails);
+
+    const auto id = fake.submittedJob(slot);
+    const auto queued = jobIn(before, slot);
+    const auto control = jobIn(afterControl, slot);
+    const auto stale = jobIn(afterStale, slot);
+    CHECK(predecessorRows == 1 && predecessorState == terminal);
+    CHECK(!id.empty() && queued.value("id") == QString::fromStdString(id));
+    CHECK(queued.value("state") == "Queued");
+    CHECK(before.value("projectConfirmed").toBool() && !before.value("pending").toMap().value(slot).toBool());
+    CHECK(queued.value("diagnostics").toString().isEmpty() && queued.value("result").toString().isEmpty());
+    const auto unchanged = [&](const QVariantMap &observed) {
+        return jobIn(observed, slot) == queued && observed.value("selected") == before.value("selected") &&
+               observed.value("errors") == before.value("errors");
+    };
+    CHECK(unchanged(afterControl));
+    const auto describe = [&](const QVariantMap &state, const QVariantMap &job) {
+        return describeJob(job) +
+               " selected=" + state.value("selected").toMap().value(slot).toString().left(48);
+    };
+    const auto receipt =
+        QString("%1: predecessor=%2; before [%3]; no-row [%4]; retained [%5]; %6")
+            .arg(slot, QString::fromStdString(predecessor), describe(before, queued),
+                 describe(afterControl, control), describe(afterStale, stale), requestDetails());
+    if (!unchanged(afterStale))
+        throw std::runtime_error(("Stale predecessor changed Queued presentation: " + receipt).toStdString());
+    std::cout << "PASS: " << receipt.toStdString() << '\n';
+    return id;
+}
+
 void loaded(CalibrationController &c, int revision) {
-    until([&] {
+    waitFor(c, "connection", QString("load artifact revision %1").arg(revision), [&] {
         return !c.artifacts().empty() && c.artifacts().front().toMap()["revision"].toInt() == revision;
     });
 }
@@ -81,12 +178,15 @@ void projectGenerations(bool returnToA, bool failOperation) {
     c.selectArtifact("rig", "G");
     c.setCaptureSelected("raw0", true);
     c.activate("third-party", "G");
-    until([&] { return c.state()["active"].toMap()["id"] == "G"; });
+    waitFor(c, "activation", "generation setup: rig G active",
+            [&] { return c.state()["active"].toMap()["id"] == "G"; });
     c.startCapture();
-    until([&] { return c.state()["captureId"] == "capture"; });
+    waitFor(c, "captures", "generation setup: capture started",
+            [&] { return c.state()["captureId"] == "capture"; });
     c.buildDataset(40);
-    until([&] { return jobs(c).contains("dataset"); });
-    fake->job("dataset-job", "Failed");
+    waitFor(c, "dataset", "generation setup: dataset job published",
+            [&] { return jobs(c).contains("dataset"); });
+    fake->job(checkSubmittedJob(c, *fake, "dataset"), "Failed");
     c.observeSnapshot(fake->snapshot());
     c.setCaptureSelected("not-finalized", true);
     CHECK(!errors(c).empty());
@@ -101,9 +201,9 @@ void projectGenerations(bool returnToA, bool failOperation) {
         fake->failList = failOperation;
     }
     c.refresh();
-    until([&] { return refresh->entered.load(); });
+    waitFor(c, "connection", "old project refresh gate entered", [&] { return refresh->entered.load(); });
     c.buildDataset(40);
-    until([&] { return operation->entered.load(); });
+    waitFor(c, "dataset", "old project dataset gate entered", [&] { return operation->entered.load(); });
     const auto before = c.state()["projectGeneration"].toString();
     fake->project("/fixture/B/project.mantis", 22);
     c.observeSnapshot(fake->snapshot());
@@ -138,7 +238,9 @@ void projectGenerations(bool returnToA, bool failOperation) {
     const auto freshErrors = errors(c);
     const auto beforeCompletion = changes;
     operation->release(); // Old A operation is genuinely completed, but retired last.
-    until([&] { return changes > beforeCompletion; });
+    waitFor(
+        c, "dataset", "retire old project dataset request", [&] { return changes > beforeCompletion; },
+        [&] { return QString("workerExited=%1").arg(operation->exited.load()); });
     CHECK(operation->exited);
     CHECK(jobs(c).empty());
     CHECK(errors(c) == freshErrors);
@@ -182,7 +284,8 @@ void disconnectAndLifetime() {
             fake->disconnected = true;
         }
         c.refresh();
-        until([&] { return errors(c).contains("connection"); });
+        waitFor(c, "connection", "disconnect error published",
+                [&] { return errors(c).contains("connection"); });
         CHECK(!c.state()["projectConfirmed"].toBool());
         CHECK(selected(c) == selection && c.state()["rawIds"].toStringList().size() == 1);
         CHECK(c.state()["projectGeneration"] == generation);
@@ -194,10 +297,11 @@ void disconnectAndLifetime() {
             fake->disconnected = false;
         }
         c.refresh();
-        until([&] { return c.state()["projectConfirmed"].toBool(); });
+        waitFor(c, "connection", "reconnect confirms project",
+                [&] { return c.state()["projectConfirmed"].toBool(); });
         CHECK(c.state()["projectGeneration"] == generation && selected(c) == selection);
         c.buildDataset(40);
-        until([&] { return jobs(c).contains("dataset"); });
+        waitFor(c, "dataset", "reconnect admits dataset job", [&] { return jobs(c).contains("dataset"); });
         CHECK(fake->datasetCalls == 1);
         CHECK(errors(c).empty());
         // Missing identity is unconfirmed authority, not a different project.
@@ -220,10 +324,19 @@ void disconnectAndLifetime() {
         }
         controller->refresh();
         controller->buildDataset(40);
-        until([&] { return refresh->entered && operation->entered; });
+        waitFor(
+            *controller, "dataset", "lifetime: both worker gates entered",
+            [&] { return refresh->entered && operation->entered; },
+            [&] {
+                return QString("refreshEntered=%1 operationEntered=%2")
+                    .arg(refresh->entered.load())
+                    .arg(operation->entered.load());
+            });
         throw std::runtime_error("intentional held-worker assertion unwind");
     } catch (const std::runtime_error &e) {
-        expectedFailure = std::string(e.what()) == "intentional held-worker assertion unwind";
+        if (std::string(e.what()) != "intentional held-worker assertion unwind")
+            throw;
+        expectedFailure = true;
     }
     CHECK(expectedFailure && lifetime.isNull());
     CHECK(refresh->exited && operation->exited);
@@ -271,7 +384,10 @@ int main(int argc, char **argv) {
         auto fake = std::make_shared<Fake>();
         CalibrationController c(fake);
         c.refresh();
-        until([&] { return c.artifacts().size() == 8; });
+        waitFor(
+            c, "connection", "initial calibration inventory has 8 entries",
+            [&] { return c.artifacts().size() == 8; },
+            [&] { return QString("artifacts=%1").arg(c.artifacts().size()); });
         CHECK(c.devices().size() == 1);
         CHECK(c.choices("target").size() == 1);
         CHECK(c.stages().size() == 7);
@@ -284,7 +400,9 @@ int main(int argc, char **argv) {
         CHECK(inspectionError);
         CHECK(errors(c).empty());
         c.createTarget(form);
-        until([&] { return selected(c)["target"] == "new-target"; });
+        waitFor(
+            c, "target", "created target selected", [&] { return selected(c)["target"] == "new-target"; },
+            [&] { return QString("target=%1").arg(selected(c)["target"].toString().left(48)); });
         {
             std::lock_guard lock(fake->mutex);
             CHECK(fake->created.SerializeAsString() == spec.SerializeAsString());
@@ -298,45 +416,87 @@ int main(int argc, char **argv) {
         c.setCaptureSelected("raw1", true);
         CHECK(c.state()["rawIds"].toStringList().size() == 1024);
         c.buildDataset(40);
-        until([&] { return jobs(c)["dataset"].toMap()["id"] == "dataset-job"; });
+        waitFor(
+            c, "dataset", "first dataset job published", [&] { return jobs(c).contains("dataset"); },
+            [&] { return QString("datasetCalls=%1").arg(fake->datasetCalls.load()); });
+        const auto firstDataset = checkSubmittedJob(c, *fake, "dataset");
         {
             std::lock_guard lock(fake->mutex);
             CHECK(fake->built.target_artifact_id() == "T");
             CHECK(fake->built.raw_capture_artifact_ids_size() == 1024);
             CHECK(fake->built.camera_roles(0) == "left" && fake->built.camera_roles(1) == "right");
+            CHECK(fake->datasetCalls == 1);
         }
-        fake->job("dataset-job", "Running", {}, .42);
+        fake->job(firstDataset, "Running", {}, .42);
         c.observeSnapshot(fake->snapshot());
         CHECK(jobs(c)["dataset"].toMap()["progress"].toDouble() == .42);
-        fake->job("dataset-job", "Completed", "D", 1);
+        fake->job(firstDataset, "Completed", "D", 1);
         c.observeSnapshot(fake->snapshot());
+        CHECK(jobs(c)["dataset"].toMap()["state"] == "Completed");
+        CHECK(jobs(c)["dataset"].toMap()["result"] == "D");
         CHECK(selected(c)["dataset"] == "D");
         CHECK(c.choices("left").size() == 1);
         c.solveBoth(3);
-        until([&] { return jobs(c).contains("left") && jobs(c).contains("right"); });
-        fake->job("left-job", "Completed", "L", 1);
-        fake->job("right-job", "Failed");
+        waitFor(
+            c, "right", "both independent camera jobs published",
+            [&] { return jobs(c).contains("left") && jobs(c).contains("right"); },
+            [&] { return QString("left: %1").arg(describeJob(jobs(c)["left"].toMap())); });
+        const auto leftJob = checkSubmittedJob(c, *fake, "left");
+        const auto firstRight = checkSubmittedJob(c, *fake, "right");
+        {
+            std::lock_guard lock(fake->mutex);
+            for (auto role : {"left", "right"}) {
+                const auto &request = fake->solvedCameras.at(role);
+                CHECK(request.camera_role() == role && request.dataset_artifact_id() == "D");
+                CHECK(request.heldout_per_camera() == 3);
+            }
+        }
+        fake->job(leftJob, "Completed", "L", 1);
+        fake->job(firstRight, "Failed");
         c.observeSnapshot(fake->snapshot());
         CHECK(selected(c)["left"] == "L");
         CHECK(selected(c)["right"].toString().isEmpty());
+        CHECK(jobs(c)["right"].toMap()["state"] == "Failed");
+        CHECK(jobs(c)["right"].toMap()["result"].toString().isEmpty());
         CHECK(jobs(c)["right"].toMap()["diagnostics"] == "useful diagnostics");
-        c.solveCamera("right", 4);
-        until([&] { return jobs(c)["right"].toMap()["state"] == "Queued"; });
-        fake->job("right-job", "Running");
-        c.observeSnapshot(fake->snapshot());
-        c.cancelJob("right");
-        until([&] {
+        const auto rightRetry = submitWithPredecessor(
+            c, *fake, "right", firstRight, "Failed", [&] { c.solveCamera("right", 4); },
+            [&] {
+                std::lock_guard lock(fake->mutex);
+                return QString("right heldout=%1").arg(fake->solvedCameras.at("right").heldout_per_camera());
+            });
+        {
             std::lock_guard lock(fake->mutex);
-            return fake->cancelled == "right-job";
-        });
-        fake->job("right-job", "Cancelled");
+            const auto &retry = fake->solvedCameras.at("right");
+            CHECK(retry.camera_role() == "right" && retry.dataset_artifact_id() == "D");
+            CHECK(retry.heldout_per_camera() == 4);
+            CHECK(fake->solvedCameras.at("left").heldout_per_camera() == 3);
+        }
+        fake->job(rightRetry, "Running");
+        c.observeSnapshot(fake->snapshot());
+        CHECK(checkSubmittedJob(c, *fake, "right") == rightRetry);
+        CHECK(jobs(c)["right"].toMap()["state"] == "Running");
+        c.cancelJob("right");
+        const auto cancelled = [&] {
+            std::lock_guard lock(fake->mutex);
+            return fake->cancelled;
+        };
+        waitFor(
+            c, "cancel", "cancel targets the right retry", [&] { return cancelled() == rightRetry; },
+            [&] {
+                return QString("expected=%1 actual=%2")
+                    .arg(QString::fromStdString(rightRetry), QString::fromStdString(cancelled()).left(48));
+            });
+        CHECK(cancelled() == rightRetry && cancelled() != firstRight);
+        fake->job(rightRetry, "Cancelled");
         c.observeSnapshot(fake->snapshot());
         CHECK(jobs(c)["right"].toMap()["state"] == "Cancelled");
         CHECK(selected(c)["left"] == "L");
         CHECK(selected(c)["dataset"] == "D");
         c.selectArtifact("right", "R");
         c.solveRig(3, "explicit.frame", "Generic rig");
-        until([&] { return jobs(c)["rig"].toMap()["id"] == "rig-job"; });
+        waitFor(c, "rig", "rig job published", [&] { return jobs(c).contains("rig"); });
+        const auto rigJob = checkSubmittedJob(c, *fake, "rig");
         {
             std::lock_guard lock(fake->mutex);
             CHECK(fake->solvedRig.left_camera_artifact_id() == "L");
@@ -344,35 +504,50 @@ int main(int argc, char **argv) {
             CHECK(fake->solvedRig.dataset_artifact_id() == "D");
             CHECK(fake->solvedRig.rig_frame_id() == "explicit.frame");
         }
-        fake->job("rig-job", "Completed", "G");
+        fake->job(rigJob, "Completed", "G");
         c.observeSnapshot(fake->snapshot());
         CHECK(selected(c)["rig"] == "G");
         CHECK(fake->activations == 0);
         c.selectDevice("third-party");
-        until([&] { return !c.state()["pending"].toMap()["activation"].toBool(); });
+        waitFor(c, "activation", "device selected with no pending activation",
+                [&] { return !c.state()["pending"].toMap()["activation"].toBool(); });
         CHECK(c.state()["rigFrameId"].toString().isEmpty());
         c.activate("stale", "G");
         CHECK(fake->activations == 0);
         CHECK(errors(c)["activation"].toMap()["status"] == "invalid_argument");
         c.activate("third-party", "G");
-        until([&] { return fake->activations == 1 && c.state()["active"].toMap()["id"] == "G"; });
+        waitFor(
+            c, "activation", "rig G bound once",
+            [&] { return fake->activations == 1 && c.state()["active"].toMap()["id"] == "G"; },
+            [&] {
+                return QString("activations=%1 active=%2")
+                    .arg(fake->activations.load())
+                    .arg(c.state()["active"].toMap()["id"].toString().left(48));
+            });
         CHECK(c.state()["active"].toMap()["revision"].toULongLong() == 2);
         {
             std::lock_guard lock(fake->mutex);
             fake->rejectActivation = true;
         }
         c.activate("third-party", "G");
-        until([&] { return errors(c)["activation"].toMap()["status"] == "incompatible"; });
+        waitFor(c, "activation", "incompatible activation reported",
+                [&] { return errors(c)["activation"].toMap()["status"] == "incompatible"; });
         CHECK(errors(c)["activation"].toMap()["component"] == "calibration.activation");
         CHECK(errors(c)["activation"].toMap()["message"].toString().contains("geometry"));
         c.clearActive("third-party");
-        until([&] { return c.state()["active"].toMap().isEmpty(); });
+        waitFor(
+            c, "activation", "active rig binding cleared",
+            [&] { return c.state()["active"].toMap().isEmpty(); },
+            [&] { return QString("active=%1").arg(c.state()["active"].toMap()["id"].toString().left(48)); });
         CHECK(selected(c)["rig"] == "G");
         c.selectArtifact("target", "T");
         c.selectArtifact("rig", "G");
         CHECK(selected(c)["dataset"] == "D" && selected(c)["left"] == "L" && selected(c)["right"] == "R");
         c.startCapture();
-        until([&] { return c.state()["captureId"] == "capture"; });
+        waitFor(
+            c, "captures", "capture started before finalization",
+            [&] { return c.state()["captureId"] == "capture"; },
+            [&] { return QString("capture=%1").arg(c.state()["captureId"].toString().left(48)); });
         {
             std::lock_guard lock(fake->mutex);
             auto *capture = fake->current.add_captures();
@@ -394,12 +569,44 @@ int main(int argc, char **argv) {
         CHECK(c.state()["captureState"].toString().contains("finalized"));
         c.setCaptureSelected("not-finalized", true);
         CHECK(c.state()["rawIds"].toStringList().contains("not-finalized"));
-        // A result for superseded inputs stays available without changing new selections.
-        c.buildDataset(40);
-        until([&] { return jobs(c)["dataset"].toMap()["state"] == "Queued"; });
+        // Clear D while keeping T as the next request's input, so stale auto-binding is observable.
         c.selectArtifact("target", "new-target");
-        fake->job("dataset-job", "Completed", "D");
+        c.selectArtifact("target", "T");
+        CHECK(selected(c)["target"] == "T" && selected(c)["dataset"].toString().isEmpty());
+        // A result for superseded inputs stays available without changing new selections.
+        const auto secondDataset = submitWithPredecessor(
+            c, *fake, "dataset", firstDataset, "Completed", [&] { c.buildDataset(40); },
+            [&] { return QString("datasetCalls=%1").arg(fake->datasetCalls.load()); });
+        {
+            std::lock_guard lock(fake->mutex);
+            CHECK(fake->datasetCalls == 2 && fake->built.target_artifact_id() == "T");
+            const auto &raw = fake->built.raw_capture_artifact_ids();
+            CHECK(std::find(raw.begin(), raw.end(), "not-finalized") != raw.end());
+            CHECK(std::find(raw.begin(), raw.end(), "raw0") == raw.end());
+        }
+        c.selectArtifact("target", "new-target");
+        CHECK(selected(c)["target"] == "new-target" && selected(c)["dataset"].toString().isEmpty());
+        const auto currentSelection = selected(c);
+        {
+            std::lock_guard lock(fake->mutex);
+            auto result = calibration_test::info("D2", "CalibrationDataset");
+            result.mutable_dataset_info()->mutable_target()->set_id("T");
+            fake->infos["D2"] = std::move(result);
+        }
+        fake->job(secondDataset, "Completed", "D2", 1);
         c.observeSnapshot(fake->snapshot());
+        CHECK(checkSubmittedJob(c, *fake, "dataset") == secondDataset);
+        CHECK(jobs(c)["dataset"].toMap()["state"] == "Completed");
+        CHECK(jobs(c)["dataset"].toMap()["result"] == "D2");
+        CHECK(selected(c) == currentSelection);
+        c.refresh();
+        waitFor(c, "dataset", "superseded dataset D2 available in choices", [&] {
+            const auto choices = c.choices("dataset");
+            return std::any_of(choices.begin(), choices.end(),
+                               [](const auto &choice) { return choice.toMap()["id"] == "D2"; });
+        });
+        CHECK(jobs(c)["dataset"].toMap()["result"] == "D2");
+        CHECK(selected(c) == currentSelection);
         CHECK(selected(c)["dataset"].toString().isEmpty());
         CHECK(!c.choices("dataset").empty());
         std::cout << "Studio calibration presentation contracts passed\n";

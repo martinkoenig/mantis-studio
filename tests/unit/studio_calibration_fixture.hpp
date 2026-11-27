@@ -2,6 +2,7 @@
 #include "calibration_controller.hpp"
 #include <atomic>
 #include <condition_variable>
+#include <map>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
@@ -46,6 +47,17 @@ inline w::CalibrationInfo info(const std::string &id, const std::string &type) {
     return i;
 }
 class Fake final : public CalibrationClient {
+    struct Submission {
+        unsigned sequence{};
+        std::string id;
+    };
+    mutable std::map<std::string, Submission> submittedJobs;
+    // The caller holds mutex. Per-slot sequences keep independent workers' IDs deterministic.
+    std::string submitJob(const std::string &slot) const {
+        auto &job = submittedJobs[slot];
+        return job.id = slot + "-job-" + std::to_string(++job.sequence);
+    }
+
   public:
     mutable std::mutex mutex;
     mutable std::map<std::string, w::CalibrationInfo> infos;
@@ -168,17 +180,23 @@ class Fake final : public CalibrationClient {
             gate->wait();
         if (fail)
             mantis::fail(mantis::Status::incompatible, "Old project operation failed", "fixture.dataset");
-        return "dataset-job";
+        lock.lock();
+        return submitJob("dataset");
     }
     std::string camera(const w::CalibrationCameraSolve &r) const override {
         std::lock_guard lock(mutex);
         solvedCameras[r.camera_role()] = r;
-        return r.camera_role() + "-job";
+        return submitJob(r.camera_role());
     }
     std::string rig(const w::CalibrationRigSolve &r) const override {
         std::lock_guard lock(mutex);
         solvedRig = r;
-        return "rig-job";
+        return submitJob("rig");
+    }
+    std::string submittedJob(const std::string &slot) const {
+        std::lock_guard lock(mutex);
+        const auto it = submittedJobs.find(slot);
+        return it == submittedJobs.end() ? std::string{} : it->second.id;
     }
     std::optional<w::ActiveCalibrationBinding> active(const std::string &) const override {
         std::lock_guard lock(mutex);
@@ -225,7 +243,15 @@ class Fake final : public CalibrationClient {
     void job(const std::string &id, const std::string &state, const std::string &result = {},
              double progress = 0) {
         std::lock_guard lock(mutex);
-        auto *j = current.add_jobs();
+        // Snapshots contain one current row per job, retaining predecessors under their own IDs.
+        w::Job *j = nullptr;
+        for (auto &row : *current.mutable_jobs())
+            if (row.id() == id) {
+                j = &row;
+                break;
+            }
+        if (!j)
+            j = current.add_jobs();
         j->set_id(id);
         j->set_state(state);
         j->set_progress(progress);
