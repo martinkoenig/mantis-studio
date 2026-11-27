@@ -663,6 +663,7 @@ void actual_alg02(artifact::Store &s, const Graph &g) {
     rejects(a3::prepare(s, b), Status::incompatible);
 }
 #include "../support/alg03_recorded.hpp"
+#include "../support/alg03_recorded_packed.hpp"
 // Exercise the current typed reader on a finalized, generically readable result
 // whose only difference is a canonical, same-length prior implementation stamp.
 void result_build_identity(artifact::Store &s, const Graph &g, const std::string &expected_digest) {
@@ -716,7 +717,9 @@ int main(int argc, char **argv) {
         const bool geometry_regressions = argc == 2 && std::string_view(argv[1]) == "--geometry-regressions";
         const bool identity = argc == 3 && std::string_view(argv[1]) == "--result-build-identity";
         const bool recorded = argc == 2 && std::string_view(argv[1]) == "--recorded";
-        CHECK(argc == 1 || artifact_regressions || geometry_regressions || identity || recorded);
+        const bool recorded_packed = argc == 2 && std::string_view(argv[1]) == "--recorded-packed";
+        CHECK(argc == 1 || artifact_regressions || geometry_regressions || identity || recorded ||
+              recorded_packed);
         if (argc == 1)
             metadata_comparison_regression();
         Temp temp;
@@ -727,6 +730,11 @@ int main(int argc, char **argv) {
             recorded_no_line(recorded_store, geometry);
             recorded_metric(recorded_store, geometry);
             std::cout << "Recorded empty and nonempty metric roundtrips and refusal controls passed\n";
+            return 0;
+        }
+        if (recorded_packed) {
+            packed_recorded_fixture::run(std::shared_ptr<artifact::Store>(std::move(store)), geometry);
+            std::cout << "Recorded packed-pixel golden and revision replay passed\n";
             return 0;
         }
         if (identity) {
