@@ -7,21 +7,23 @@ inline void recorded_checkpoint(const Id &, artifact::Store::ObservationWriteSta
         recorded_cancel_at_commit->cancel();
 }
 
-// One recorded source, including the control-only prefix; no fixture-side
-// extraction or triangulation substitutes for the production composition.
-void recorded_metric(artifact::Store &s, const Graph &g) {
-    auto &camera = g.left.value.solution.camera;
-    auto bundle = l1_fixture::image_bundle(
-        false, camera.image_width, camera.image_height, [](uint32_t, uint32_t y) -> uint16_t {
-            return y == 399 ? 155 : y == 400 ? 179 : y == 401 ? 171 : y == 398 ? 99 : y == 402 ? 131 : 12;
-        });
+data::AcquisitionBundle recorded_image(const Graph &g, const l1_fixture::Signal &signal) {
+    const auto &camera = g.left.value.solution.camera;
+    auto bundle = l1_fixture::image_bundle(false, camera.image_width, camera.image_height, signal);
     bundle.evidence.frames[0].camera_calibration = exact(g.left);
     bundle.evidence.frames[0].rig_calibration = exact(g.rig);
     bundle.evidence.rig_calibration = exact(g.rig);
-    l1_fixture::edit_image(bundle, [&](data::Packet &image) {
-        image.header.frame = camera.optical_frame;
-        image.header.calibration = g.rig.value.revision;
-    });
+    auto set = *bundle.frameset;
+    auto image = *set.frames[0];
+    set.header.frame = image.header.frame = camera.optical_frame;
+    set.header.calibration = image.header.calibration = g.rig.value.revision;
+    set.frames[0] = data::publish(std::move(image));
+    bundle.frameset = data::publish(std::move(set));
+    return bundle;
+}
+
+a3::RecordedRequest record_image(artifact::Store &s, const Graph &g, const data::AcquisitionBundle &bundle) {
+    constexpr uint64_t selected_record = 1; // After a startup bundle with no FrameSet.
     auto raw = s.begin_projected_capture(storage_fixture::header());
     s.append_bundle(raw, storage_fixture::bundle(0));
     s.append_bundle(raw, bundle);
@@ -29,20 +31,152 @@ void recorded_metric(artifact::Store &s, const Graph &g) {
                                                            data::AcquisitionReason::none)});
     auto descriptor = s.finalize(raw);
     auto config = l1_fixture::subpixel_config();
-    config.optical_frame = camera.optical_frame;
+    config.optical_frame = g.left.value.solution.camera.optical_frame;
     config.roi = pipeline::L1CandidateConfig::Roi{637, 396, 3, 9};
     config.raw_input = {raw, {"org.mantis.RawCapture", 3}, descriptor.hash, 0};
     auto p = plane(g);
     p.line = {config.emitter, config.pattern, config.pattern_revision, config.line};
     p.cameras[0].component = config.camera;
-    a3::RecordedRequest request{config,
-                                1,
-                                get(a3::create_plane(s, p)),
-                                get(a3::create_policy(s, policy(a3::SourceContract::alg02_subpixel_1))),
-                                exact(g.left),
-                                exact(g.rig)};
-    // The shared pointer is synchronous/non-owning here; the Store outlives it.
-    auto store = std::shared_ptr<artifact::Store>(&s, [](artifact::Store *) {});
+    return {config,
+            selected_record,
+            get(a3::create_plane(s, p)),
+            get(a3::create_policy(s, policy(a3::SourceContract::alg02_subpixel_1))),
+            exact(g.left),
+            exact(g.rig),
+            a3::Selection::recorded_effective};
+}
+
+size_t recorded_result_count(const artifact::Store &s) {
+    const auto descriptors = s.list();
+    return std::count_if(descriptors.begin(), descriptors.end(),
+                         [](const auto &d) { return d.type.name == a3::result_type.name; });
+}
+
+// Refusals must not create a metric result. Later failures can retain a valid
+// observation with its own receipt, per the nontransactional artifact contract.
+std::vector<Id> refuse_recorded(const std::shared_ptr<artifact::Store> &store, const a3::RecordedRequest &bad,
+                                Status expected, std::string_view diagnostic,
+                                const std::source_location &caller = std::source_location::current()) {
+    auto before = recorded_result_count(*store);
+    std::set<Id> existing;
+    for (const auto &d : store->list())
+        existing.insert(d.id);
+    auto result = a3::process_recorded(store, bad);
+    rejects(result, expected, caller);
+    CHECK(result.error().message.find(diagnostic) != std::string::npos);
+    CHECK(recorded_result_count(*store) == before);
+    std::vector<Id> retained;
+    for (const auto &d : store->list()) {
+        if (!existing.contains(d.id)) {
+            CHECK(d.type.name == schema::laser_observation.name);
+            CHECK(d.state == artifact::ArtifactState::finalized);
+            CHECK(result.error().message.find("ALG03 artifact " + d.id.value +
+                                              "; observed state FINALIZED") != std::string::npos);
+            retained.push_back(d.id);
+        }
+    }
+    return retained;
+}
+
+void recorded_no_line(const std::shared_ptr<artifact::Store> &store, const Graph &g) {
+    auto &s = *store;
+    // Uniform grey at the normal 12 DN background: no stripe, not a disabled
+    // extractor. Use the same ALG-02 settings and exposure evidence as the stripe case.
+    const auto bundle = recorded_image(g, [](uint32_t, uint32_t) -> uint16_t { return 12; });
+    const auto request = record_image(s, g, bundle);
+    const auto &raw = request.extractor.raw_input;
+    const auto descriptor = s.get(raw.id);
+    CHECK(descriptor.state == artifact::ArtifactState::finalized);
+    const data::ContentReference reread_raw{
+        descriptor.id, {descriptor.type.name, descriptor.type.schema_version}, descriptor.hash, 0};
+    CHECK(a3::detail::same(raw, reread_raw));
+    const auto run_outcome = s.run_outcome(raw.id);
+    CHECK(run_outcome && run_outcome->disposition == data::RecordedRunDisposition::completed);
+    const auto selected = s.bundle(raw.id, request.record);
+    const auto selected_bytes = storage_fixture::encode(selected);
+    CHECK(selected_bytes == storage_fixture::encode(bundle));
+    const auto &frame = selected.evidence.frames.at(0);
+
+    const auto refs = get(a3::process_recorded(store, request));
+    const auto observation_descriptor = s.get(refs.observation.id);
+    CHECK(observation_descriptor.state == artifact::ArtifactState::finalized);
+    CHECK(observation_descriptor.chunks == 1);
+    CHECK(observation_descriptor.type.name == "org.mantis.LaserObservation");
+    CHECK(observation_descriptor.type.schema_version == 1);
+    const data::ContentReference reread_observation{observation_descriptor.id, schema::laser_observation,
+                                                    observation_descriptor.hash, 1};
+    CHECK(a3::detail::same(refs.observation, reread_observation));
+    const auto observation = s.laser_observation(refs.observation.id);
+    CHECK(observation.disposition == data::ObservationDisposition::success);
+    CHECK(observation.sample_count == 0);
+    CHECK(observation.attributes.empty());
+    CHECK(observation.context.producer.implementation.value == "org.mantis.l1-subpixel");
+    CHECK(observation.diagnostic == "profiles=3;missing=3;rejected=0;saturated=0");
+    const auto &context = observation.context;
+    CHECK(context.raw_input.get() && a3::detail::same(*context.raw_input.get(), reread_raw));
+    CHECK(context.exact_inputs.size() == 1 && a3::detail::same(context.exact_inputs[0], reread_raw));
+    CHECK(context.bundle.get() && *context.bundle.get() == selected.key);
+    CHECK(context.frameset.get() && context.frameset == selected.evidence.frameset);
+    CHECK(context.acquisition_evidence.get() && *context.acquisition_evidence.get() == selected.evidence.key);
+    CHECK(context.source.frame == frame.frame);
+    CHECK(context.source.camera_calibration.get() && frame.camera_calibration.get() &&
+          a3::detail::same(*context.source.camera_calibration.get(), *frame.camera_calibration.get()));
+    CHECK(context.source.rig_calibration.get() && frame.rig_calibration.get() &&
+          a3::detail::same(*context.source.rig_calibration.get(), *frame.rig_calibration.get()));
+
+    const auto result_descriptor = s.get(refs.result.id);
+    CHECK(result_descriptor.state == artifact::ArtifactState::finalized);
+    CHECK(result_descriptor.type.name == "org.mantis.Alg03Result");
+    CHECK(result_descriptor.type.schema_version == 1);
+    CHECK(result_descriptor.hash == refs.result.hash);
+    const auto result = get(a3::load_result(s, refs.result.id));
+    // The manifest is the entire tensor: no source/point rows or XYZ column.
+    CHECK(result->type == schema::tensor);
+    CHECK(result->attributes.size() == 1);
+    CHECK(result->attributes[0].descriptor.name == "org.mantis.alg03.manifest");
+    const auto m = manifest(*result);
+    CHECK(m.at("layout_version") == 1);
+    CHECK(m.at("outcome") == "empty_input");
+    CHECK(m.at("source_disposition") == "success");
+    CHECK(m.at("sample_count") == 0 && m.at("accepted_count") == 0 && m.at("rejected_count") == 0);
+    CHECK(m.at("source_frame") == a3::detail::frame_key(frame.frame));
+    CHECK(m.at("source_key") == a3::detail::observation_key(observation.key));
+    CHECK(m.at("camera_role") == frame.camera_role);
+    CHECK(m.at("image_width") == frame.width && m.at("image_height") == frame.height);
+    const auto &recorded = m.at("recorded_calibration");
+    CHECK(recorded.at("camera").at("presence") == "established");
+    CHECK(recorded.at("rig").at("presence") == "established");
+    CHECK(recorded.at("camera").at("value") == a3::detail::exact(exact(g.left)));
+    CHECK(recorded.at("rig").at("value") == a3::detail::exact(exact(g.rig)));
+    const auto &inputs = m.at("inputs");
+    CHECK(inputs.at("observation") == a3::detail::content(reread_observation));
+    CHECK(inputs.at("calibration_selection") == "recorded_effective");
+    CHECK(inputs.at("camera") == a3::detail::exact(request.camera));
+    CHECK(inputs.at("rig") == a3::detail::exact(request.rig));
+    CHECK(inputs.at("plane") == a3::detail::content(request.plane));
+    CHECK(inputs.at("policy") == a3::detail::content(request.policy));
+
+    // Same pixels and extraction; a mismatched requested rig revision must still refuse
+    // after observation persistence, not turn the binding error into empty_input.
+    auto stale = request;
+    ++stale.rig.calibration.revision;
+    const auto retained =
+        refuse_recorded(store, stale, Status::incompatible, "Calibration reference version mismatch");
+    CHECK(retained.size() == 1);
+    CHECK(l1_fixture::encode(s.laser_observation(retained[0])) == l1_fixture::encode(observation));
+    CHECK(s.get(raw.id).hash == descriptor.hash);
+    CHECK(storage_fixture::encode(s.bundle(raw.id, request.record)) == selected_bytes);
+}
+
+void recorded_metric(const std::shared_ptr<artifact::Store> &store, const Graph &g) {
+    auto &s = *store;
+    const auto bundle = recorded_image(g, [](uint32_t, uint32_t y) -> uint16_t {
+        return y == 399 ? 155 : y == 400 ? 179 : y == 401 ? 171 : y == 398 ? 99 : y == 402 ? 131 : 12;
+    });
+    const auto request = record_image(s, g, bundle);
+    const auto &config = request.extractor;
+    const auto &raw = config.raw_input.id;
+    const auto descriptor = s.get(raw);
     const auto raw_bytes = storage_fixture::encode(s.bundle(raw, 1));
     std::string previous;
     data::Published previous_result;
@@ -98,31 +232,10 @@ void recorded_metric(artifact::Store &s, const Graph &g) {
         }
         previous_result = result;
     }
-    // Refusals must not create a metric result. Some later failures may retain
-    // their valid observation, per the nontransactional artifact contract.
-    auto result_count = [&] {
-        size_t count{};
-        for (const auto &d : s.list())
-            if (d.type.name == a3::result_type.name)
-                ++count;
-        return count;
-    };
-    auto refuse = [&](const a3::RecordedRequest &bad, Status expected, std::string_view diagnostic) {
-        auto before = result_count();
-        std::set<Id> existing;
-        for (const auto &d : s.list())
-            existing.insert(d.id);
-        auto result = a3::process_recorded(store, bad);
-        rejects(result, expected);
-        CHECK(result.error().message.find(diagnostic) != std::string::npos);
-        CHECK(result_count() == before);
-        for (const auto &d : s.list()) {
-            if (!existing.contains(d.id)) {
-                CHECK(d.type.name == schema::laser_observation.name);
-                CHECK(d.state == artifact::ArtifactState::finalized);
-                CHECK(result.error().message.find(d.id.value) != std::string::npos);
-            }
-        }
+    auto result_count = [&] { return recorded_result_count(s); };
+    auto refuse = [&](const a3::RecordedRequest &bad, Status expected, std::string_view diagnostic,
+                      const std::source_location &caller = std::source_location::current()) {
+        refuse_recorded(store, bad, expected, diagnostic, caller);
     };
     auto bad = request;
     bad.extractor.raw_input.id = {"missing-recorded-source"};

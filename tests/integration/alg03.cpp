@@ -723,8 +723,10 @@ int main(int argc, char **argv) {
         auto store = std::make_unique<artifact::Store>(temp.path, recorded_checkpoint);
         auto geometry = graph(*store);
         if (recorded) {
-            recorded_metric(*store, geometry);
-            std::cout << "Recorded bundle metric roundtrip and refusal controls passed\n";
+            std::shared_ptr<artifact::Store> recorded_store(std::move(store));
+            recorded_no_line(recorded_store, geometry);
+            recorded_metric(recorded_store, geometry);
+            std::cout << "Recorded empty and nonempty metric roundtrips and refusal controls passed\n";
             return 0;
         }
         if (identity) {
