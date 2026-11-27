@@ -1,3 +1,4 @@
+#include "alg03_ply.hpp"
 #include "projected_sessions.hpp"
 #include "x1_roles.hpp"
 #include <cstdlib>
@@ -9,6 +10,7 @@
 #include <mantis/capture_calibration.hpp>
 #include <mantis/data_io.hpp>
 #include <mantis/device_runtime.hpp>
+#include <mantis/l1_ray_plane.hpp>
 #include <mantis/pipeline_runtime.hpp>
 #include <mantis/replay.hpp>
 #include <mantis/services.hpp>
@@ -680,9 +682,13 @@ Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
         fail(Status::invalid_argument, "Export destination already exists");
     return impl_->jobs->submit(
         "Export PLY",
-        [this, store, id, a, output](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
+        [this, store, source = artifact::ArtifactReference{a.id, a.hash}, type = std::move(a.type),
+         output](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
             context.update(0.1, "Reading artifact");
-            auto input = store->packet(id);
+            const bool alg03_result = type.name == alg03::result_type.name &&
+                                      type.schema_version == alg03::result_type.schema_version;
+            auto input = alg03_result ? detail::alg03_ply_input(*store, source.id, context.cancellation)
+                                      : store->packet(source.id);
             auto part = output;
             part += "." + Id::random().value + ".part";
             try {
@@ -691,6 +697,8 @@ Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
                 platform::durable_file(part);
                 if (std::filesystem::exists(output))
                     fail(Status::invalid_argument, "Export destination appeared while writing");
+                if (alg03_result)
+                    context.cancellation.check();
                 std::filesystem::rename(part, output);
                 platform::durable_directory(output.parent_path());
             } catch (...) {
@@ -699,7 +707,7 @@ Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
                 throw;
             }
             impl_->event("export.completed", "export", output.string());
-            return artifact::ArtifactReference{id, a.hash};
+            return source;
         });
 }
 artifact::ArtifactDescriptor Runtime::recover_artifact(const Id &id) {

@@ -31,3 +31,33 @@ The runner invokes three fresh processes: load/entry RSS baseline; fixture-only 
 ## Review receipts
 
 Read the **successful test text** in each exact-candidate Architecture Studio ON job's `ui-m0-*` artifact (`ui-m1/full-ctest.log`). Correlate PR head, tested checkout/tree, job runner, arch/ELF, Debug/Studio/sanitizer profile, executable/config/fixture identity, storage conditions and all sample/queue/outcome lines. Algorithm build hashes identify the actual compiled processing inputs. Ordinary CI green without the matching receipts does not establish native characterization. Required independent source/test review, published head acceptance and protected integration stay separate.
+
+## Public PLY follow-up
+
+`alg03-public-ply` reuses the same frozen calibration and sensor recording. It
+exports the 256-point stripe and a mixed result from that stripe through stock
+`mantisd` and the loaded first-party PLY exporter. An independently determined
+incidence threshold gives 128 accepted and 128 near-parallel rows. The checker
+reads every vertex, compares ordered binary32 bits/spacing, and reports narrowing
+error separately from the forward-geometry oracle. The same public path covers a
+repeat via CLI, coincident valid points in a typed synthetic control, the two
+zero-accepted outcomes, bad inputs, obstruction and legacy PointCloud. Project
+inventory and stored bytes are compared around the exports.
+
+The separate link-probe daemon runs the same main, runtime, adapter and exporter
+on the same project. It measures the typed reader's retained mapped extent and
+aligned replay allocations separately from the projection/native export. It
+counts linker-visible `memcpy`/`memmove` of at least one sensor packed XYZ extent;
+this excludes inlined/smaller copies, DSO internals, I/O and kernel/page cache.
+The probe verifies a single 3,072-byte position allocation reaches the Registry
+at the original address, with the original frame/calibration, and matches stock
+output. A gate after the real part-file sync proves entered-state cancellation
+and late destination obstruction before rename. No timing or RSS inference is
+made from these counts. `alg03-ply-rounding` independently checks exact midpoint,
+subnormal, carry, range/refusal and ambient floating-point controls.
+
+Build `mantis-alg03-ply-probe-daemon` and `mantis-alg03-ply-rounding-tests`, then
+run `ctest --test-dir build/<profile> -j1 -V -R '^alg03-(public-ply|ply-rounding)$'`.
+Read `ALG03_PLY_CONTEXT`, `ALG03_PLY` and `ALG03_PLY_BACKINGS` in the same native
+Architecture log artifacts described above; the two receipt populations are
+separate. This is read-side software interoperability, not physical qualification.

@@ -839,10 +839,16 @@ void stream(const std::shared_ptr<artifact::Store> &store, const Fixture &f,
 }
 } // namespace
 
+#include "ply_fixture.hpp"
+
 int main(int argc, char **argv) {
     try {
         CHECK(argc == 5);
         const std::string_view mode = argv[3];
+        if (mode == "ply-fixture") {
+            ply_fixture(argv[1], argv[2], argv[4]);
+            return 0;
+        }
         CHECK(mode == "baseline" || mode == "fixture" || mode == "campaign");
         print_phase("process_entry", usage());
         if (mode == "baseline")

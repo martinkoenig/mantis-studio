@@ -88,3 +88,31 @@ readback failure/revalidation. The Decimal enclosure oracle uses independent
 100-digit fixed-point Brown inversion of stored input pixels rather than the
 production Newton/Jacobian. Real optics/HIL, Windows/macOS native qualification,
 long soak and physical calibration remain separate evidence gates.
+
+## Export an explicitly selected result to PLY (Refs #64)
+
+Use `mantis-cli export ARTIFACT OUTPUT.ply` (or `Client::export_artifact`)
+with the exact finalized `org.mantis.Alg03Result` schema 1 artifact ID in the
+current project. Choose a new destination outside the project store. The existing
+daemon export job runs the typed reader once, including Store integrity checks,
+exact processing dependencies and arithmetic replay. No recorded images are
+reprocessed. With no source rows it fails with `empty_input`; with rows but no
+accepted points it fails with `all_rejected`. Neither produces an empty PLY.
+
+For a nonempty accepted set the job passes a temporary PointCloud to the existing
+first-party PLY exporter. It retains the processing rig frame and calibration in
+the packet, uses the accepted mask in source order (including duplicate points),
+and emits the same millimeter axes. Every axis is narrowed to IEEE 754 binary32
+with round-to-nearest, ties-to-even, without changing the floating-point environment.
+Each axis loses at most half the larger adjacent binary32 spacing, at most
+0.03125 mm under the existing 1e6 mm position cap. This is conversion error,
+separate from the algorithm's f64 geometry error and not scanner accuracy.
+
+The completed export job's `result_artifact` is the **original** ALG03 ID. In the
+same project's artifact snapshot that ID identifies the exact finalized type,
+hash and direct inputs, including the referenced observation. Use those project
+artifacts for the recorded RAW ancestry, calibration, row identities, rejection
+reasons and full precision. The compact PLY retains the usual millimeters header
+and is **not** a self-contained provenance or rejection record. There is no
+sidecar, new project artifact or change to which artifacts Studio advertises as
+PointCloud. Legacy PointCloud exports and the exporter format are unchanged.
