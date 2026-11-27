@@ -662,6 +662,7 @@ void actual_alg02(artifact::Store &s, const Graph &g) {
     b.observation = persist(s, corrupt);
     rejects(a3::prepare(s, b), Status::incompatible);
 }
+#include "../support/alg03_recorded.hpp"
 // Exercise the current typed reader on a finalized, generically readable result
 // whose only difference is a canonical, same-length prior implementation stamp.
 void result_build_identity(artifact::Store &s, const Graph &g, const std::string &expected_digest) {
@@ -714,12 +715,18 @@ int main(int argc, char **argv) {
         const bool artifact_regressions = argc == 2 && std::string_view(argv[1]) == "--artifact-regressions";
         const bool geometry_regressions = argc == 2 && std::string_view(argv[1]) == "--geometry-regressions";
         const bool identity = argc == 3 && std::string_view(argv[1]) == "--result-build-identity";
-        CHECK(argc == 1 || artifact_regressions || geometry_regressions || identity);
+        const bool recorded = argc == 2 && std::string_view(argv[1]) == "--recorded";
+        CHECK(argc == 1 || artifact_regressions || geometry_regressions || identity || recorded);
         if (argc == 1)
             metadata_comparison_regression();
         Temp temp;
-        auto store = std::make_unique<artifact::Store>(temp.path);
+        auto store = std::make_unique<artifact::Store>(temp.path, recorded_checkpoint);
         auto geometry = graph(*store);
+        if (recorded) {
+            recorded_metric(*store, geometry);
+            std::cout << "Recorded bundle metric roundtrip and refusal controls passed\n";
+            return 0;
+        }
         if (identity) {
             result_build_identity(*store, geometry, argv[2]);
             return 0;

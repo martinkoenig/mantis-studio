@@ -45,6 +45,43 @@ identity, observed Store state and initiating error. It does not reserve again,
 claim rollback or convert committed generic storage into typed success. Recovery
 must be explicit and must revalidate the same retained object.
 
+## One recorded-bundle increment (Refs #64)
+
+`process_recorded` in the internal `l1_recorded.hpp` composes the existing
+cancellable `BundleCaptureReader`, ALG-02 extractor and ALG-03 typed node. Supply
+an exact finalized local RawCapture-3 reference in the extractor configuration,
+a zero-based record ordinal (including evidence-only records), explicit camera/
+emitter/stream/line and subpixel configuration, and immutable plane, policy,
+camera and rig references. Control-only selections are refused; no first-image
+or active-calibration fallback is made. The reader validates the prefix through
+the selection, not the unvisited suffix or successful completion of the run.
+
+Two lossless typed plans straddle the existing immutable observation boundary:
+extract once, persist the exact observation, prepare its geometry, then execute
+triangulation and persist the existing result type. `persist_result` owns typed
+readback and the success boundary; the wrapper performs no redundant readback or
+cancellation check afterward. Success returns both artifact references. Repeating
+creates distinct artifact IDs, with identical observation bytes and metric columns;
+only the derived observation ID differs in the metric manifest. RAW is unchanged.
+
+Failures retain their status, distinguish missing/mismatched inputs, corruption
+and cancellation, and publish no successful return. These are not multi-artifact
+transactions: later geometry failure can leave a finalized observation, and
+commit/readback failure can leave an OPEN/RECOVERABLE/FINALIZED reservation. The
+existing Store receipt identifies retained artifacts and observed state; later
+failures include the earlier observation receipt without discarding a metric
+receipt. Recovery/revalidation is explicit, never an implicit retry or deletion.
+
+`alg03-recorded-integration` uses the existing integration executable with a
+recorded control prefix and padded RAW8 quadratic image, an independent
+long-double forward-projection oracle, exact lineage/version and repeat checks,
+source/calibration refusals, real segment corruption/restoration and cancellation
+after observation journaling with same-ID recovery. It retains the 60-second
+integration deadline separately from the pre-existing cases. This is one offline
+software increment, not whole-issue #64 completion: no service/SDK/UI surface,
+worker automation, live acquisition, physical accuracy, native ARM throughput,
+full-job backpressure or production qualification is claimed.
+
 Tests include actual standalone dependency refusals, low-cap/large-shallow decode
 admission, entered-state post-reservation failure/cancellation and FINALIZED
 readback failure/revalidation. The Decimal enclosure oracle uses independent
