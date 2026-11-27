@@ -21,6 +21,8 @@ MAX_OUTPUT_BYTES = 1_048_576
 
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'shadow-configured'
+PROTO = 'protocol/protobuf/mantis.proto'
+RULE_RECEIPT = 'mantis-protobuf-ninja-query.json'
 
 
 def digest(data):
@@ -233,6 +235,11 @@ def produce(root, generator='Ninja', *, deadline=None):
         stream.write('// changed shared interface\n')
     for args in (['add', '.'], ['commit', '-m', 'shared contract change']):
         run(['git', '-C', str(source), *args], root, env=env, deadline=deadline)
+    # The last commit isolates the generator input for the reachability oracle.
+    with (source / PROTO).open('a') as stream:
+        stream.write('\n// changed generator input\n')
+    for args in (['add', PROTO], ['commit', '-m', 'generator input change']):
+        run(['git', '-C', str(source), *args], root, env=env, deadline=deadline)
     commit = run(['git', '-C', str(source), 'rev-parse', 'HEAD'], root, deadline=deadline).decode().strip()
     tree = run(['git', '-C', str(source), 'rev-parse', 'HEAD^{tree}'], root, deadline=deadline).decode().strip()
     query = build / '.cmake/api/v1/query'
@@ -241,6 +248,14 @@ def produce(root, generator='Ninja', *, deadline=None):
         (query / kind).touch()
     run(['cmake', '-S', str(source), '-B', str(build), '-G', generator,
          '-DCMAKE_BUILD_TYPE=Debug'], root, deadline=deadline)
+    queries = {}
+    ninja_paths = ('build.ninja', 'CMakeFiles/rules.ninja')
+    if generator == 'Ninja':
+        # Capture graph metadata before compilation can populate Ninja's deps log.
+        ninja_pins = {p: digest((build / p).read_bytes()) for p in ninja_paths}
+        for output in ('mantis.pb.cc', 'mantis.pb.h'):
+            queries[output] = run(['ninja', '-C', str(build), '-t', 'query', output],
+                                  root, deadline=deadline).decode()
     # Tiny executable artifacts are needed for CTest's real command expansion.
     # One compiler only; never run these test executables.
     run(['cmake', '--build', str(build), '--config', 'Debug', '--parallel', '1'], root, deadline=deadline)
@@ -253,10 +268,23 @@ def produce(root, generator='Ninja', *, deadline=None):
                 'roots': {'source': str(source), 'build': str(build)}, 'configuration': 'Debug',
                 'generator': generator, 'index': indexes[0].relative_to(build).as_posix(),
                 'ctest': 'ctest.json', 'files': []}
-    for path in sorted(source.iterdir()):
+    for path in sorted(source.iterdir()) + [source / PROTO]:
         if path.is_file():
-            manifest['files'].append({'root': 'source', 'path': path.name, 'sha256': digest(path.read_bytes())})
-    for path in sorted((build / '.cmake/api/v1/reply').glob('*.json')) + [build / 'ctest.json', build / 'CMakeCache.txt']:
+            manifest['files'].append({'root': 'source', 'path': path.relative_to(source).as_posix(),
+                                      'sha256': digest(path.read_bytes())})
+    reply = indexes[0].parent
+    extra = []
+    if generator == 'Ninja':
+        assert ninja_pins == {p: digest((build / p).read_bytes()) for p in ninja_paths}, 'Ninja graph changed after query'
+        bindings = {**ninja_pins, PROTO: digest((source / PROTO).read_bytes()),
+                    'index': digest(indexes[0].read_bytes()),
+                    'cache': digest(next(reply.glob('cache-*.json')).read_bytes()),
+                    'owner': digest(next(reply.glob('target-mantis-wire-*.json')).read_bytes())}
+        receipt = {k: manifest[k] for k in ('source', 'roots', 'configuration', 'generator')}
+        receipt.update(schema='ci110-mantis-protobuf-ninja-query-v1', sha256=bindings, queries=queries)
+        (build / RULE_RECEIPT).write_bytes(encode(receipt))
+        extra = [build / p for p in (*ninja_paths, RULE_RECEIPT)]
+    for path in sorted(reply.glob('*.json')) + [build / 'ctest.json', build / 'CMakeCache.txt', *extra]:
         manifest['files'].append({'root': 'build', 'path': path.relative_to(build).as_posix(),
                                   'sha256': digest(path.read_bytes())})
     path = root / 'inputs.json'

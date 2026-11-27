@@ -720,6 +720,132 @@ class ConfiguredInventory(unittest.TestCase):
     def unknowns(self, result):
         return {u['reason'] for u in result['unknowns']}
 
+    def test_real_protobuf_rule_reachability_miss_and_exact_restoration(self):
+        source = self.inv['roots']['source']
+        base = subprocess.check_output(['git', '-C', source, 'rev-parse', 'HEAD^'], timeout=5).decode().strip()
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', source,
+                   '--event', 'push', '--ref', 'refs/heads/develop', '--base', base,
+                   '--head', self.inv['source']['commit']]
+
+        def collect(argv):
+            p = subprocess.run(argv, capture_output=True, timeout=10, check=True)
+            self.assertEqual(p.stderr, b'')
+            return json.loads(p.stdout)
+
+        baseline = collect(command)
+        self.assertEqual([r['path'] for r in baseline['acquisition']['diff']['records']], [self.fixture.PROTO])
+        self.assertEqual(baseline.pop('schema'), 'mantis-git-shadow-v1')
+        self.assertTrue(baseline['decision']['full_matrix_would_select'])
+
+        def configured():
+            raw = self.fixture.encode(self.inv)
+            self.path.write_bytes(raw)
+            report = collect(command + ['--configured-inputs', str(self.path), '--configured-inputs-sha256',
+                                        self.fixture.digest(raw)])
+            self.assertEqual(report.pop('schema'), 'mantis-git-shadow-v2')
+            result = report.pop('configured_diagnostic')
+            self.assertEqual(shadow.policy.canonical(report), shadow.policy.canonical(baseline),
+                             'generator evidence changed the unconditional FULL projection')
+            self.full(result)
+            self.assertEqual(result['status'], 'ingested', result)
+            return result
+
+        def expect_hit(result):
+            reached = {t['name'] for t in result['targets'] if t['id'] in result['target_reasons']}
+            self.assertEqual(reached, {'mantis-wire', 'middle', 'app'}, 'configured generator consumer MISS')
+            self.assertEqual(result['impacted_test_ids'], ['app-contract'], 'configured CTest consumer MISS')
+            wire = next(t['id'] for t in result['targets'] if t['name'] == 'mantis-wire')
+            self.assertEqual([e for e in result['file_target_edges'] if e['file'] == self.fixture.PROTO],
+                             [{'file': self.fixture.PROTO, 'target': wire, 'evidence': 'observed',
+                               'reason': 'ninja-query-protobuf-cxx'}])
+
+        legacy = configured()
+        self.assertEqual(legacy['impacted_test_ids'], [])
+        self.assertIn('changed-path-consumers-unresolved', self.unknowns(legacy))
+        self.inv['schema'] = 'ci110-configured-inputs-v2'
+        hit = configured()
+        expect_hit(hit)
+
+        name = self.fixture.RULE_RECEIPT
+        exact = self.original_bytes['build', name]
+        receipt = json.loads(exact)
+        edge = '    ' + str(Path(source) / self.fixture.PROTO) + '\n'
+        for output, text in receipt['queries'].items():
+            self.assertEqual(text.count(edge), 1, 'fixture query must witness the real input edge')
+            receipt['queries'][output] = text.replace(edge, '')
+        self.repin('build', name, receipt)
+        miss = configured()
+        self.assertEqual(miss['target_reasons'], {})
+        self.assertEqual(miss['impacted_test_ids'], [])
+        self.assertTrue({'protobuf-ninja-rule-input-missing', 'changed-path-consumers-unresolved'}
+                        <= self.unknowns(miss))
+        # The very same positive oracle goes RED on a repinned semantic loss.
+        with self.assertRaisesRegex(AssertionError, 'configured generator consumer MISS'):
+            expect_hit(miss)
+        self.repin('build', name, exact)
+        restored = configured()
+        expect_hit(restored)
+        self.assertEqual(restored, hit, 'exact evidence restoration changed the diagnostic')
+
+    def test_protobuf_rule_unknown_on_stale_missing_or_unsupported_evidence(self):
+        name, proto = self.fixture.RULE_RECEIPT, self.fixture.PROTO
+        exact = self.original_bytes['build', name]
+        receipt = json.loads(exact)
+        input_line = '    ' + str(Path(self.inv['roots']['source']) / proto) + '\n'
+
+        def unknown(reason, result):
+            self.full(result)
+            self.assertEqual(result['status'], 'ingested', result)
+            self.assertEqual(result['target_reasons'], {})
+            self.assertEqual(result['impacted_test_ids'], [])
+            self.assertIn({'reason': reason, 'subject': proto, 'evidence': 'unresolved'}, result['unknowns'])
+
+        self.inv['schema'] = 'ci110-configured-inputs-v2'
+        self.inv['files'] = [r for r in self.inv['files'] if r['path'] != name]
+        unknown('protobuf-ninja-evidence-missing', self.diagnostic((proto,)))
+        self.inv = self.copy(self.original)
+        self.inv['schema'] = 'ci110-configured-inputs-v2'
+        mismatch = 'protobuf-ninja-evidence-context-mismatch'
+        unsupported = 'protobuf-ninja-evidence-unsupported'
+        for field, value, reason in (
+                ('source', {**receipt['source'], 'commit': self.base}, mismatch),
+                ('roots', {**receipt['roots'], 'build': receipt['roots']['source']}, mismatch),
+                ('configuration', 'Release', mismatch), ('generator', 'Ninja Multi-Config', mismatch),
+                ('schema', 'unrecognized', unsupported), ('query_file', '../arbitrary.query', unsupported)):
+            with self.subTest(field=field):
+                self.repin('build', name, {**receipt, field: value})
+                unknown(reason, self.diagnostic((proto,)))
+        for replacement, reason in (
+                (input_line * 2, 'protobuf-ninja-rule-ambiguous'),
+                ('    || ' + input_line[4:], unsupported),
+                ('    ' + proto + '\n', 'protobuf-ninja-rule-input-missing')):
+            with self.subTest(query=reason):
+                queries = dict(receipt['queries'])
+                queries['mantis.pb.h'] = queries['mantis.pb.h'].replace(input_line, replacement)
+                self.repin('build', name, {**receipt, 'queries': queries})
+                unknown(reason, self.diagnostic((proto,)))
+        self.repin('build', name, exact)
+        # The outer bytes are all correctly repinned, but the query snapshot is stale.
+        ninja = self.original_bytes['build', 'build.ninja']
+        self.repin('build', 'build.ninja', ninja + b'\n# new graph revision\n')
+        unknown(mismatch, self.diagnostic((proto,)))
+        self.repin('build', 'build.ninja', ninja)
+
+        path, owner = self.fixture.target_document(self.inv, 'mantis-wire')
+        header = next(row for row in owner['sources'] if row['path'].endswith('/mantis.pb.h'))
+        header['path'] = str(Path(header['path']).parent / 'elsewhere' / 'mantis.pb.h')
+        self.repin('build', path, owner)
+        self.repin('build', name, {**receipt, 'sha256': {**receipt['sha256'],
+                   'owner': self.fixture.digest(self.fixture.encode(owner))}})
+        unknown('protobuf-ninja-codemodel-mismatch', self.diagnostic((proto,)))
+
+        multi, _, _ = self.multi_inputs
+        raw = self.fixture.encode({**multi, 'schema': 'ci110-configured-inputs-v2'})
+        other = self.root / 'multi-rule-inputs.json'
+        other.write_bytes(raw)
+        unknown(unsupported, self.configured.diagnose(other, self.fixture.digest(raw), multi['source'],
+                                                     [{'path': proto}]))
+
     def test_real_named_direct_transitive_and_header_oracles(self):
         result = self.diagnostic()
         self.assertEqual(result['status'], 'ingested', result)
