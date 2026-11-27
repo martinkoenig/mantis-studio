@@ -115,7 +115,7 @@ mantis_library(calibration-artifacts mantis-calibration mantis-artifact-store)
 target_link_libraries(mantis-calibration-artifacts PRIVATE nlohmann_json::nlohmann_json)
 # Internal artifact-scoped ALG03 CPU node; no service, SDK or registry surface.
 mantis_library(alg03 mantis-pipeline-runtime mantis-calibration-artifacts)
-target_sources(mantis-alg03 PRIVATE src/alg03/documents.cpp src/alg03/artifacts.cpp src/alg03/numeric.cpp)
+target_sources(mantis-alg03 PRIVATE src/alg03/documents.cpp src/alg03/artifacts.cpp src/alg03/numeric.cpp src/alg03/recorded.cpp)
 target_link_libraries(mantis-alg03 PRIVATE nlohmann_json::nlohmann_json)
 if(MSVC)
  target_compile_options(mantis-alg03 PRIVATE /fp:strict)
@@ -125,6 +125,7 @@ endif()
 set(mantis_alg03_fingerprint_inputs
  src/alg03/alg03.cpp src/alg03/artifacts.cpp src/alg03/documents.cpp src/alg03/numeric.cpp
  src/alg03/private.hpp src/alg03/include/mantis/l1_ray_plane.hpp
+ src/alg03/recorded.cpp src/alg03/include/mantis/l1_recorded.hpp
  src/artifact-store/artifact-store.cpp src/artifact-store/include/mantis/artifact_store.hpp
  src/calibration-artifacts/codecs.hpp src/calibration/include/mantis/calibration_solve.hpp
  src/data/include/mantis/semantic_packet.hpp src/data/include/mantis/projected_light.hpp
@@ -840,10 +841,11 @@ if(BUILD_TESTING)
  target_include_directories(mantis-alg03-integration-tests SYSTEM PRIVATE ${OpenCV_INCLUDE_DIRS})
  target_link_libraries(mantis-alg03-integration-tests PRIVATE mantis-alg03 mantis-calibration-solver-opencv opencv_core opencv_calib3d nlohmann_json::nlohmann_json)
  add_test(NAME alg03-integration COMMAND mantis-alg03-integration-tests)
+ add_test(NAME alg03-recorded-integration COMMAND mantis-alg03-integration-tests --recorded)
  add_test(NAME alg03-artifact-regressions COMMAND mantis-alg03-integration-tests --artifact-regressions)
  add_test(NAME alg03-geometry-regressions COMMAND mantis-alg03-integration-tests --geometry-regressions)
  add_test(NAME alg03-result-build-identity COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/alg03_build_identity.py $<TARGET_FILE:mantis-alg03-integration-tests>)
- set_tests_properties(alg03-integration alg03-artifact-regressions alg03-geometry-regressions alg03-result-build-identity PROPERTIES TIMEOUT 60)
+ set_tests_properties(alg03-integration alg03-recorded-integration alg03-artifact-regressions alg03-geometry-regressions alg03-result-build-identity PROPERTIES TIMEOUT 60)
  add_executable(mantis-alg03-benchmark benchmarks/alg03.cpp)
  target_include_directories(mantis-alg03-benchmark SYSTEM PRIVATE ${OpenCV_INCLUDE_DIRS})
  target_link_libraries(mantis-alg03-benchmark PRIVATE mantis-alg03 mantis-calibration-solver-opencv opencv_core opencv_calib3d)
