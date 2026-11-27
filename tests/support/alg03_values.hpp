@@ -84,20 +84,23 @@ template <class T> inline data::ExactCalibrationReference exact(const ca::Stored
             data::ContentReference{
                 v.descriptor.id, {v.descriptor.type.name, 1}, v.descriptor.hash, v.value.revision.revision}};
 }
-inline a3::Plane plane(const Graph &g) {
+inline a3::Plane plane(const Graph &g, const data::ComponentId &component, const data::LineIdentity &line) {
     a3::Plane p;
     p.rig = exact(g.rig);
     p.frame = g.rig.value.solution.config.rig_frame;
     p.normal_xyz = {0, -1, 0};
     p.offset_mm = 800;
-    auto source = observation_fixture::observation();
-    p.line = source.line_dictionary[0];
-    p.cameras = {{source.context.source.frame.camera, g.left.value.solution.camera, exact(g.left)}};
+    p.line = line;
+    p.cameras = {{component, g.left.value.solution.camera, exact(g.left)}};
     p.producer = {{"org.mantis.alg03.declared-synthetic-plane"},
                   {1, 0, 0},
                   "fixture-no-optical-calibration",
                   data::Unavailable{}};
     return p;
+}
+inline a3::Plane plane(const Graph &g) {
+    const auto source = observation_fixture::observation();
+    return plane(g, source.context.source.frame.camera, source.line_dictionary[0]);
 }
 inline a3::Policy policy(a3::SourceContract source = a3::SourceContract::synthetic_reference_1) {
     a3::Policy p;
