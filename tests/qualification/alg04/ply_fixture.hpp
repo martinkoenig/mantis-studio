@@ -7,7 +7,8 @@ void ply_fixture(const std::filesystem::path &project, const std::filesystem::pa
                  const std::filesystem::path &calibration) {
     const auto store = std::make_shared<artifact::Store>(project);
     const auto g = fixed_graph(*store, calibration);
-    const auto f = record(*store, g);
+    constexpr std::array records{Pattern::stripe, Pattern::zero, Pattern::unresolved};
+    const auto f = record(*store, g, records);
     const auto &t = g.rig.value.solution.rig.T_rig_from_left.matrix;
     std::array<std::array<long double, 3>, rows> expected{};
     std::array<double, rows> incidence{};
@@ -56,7 +57,7 @@ void ply_fixture(const std::filesystem::path &project, const std::filesystem::pa
             CHECK(value<uint32_t>(*p, "reason_bits", row) == (accepted ? 0u : rejected_reason));
             if (!accepted)
                 continue;
-            CHECK(value<float>(*p, "source_pixel", row) == first + row);
+            CHECK(value<float>(*p, "source_pixel", row) == static_cast<float>(first + row));
             CHECK(value<float>(*p, "source_pixel", row, 1) == packed::vertex);
             std::array<double, 3> point{};
             for (size_t axis = 0; axis < point.size(); ++axis) {
@@ -90,7 +91,7 @@ void ply_fixture(const std::filesystem::path &project, const std::filesystem::pa
     auto zero = f.request;
     zero.record = 2; // Literal zero, optical ON.
     process("empty_input", zero, "empty_input", 0, 0, 0);
-    zero.record = 6; // Same stripe, optical Unknown.
+    zero.record = 3; // Same stripe, optical Unknown.
     process("all_rejected", zero, "all_rejected", rows, 0, a3::unresolved_attribution);
 
     // Separate typed synthetic control: coincident valid coordinates are not
@@ -138,7 +139,10 @@ void ply_fixture(const std::filesystem::path &project, const std::filesystem::pa
     lookalike.attributes.push_back(legacy.attributes.front());
     put("tensor", {schema::tensor.name, 1}, lookalike, {});
     const auto provenance = store->get({out.at("sensor").at("id").get<std::string>()}).provenance;
-    put("wrong_version", {a3::result_type.name, 2}, *sensor, provenance);
+    // A recognized ALG03 name with an unsupported version must not fall through
+    // to the legacy exporter even when its contents satisfy the PointCloud ABI.
+    put("wrong_version", {a3::result_type.name, 2}, legacy, provenance);
+    put("wrong_envelope", a3::result_type, legacy, provenance);
     out["unfinalized"] = store->begin(a3::result_type, provenance).value;
     auto incompatible = *sensor;
     auto manifest_bytes = get(incompatible.attributes.front().buffer.map_read());

@@ -34,7 +34,8 @@ Read the **successful test text** in each exact-candidate Architecture Studio ON
 
 ## Public PLY follow-up
 
-`alg03-public-ply` reuses the same frozen calibration and sensor recording. It
+`alg03-public-ply` reuses the frozen calibration and the stripe, literal-zero and
+optical-Unknown records from the sensor fixture above. It
 exports the 256-point stripe and a mixed result from that stripe through stock
 `mantisd` and the loaded first-party PLY exporter. An independently determined
 incidence threshold gives 128 accepted and 128 near-parallel rows. The checker

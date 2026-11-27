@@ -101,7 +101,8 @@ def assert_no_output(path):
 def assert_job(client, handle, state, *, source='', diagnostic=None):
     try:
         result = handle.wait(timeout=15)
-        assert state == 'Completed' and result and result.id == source, (handle.id, state, result)
+        assert state == 'Completed', f'expected {state}: {diagnostic}; job completed'
+        assert result and result.id == source, (source, result)
     except mantis.MantisError as error:
         assert state != 'Completed', f'positive export failed: {error}'
         assert diagnostic and diagnostic in str(error), (diagnostic, str(error))
@@ -170,7 +171,9 @@ def run_exports(root, client, cli, env, project, fixture):
     assert not list(root.glob(duplicate.name + '.*.part'))
 
     for label, message in (('empty_input', 'empty_input'), ('all_rejected', 'all_rejected'),
-                           ('tensor', 'Exporter input type mismatch'), ('wrong_version', 'Exporter input type mismatch'),
+                           ('tensor', 'Exporter input type mismatch'),
+                           ('wrong_version', 'ALG03 export: unsupported result schema'),
+                           ('wrong_envelope', 'Expected flat Tensor1 document'),
                            ('wrong_build', 'Attribute byte mismatch'), ('corrupt', 'Object integrity check failed')):
         ref = fixture[label]
         path = root / (label + '.ply')

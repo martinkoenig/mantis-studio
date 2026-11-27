@@ -132,7 +132,7 @@ struct Fixture {
     a3::RecordedRequest request;
     ContentReference tight;
 };
-Fixture record(artifact::Store &s, const Graph &g) {
+Fixture record(artifact::Store &s, const Graph &g, std::span<const Pattern> records = patterns) {
     const auto &cam = g.left.value.solution.camera;
     CHECK(cam.image_width == width && cam.image_height == height);
     auto header = storage_fixture::header();
@@ -145,8 +145,8 @@ Fixture record(artifact::Store &s, const Graph &g) {
     startup.published = run.host(0);
     s.append_bundle(raw_id, startup);
     auto predecessor = startup.evidence.key;
-    for (size_t i = 0; i < patterns.size(); ++i) {
-        const auto pattern = patterns[i];
+    for (size_t i = 0; i < records.size(); ++i) {
+        const auto pattern = records[i];
         auto b = l1_fixture::image_bundle(
             true, width, height, [=](uint32_t x, uint32_t y) { return signal(pattern, x, y); },
             packed::padding);
@@ -159,7 +159,7 @@ Fixture record(artifact::Store &s, const Graph &g) {
     auto outcome = storage_fixture::outcome(RecordedRunDisposition::completed, AcquisitionReason::none);
     outcome.run = run.run;
     outcome.generation = run.capture;
-    s.record_run_outcome(raw_id, {patterns.size() + 1, outcome});
+    s.record_run_outcome(raw_id, {records.size() + 1, outcome});
     auto raw = s.finalize(raw_id);
     auto config = packed::extractor(g, run, raw);
     CHECK(config.background_level == 48 && config.minimum_signal == 64 && !config.dark);

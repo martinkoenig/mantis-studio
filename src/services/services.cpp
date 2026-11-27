@@ -685,8 +685,9 @@ Id Runtime::export_artifact(const Id &id, const std::filesystem::path &path) {
         [this, store, source = artifact::ArtifactReference{a.id, a.hash}, type = std::move(a.type),
          output](jobs::Context &context) -> std::optional<artifact::ArtifactReference> {
             context.update(0.1, "Reading artifact");
-            const bool alg03_result = type.name == alg03::result_type.name &&
-                                      type.schema_version == alg03::result_type.schema_version;
+            const bool alg03_result = type.name == alg03::result_type.name;
+            if (alg03_result && type.schema_version != 1)
+                fail(Status::incompatible, "ALG03 export: unsupported result schema");
             auto input = alg03_result ? detail::alg03_ply_input(*store, source.id, context.cancellation)
                                       : store->packet(source.id);
             auto part = output;

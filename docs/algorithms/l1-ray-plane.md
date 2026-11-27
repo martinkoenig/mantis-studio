@@ -98,6 +98,7 @@ daemon export job runs the typed reader once, including Store integrity checks,
 exact processing dependencies and arithmetic replay. No recorded images are
 reprocessed. With no source rows it fails with `empty_input`; with rows but no
 accepted points it fails with `all_rejected`. Neither produces an empty PLY.
+An unsupported ALG03 schema is refused, not sent to the legacy exporter.
 
 For a nonempty accepted set the job passes a temporary PointCloud to the existing
 first-party PLY exporter. It retains the processing rig frame and calibration in
