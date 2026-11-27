@@ -51,7 +51,7 @@ struct Graph {
     ca::Stored<ca::CameraArtifact> left, right;
     ca::Stored<ca::RigArtifact> rig;
 };
-inline Graph graph(artifact::Store &s) {
+inline std::pair<ca::Stored<ca::TargetArtifact>, std::vector<Id>> calibration_sources(artifact::Store &s) {
     calibration::CalibrationTarget target;
     target.grid = {8, 6, 40};
     target.pattern = calibration::CharucoDefinition{"DICT_6X6_250", 25};
@@ -60,6 +60,10 @@ inline Graph graph(artifact::Store &s) {
     auto t = get(ca::create_calibration_target(s, target));
     std::vector<Id> captures{raw(s), raw(s)};
     std::sort(captures.begin(), captures.end());
+    return {std::move(t), std::move(captures)};
+}
+inline Graph graph(artifact::Store &s) {
+    auto [t, captures] = calibration_sources(s);
     auto data = m5fixture::fixture(t.value.target, captures);
     auto d = get(ca::create_calibration_dataset(s, data, t.reference()));
     calibration::MonoSolveConfig mono;

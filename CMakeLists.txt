@@ -832,6 +832,7 @@ endif()
 
 # Synthetic ALG03 qualification source. Execution requires normal native admission.
 if(BUILD_TESTING)
+ add_subdirectory(tests/qualification/alg04)
  add_executable(mantis-alg03-numeric-tests tests/unit/alg03_numeric.cpp)
  target_link_libraries(mantis-alg03-numeric-tests PRIVATE mantis-alg03 nlohmann_json::nlohmann_json)
  add_test(NAME alg03-numeric COMMAND mantis-alg03-numeric-tests)
