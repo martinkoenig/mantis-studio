@@ -22,18 +22,31 @@ data::AcquisitionBundle recorded_image(const Graph &g, const l1_fixture::Signal 
     return bundle;
 }
 
-a3::RecordedRequest record_image(artifact::Store &s, const Graph &g, const data::AcquisitionBundle &bundle) {
-    constexpr uint64_t selected_record = 1; // After a startup bundle with no FrameSet.
-    auto raw = s.begin_projected_capture(storage_fixture::header());
-    s.append_bundle(raw, storage_fixture::bundle(0));
+artifact::ArtifactDescriptor record_capture(artifact::Store &s, const data::AcquisitionBundle &bundle,
+                                            const data::ProjectedCaptureHeader &header) {
+    auto raw = s.begin_projected_capture(header);
+    auto startup = storage_fixture::bundle(0);
+    startup.key.run_id = startup.evidence.key.run_id = header.run;
+    startup.evidence.participants = header.program.participants;
+    startup.evidence.program = header.program.identity;
+    s.append_bundle(raw, startup);
     s.append_bundle(raw, bundle);
-    s.record_run_outcome(raw, {2, storage_fixture::outcome(data::RecordedRunDisposition::completed,
-                                                           data::AcquisitionReason::none)});
-    auto descriptor = s.finalize(raw);
+    auto outcome =
+        storage_fixture::outcome(data::RecordedRunDisposition::completed, data::AcquisitionReason::none);
+    outcome.run = header.run;
+    outcome.generation = header.generation;
+    s.record_run_outcome(raw, {2, outcome});
+    return s.finalize(raw);
+}
+
+a3::RecordedRequest record_image(artifact::Store &s, const Graph &g, const data::AcquisitionBundle &bundle,
+                                 const data::ProjectedCaptureHeader &header = storage_fixture::header()) {
+    constexpr uint64_t selected_record = 1; // After a startup bundle with no FrameSet.
+    const auto descriptor = record_capture(s, bundle, header);
     auto config = l1_fixture::subpixel_config();
     config.optical_frame = g.left.value.solution.camera.optical_frame;
     config.roi = pipeline::L1CandidateConfig::Roi{637, 396, 3, 9};
-    config.raw_input = {raw, {"org.mantis.RawCapture", 3}, descriptor.hash, 0};
+    config.raw_input = {descriptor.id, {"org.mantis.RawCapture", 3}, descriptor.hash, 0};
     auto p = plane(g);
     p.line = {config.emitter, config.pattern, config.pattern_revision, config.line};
     p.cameras[0].component = config.camera;
@@ -168,11 +181,13 @@ void recorded_no_line(const std::shared_ptr<artifact::Store> &store, const Graph
     CHECK(storage_fixture::encode(s.bundle(raw.id, request.record)) == selected_bytes);
 }
 
+uint16_t recorded_stripe(uint32_t, uint32_t y) {
+    return y == 399 ? 155 : y == 400 ? 179 : y == 401 ? 171 : y == 398 ? 99 : y == 402 ? 131 : 12;
+}
+
 void recorded_metric(const std::shared_ptr<artifact::Store> &store, const Graph &g) {
     auto &s = *store;
-    const auto bundle = recorded_image(g, [](uint32_t, uint32_t y) -> uint16_t {
-        return y == 399 ? 155 : y == 400 ? 179 : y == 401 ? 171 : y == 398 ? 99 : y == 402 ? 131 : 12;
-    });
+    const auto bundle = recorded_image(g, recorded_stripe);
     const auto request = record_image(s, g, bundle);
     const auto &config = request.extractor;
     const auto &raw = config.raw_input.id;
