@@ -3,11 +3,24 @@
 #include <bit>
 #include <filesystem>
 #include <mantis/data_io.hpp>
-#include <mantis/l1_ray_plane.hpp>
+#include <mantis/l1_recorded.hpp>
 #include <mantis/laser_observation_io.hpp>
 #include <sstream>
 
 namespace mantis::alg03::detail {
+// Optional one-call diagnostics, not part of any persisted artifact or public
+// interface. A slot is present only if the corresponding executor succeeded.
+struct RecordedStageMetrics {
+    uint64_t retained_payload_bytes{}, retained_payload_limit_bytes{}, wall_ns{}, node_wall_ns{};
+    std::optional<uint64_t> process_cpu_ns;
+    size_t nodes{};
+};
+struct RecordedMetrics {
+    std::optional<RecordedStageMetrics> extraction, triangulation;
+};
+Result<RecordedResult> process_recorded(std::shared_ptr<artifact::Store>, const RecordedRequest &,
+                                        const CancellationToken &, RecordedMetrics *);
+
 using Json = nlohmann::json;
 namespace m4 = calibration::artifacts::codec;
 inline void require(bool ok, std::string_view message, Status code = Status::corrupt) {

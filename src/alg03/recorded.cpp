@@ -1,5 +1,6 @@
 #include "private.hpp"
-#include <mantis/l1_recorded.hpp>
+#include <chrono>
+#include <ctime>
 
 namespace mantis::alg03 {
 using namespace detail;
@@ -10,18 +11,44 @@ template <class T> T checked(Result<T> r) {
     return std::move(*r);
 }
 data::SemanticPublished execute(pipeline::SemanticNode node, schema::DataTypeId type,
-                                data::SemanticPublished input, const CancellationToken &token) {
+                                data::SemanticPublished input, const CancellationToken &token,
+                                std::optional<RecordedStageMetrics> *metrics) {
     pipeline::NodeDescriptor source;
     source.id = "recorded-input";
     source.outputs = {{"source", type}};
     pipeline::SemanticGraph graph;
     graph.nodes = {{source, {}}, std::move(node)};
     graph.connections = {{0, 0, 1, 0, 1, pipeline::QueuePolicy::lossless}};
-    return checked(pipeline::execute(checked(pipeline::compile(graph)), std::move(input), token)).output;
+    auto plan = checked(pipeline::compile(graph));
+    if (!metrics)
+        return checked(pipeline::execute(plan, std::move(input), token)).output;
+    const auto cpu_start = std::clock();
+    const auto start = std::chrono::steady_clock::now();
+    auto outcome = pipeline::execute(plan, std::move(input), token);
+    const auto end = std::chrono::steady_clock::now();
+    const auto cpu_end = std::clock();
+    auto execution = checked(std::move(outcome));
+    auto &receipt = metrics->emplace();
+    receipt.retained_payload_bytes = execution.retained_payload_high_water;
+    receipt.retained_payload_limit_bytes = plan.graph.retained_payload_limit_bytes;
+    receipt.wall_ns =
+        static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+    if (cpu_start != std::clock_t(-1) && cpu_end != std::clock_t(-1) && cpu_end >= cpu_start)
+        receipt.process_cpu_ns = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::duration<double>(double(cpu_end - cpu_start) / CLOCKS_PER_SEC))
+                .count());
+    receipt.nodes = execution.timings.size();
+    for (const auto &timing : execution.timings)
+        receipt.node_wall_ns += timing.nanoseconds;
+    return std::move(execution.output);
 }
 } // namespace
-Result<RecordedResult> process_recorded(std::shared_ptr<artifact::Store> store,
-                                        const RecordedRequest &request, const CancellationToken &token) {
+Result<RecordedResult> detail::process_recorded(std::shared_ptr<artifact::Store> store,
+                                                const RecordedRequest &request,
+                                                const CancellationToken &token, RecordedMetrics *metrics) {
+    if (metrics)
+        *metrics = {};
     return result([&] {
         token.check();
         require(bool(store), "Recorded processing requires Store", Status::invalid_argument);
@@ -51,7 +78,8 @@ Result<RecordedResult> process_recorded(std::shared_ptr<artifact::Store> store,
         require(bundle.frameset && bundle.evidence.disposition == data::AcquisitionDisposition::captured,
                 "Selected bundle is not a captured image bundle", Status::incompatible);
         auto extracted = execute(std::move(extractor), schema::acquisition_bundle,
-                                 data::publish(data::SemanticPacket{std::move(bundle)}), token);
+                                 data::publish(data::SemanticPacket{std::move(bundle)}), token,
+                                 metrics ? &metrics->extraction : nullptr);
         const auto &observation = std::get<data::LaserObservation>(*extracted);
         token.check();
         auto id = store->begin_laser_observation();
@@ -75,8 +103,8 @@ Result<RecordedResult> process_recorded(std::shared_ptr<artifact::Store> store,
             // prepare requires a persisted exact observation; do not rerun extraction
             // to cross that immutable boundary. The second typed plan consumes the
             // same publication and uses the existing Prepared equality guards.
-            auto metric =
-                execute(triangulator(prepared), schema::laser_observation, std::move(extracted), token);
+            auto metric = execute(triangulator(prepared), schema::laser_observation, std::move(extracted),
+                                  token, metrics ? &metrics->triangulation : nullptr);
             auto packet = std::get<data::Published>(*metric);
             // persist_result owns the reservation, typed readback and failure
             // receipt. No additional fallible work after its success boundary.
@@ -94,5 +122,9 @@ Result<RecordedResult> process_recorded(std::shared_ptr<artifact::Store> store,
         }
         return std::move(*processed);
     });
+}
+Result<RecordedResult> process_recorded(std::shared_ptr<artifact::Store> store,
+                                        const RecordedRequest &request, const CancellationToken &token) {
+    return detail::process_recorded(std::move(store), request, token, nullptr);
 }
 } // namespace mantis::alg03
