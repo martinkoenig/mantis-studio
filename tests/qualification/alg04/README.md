@@ -35,10 +35,11 @@ Read the **successful test text** in each exact-candidate Architecture Studio ON
 ## Public PLY follow-up
 
 `alg03-public-ply` reuses the frozen calibration and the stripe, literal-zero and
-optical-Unknown records from the sensor fixture above. It
-exports the 256-point stripe and a mixed result from that stripe through stock
-`mantisd` and the loaded first-party PLY exporter. An independently determined
-incidence threshold gives 128 accepted and 128 near-parallel rows. The checker
+optical-Unknown records from the sensor fixture above. It exports the 256-point
+stripe and a mixed result from the same finalized observation through stock
+`mantisd` and the loaded first-party PLY exporter. The mixed geometry policy uses
+an independent incidence threshold yielding 128 accepted and 128 near-parallel
+rows; the zero controls use a three-profile ROI. The checker
 reads every vertex, compares ordered binary32 bits/spacing, and reports narrowing
 error separately from the forward-geometry oracle. The same public path covers a
 repeat via CLI, coincident valid points in a typed synthetic control, the two

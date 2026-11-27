@@ -24,10 +24,12 @@ void ply_fixture(const std::filesystem::path &project, const std::filesystem::pa
     CHECK(sorted[middle] - sorted[middle - 1] > 1e-8);
 
     Json out;
-    auto process = [&](const char *label, a3::RecordedRequest req, std::string_view outcome, size_t samples,
-                       size_t count, uint32_t rejected_reason) {
-        const auto refs = get(a3::process_recorded(store, req));
-        const auto p = get(a3::load_result(*store, refs.result.id));
+    auto check_result = [&](const char *label, const a3::RecordedRequest &req, const a3::RecordedResult &refs,
+                            std::string_view outcome, size_t samples, size_t count,
+                            uint32_t rejected_reason) {
+        // Only the positive position oracle needs an extra typed readback in
+        // the fixture. process_recorded has already typed-validated its zeros.
+        const auto p = count ? get(a3::load_result(*store, refs.result.id)) : store->packet(refs.result.id);
         const auto bytes = get(p->attributes.at(0).buffer.map_read());
         const auto doc = Json::parse(reinterpret_cast<const char *>(bytes.data()),
                                      reinterpret_cast<const char *>(bytes.data() + bytes.size()));
@@ -40,6 +42,7 @@ void ply_fixture(const std::filesystem::path &project, const std::filesystem::pa
         packed::check_logical(p->header.calibration, req.rig.calibration);
         CHECK(m.at("inputs").at("observation") == a3::detail::content(refs.observation));
         const auto o = store->laser_observation(refs.observation.id);
+        CHECK(o.disposition == data::ObservationDisposition::success && o.sample_count == samples);
         packed::check_content(o.context.raw_input, req.extractor.raw_input);
         packed::check_calibration(o.context.source.rig_calibration, req.rig);
         const auto d = store->get(refs.result.id);
@@ -82,17 +85,28 @@ void ply_fixture(const std::filesystem::path &project, const std::filesystem::pa
             out[label]["inputs"].push_back(input.value);
         return p;
     };
-    const auto sensor = process("sensor", f.request, "all_accepted", rows, rows, 0);
+    const auto sensor_refs = get(a3::process_recorded(store, f.request));
+    const auto sensor = check_result("sensor", f.request, sensor_refs, "all_accepted", rows, rows, 0);
     auto mixed = f.request;
     auto pol = bounded_policy();
     pol.min_incidence_cosine = threshold;
     mixed.policy = get(a3::create_policy(*store, pol));
-    process("mixed", mixed, "mixed", rows, rows - middle, a3::near_parallel);
+    // The mixed geometry policy consumes the exact finalized observation from
+    // the recorded run; it does not need to decode the same RAW frame twice.
+    const auto mixed_bound = get(a3::prepare(*store, {sensor_refs.observation, mixed.plane, mixed.policy,
+                                                      mixed.camera, mixed.rig, mixed.calibration_selection}));
+    const auto observed_stripe = store->laser_observation(sensor_refs.observation.id);
+    const auto mixed_packet = get(a3::process(mixed_bound, observed_stripe));
+    const auto mixed_ref = get(a3::persist_result(*store, mixed_bound, *mixed_packet));
+    check_result("mixed", mixed, {sensor_refs.observation, mixed_ref}, "mixed", rows, rows - middle,
+                 a3::near_parallel);
     auto zero = f.request;
+    zero.extractor.roi = pipeline::L1CandidateConfig::Roi{packed::first_column, packed::peak_row - 4, 3, 9};
     zero.record = 2; // Literal zero, optical ON.
-    process("empty_input", zero, "empty_input", 0, 0, 0);
+    check_result("empty_input", zero, get(a3::process_recorded(store, zero)), "empty_input", 0, 0, 0);
     zero.record = 3; // Same stripe, optical Unknown.
-    process("all_rejected", zero, "all_rejected", rows, 0, a3::unresolved_attribution);
+    check_result("all_rejected", zero, get(a3::process_recorded(store, zero)), "all_rejected", 3, 0,
+                 a3::unresolved_attribution);
 
     // Separate typed synthetic control: coincident valid coordinates are not
     // identities. ALG02 profiles in the recorded control have distinct pixels.

@@ -318,7 +318,9 @@ def main():
         receipt = root / 'fixture.json'
         env = {k: v for k, v in os.environ.items() if not k.startswith(('MANTIS_X1_', 'MANTIS_PLY_PROBE_'))}
         env.update(MANTIS_TOKEN=os.urandom(24).hex(), TMPDIR=tmp)
-        subprocess.run([generator, project, receipt, 'ply-fixture', fit], env=env, check=True, timeout=25)
+        # The child runs real disk finalization, calibrated replay and exact
+        # readback under sanitizers. Keep setup bounded separately from RPCs.
+        subprocess.run([generator, project, receipt, 'ply-fixture', fit], env=env, check=True, timeout=45)
         fixture = json.loads(receipt.read_text())
         files = stored_files(project)
         plugins = plugin_directory(build, root)
