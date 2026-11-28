@@ -4,6 +4,7 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 enable_testing()
 configure_file(generated.cpp.in generated.cpp COPYONLY)
 option(MANTIS_BUILD_STUDIO "Studio mode of the configured evidence fixture" OFF)
+option(BUILD_TESTING "Testing mode of the configured evidence fixture" ON)
 # A tiny stand-in for the product generator: no Protobuf toolchain is needed
 # here. Ninja records the real input and both generated outputs.
 set(proto "${CMAKE_CURRENT_SOURCE_DIR}/protocol/protobuf/mantis.proto")
@@ -14,6 +15,8 @@ add_custom_command(OUTPUT mantis.pb.h mantis.pb.cc
 add_library(mantis-wire STATIC mantis.pb.cc mantis.pb.h)
 set(python_output "${CMAKE_CURRENT_BINARY_DIR}/python/mantis/mantis_pb2.py")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/python/mantis")
+configure_file(sdk/python/mantis/__init__.py ${CMAKE_BINARY_DIR}/python/mantis/__init__.py COPYONLY)
+configure_file(sdk/python/mantis/calibration.py ${CMAKE_BINARY_DIR}/python/mantis/calibration.py COPYONLY)
 add_custom_command(OUTPUT "${python_output}"
     COMMAND "${CMAKE_COMMAND}" -E touch "${python_output}"
     DEPENDS "${proto}" VERBATIM)
@@ -32,6 +35,7 @@ add_dependencies(python-consumer mantis-python)
 add_test(NAME app-contract COMMAND app)
 set_tests_properties(app-contract PROPERTIES FIXTURES_REQUIRED prepared)
 add_test(NAME peer-contract COMMAND peer)
+add_test(NAME python-calibration COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/python_calibration.py ${CMAKE_BINARY_DIR})
 add_test(NAME python-generator-contract COMMAND python-consumer)
 add_test(NAME fixture-setup COMMAND "${CMAKE_COMMAND}" -E true)
 set_tests_properties(fixture-setup PROPERTIES FIXTURES_SETUP prepared)

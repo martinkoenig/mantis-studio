@@ -25,6 +25,20 @@ ALG03_INPUT_SCHEMA = 'ci110-configured-inputs-v4'
 ALG03_SCRIPT = 'tests/unit/alg03_enclosure.py'
 ALG03_TEST = 'alg03-enclosure'
 ALG03_NUMERIC = 'mantis-alg03-numeric-tests'
+CALIBRATION_INPUT_SCHEMA = 'ci110-configured-inputs-v5'
+DIRECT_TEST_INPUT_SCHEMAS = (ALG03_INPUT_SCHEMA, CALIBRATION_INPUT_SCHEMA)
+CALIBRATION_SOURCE = 'sdk/python/mantis/calibration.py'
+CALIBRATION_INIT = 'sdk/python/mantis/__init__.py'
+CALIBRATION_SCRIPT = 'tests/unit/python_calibration.py'
+CALIBRATION_TEST = 'python-calibration'
+CALIBRATION_COPY_RECEIPT = ('build', 'mantis-python-calibration-copy-trace.json')
+# Reviewed source bytes: the script inserts argv[1]/python first, imports
+# mantis and calls mantis.Calibration; __init__ re-exports .calibration.Calibration.
+# Changes to either route require reinspection, not token/substring matching.
+CALIBRATION_IMPORT_DIGESTS = {
+    CALIBRATION_SCRIPT: '4378480203792b8461a5f69b0d8fc5494faf3002e2278779af6285ad9655367e',
+    CALIBRATION_INIT: '5931e132b1d40f7e7394f286cb3cc538e64907eea0dfaf976faa2c0af714692a',
+}
 
 
 class InvalidInput(ValueError):
@@ -58,7 +72,7 @@ class Inputs:
     def __init__(self, manifest, expected):
         policy.keys(manifest, 'schema source roots configuration generator index ctest files', 'configured-input-fields')
         check(manifest['schema'] in ('ci110-configured-inputs-v1', 'ci110-configured-inputs-v2',
-                                     PYTHON_PROTO_INPUT_SCHEMA, ALG03_INPUT_SCHEMA),
+                                     PYTHON_PROTO_INPUT_SCHEMA, *DIRECT_TEST_INPUT_SCHEMAS),
               'configured-input-version')
         policy.identity(manifest['source'])
         check(manifest['source'] == expected, 'configured-source-identity-mismatch')
@@ -69,7 +83,7 @@ class Inputs:
             check(isinstance(value, str) and Path(value).is_absolute(), 'configured-root-path')
             root = Path(value)
             check(root == root.resolve() and root.is_dir(), 'configured-root-not-canonical')
-            if manifest['schema'] == ALG03_INPUT_SCHEMA:
+            if manifest['schema'] in DIRECT_TEST_INPUT_SCHEMAS:
                 check(value == str(root), 'configured-root-not-canonical')
             self.roots[name] = root
         check(self.roots['source'] != self.roots['build'] and
@@ -285,17 +299,18 @@ def python_protobuf_owner(i, generator, configs, cache, cache_path, rows, target
     return owner_id
 
 
-def alg03_interpreter(i, cmake_version, generator, configs, cache):
+def configured_interpreter(i, cmake_version, generator, configs, cache, test):
     """Return the configured interpreter spelling for the supported context only."""
-    unsupported = 'alg03-enclosure-context-unsupported'
+    unsupported = test + '-context-unsupported'
     check(i.manifest['configuration'] == 'Debug' and generator.get('name') == 'Ninja' and
           generator.get('multiConfig') is False and len(configs) == 1, unsupported)
     # Cache/codemodel do not normally report the target OS. Read only the pinned
     # generator output for this exact CMake version; recognize the native Linux
     # template without interpreting CMake code, includes or a toolchain file.
     system = i.data.get(('build', f'CMakeFiles/{cmake_version}/CMakeSystem.cmake'))
-    check(system is not None, 'alg03-enclosure-system-pin-missing')
-    check(len(system) <= 4096 and re.fullmatch(
+    if system is None:  # optional scoped evidence
+        raise InvalidInput(test + '-system-pin-missing')
+    native = len(system) <= 4096 and re.fullmatch(
         rb'set\(CMAKE_HOST_SYSTEM "Linux-(?P<release>[A-Za-z0-9._+~-]+)"\)\n'
         rb'set\(CMAKE_HOST_SYSTEM_NAME "Linux"\)\n'
         rb'set\(CMAKE_HOST_SYSTEM_VERSION "(?P=release)"\)\n'
@@ -304,22 +319,27 @@ def alg03_interpreter(i, cmake_version, generator, configs, cache):
         rb'set\(CMAKE_SYSTEM_NAME "Linux"\)\n'
         rb'set\(CMAKE_SYSTEM_VERSION "(?P=release)"\)\n'
         rb'set\(CMAKE_SYSTEM_PROCESSOR "(?P=arch)"\)\n\n'
-        rb'set\(CMAKE_CROSSCOMPILING "FALSE"\)\n\nset\(CMAKE_SYSTEM_LOADED 1\)\n', system), unsupported)
+        rb'set\(CMAKE_CROSSCOMPILING "FALSE"\)\n\nset\(CMAKE_SYSTEM_LOADED 1\)\n', system)
+    if not native:
+        raise InvalidInput(unsupported)
     context = {'CMAKE_BUILD_TYPE': 'Debug', 'CMAKE_GENERATOR': 'Ninja', 'MANTIS_BUILD_STUDIO': 'OFF',
                'CMAKE_HOME_DIRECTORY': str(i.roots['source']), 'CMAKE_CACHEFILE_DIR': str(i.roots['build'])}
+    if test == CALIBRATION_TEST:
+        check(native.group('arch') == b'x86_64', unsupported)
+        context['BUILD_TESTING'] = 'ON'
     entries = records(cache.get('entries'))
     pinned = [(r['name'], r.get('value')) for r in entries if r.get('name') in context]
-    check(len(pinned) == len(context) and dict(pinned) == context, 'alg03-enclosure-cache-mismatch')
+    check(len(pinned) == len(context) and dict(pinned) == context, test + '-cache-mismatch')
     selected = [r.get('value') for r in entries if r.get('name') == '_Python3_EXECUTABLE']
     override = [r.get('value') for r in entries if r.get('name') == 'Python3_EXECUTABLE']
-    check(len(selected) == 1 and (not override or override == selected), 'alg03-enclosure-interpreter-unresolved')
+    check(len(selected) == 1 and (not override or override == selected), test + '-interpreter-unresolved')
     python = selected[0]
     # Compare the cache's absolute spelling, not a realpath (the interpreter
     # may be a symlink). Reject relative, aliased or nonliteral path spellings.
     check(isinstance(python, str) and 0 < len(python) <= 4096 and python.startswith('/') and
           '\\' not in python and python.isprintable() and
           all(part not in ('', '.', '..') for part in python[1:].split('/')),
-          'alg03-enclosure-interpreter-unresolved')
+          test + '-interpreter-unresolved')
     return python
 
 
@@ -345,6 +365,89 @@ def check_alg03_registration(i, python, target, artifacts, registration):
     command = registration.get('command')
     check(command is not None, 'alg03-enclosure-command-missing')
     check(command == [python, '-B', script, artifact], 'alg03-enclosure-argv-mismatch')
+
+
+def check_calibration_registration(i, python, ctest, registration, cmake_lines):
+    """Match the named argv and its exact top-level add_test backtrace."""
+    if registration is None:
+        raise InvalidInput('python-calibration-registration-missing')
+    script = str(i.roots['source'] / CALIBRATION_SCRIPT)
+    build = str(i.roots['build'])
+    check(i.locate(script) == ('source', CALIBRATION_SCRIPT) and
+          registration.get('command') == [python, script, build], 'python-calibration-argv-mismatch')
+    props = {r['name']: r.get('value') for r in registration.get('properties', [])}
+    check(props.get('WORKING_DIRECTORY') == build and not {'ENVIRONMENT', 'ENVIRONMENT_MODIFICATION'} & props.keys(),
+          'python-calibration-context-unsupported')
+
+    def at(rows, index):
+        return rows[index] if isinstance(rows, list) and type(index) is int and 0 <= index < len(rows) else None
+
+    graph = ctest.get('backtraceGraph')
+    error = 'python-calibration-registration-unresolved'
+    if not isinstance(graph, dict):
+        raise InvalidInput(error)
+    node = at(graph.get('nodes'), registration.get('backtrace'))
+    if not isinstance(node, dict):
+        raise InvalidInput(error)
+    check(at(graph.get('commands'), node.get('command')) == 'add_test' and
+          at(graph.get('files'), node.get('file')) in ('CMakeLists.txt', str(i.roots['source'] / 'CMakeLists.txt')),
+          error)
+    line = node.get('line')
+    declaration = (b'add_test(NAME python-calibration COMMAND ${Python3_EXECUTABLE} '
+                   b'${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/python_calibration.py ${CMAKE_BINARY_DIR})')
+    check(type(line) is int and 1 <= line <= len(cmake_lines) and
+          cmake_lines[line - 1] == declaration and cmake_lines.count(declaration) == 1, error)
+
+
+def check_calibration_trace(i, expected, evidence_pins):
+    """Validate only the scoped projection of a completed expanded CMake trace."""
+    missing = 'python-calibration-copy-trace-missing'
+    unsupported = 'python-calibration-copy-trace-unsupported'
+    raw = i.data.get(CALIBRATION_COPY_RECEIPT)
+    check(raw is not None, missing)
+    check(len(raw) <= 32_768, unsupported)
+    context = ('source', 'roots', 'configuration', 'generator')
+    try:
+        receipt = policy.strict_json(raw)
+        policy.keys(receipt, 'schema sha256 commands ' + ' '.join(context), unsupported)
+    except ValueError:
+        raise InvalidInput(unsupported) from None
+    check(receipt['schema'] == 'ci110-mantis-python-calibration-copy-trace-v3', unsupported)
+    check(all(receipt[k] == i.manifest[k] for k in context) and
+          receipt['sha256'] == {name: policy.digest(i.data[key]) for name, key in evidence_pins.items()},
+          'python-calibration-copy-trace-context-mismatch')
+    # Count invocations, not distinct values: a repeated or competing command
+    # is ambiguous even if it wrote exactly the same bytes. No evaluation of
+    # unknown commands, directory destinations or implicit path resolution.
+    commands = receipt['commands']
+    check(isinstance(commands, list) and len(commands) == len(expected) and
+          all(isinstance(command, dict) and all(type(command.get(key)) is int
+              for key in ('line', 'frame', 'global_frame')) for command in commands) and
+          all(commands.count(command) == 1 for command in expected), 'python-calibration-copyonly-unresolved')
+
+
+def check_calibration_copy(i, cmake_inputs, cache_path, python, ctest, registration):
+    """Fixed COPYONLY and import evidence, not a CMake or Python evaluator."""
+    copies = ((CALIBRATION_SOURCE, 'python/mantis/calibration.py'), (CALIBRATION_INIT, 'python/mantis/__init__.py'))
+    required = [('source', path) for path in ('CMakeLists.txt', CALIBRATION_SCRIPT)]
+    required.extend(key for src, dst in copies for key in (('source', src), ('build', dst)))
+    check(all(key in i.data for key in required), 'python-calibration-pin-missing')
+    cmake_lines = [line.strip() for line in i.data['source', 'CMakeLists.txt'].splitlines()]
+    check_calibration_registration(i, python, ctest, registration, cmake_lines)
+    expected = []
+    for src, dst in copies:
+        declaration = f'configure_file({src} ${{CMAKE_BINARY_DIR}}/{dst} COPYONLY)'.encode()
+        check([r for r in cmake_inputs if r.get('path') == src] == [{'path': src}] and
+              cmake_lines.count(declaration) == 1, 'python-calibration-copyonly-unresolved')
+        check(i.data['source', src] == i.data['build', dst], 'python-calibration-copy-bytes-mismatch')
+        expected.append({'cmd': 'configure_file', 'file': str(i.roots['source'] / 'CMakeLists.txt'),
+                         'line': cmake_lines.index(declaration) + 1, 'frame': 1, 'global_frame': 1,
+                         'args': [src, str(i.roots['build'] / dst), 'COPYONLY']})
+    check(all(policy.digest(i.data['source', path]) == digest for path, digest in CALIBRATION_IMPORT_DIGESTS.items()),
+          'python-calibration-import-unrecognized')
+    pins = {'index': ('build', i.manifest['index']), 'cache': ('build', cache_path),
+            'ctest': ('build', i.manifest['ctest']), **{path: (root, path) for root, path in required}}
+    check_calibration_trace(i, expected, pins)
 
 
 def import_inputs(inputs, expected, changes):
@@ -387,7 +490,8 @@ def import_inputs(inputs, expected, changes):
                    'configuration-coverage-unqualified', 'caller-source-binding-not-authenticated',
                    'ctest-configuration-and-source-binding-unverified'):
         unknown(reason)
-    for row in records(by_kind['cmakeFiles']['inputs']):
+    cmake_inputs = records(by_kind['cmakeFiles']['inputs'])
+    for row in cmake_inputs:
         loc = i.locate(row.get('path'))
         if row.get('isGenerated'):
             unknown('generated-configure-input')
@@ -503,7 +607,7 @@ def import_inputs(inputs, expected, changes):
                 for header in resolved:
                     file_edges.add((header, tid, 'conservative-inference', 'literal-include-from:' + path))
                     pending.append(header)
-    if inputs['schema'] in ('ci110-configured-inputs-v2', PYTHON_PROTO_INPUT_SCHEMA, ALG03_INPUT_SCHEMA):
+    if inputs['schema'] in ('ci110-configured-inputs-v2', PYTHON_PROTO_INPUT_SCHEMA, *DIRECT_TEST_INPUT_SCHEMAS):
         try:
             owner = protobuf_owner(i, cmake['generator'], configs, by_kind['cache'], cache_path, rows, target_docs)
         except InvalidInput as exc:
@@ -511,7 +615,7 @@ def import_inputs(inputs, expected, changes):
         else:
             file_edges.add((PROTO, owner, 'observed', 'ninja-query-protobuf-cxx'))
     # Separate opt-in keeps the canonical v1/v2 diagnostic replayable as-is.
-    if inputs['schema'] in (PYTHON_PROTO_INPUT_SCHEMA, ALG03_INPUT_SCHEMA):
+    if inputs['schema'] in (PYTHON_PROTO_INPUT_SCHEMA, *DIRECT_TEST_INPUT_SCHEMAS):
         try:
             owner = python_protobuf_owner(i, cmake['generator'], configs, by_kind['cache'], cache_path,
                                           rows, target_docs)
@@ -542,6 +646,7 @@ def import_inputs(inputs, expected, changes):
     tests = []
     test_ids = set()
     enclosure_registration = None
+    calibration_registration = None
     for row in records(ctest['tests']):
         name = row['name']
         check(label(name) and name not in test_ids, 'configured-duplicate-or-invalid-test')
@@ -570,13 +675,15 @@ def import_inputs(inputs, expected, changes):
             unknown('test-fixture-or-runtime-dependency-unresolved', name)
         unknown('test-runtime-closure-unqualified', name)
         tests.append({'id': name, 'targets': mapped, 'command_sha256': policy.digest(policy.canonical(command))})
-        if inputs['schema'] == ALG03_INPUT_SCHEMA and name == ALG03_TEST:
+        if name == ALG03_TEST:
             enclosure_registration = row
+        if name == CALIBRATION_TEST:
+            calibration_registration = row
     check(tests, 'configured-empty-tests')
     file_test_edges = []
-    if inputs['schema'] == ALG03_INPUT_SCHEMA:
+    if inputs['schema'] in DIRECT_TEST_INPUT_SCHEMAS:
         try:
-            python = alg03_interpreter(i, cmake_version, cmake['generator'], configs, by_kind['cache'])
+            python = configured_interpreter(i, cmake_version, cmake['generator'], configs, by_kind['cache'], ALG03_TEST)
             check_alg03_registration(i, python, target_docs.get(names.get(ALG03_NUMERIC)), artifacts,
                                      enclosure_registration)
         except InvalidInput as exc:
@@ -584,6 +691,16 @@ def import_inputs(inputs, expected, changes):
         else:
             file_test_edges.append({'file': ALG03_SCRIPT, 'test': ALG03_TEST, 'evidence': 'observed',
                                     'reason': 'ctest-alg03-enclosure-argv-match'})
+    if inputs['schema'] == CALIBRATION_INPUT_SCHEMA:
+        try:
+            python = configured_interpreter(i, cmake_version, cmake['generator'], configs, by_kind['cache'], CALIBRATION_TEST)
+            check_calibration_copy(i, cmake_inputs, cache_path, python, ctest, calibration_registration)
+        except InvalidInput as exc:
+            unknown(str(exc), CALIBRATION_SOURCE)
+        else:
+            file_test_edges.append({'file': CALIBRATION_SOURCE, 'test': CALIBRATION_TEST,
+                                    'evidence': 'conservative-inference',
+                                    'reason': 'ctest-python-calibration-copyonly-import-match'})
     for path, tid, _, _ in sorted(file_edges):
         targets[tid]['sources'].append(path)
     for info in targets.values():
@@ -608,7 +725,7 @@ def import_inputs(inputs, expected, changes):
             'limits': ['caller-pins-are-not-authentication', 'no-complete-product-closure',
                        'no-provider-event-authentication', 'no-signatures-or-OS-isolation',
                        'no-historical-recall-or-performance-qualification']}
-    if inputs['schema'] == ALG03_INPUT_SCHEMA:
+    if inputs['schema'] in DIRECT_TEST_INPUT_SCHEMAS:
         result['file_test_edges'] = file_test_edges
     project(result, changes)
     return result
