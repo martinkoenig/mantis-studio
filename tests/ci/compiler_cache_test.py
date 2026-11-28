@@ -123,23 +123,33 @@ class WorkflowPolicy(unittest.TestCase):
                     self.assertNotIn('ci-shadow', json.dumps(step), 'classifier-dependent validation gate')
             self.assertEqual(WORKFLOW['permissions'], {'contents': 'read'})
 
-    def test_concurrency_distinguishes_prs_branches_events_and_manual_runs(self):
-        group = WORKFLOW["concurrency"]["group"]
-        def render(event, ref, pr=0, run=1):
-            context = {"github.workflow": "architecture", "github.event_name": event,
-                       "github.ref": ref, "github.event.pull_request.number": pr,
-                       "github.run_id": run}
-            return re.sub(r"\$\{\{(.*?)\}\}", lambda m: str(expression(m[0], context)), group)
-        self.assertEqual(render("pull_request", "refs/pull/7/merge", 7, 1),
-                         render("pull_request", "refs/pull/7/merge", 7, 2))
-        values = [render("pull_request", "refs/pull/7/merge", 7),
-                  render("pull_request", "refs/pull/8/merge", 8),
-                  render("push", "refs/heads/develop"), render("push", "refs/heads/main"),
-                  render("push", "refs/heads/integration/a"),
-                  render("workflow_dispatch", "refs/heads/develop", run=1),
-                  render("workflow_dispatch", "refs/heads/develop", run=2)]
-        self.assertEqual(len(set(values)), len(values))
-        self.assertEqual(WORKFLOW["concurrency"]["cancel-in-progress"], "true")
+    def test_concurrency_distinguishes_prs_develop_commits_and_manual_runs(self):
+        control = yaml.load((ROOT / ".github/workflows/python-control.yml").read_text(),
+                            Loader=yaml.BaseLoader)
+        for workflow in (WORKFLOW, control):
+            with self.subTest(workflow=workflow["name"]):
+                group = workflow["concurrency"]["group"]
+
+                def render(event, ref, pr=0, run=1, sha="commit-a"):
+                    context = {"github.workflow": workflow["name"], "github.event_name": event,
+                               "github.ref": ref, "github.event.pull_request.number": pr,
+                               "github.run_id": run, "github.sha": sha}
+                    return re.sub(r"\$\{\{(.*?)\}\}", lambda m: str(expression(m[0], context)), group)
+
+                develop = "refs/heads/develop"
+                main = "refs/heads/main"
+                self.assertEqual(render("pull_request", "refs/pull/7/merge", 7, 1),
+                                 render("pull_request", "refs/pull/7/merge", 7, 2, "commit-b"))
+                self.assertEqual(render("push", develop), render("push", develop, run=2))
+                self.assertEqual(render("push", main), render("push", main, sha="commit-b"))
+                values = [render("pull_request", "refs/pull/7/merge", 7),
+                          render("pull_request", "refs/pull/8/merge", 8),
+                          render("push", develop), render("push", develop, sha="commit-b"),
+                          render("push", main), render("push", "refs/heads/integration/a"),
+                          render("workflow_dispatch", develop, run=1),
+                          render("workflow_dispatch", develop, run=2)]
+                self.assertEqual(len(set(values)), len(values))
+                self.assertEqual(workflow["concurrency"]["cancel-in-progress"], "true")
 
     def test_test_commands_and_sanitizer_environment_stay_strict(self):
         for name, job in WORKFLOW["jobs"].items():
