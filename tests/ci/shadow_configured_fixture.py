@@ -25,6 +25,7 @@ PROTO = 'protocol/protobuf/mantis.proto'
 RULE_RECEIPT = 'mantis-protobuf-ninja-query.json'
 PYTHON_OUTPUT = 'python/mantis/mantis_pb2.py'
 PYTHON_RECEIPT = 'mantis-protobuf-python-ninja-query.json'
+ENCLOSURE_SCRIPT = 'tests/unit/alg03_enclosure.py'
 
 
 def digest(data):
@@ -249,7 +250,7 @@ def produce(root, generator='Ninja', *, deadline=None):
     for kind in ('codemodel-v2', 'cmakeFiles-v1', 'cache-v2'):
         (query / kind).touch()
     run(['cmake', '-S', str(source), '-B', str(build), '-G', generator,
-         '-DCMAKE_BUILD_TYPE=Debug'], root, deadline=deadline)
+         '-DCMAKE_BUILD_TYPE=Debug', '-DPython3_EXECUTABLE=' + sys.executable], root, deadline=deadline)
     queries = {}
     python_query = ''
     ninja_paths = ('build.ninja', 'CMakeFiles/rules.ninja')
@@ -273,12 +274,14 @@ def produce(root, generator='Ninja', *, deadline=None):
                 'roots': {'source': str(source), 'build': str(build)}, 'configuration': 'Debug',
                 'generator': generator, 'index': indexes[0].relative_to(build).as_posix(),
                 'ctest': 'ctest.json', 'files': []}
-    for path in sorted(source.iterdir()) + [source / PROTO]:
+    for path in sorted(source.iterdir()) + [source / PROTO, source / ENCLOSURE_SCRIPT]:
         if path.is_file():
             manifest['files'].append({'root': 'source', 'path': path.relative_to(source).as_posix(),
                                       'sha256': digest(path.read_bytes())})
     reply = indexes[0].parent
-    extra = []
+    index = json.loads(indexes[0].read_bytes())
+    system = build / 'CMakeFiles' / index['cmake']['version']['string'] / 'CMakeSystem.cmake'
+    extra = [system]
     if generator == 'Ninja':
         assert ninja_pins == {p: digest((build / p).read_bytes()) for p in ninja_paths}, 'Ninja graph changed after query'
         bindings = {**ninja_pins, PROTO: digest((source / PROTO).read_bytes()),
@@ -292,7 +295,7 @@ def produce(root, generator='Ninja', *, deadline=None):
         python_receipt.update(schema='ci110-mantis-protobuf-python-ninja-query-v1', query=python_query,
                               sha256={**bindings, 'owner': digest(next(reply.glob('target-mantis-python-*.json')).read_bytes())})
         (build / PYTHON_RECEIPT).write_bytes(encode(python_receipt))
-        extra = [build / p for p in (*ninja_paths, RULE_RECEIPT, PYTHON_RECEIPT)]
+        extra.extend(build / p for p in (*ninja_paths, RULE_RECEIPT, PYTHON_RECEIPT))
     for path in sorted(reply.glob('*.json')) + [build / 'ctest.json', build / 'CMakeCache.txt', *extra]:
         manifest['files'].append({'root': 'build', 'path': path.relative_to(build).as_posix(),
                                   'sha256': digest(path.read_bytes())})

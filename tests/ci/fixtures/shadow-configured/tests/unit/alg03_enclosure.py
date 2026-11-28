@@ -1,0 +1,1 @@
+raise SystemExit('metadata-only fixture: do not execute')

@@ -1176,7 +1176,8 @@ class ConfiguredInventory(unittest.TestCase):
         seed['targets']['storage']['sources'] = []
         return self.fixture.encode(seed)
 
-    def corpus_case(self, shadow_raw=None, *, static_raw=None):
+    def corpus_case(self, shadow_raw=None, *, static_raw=None, case_id='header-app',
+                    expected=('app-contract',), basis='independent-cmake-link-consumer-expectation'):
         """Independent app/peer expectations; never derived from impacted IDs."""
         self.diagnostic()
         command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', self.inv['roots']['source'],
@@ -1214,12 +1215,11 @@ class ConfiguredInventory(unittest.TestCase):
                    'test_inventory_sha256': self.fixture.digest(self.fixture.encode(diag['tests']))}
         observation = {'schema': 'ci110-impact-observation-v1', 'context': context,
                        'kind': 'controlled-fixture', 'origin': 'owned-tiny-consumer-contract',
-                       'trust': 'caller-asserted-unverified', 'test_ids': ['app-contract'],
-                       'basis': 'independent-cmake-link-consumer-expectation'}
+                       'trust': 'caller-asserted-unverified', 'test_ids': list(expected), 'basis': basis}
         def pin(name, raw):
             (self.root / name).write_bytes(raw)
             return {'path': name, 'sha256': self.fixture.digest(raw)}
-        case = {'id': 'header-app', 'context': context,
+        case = {'id': case_id, 'context': context,
                 'shadow': {'path': 'shadow.json', 'sha256': self.fixture.digest(shadow_raw)},
                 'configured_inputs': {'path': 'inputs.json', 'sha256': self.fixture.digest(self.path.read_bytes())},
                 'observation': pin('observation.json', self.fixture.encode(observation))}
@@ -1284,6 +1284,195 @@ class ConfiguredInventory(unittest.TestCase):
             receipt_path.write_bytes(self.fixture.encode(receipt))
         return result
 
+    def test_real_alg03_enclosure_script_only_collector_and_replay(self):
+        self.addCleanup(self.path.write_bytes, self.path.read_bytes())
+        self.inv['schema'] = 'ci110-configured-inputs-v4'
+        script, test = 'tests/unit/alg03_enclosure.py', 'alg03-enclosure'
+        source = Path(self.inv['roots']['source'])
+        evidence = Path(tempfile.mkdtemp(prefix='enclosure-evidence-', dir=self.root))
+        head = self.inv['source']['commit']
+        # Construct a real one-file comparison commit without editing or moving
+        # the configured checkout shared by the other test methods.
+        env = {**os.environ, 'GIT_INDEX_FILE': str(evidence / 'alternate.index')}
+
+        def git(*args, data=None):
+            return subprocess.run(['git', '-C', source, '-c', 'user.name=Fixture',
+                                   '-c', 'user.email=fixture@example.invalid', *args],
+                                  env=env, input=data, capture_output=True, timeout=5, check=True).stdout
+
+        git('read-tree', head)
+        raw = self.original_bytes['source', script]
+        blob = git('hash-object', '-w', '--stdin', data=raw + b'\n# disposable comparison\n').decode().strip()
+        git('update-index', '--cacheinfo', '100644', blob, script)
+        tree = git('write-tree').decode().strip()
+        base = git('commit-tree', tree, '-p', head, '-m', 'script-only comparison').decode().strip()
+        diff = git('diff', '--name-status', base, head)
+        self.assertEqual(diff, f'M\t{script}\n'.encode())
+        (evidence / 'script.diff').write_bytes(git('diff', '--binary', base, head))
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', source,
+                   '--event', 'push', '--ref', 'refs/heads/develop', '--base', base, '--head', head,
+                   '--configured-inputs', self.path, '--configured-inputs-sha256']
+
+        def collect(phase):
+            raw = self.fixture.encode(self.inv)
+            self.path.write_bytes(raw)
+            run = subprocess.run(command + [self.fixture.digest(raw)], capture_output=True, timeout=10, check=True)
+            self.assertEqual(run.stderr, b'')
+            (evidence / f'{phase}-inputs.json').write_bytes(raw)
+            (evidence / f'{phase}-shadow.json').write_bytes(run.stdout)
+            report = json.loads(run.stdout)
+            self.assertEqual(report['schema'], 'mantis-git-shadow-v2')
+            self.assertEqual([r['path'] for r in report['acquisition']['diff']['records']], [script])
+            self.assertFalse(report['execution_authorized'])
+            self.assertTrue(report['decision']['full_matrix_would_select'])
+            diag = report['configured_diagnostic']
+            self.assertEqual(diag['status'], 'ingested', diag.get('errors'))
+            self.full(diag)
+            self.assertEqual(diag['target_reasons'], {})
+            return run.stdout, diag
+
+        def compare(raw, state):
+            corpus, _ = self.corpus_case(shadow_raw=raw, case_id='enclosure-script', expected=(test,),
+                                         basis='independent-exact-fixture-registration')
+            replay = self.compare_corpus(corpus)
+            self.assertEqual(replay['status'], 'compared', replay)
+            case = replay['cases'][0]
+            self.assertEqual(case['diagnostic'], {'state': state, 'denominator': 1,
+                             'hits': [test] if state == 'HIT' else [],
+                             'misses': [test] if state == 'MISS' else []})
+            self.assertTrue({'alg03-numeric', 'peer-contract'} <= set(case['full_would_select_test_ids']))
+            return shadow.policy.canonical(replay)
+
+        intact, hit = collect('intact')
+        self.assertEqual(hit['file_test_edges'], [{'file': script, 'test': test, 'evidence': 'observed',
+                                                   'reason': 'ctest-alg03-enclosure-argv-match'}])
+        self.assertEqual(hit['impacted_test_ids'], [test], 'configured enclosure consumer MISS')
+        self.assertIn({'reason': 'test-runtime-closure-unqualified', 'subject': test, 'evidence': 'unresolved'},
+                      hit['unknowns'])
+        intact_comparison = compare(intact, 'HIT')
+
+        ctest = self.inv['ctest']
+        exact = self.original_bytes['build', ctest]
+        document = json.loads(exact)
+        row = next(row for row in document['tests'] if row['name'] == test)
+        self.assertEqual(row['command'][2], str(source / script))
+        decoy = evidence / Path(script).name
+        decoy.write_bytes(raw)
+        row['command'][2] = str(decoy)  # existing same-basename file, not the source-root script
+        (evidence / 'decoy-ctest.json').write_bytes(self.fixture.encode(document))
+        self.repin('build', ctest, document)
+        changed, miss = collect('decoy')
+        self.assertEqual(miss['file_test_edges'], [])
+        self.assertEqual(miss['impacted_test_ids'], [])
+        self.assertIn({'reason': 'alg03-enclosure-argv-mismatch', 'subject': script, 'evidence': 'unresolved'},
+                      miss['unknowns'])
+        compare(changed, 'MISS')
+
+        self.repin('build', ctest, exact)
+        restored, _ = collect('restored')
+        self.assertEqual(restored, intact)
+        self.assertEqual(compare(restored, 'HIT'), intact_comparison)
+
+    def test_alg03_enclosure_wrong_context_artifact_and_pins(self):
+        # Restore the exact borrowed manifest even if an assertion fails; the
+        # unchanged prepared-loader control must still see its sealed bytes.
+        self.addCleanup(self.path.write_bytes, self.path.read_bytes())
+        script, test = 'tests/unit/alg03_enclosure.py', 'alg03-enclosure'
+        proto = self.fixture.PROTO
+        self.inv['schema'] = 'ci110-configured-inputs-v3'
+        legacy = self.diagnostic((proto,))
+        self.assertNotIn('file_test_edges', legacy)
+        self.assertEqual(self.diagnostic((script,))['impacted_test_ids'], [])
+        self.inv['schema'] = 'ci110-configured-inputs-v4'
+        pristine = self.copy(self.inv)
+        raw = self.fixture.encode(pristine)
+        current = self.diagnostic((proto,))
+        self.assertEqual(current['file_target_edges'], legacy['file_target_edges'])
+        self.assertEqual(current['target_test_edges'], legacy['target_test_edges'])
+        self.assertEqual(current['impacted_test_ids'], ['app-contract', 'python-generator-contract'])
+        intact = self.diagnostic((script,))
+        self.assertEqual(intact['impacted_test_ids'], [test])
+
+        def suppressed(reason, result):
+            self.full(result)
+            self.assertEqual(result['status'], 'ingested', result.get('errors'))
+            self.assertEqual(result['file_test_edges'], [])
+            self.assertEqual(result['impacted_test_ids'], [])
+            self.assertIn({'reason': 'alg03-enclosure-' + reason, 'subject': script, 'evidence': 'unresolved'},
+                          result['unknowns'])
+
+        ctest = self.inv['ctest']
+        exact = self.original_bytes['build', ctest]
+        ctest_doc = json.loads(exact)
+        ctest_row = next(row for row in ctest_doc['tests'] if row['name'] == test)
+        python, flag, path, artifact = ctest_row['command']
+        other_artifact = next(row['command'][0] for row in ctest_doc['tests'] if row['name'] == 'peer-contract')
+        for command in (['/bin/false', flag, path, artifact], [python, '-I', path, artifact],
+                        [python, flag, artifact, path], [python, flag, path, other_artifact],
+                        [python, flag, path, str(Path(artifact).parent) + '/./' + Path(artifact).name],
+                        [python, flag, path, artifact, '--extra'], ['/bin/sh', '-c', ' '.join(ctest_row['command'])]):
+            with self.subTest(command=command):
+                changed = self.copy(ctest_doc)
+                next(r for r in changed['tests'] if r['name'] == test)['command'] = command
+                self.repin('build', ctest, changed)
+                suppressed('argv-mismatch', self.diagnostic((script,)))
+        # A real, changed saved CTest file with the original manifest pin fails
+        # before scoped matching; refreshing this outer pin is not implicit.
+        stale = self.diagnostic((script,), raw=raw)
+        self.assertEqual(stale['errors'], ['configured-file-digest-mismatch'])
+        self.assertEqual(stale['status'], 'rejected')
+        self.full(stale)
+        renamed = self.copy(ctest_doc)
+        next(r for r in renamed['tests'] if r['name'] == test)['name'] = 'generic-python-control'
+        self.repin('build', ctest, renamed)
+        suppressed('registration-missing', self.diagnostic((script,)))
+        missing = self.copy(ctest_doc)
+        del next(r for r in missing['tests'] if r['name'] == test)['command']
+        self.repin('build', ctest, missing)
+        suppressed('command-missing', self.diagnostic((script,)))
+        self.repin('build', ctest, exact)
+
+        owner, doc = self.fixture.target_document(self.inv, 'mantis-alg03-numeric-tests')
+        self.repin('build', owner, {**doc, 'type': 'UTILITY'})
+        suppressed('artifact-unresolved', self.diagnostic((script,)))
+        self.repin('build', owner, {**doc, 'artifacts': doc['artifacts'] * 2})
+        suppressed('artifact-unresolved', self.diagnostic((script,)))
+        self.repin('build', owner, self.original_bytes['build', owner])
+
+        cache_path, cache = self.document('cache')
+        next(r for r in cache['entries'] if r['name'] == 'MANTIS_BUILD_STUDIO')['value'] = 'ON'
+        self.repin('build', cache_path, cache)
+        suppressed('cache-mismatch', self.diagnostic((script,)))
+        _, cache = self.document('cache')
+        next(r for r in cache['entries'] if r['name'] == 'Python3_EXECUTABLE')['value'] = '/bin/false'
+        self.repin('build', cache_path, cache)
+        suppressed('interpreter-unresolved', self.diagnostic((script,)))
+        self.repin('build', cache_path, self.original_bytes['build', cache_path])
+        system, = [p for root, p in self.original_bytes if root == 'build' and p.endswith('/CMakeSystem.cmake')]
+        system_raw = self.original_bytes['build', system]
+        cross = system_raw.replace(b'CMAKE_CROSSCOMPILING "FALSE"', b'CMAKE_CROSSCOMPILING "TRUE"')
+        self.assertNotEqual(cross, system_raw)
+        self.repin('build', system, cross)
+        suppressed('context-unsupported', self.diagnostic((script,)))
+        self.repin('build', system, system_raw)
+
+        multi, _, _ = self.multi_inputs
+        multi_raw = self.fixture.encode({**multi, 'schema': 'ci110-configured-inputs-v4'})
+        other = self.root / 'enclosure-multi.json'
+        other.write_bytes(multi_raw)
+        suppressed('context-unsupported', self.configured.diagnose(other, self.fixture.digest(multi_raw),
+                                                                   multi['source'], [{'path': script}]))
+        for root, path, reason in [('build', system, 'system-pin-missing'),
+                                   ('source', script, 'script-pin-missing')]:
+            self.inv['files'] = [r for r in pristine['files'] if (r['root'], r['path']) != (root, path)]
+            suppressed(reason, self.diagnostic((script,)))
+        self.inv = pristine
+        stale = self.diagnostic((script,), pin='0' * 64)
+        self.full(stale)
+        self.assertEqual(stale['status'], 'rejected')
+        self.assertEqual(stale['errors'], ['configured-manifest-digest-mismatch'])
+        self.assertEqual(shadow.policy.canonical(self.diagnostic((script,))), shadow.policy.canonical(intact))
+
     def test_corpus_cli_independent_hit_unrelated_and_full_separation(self):
         corpus, observation = self.corpus_case()
         result = self.compare_corpus(corpus)
@@ -1293,7 +1482,8 @@ class ConfiguredInventory(unittest.TestCase):
                          'denominator': 1, 'state': 'HIT'})
         self.assertEqual(case['diagnostic_impacted_test_ids'], ['app-contract'])
         self.assertEqual(case['full_would_select_test_ids'],
-                         ['app-contract', 'fixture-setup', 'peer-contract', 'python-generator-contract'])
+                         ['alg03-enclosure', 'alg03-numeric', 'app-contract', 'fixture-setup',
+                          'peer-contract', 'python-generator-contract'])
         self.assertEqual(result, self.compare_corpus(corpus), 'replay output must be deterministic')
         absent = self.copy(corpus); absent['schema'] = 'ci110-impact-corpus-v2'
         absent['cases'][0]['static_inventory'] = None
