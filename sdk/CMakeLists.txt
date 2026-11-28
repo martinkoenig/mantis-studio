@@ -33,14 +33,14 @@ target_include_directories(mantis-sdk-cpp INTERFACE
 target_compile_features(mantis-sdk-cpp INTERFACE cxx_std_23)
 target_link_libraries(mantis-sdk-cpp INTERFACE mantis-sdk-c)
 
-install(TARGETS mantis-sdk-c mantis-sdk-cpp EXPORT MantisPluginSDKTargets)
+install(TARGETS mantis-sdk-c mantis-sdk-cpp EXPORT MantisPluginSDKTargets COMPONENT PluginSDK)
 install(FILES c/include/mantis/plugin.h c/include/mantis/projected_light.h
-              c/include/mantis/semantic_views.h DESTINATION "${sdk_include}/c/mantis")
-install(FILES cpp/include/mantis/sdk.hpp DESTINATION "${sdk_include}/cpp/mantis")
+              c/include/mantis/semantic_views.h DESTINATION "${sdk_include}/c/mantis" COMPONENT PluginSDK)
+install(FILES cpp/include/mantis/sdk.hpp DESTINATION "${sdk_include}/cpp/mantis" COMPONENT PluginSDK)
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE"
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/MantisPluginSDK-${PROJECT_VERSION}")
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/MantisPluginSDK-${PROJECT_VERSION}" COMPONENT PluginSDK)
 install(EXPORT MantisPluginSDKTargets NAMESPACE MantisPluginSDK::
-        DESTINATION "${MantisPluginSDK_INSTALL_CMAKEDIR}")
+        DESTINATION "${MantisPluginSDK_INSTALL_CMAKEDIR}" COMPONENT PluginSDK)
 
 configure_package_config_file(cmake/MantisPluginSDKConfig.cmake.in
   "${CMAKE_CURRENT_BINARY_DIR}/MantisPluginSDKConfig.cmake"
@@ -51,4 +51,4 @@ write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/MantisPluginSDKCon
   VERSION "${PROJECT_VERSION}" COMPATIBILITY ExactVersion ARCH_INDEPENDENT)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/MantisPluginSDKConfig.cmake"
               "${CMAKE_CURRENT_BINARY_DIR}/MantisPluginSDKConfigVersion.cmake"
-        DESTINATION "${MantisPluginSDK_INSTALL_CMAKEDIR}")
+        DESTINATION "${MantisPluginSDK_INSTALL_CMAKEDIR}" COMPONENT PluginSDK)

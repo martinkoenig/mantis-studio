@@ -148,6 +148,18 @@ jobs:
             build/ci/ui-m2a/capabilities*/client-result.json
             build/ci/ui-m2a/capabilities*/*-failure.log
             build/ci/ui-m2a/capabilities*/negative-result.log
+      - name: Upload actual staged-install receipts and command logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-product-${{ matrix.runner }}-${{ matrix.studio }}
+          retention-days: 14
+          path: |
+            build/ci/install-evidence/run-*/*.json
+            build/ci/install-evidence/run-*/*.log
+            build/ci/install-evidence/run-*/*-cmake-manifest.txt
+            build/ci/install-evidence/run-*/external sdk build/origins.txt
+            build/ci/install-evidence/run-*/external sdk build/compile_commands.json
       - name: Upload UI review evidence
         if: ${{ always() && matrix.studio == 'ON' }}
         uses: actions/upload-artifact@v4
@@ -268,6 +280,18 @@ jobs:
             build/sanitizers/ui-m2a/capabilities*/client-result.json
             build/sanitizers/ui-m2a/capabilities*/*-failure.log
             build/sanitizers/ui-m2a/capabilities*/negative-result.log
+      - name: Upload sanitized-install command receipts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-product-sanitizers
+          retention-days: 14
+          path: |
+            build/sanitizers/install-evidence/run-*/*.json
+            build/sanitizers/install-evidence/run-*/*.log
+            build/sanitizers/install-evidence/run-*/*-cmake-manifest.txt
+            build/sanitizers/install-evidence/run-*/external sdk build/origins.txt
+            build/sanitizers/install-evidence/run-*/external sdk build/compile_commands.json
       - name: Bound trusted compiler cache snapshot
         if: ${{ success() && github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && steps.cache-restore.outputs.cache-hit != 'true' }}
         run: python3 tools/ci_ccache.py trim

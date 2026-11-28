@@ -1,0 +1,10 @@
+#pragma once
+#include <filesystem>
+namespace mantis::app {
+inline constexpr char plugins_from_bin[] = R"mantis(@MANTIS_PLUGINS_FROM_BIN@)mantis";
+inline constexpr char host_from_bin[] = R"mantis(@MANTIS_HOST_FROM_BIN@)mantis";
+inline constexpr char recipes_from_bin[] = R"mantis(@MANTIS_RECIPES_FROM_BIN@)mantis";
+inline constexpr char build_bin[] = R"mantis(@CMAKE_RUNTIME_OUTPUT_DIRECTORY@)mantis";
+// OS-reported image identity, never argv[0], CWD or PATH.
+std::filesystem::path executable_path();
+}
