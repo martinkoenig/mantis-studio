@@ -1,6 +1,8 @@
 """Audit actual mantisd through the public C++ Client in an isolated temp project."""
+from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 import argparse
+import errno
 import json
 import os
 import re
@@ -22,10 +24,58 @@ sys.path.insert(0, str(build / 'python'))
 import mantis
 from mantis import mantis_pb2 as w
 
+
+@contextmanager
+def fixture_resources():
+    resources = ExitStack()
+    try:
+        yield resources
+    except BaseException:
+        # Retire all owned resources without replacing the initiating error.
+        with suppress(Exception):
+            resources.close()
+        raise
+    else:
+        resources.close()
+
+
+def stop_process(process, group=False):
+    if process and process.poll() is None:
+        if group and os.name == 'posix':
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+        process.wait(timeout=5)
+
+
+def retain_locked_startup(path, stream_path, peer, attempts, last_error):
+    returncode = peer.poll() if peer else None
+    state = 'not started' if peer is None else 'running' if returncode is None else 'exited'
+    evidence = dict(peer='Locked.mantis', state=state, returncode=returncode, snapshot_attempts=attempts,
+                    last_snapshot_error=last_error)
+    # Recognize fixed startup markers from a bounded sample, never retain raw
+    # text that can contain tokens, paths or request details.
+    try:
+        with stream_path.open('rb') as stream:
+            lines = stream.read(8192).splitlines()
+        evidence.update(
+            listener_announced=any(line.startswith(b'mantisd ready on 127.0.0.1:') for line in lines),
+            startup_error_reported=any(line.startswith(b'mantisd: ') for line in lines))
+    except OSError:
+        evidence['stream_sample_unavailable'] = True
+    text = json.dumps(evidence)
+    with suppress(Exception):
+        print('Locked peer startup: ' + text, file=sys.stderr)
+    with suppress(Exception):
+        path.write_text(text + '\n')
+
+
 out = build / ('ui-m2a/capabilities-negative' if args.negative_writer else 'ui-m2a/capabilities')
 out.mkdir(parents=True, exist_ok=True)
-with tempfile.TemporaryDirectory(prefix='mantis-project-capabilities-') as tmp:
-    root = Path(tmp)
+locked_failure = out / 'locked-peer-failure.log'
+locked_failure.unlink(missing_ok=True)
+with fixture_resources() as fixture:
+    root = Path(fixture.enter_context(tempfile.TemporaryDirectory(prefix='mantis-project-capabilities-')))
     (root / 'file').write_text('not a directory')
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
@@ -57,29 +107,60 @@ with tempfile.TemporaryDirectory(prefix='mantis-project-capabilities-') as tmp:
             daemon_fds = (gate_daemon.fileno(),)
     daemon_command += ['--project', str(root / 'A.mantis'), '--plugins',
                        str(build / ('plugins' if args.negative_writer else 'project-capabilities-plugins'))]
-    with (out / 'daemon.log').open('w+') as log:
+    with fixture_resources() as resources:
+        daemon = locked = proc = writer_lock = None
+
+        def retire():
+            # ExitStack runs in reverse order and continues if a cleanup fails.
+            with ExitStack() as cleanup:
+                cleanup.callback(stop_process, daemon)
+                cleanup.callback(stop_process, locked)
+                if gate_client:
+                    cleanup.callback(gate_client.close)
+                cleanup.callback(stop_process, proc, group=True)
+                if gate_daemon:
+                    cleanup.callback(gate_daemon.close)
+                if writer_lock:
+                    cleanup.callback(writer_lock.close)
+                    cleanup.callback(writer_lock.rollback)
+
+        log = resources.enter_context((out / 'daemon.log').open('w+'))
+        resources.callback(retire)
         daemon = subprocess.Popen(daemon_command, pass_fds=daemon_fds,
                                   env=env, stdout=log, stderr=log)
         if gate_daemon and not args.negative_writer:
             gate_daemon.close()
-        locked = None
-        proc = None
-        writer_lock = None
+        locked_stream = root / 'locked-peer.log'  # Ephemeral; only the summary is retained.
+        locked_ready = False
+        locked_attempts = 0
+        locked_error = None
         try:
             with socket.socket() as sock:
                 sock.bind(('127.0.0.1', 0))
                 locked_port = sock.getsockname()[1]
             locked_env = dict(env, MANTIS_PORT=str(locked_port))
-            locked = subprocess.Popen([str(build / 'bin/mantisd'), '--project', str(root / 'Locked.mantis')],
-                                      env=locked_env, stdout=log, stderr=log)
+            # The peer only holds a project lock; it needs no plugin catalogue.
+            locked_plugins = root / 'locked-peer-plugins'
+            locked_plugins.mkdir()
+            locked_log = resources.enter_context(locked_stream.open('wb'))
+            locked = subprocess.Popen([str(build / 'bin/mantisd'), '--project', str(root / 'Locked.mantis'),
+                                       '--plugins', str(locked_plugins)],
+                                      env=locked_env, stdout=locked_log, stderr=locked_log)
             lc = mantis.Client(locked_port, env['MANTIS_TOKEN'])
             for _ in range(100):
                 if locked.poll() is not None:
                     raise AssertionError('Locked peer failed startup')
+                locked_attempts += 1
                 try:
                     lc.snapshot()
+                    locked_ready = True
                     break
-                except (OSError, mantis.MantisError):
+                except (OSError, mantis.MantisError) as error:
+                    if isinstance(error, OSError):
+                        locked_error = errno.errorcode.get(error.errno or 0, type(error).__name__)
+                    else:
+                        locked_error = (f'MantisError code {error.code}' if isinstance(error.code, int)
+                                        else 'MantisError')
                     time.sleep(.03)
             else:
                 raise AssertionError('Locked peer startup deadline')
@@ -173,35 +254,22 @@ with tempfile.TemporaryDirectory(prefix='mantis-project-capabilities-') as tmp:
             assert daemon.wait(timeout=8) == 0
             assert not any((root / name).exists() for name in ('denied.mantis', 'missing.mantis', 'busy.mantis'))
         except BaseException as error:
+            if not locked_ready:
+                with suppress(Exception):
+                    retain_locked_startup(locked_failure, locked_stream, locked, locked_attempts, locked_error)
             if isinstance(error, subprocess.TimeoutExpired):
-                retain('capabilities.log', error.stdout)
+                with suppress(Exception):
+                    retain('capabilities.log', error.stdout)
             # Bound retained diagnostics, including the real daemon's durable
             # capture errors. Never dump Requests, environment or access tokens.
             for name, path in [('daemon', out / 'daemon.log'),
                                ('project-diagnostics', root / 'A.mantis/diagnostics.log')]:
-                if path.exists():
-                    with path.open('rb') as diagnostic:
-                        diagnostic.seek(0, os.SEEK_END)
-                        diagnostic.seek(max(0, diagnostic.tell() - 65536))
-                        text = redact(diagnostic.read(65536))
-                    (out / (name + '-failure.log')).write_text(text)
-                    print(name + ':\n' + text, file=sys.stderr)
+                with suppress(Exception):
+                    if path.exists():
+                        with path.open('rb') as diagnostic:
+                            diagnostic.seek(0, os.SEEK_END)
+                            diagnostic.seek(max(0, diagnostic.tell() - 65536))
+                            text = redact(diagnostic.read(65536))
+                        (out / (name + '-failure.log')).write_text(text)
+                        print(name + ':\n' + text, file=sys.stderr)
             raise
-        finally:
-            if writer_lock:
-                writer_lock.rollback()
-                writer_lock.close()
-            if gate_daemon:
-                gate_daemon.close()
-            if proc and proc.poll() is None:
-                if os.name == 'posix':
-                    os.killpg(proc.pid, signal.SIGKILL)
-                else:
-                    proc.kill()
-                proc.wait(timeout=5)
-            if gate_client:
-                gate_client.close()
-            for process in (locked, daemon):
-                if process and process.poll() is None:
-                    process.kill()
-                    process.wait(timeout=5)
