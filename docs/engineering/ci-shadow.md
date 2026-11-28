@@ -304,14 +304,56 @@ not a test of `protoc`. It verifies the proto-only change, an unrelated consumer
 loss of the query's input edge after repinning, and exact restoration.
 
 The receipt is a consistency check for an owned capture, not authentication of
-the query producer or attestation of a build. Other Protobuf paths (including
-Python generation), generated sources, and overall closure stay unresolved.
-FULL, `execution_authorized=false` and `closure_complete=false` are unchanged.
+the query producer or attestation of a build.
+
+### One generated Python Protobuf edge (separate opt-in)
+
+In the same Studio OFF, Debug, single-config Ninja lane, use the same manifest
+fields with `schema: ci110-configured-inputs-v3`. This input version leaves v1/v2
+diagnostics and saved corpus replay unchanged. V3 uses the same C++ receipt and
+validation as v2, independently of Python. To supply Python evidence, run the
+following bounded query before building, with the same stdout/stderr and graph
+byte checks described above:
+
+```sh
+ninja -C "$BUILD" -t query python/mantis/mantis_pb2.py
+```
+
+Pin `mantis-protobuf-python-ninja-query.json` at the build root in `files` in
+addition to the graph, proto, and File API pins. This receipt uses the C++
+receipt's fields and bounds, except that `schema` is
+`ci110-mantis-protobuf-python-ninja-query-v1`, `query` is the single complete
+stdout string (instead of `queries`), and `sha256.owner` pins the `mantis-python`
+target reply. `index`, `cache`, both Ninja files, the exact proto bytes and the
+source/tree, roots, configuration and generator must still agree.
+
+Admission requires the exact `CUSTOM_COMMAND` output, the absolute proto path
+as an explicit input, and the observed `mantis-python` consumer and relative
+and absolute `CMakeFiles/mantis-python` nodes. The selected File API target
+must be a `UTILITY` without compile groups or artifacts, uniquely listing the
+exact generated `CMakeFiles/mantis-python.rule` and
+`python/mantis/mantis_pb2.py.rule` paths. No Python output file needs to exist.
+The receipt never names paths to open or commands to execute.
+
+Only that match adds the observed `ninja-query-protobuf-python` edge to
+`mantis-python`. Reachability follows the existing codemodel links, including
+`mantis-alg03-ply-probe-daemon` in the checked Studio OFF graph; it is not inferred
+from Ninja consumer names, Python imports or script arguments. Missing,
+unsupported, stale, ambiguous or mismapped Python evidence yields an explicit
+Python unknown without removing a valid C++ edge. Invalid outer file pins still
+reject ingestion. The tiny fixture maps `python-generator-contract` through a
+configured dependency and leaves `peer-contract` untouched. It checks actual
+Ninja input removal, wrong File API association, stale/crossed pins, and exact
+restoration. It does not run these fixture executables or test Python imports.
+
+Other generated sources, Python runtime/CTest membership and overall closure
+remain unqualified. The diagnostic and corpus envelopes are unchanged. FULL,
+`execution_authorized=false` and `closure_complete=false` remain binding.
 
 ### Edge and uncertainty semantics
 
 - `observed`: codemodel-listed file-to-target and dependency-to-consumer edges,
-  plus the opt-in generated C++ edge above, with exact pinned document/target
+  plus the opt-in generated Protobuf edges above, with exact pinned document/target
   identity. These are **listed observations**, not evidence that CMake listed
   every semantic dependency.
 - `conservative-inference`: literal quoted include-to-target edges, with the

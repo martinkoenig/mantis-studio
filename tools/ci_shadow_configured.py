@@ -17,6 +17,10 @@ PROTO = 'protocol/protobuf/mantis.proto'
 PROTO_OUTPUTS = ('mantis.pb.cc', 'mantis.pb.h')
 PROTO_OWNER = 'mantis-wire'
 PROTO_RECEIPT = ('build', 'mantis-protobuf-ninja-query.json')
+PYTHON_PROTO_OUTPUT = 'python/mantis/mantis_pb2.py'
+PYTHON_PROTO_OWNER = 'mantis-python'
+PYTHON_PROTO_RECEIPT = ('build', 'mantis-protobuf-python-ninja-query.json')
+PYTHON_PROTO_INPUT_SCHEMA = 'ci110-configured-inputs-v3'
 
 
 class InvalidInput(ValueError):
@@ -49,7 +53,8 @@ def anchor(value):
 class Inputs:
     def __init__(self, manifest, expected):
         policy.keys(manifest, 'schema source roots configuration generator index ctest files', 'configured-input-fields')
-        check(manifest['schema'] in ('ci110-configured-inputs-v1', 'ci110-configured-inputs-v2'),
+        check(manifest['schema'] in ('ci110-configured-inputs-v1', 'ci110-configured-inputs-v2',
+                                     PYTHON_PROTO_INPUT_SCHEMA),
               'configured-input-version')
         policy.identity(manifest['source'])
         check(manifest['source'] == expected, 'configured-source-identity-mismatch')
@@ -201,6 +206,76 @@ def protobuf_owner(i, generator, configs, cache, cache_path, rows, target_docs):
                   mapping)
         else:
             check('compileGroupIndex' not in item, mapping)
+    return owner_id
+
+
+def python_protobuf_owner(i, generator, configs, cache, cache_path, rows, target_docs):
+    """Recognize only the fixed Python output and its generated UTILITY rules."""
+    unsupported = 'protobuf-python-ninja-evidence-unsupported'
+    missing = 'protobuf-python-ninja-evidence-missing'
+    mismatch = 'protobuf-python-ninja-evidence-context-mismatch'
+    mapping = 'protobuf-python-ninja-codemodel-mismatch'
+    ambiguous = 'protobuf-python-ninja-rule-ambiguous'
+    check(i.manifest['configuration'] == 'Debug' and generator.get('name') == 'Ninja' and
+          generator.get('multiConfig') is False and len(configs) == 1, unsupported)
+    raw = i.data.get(PYTHON_PROTO_RECEIPT)
+    check(raw is not None, missing)
+    check(len(raw) <= 32_768, unsupported)
+    context_keys = ('source', 'roots', 'configuration', 'generator')
+    try:
+        receipt = policy.strict_json(raw)
+        policy.keys(receipt, 'schema sha256 query ' + ' '.join(context_keys), unsupported)
+    except (ValueError, RecursionError):
+        raise InvalidInput(unsupported) from None
+    check(receipt['schema'] == 'ci110-mantis-protobuf-python-ninja-query-v1', unsupported)
+    check(all(receipt[k] == i.manifest[k] for k in context_keys), mismatch)
+    expected_cache = {'CMAKE_BUILD_TYPE': 'Debug', 'CMAKE_GENERATOR': 'Ninja', 'MANTIS_BUILD_STUDIO': 'OFF',
+                      'CMAKE_HOME_DIRECTORY': str(i.roots['source']), 'CMAKE_CACHEFILE_DIR': str(i.roots['build'])}
+    entries = [(r['name'], r.get('value')) for r in records(cache.get('entries'))
+               if r.get('name') in tuple(expected_cache)]
+    check(len(entries) == len(expected_cache) and dict(entries) == expected_cache, mismatch)
+
+    owner = next((r for r in rows if r['name'] == PYTHON_PROTO_OWNER), None)
+    if owner is None:
+        raise InvalidInput(mapping)
+    owner_id = owner['id']
+    doc = target_docs[owner_id]
+    check(doc['type'] == 'UTILITY' and not doc.get('compileGroups') and not doc.get('artifacts'), mapping)
+    reply = str(Path(i.manifest['index']).parent)
+    pins = {'index': ('build', i.manifest['index']), 'cache': ('build', cache_path),
+            'owner': ('build', reply + '/' + owner['jsonFile']), PROTO: ('source', PROTO),
+            'build.ninja': ('build', 'build.ninja'), 'CMakeFiles/rules.ninja': ('build', 'CMakeFiles/rules.ninja')}
+    check(all(p in i.data for p in pins.values()), missing)
+    check(receipt['sha256'] == {name: policy.digest(i.data[p]) for name, p in pins.items()}, mismatch)
+
+    utility_node = 'CMakeFiles/' + PYTHON_PROTO_OWNER
+    query = receipt['query']
+    check(isinstance(query, str) and len(query) <= 8192, unsupported)
+    lines = query.split('\n')
+    check(len(lines) >= 7 and lines[:2] == [PYTHON_PROTO_OUTPUT + ':', '  input: CUSTOM_COMMAND'] and
+          lines[-5] == '  outputs:' and lines[-1] == '', unsupported)
+    outputs = lines[-4:-1]
+    check(len(set(outputs)) == len(outputs), ambiguous)
+    check(set(outputs) == {'    ' + output for output in
+                           (PYTHON_PROTO_OWNER, utility_node, str(i.roots['build'] / utility_node))}, unsupported)
+    deps = lines[2:-5]
+    check(all(re.fullmatch(r'    [!-~][ -~]*', d) and d[4] != '|' and not d.endswith(' ')
+              for d in deps), unsupported)
+    check(len(deps) == len(set(deps)), ambiguous)
+    check('    ' + str(i.roots['source'] / PROTO) in deps, 'protobuf-python-ninja-rule-input-missing')
+
+    # File API lists .rule markers, not the .py output as a compiled source.
+    # A second association (even a different spelling of the same path) is ambiguous.
+    for rule in (utility_node + '.rule', PYTHON_PROTO_OUTPUT + '.rule'):
+        absolute = i.roots['build'] / rule
+        paths = {str(absolute)}
+        if absolute.is_relative_to(i.roots['source']):
+            paths.add(absolute.relative_to(i.roots['source']).as_posix())
+        matches = [(tid, item) for tid, target in target_docs.items()
+                   for item in target.get('sources', []) if item['path'] in paths]
+        check(len(matches) <= 1, ambiguous)
+        check(matches and matches[0][0] == owner_id and matches[0][1].get('isGenerated') is True and
+              'compileGroupIndex' not in matches[0][1], mapping)
     return owner_id
 
 
@@ -360,13 +435,22 @@ def import_inputs(inputs, expected, changes):
                 for header in resolved:
                     file_edges.add((header, tid, 'conservative-inference', 'literal-include-from:' + path))
                     pending.append(header)
-    if inputs['schema'] == 'ci110-configured-inputs-v2':
+    if inputs['schema'] in ('ci110-configured-inputs-v2', PYTHON_PROTO_INPUT_SCHEMA):
         try:
             owner = protobuf_owner(i, cmake['generator'], configs, by_kind['cache'], cache_path, rows, target_docs)
         except InvalidInput as exc:
             unknown(str(exc), PROTO)
         else:
             file_edges.add((PROTO, owner, 'observed', 'ninja-query-protobuf-cxx'))
+    # Separate opt-in keeps the canonical v1/v2 diagnostic replayable as-is.
+    if inputs['schema'] == PYTHON_PROTO_INPUT_SCHEMA:
+        try:
+            owner = python_protobuf_owner(i, cmake['generator'], configs, by_kind['cache'], cache_path,
+                                          rows, target_docs)
+        except InvalidInput as exc:
+            unknown(str(exc), PROTO)
+        else:
+            file_edges.add((PROTO, owner, 'observed', 'ninja-query-protobuf-python'))
     # Detect cycles without recursion; absence of cycles says nothing about
     # omitted dependencies. The existing reachability worklist handles both.
     remaining = {t: len(info['dependencies']) for t, info in targets.items()}
