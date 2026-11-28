@@ -720,7 +720,7 @@ class ConfiguredInventory(unittest.TestCase):
     def unknowns(self, result):
         return {u['reason'] for u in result['unknowns']}
 
-    def test_real_protobuf_rule_reachability_miss_and_exact_restoration(self):
+    def proto_collector(self):
         source = self.inv['roots']['source']
         base = subprocess.check_output(['git', '-C', source, 'rev-parse', 'HEAD^'], timeout=5).decode().strip()
         command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', source,
@@ -735,13 +735,16 @@ class ConfiguredInventory(unittest.TestCase):
         baseline = collect(command)
         self.assertEqual([r['path'] for r in baseline['acquisition']['diff']['records']], [self.fixture.PROTO])
         self.assertEqual(baseline.pop('schema'), 'mantis-git-shadow-v1')
+        self.assertIs(baseline['execution_authorized'], False)
         self.assertTrue(baseline['decision']['full_matrix_would_select'])
 
-        def configured():
+        def configured(*, save=None):
             raw = self.fixture.encode(self.inv)
             self.path.write_bytes(raw)
             report = collect(command + ['--configured-inputs', str(self.path), '--configured-inputs-sha256',
                                         self.fixture.digest(raw)])
+            if save is not None:
+                save.write_bytes(shadow.policy.canonical(report))
             self.assertEqual(report.pop('schema'), 'mantis-git-shadow-v2')
             result = report.pop('configured_diagnostic')
             self.assertEqual(shadow.policy.canonical(report), shadow.policy.canonical(baseline),
@@ -749,6 +752,12 @@ class ConfiguredInventory(unittest.TestCase):
             self.full(result)
             self.assertEqual(result['status'], 'ingested', result)
             return result
+
+        return configured
+
+    def test_real_protobuf_rule_reachability_miss_and_exact_restoration(self):
+        configured = self.proto_collector()
+        source = self.inv['roots']['source']
 
         def expect_hit(result):
             reached = {t['name'] for t in result['targets'] if t['id'] in result['target_reasons']}
@@ -845,6 +854,166 @@ class ConfiguredInventory(unittest.TestCase):
         other.write_bytes(raw)
         unknown(unsupported, self.configured.diagnose(other, self.fixture.digest(raw), multi['source'],
                                                      [{'path': proto}]))
+
+    def test_real_python_protobuf_rule_reaches_only_configured_consumers(self):
+        configured = self.proto_collector()
+        self.inv['schema'] = 'ci110-configured-inputs-v3'
+        proto = self.fixture.PROTO
+        output, python_receipt, cxx_receipt = (self.fixture.PYTHON_OUTPUT, self.fixture.PYTHON_RECEIPT,
+                                              self.fixture.RULE_RECEIPT)
+        graph = 'build.ninja'
+        build = Path(self.inv['roots']['build'])
+        evidence = Path(tempfile.mkdtemp(prefix='python-rule-evidence-', dir=self.root))
+
+        def expect_hit(result):
+            names = {t['id']: t['name'] for t in result['targets']}
+            self.assertEqual({names[t] for t in result['target_reasons']},
+                             {'mantis-wire', 'middle', 'app', 'mantis-python', 'python-consumer'},
+                             'configured Python generator consumer MISS')
+            self.assertEqual(result['impacted_test_ids'], ['app-contract', 'python-generator-contract'])
+            self.assertIn('peer-contract', {t['id'] for t in result['tests']})
+            self.assertEqual({(names[e['target']], e['reason'], e['evidence'])
+                              for e in result['file_target_edges'] if e['file'] == proto},
+                             {('mantis-wire', 'ninja-query-protobuf-cxx', 'observed'),
+                              ('mantis-python', 'ninja-query-protobuf-python', 'observed')})
+
+        def record(phase, result, *files):
+            dest = evidence / phase
+            dest.mkdir()
+            (dest / 'diagnostic.json').write_bytes(shadow.policy.canonical(result))
+            (dest / 'manifest.json').write_bytes(self.path.read_bytes())
+            for file in files:
+                (dest / Path(file).name).write_bytes((build / file).read_bytes())
+            return result
+
+        shadow_path = evidence / 'shadow.json'
+        hit = record('intact', configured(save=shadow_path), graph, python_receipt, cxx_receipt)
+        expect_hit(hit)
+        cxx = [e for e in hit['file_target_edges'] if e['reason'] == 'ninja-query-protobuf-cxx']
+        self.assertEqual(len(cxx), 1)
+        corpus, observation = self.corpus_case(shadow_raw=shadow_path.read_bytes())
+        observation.update(test_ids=['python-generator-contract'], basis='independent-utility-consumer-expectation')
+        raw = self.fixture.encode(observation)
+        (self.root / 'observation.json').write_bytes(raw)
+        corpus['cases'][0]['id'] = 'proto-python'
+        corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(raw)
+        comparison = self.compare_corpus(corpus)
+        self.assertEqual(comparison['status'], 'compared', comparison)
+        self.assertEqual(comparison['cases'][0]['diagnostic']['hits'], ['python-generator-contract'])
+
+        def expect_miss(result, reason):
+            with self.assertRaisesRegex(AssertionError, 'configured Python generator consumer MISS'):
+                expect_hit(result)
+            self.full(result)
+            self.assertEqual(result['status'], 'ingested', result)
+            self.assertEqual([e for e in result['file_target_edges'] if e['file'] == proto], cxx)
+            self.assertEqual(result['target_reasons'], {t: hit['target_reasons'][t] for t in
+                             (row['id'] for row in hit['targets'] if row['name'] in ('mantis-wire', 'middle', 'app'))})
+            self.assertEqual(result['impacted_test_ids'], ['app-contract'])
+            self.assertIn({'reason': reason, 'subject': proto, 'evidence': 'unresolved'}, result['unknowns'])
+
+        exact_graph = self.original_bytes['build', graph]
+        exact_python = self.original_bytes['build', python_receipt]
+        exact_cxx = self.original_bytes['build', cxx_receipt]
+        receipt = json.loads(exact_python)
+        # Change the actual disposable configured edge, not just a receipt's text.
+        line = next(row for row in exact_graph.splitlines() if row.startswith(f'build {output} | '.encode()))
+        source_proto = str(Path(self.inv['roots']['source']) / proto)
+        # Ninja escapes spaces/colons/dollars in path tokens; query stdout does not.
+        escaped = source_proto.replace('$', '$$').replace(' ', '$ ').replace(':', '$:').encode()
+        dependency = b': CUSTOM_COMMAND ' + escaped
+        self.assertTrue(line.endswith(dependency), line)
+        self.repin('build', graph, exact_graph.replace(line + b'\n', line.removesuffix(dependency) +
+                   b': CUSTOM_COMMAND\n', 1))
+        graph_pin = self.fixture.digest((build / graph).read_bytes())
+
+        def query(node):
+            proc = subprocess.run(['ninja', '-C', str(build), '-t', 'query', node],
+                                  capture_output=True, check=True, timeout=5)
+            self.assertEqual(proc.stderr, b'')
+            return proc.stdout.decode()
+
+        cxx_capture = json.loads(exact_cxx)
+        self.assertEqual({node: query(node) for node in cxx_capture['queries']}, cxx_capture['queries'])
+        self.repin('build', cxx_receipt, {**cxx_capture, 'sha256': {**cxx_capture['sha256'], graph: graph_pin}})
+        mismatch = 'protobuf-python-ninja-evidence-context-mismatch'
+        expect_miss(record('stale-graph', self.diagnostic((proto,)), graph, python_receipt, cxx_receipt), mismatch)
+        fresh_query = query(output)
+        self.assertEqual(fresh_query, receipt['query'].replace('    ' + source_proto + '\n', '', 1))
+        self.repin('build', python_receipt, {**receipt, 'query': fresh_query,
+                   'sha256': {**receipt['sha256'], graph: graph_pin}})
+        expect_miss(record('missing-input', configured(), graph, python_receipt, cxx_receipt),
+                    'protobuf-python-ninja-rule-input-missing')
+        self.repin('build', graph, exact_graph)
+        self.repin('build', cxx_receipt, exact_cxx)
+
+        # Deliberately cross with the pinned C++ owner's reply digest, then test
+        # a coherently repinned File API reply that no longer associates the rule.
+        wrong_digest = cxx_capture['sha256']['owner']
+        self.repin('build', python_receipt, {**receipt, 'sha256': {**receipt['sha256'], 'owner': wrong_digest}})
+        expect_miss(record('crossed-owner-pin', self.diagnostic((proto,)), python_receipt), mismatch)
+        path, owner = self.fixture.target_document(self.inv, 'mantis-python')
+        rule = next(row for row in owner['sources'] if row['path'] == str(build / (output + '.rule')))
+        rule['path'] = str(build / 'elsewhere' / (output + '.rule'))
+        changed_owner = self.fixture.encode(owner)
+        self.repin('build', path, changed_owner)
+        self.repin('build', python_receipt, {**receipt, 'sha256': {**receipt['sha256'],
+                   'owner': self.fixture.digest(changed_owner)}})
+        expect_miss(record('wrong-owner', self.diagnostic((proto,)), path, python_receipt),
+                    'protobuf-python-ninja-codemodel-mismatch')
+
+        self.repin('build', path, self.original_bytes['build', path])
+        self.repin('build', python_receipt, exact_python)
+        restored = record('restored', configured(), graph, python_receipt, cxx_receipt)
+        expect_hit(restored)
+        self.assertEqual(shadow.policy.canonical(restored), shadow.policy.canonical(hit))
+
+    def test_python_protobuf_optional_evidence_is_independent_and_bounded(self):
+        proto, name = self.fixture.PROTO, self.fixture.PYTHON_RECEIPT
+        receipt = json.loads(self.original_bytes['build', name])
+        legacy = self.diagnostic((proto,))
+        self.assertEqual(legacy['impacted_test_ids'], [])
+        self.inv['schema'] = 'ci110-configured-inputs-v2'
+        cxx_only = self.diagnostic((proto,))
+        self.assertEqual(cxx_only['impacted_test_ids'], ['app-contract'])
+        for result in (legacy, cxx_only):
+            self.full(result)
+            self.assertFalse(any(reason.startswith('protobuf-python-') for reason in self.unknowns(result)))
+
+        def unresolved(reason, result, expected=('app-contract',)):
+            self.full(result)
+            self.assertEqual(result['status'], 'ingested', result)
+            self.assertEqual(result['impacted_test_ids'], list(expected))
+            self.assertIn({'reason': reason, 'subject': proto, 'evidence': 'unresolved'}, result['unknowns'])
+
+        self.inv['schema'] = 'ci110-configured-inputs-v3'
+        files = self.inv['files']
+        self.inv['files'] = [r for r in files if r['path'] != name]
+        unresolved('protobuf-python-ninja-evidence-missing', self.diagnostic((proto,)))
+        self.inv['files'] = [r for r in files if r['path'] != self.fixture.RULE_RECEIPT]
+        unresolved('protobuf-ninja-evidence-missing', self.diagnostic((proto,)), ('python-generator-contract',))
+        self.inv['files'] = files
+        unsupported = 'protobuf-python-ninja-evidence-unsupported'
+        input_line = '    ' + str(Path(self.inv['roots']['source']) / proto) + '\n'
+        variants = (
+            (b'{', unsupported),
+            ({**receipt, 'query': receipt['query'].replace(input_line, '    || ' + input_line[4:])}, unsupported),
+            ({**receipt, 'query': receipt['query'].replace(input_line, input_line * 2)},
+             'protobuf-python-ninja-rule-ambiguous'),
+            ({**receipt, 'source': {**receipt['source'], 'commit': self.base}},
+             'protobuf-python-ninja-evidence-context-mismatch'),
+        )
+        for value, reason in variants:
+            with self.subTest(reason=reason):
+                self.repin('build', name, value)
+                unresolved(reason, self.diagnostic((proto,)))
+
+        multi, _, _ = self.multi_inputs
+        raw = self.fixture.encode({**multi, 'schema': 'ci110-configured-inputs-v3'})
+        other = self.root / 'multi-python-rule-inputs.json'
+        other.write_bytes(raw)
+        unresolved(unsupported, self.configured.diagnose(other, self.fixture.digest(raw), multi['source'],
+                                                        [{'path': proto}]), ())
 
     def test_real_named_direct_transitive_and_header_oracles(self):
         result = self.diagnostic()
@@ -1123,7 +1292,8 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(case['diagnostic'], {'hits': ['app-contract'], 'misses': [],
                          'denominator': 1, 'state': 'HIT'})
         self.assertEqual(case['diagnostic_impacted_test_ids'], ['app-contract'])
-        self.assertEqual(case['full_would_select_test_ids'], ['app-contract', 'fixture-setup', 'peer-contract'])
+        self.assertEqual(case['full_would_select_test_ids'],
+                         ['app-contract', 'fixture-setup', 'peer-contract', 'python-generator-contract'])
         self.assertEqual(result, self.compare_corpus(corpus), 'replay output must be deterministic')
         absent = self.copy(corpus); absent['schema'] = 'ci110-impact-corpus-v2'
         absent['cases'][0]['static_inventory'] = None
