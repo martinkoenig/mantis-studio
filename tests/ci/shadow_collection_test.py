@@ -1166,7 +1166,9 @@ class ConfiguredInventory(unittest.TestCase):
             bad = self.copy(merged); bad['decision'][section][key] = value
             raw = self.fixture.encode(bad); (self.root / 'shadow.json').write_bytes(raw)
             corpus['cases'][0]['shadow']['sha256'] = self.fixture.digest(raw)
-            rejected = self.compare_corpus(corpus)
+            # The head-identity case crosses the supervised CLI; the other
+            # field permutations use the same worker and exact saved bytes.
+            rejected = self.compare_corpus(corpus, cli=(section, key) == ('source', 'head'))
             self.assertEqual(rejected['errors'], ['corpus-decision-acquisition-mismatch'])
             self.assertEqual(rejected['cases'], [])
         (self.root / 'shadow.json').write_bytes(original_merged)
@@ -1817,7 +1819,8 @@ class ConfiguredInventory(unittest.TestCase):
             else: bad.pop('basis')
             raw = self.fixture.encode(bad); (self.root / 'observation.json').write_bytes(raw)
             corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(raw)
-            self.assertEqual(self.compare_corpus(corpus)['status'], 'rejected', change)
+            self.assertEqual(self.compare_corpus(corpus, cli=change == 'stale-context')['status'],
+                             'rejected', change)
         (self.root / 'observation.json').write_bytes(original_observation)
         corpus['cases'][0]['observation']['sha256'] = self.fixture.digest(original_observation)
         # Repinned stale serialized projection must be rejected, not trusted.
