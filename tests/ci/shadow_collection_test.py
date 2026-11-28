@@ -1179,11 +1179,14 @@ class ConfiguredInventory(unittest.TestCase):
     def corpus_case(self, shadow_raw=None, *, static_raw=None, case_id='header-app',
                     expected=('app-contract',), basis='independent-cmake-link-consumer-expectation'):
         """Independent app/peer expectations; never derived from impacted IDs."""
-        self.diagnostic()
+        # Save the input once. The collector and replay validate it themselves;
+        # a standalone import here was redundant and its result was discarded.
+        inputs = self.fixture.encode(self.inv)
+        self.path.write_bytes(inputs)
         command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', self.inv['roots']['source'],
                    '--event', 'push', '--ref', 'refs/heads/develop', '--base', self.base,
                    '--head', self.inv['source']['commit'], '--configured-inputs', str(self.path),
-                   '--configured-inputs-sha256', self.fixture.digest(self.path.read_bytes())]
+                   '--configured-inputs-sha256', self.fixture.digest(inputs)]
         if static_raw is not None:
             (self.root / 'static.json').write_bytes(static_raw)
             command += ['--inventory', str(self.root / 'static.json'),

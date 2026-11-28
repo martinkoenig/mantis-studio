@@ -365,7 +365,7 @@ def calibration_decoy(root):
     (source / cal).write_bytes(exact + b'\n# independent before bytes\n')
     (source / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.25)
 project(CalibrationCopyRoute LANGUAGES NONE)
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(_Python3_EXECUTABLE "${{Python3_EXECUTABLE}}" CACHE INTERNAL "Fixture's running interpreter")
 option(MANTIS_BUILD_STUDIO "Studio" OFF)
 option(BUILD_TESTING "Testing" ON)
 enable_testing()
@@ -385,13 +385,13 @@ add_test(NAME python-calibration COMMAND ${{Python3_EXECUTABLE}} ${{CMAKE_CURREN
                     '-c', 'core.hooksPath=' + os.devnull, *args], root, deadline=deadline).decode().strip()
 
     def configure(destination):
-        query = destination / '.cmake/api/v1/query'
-        query.mkdir(parents=True)
-        for kind in ('codemodel-v2', 'cmakeFiles-v1', 'cache-v2'):
-            (query / kind).touch()
         command = ['cmake', '-S', str(source), '-B', str(destination), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Debug',
                    '-DPython3_EXECUTABLE=' + sys.executable]
         if destination == build:
+            query = destination / '.cmake/api/v1/query'
+            query.mkdir(parents=True)
+            for kind in ('codemodel-v2', 'cmakeFiles-v1', 'cache-v2'):
+                (query / kind).touch()
             command += ['--trace-expand', '--trace-format=json-v1', '--trace-redirect=' + str(root / 'trace.jsonl')]
         run(command, root, deadline=deadline)
 
