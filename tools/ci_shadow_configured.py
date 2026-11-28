@@ -31,6 +31,7 @@ CALIBRATION_SOURCE = 'sdk/python/mantis/calibration.py'
 CALIBRATION_INIT = 'sdk/python/mantis/__init__.py'
 CALIBRATION_SCRIPT = 'tests/unit/python_calibration.py'
 CALIBRATION_TEST = 'python-calibration'
+CALIBRATION_COPY_RECEIPT = ('build', 'mantis-python-calibration-copy-trace.json')
 # Reviewed source bytes: the script inserts argv[1]/python first, imports
 # mantis and calls mantis.Calibration; __init__ re-exports .calibration.Calibration.
 # Changes to either route require reinspection, not token/substring matching.
@@ -398,7 +399,34 @@ def check_calibration_registration(i, python, ctest, registration, cmake_lines):
           cmake_lines[line - 1] == declaration and cmake_lines.count(declaration) == 1, error)
 
 
-def check_calibration_copy(i, cmake_inputs, python, ctest, registration):
+def check_calibration_trace(i, expected, evidence_pins):
+    """Validate only the scoped projection of a completed expanded CMake trace."""
+    missing = 'python-calibration-copy-trace-missing'
+    unsupported = 'python-calibration-copy-trace-unsupported'
+    raw = i.data.get(CALIBRATION_COPY_RECEIPT)
+    check(raw is not None, missing)
+    check(len(raw) <= 32_768, unsupported)
+    context = ('source', 'roots', 'configuration', 'generator')
+    try:
+        receipt = policy.strict_json(raw)
+        policy.keys(receipt, 'schema sha256 commands ' + ' '.join(context), unsupported)
+    except ValueError:
+        raise InvalidInput(unsupported) from None
+    check(receipt['schema'] == 'ci110-mantis-python-calibration-copy-trace-v1', unsupported)
+    check(all(receipt[k] == i.manifest[k] for k in context) and
+          receipt['sha256'] == {name: policy.digest(i.data[key]) for name, key in evidence_pins.items()},
+          'python-calibration-copy-trace-context-mismatch')
+    # Count invocations, not distinct values: a repeated or competing command
+    # is ambiguous even if it wrote exactly the same bytes. No evaluation of
+    # unknown commands, directory destinations or implicit path resolution.
+    commands = receipt['commands']
+    check(isinstance(commands, list) and len(commands) == len(expected) and
+          all(isinstance(command, dict) and all(type(command.get(key)) is int
+              for key in ('line', 'frame', 'global_frame')) for command in commands) and
+          all(commands.count(command) == 1 for command in expected), 'python-calibration-copyonly-unresolved')
+
+
+def check_calibration_copy(i, cmake_inputs, cache_path, python, ctest, registration):
     """Fixed COPYONLY and import evidence, not a CMake or Python evaluator."""
     copies = ((CALIBRATION_SOURCE, 'python/mantis/calibration.py'), (CALIBRATION_INIT, 'python/mantis/__init__.py'))
     required = [('source', path) for path in ('CMakeLists.txt', CALIBRATION_SCRIPT)]
@@ -406,13 +434,20 @@ def check_calibration_copy(i, cmake_inputs, python, ctest, registration):
     check(all(key in i.data for key in required), 'python-calibration-pin-missing')
     cmake_lines = [line.strip() for line in i.data['source', 'CMakeLists.txt'].splitlines()]
     check_calibration_registration(i, python, ctest, registration, cmake_lines)
+    expected = []
     for src, dst in copies:
         declaration = f'configure_file({src} ${{CMAKE_BINARY_DIR}}/{dst} COPYONLY)'.encode()
         check([r for r in cmake_inputs if r.get('path') == src] == [{'path': src}] and
               cmake_lines.count(declaration) == 1, 'python-calibration-copyonly-unresolved')
         check(i.data['source', src] == i.data['build', dst], 'python-calibration-copy-bytes-mismatch')
+        expected.append({'cmd': 'configure_file', 'file': str(i.roots['source'] / 'CMakeLists.txt'),
+                         'line': cmake_lines.index(declaration) + 1, 'frame': 1, 'global_frame': 1,
+                         'args': [src, str(i.roots['build'] / dst), 'COPYONLY']})
     check(all(policy.digest(i.data['source', path]) == digest for path, digest in CALIBRATION_IMPORT_DIGESTS.items()),
           'python-calibration-import-unrecognized')
+    pins = {'index': ('build', i.manifest['index']), 'cache': ('build', cache_path),
+            'ctest': ('build', i.manifest['ctest']), **{path: (root, path) for root, path in required}}
+    check_calibration_trace(i, expected, pins)
 
 
 def import_inputs(inputs, expected, changes):
@@ -659,7 +694,7 @@ def import_inputs(inputs, expected, changes):
     if inputs['schema'] == CALIBRATION_INPUT_SCHEMA:
         try:
             python = configured_interpreter(i, cmake_version, cmake['generator'], configs, by_kind['cache'], CALIBRATION_TEST)
-            check_calibration_copy(i, cmake_inputs, python, ctest, calibration_registration)
+            check_calibration_copy(i, cmake_inputs, cache_path, python, ctest, calibration_registration)
         except InvalidInput as exc:
             unknown(str(exc), CALIBRATION_SOURCE)
         else:

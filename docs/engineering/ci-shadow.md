@@ -397,15 +397,40 @@ CTest show-only JSON as above. Pin these additional files:
 | Root | Paths |
 | --- | --- |
 | Source | `CMakeLists.txt`, `tests/unit/python_calibration.py`, `sdk/python/mantis/calibration.py`, `sdk/python/mantis/__init__.py` |
-| Build | `python/mantis/calibration.py`, `python/mantis/__init__.py` |
+| Build | `python/mantis/calibration.py`, `python/mantis/__init__.py`, `mantis-python-calibration-copy-trace.json` |
 
 The single `python-calibration` registration must have exactly the configured
 interpreter, the absolute source-root test script and the absolute build root
 as argv, with that same working directory and no CTest environment override.
 Its backtrace must match the scoped top-level `add_test` declaration. The
-importer checks the two exact top-level `configure_file(... COPYONLY)` lines,
-their corresponding source entries in `cmakeFiles`, and byte equality of each
-source and its copy at the exact `python/mantis/` path.
+importer also checks `cmakeFiles` lists each source and that each pinned source
+matches its exact `python/mantis/` copy. Neither a listed input, a literal
+statement in an inactive branch, nor equal bytes establish who produced a copy.
+
+Capture the successful, fresh configure with `--trace-expand
+--trace-format=json-v1 --trace-redirect=<private-trace-path>` (no
+`--trace-source` filter), and collect the File API and CTest show-only data from
+that same build. Keep the full trace private and outside the manifest. Pin a
+receipt of at most 32,768 bytes using these exact fields:
+
+- `schema`: `ci110-mantis-python-calibration-copy-trace-v1`.
+- `source`, `roots`, `configuration`, `generator`: as in the input manifest.
+- `sha256`: digests keyed by `index`, `cache` (File API cache reply), `ctest`,
+  and each source/copy path in the table, excluding the receipt itself.
+- `commands`: the trace records relevant to either copy route, retaining only
+  `cmd`, `file`, `line`, `frame`, `global_frame`, and expanded `args`. Keep
+  competing calls as well as the expected calls: check both input and output
+  spellings, directory writes to the package, and overrides of `configure_file`.
+  If the producer cannot resolve an opaque or indirect writer, omit the receipt
+  rather than supplying a success-only extract.
+
+The importer accepts exactly two records, one active top-level `configure_file`
+per pair, with both frame depths equal to 1, the exact source recipe line,
+the source-relative input, the exact absolute destination and `COPYONLY`. A
+missing, repeated, redirected or competing invocation is not qualified, even
+if the final file bytes match. This is caller-captured evidence about these
+two configure-time routes, not an authenticated trace or a general filesystem
+provenance check.
 
 Matching copies alone are not import evidence. The importer recognizes the
 reviewed full-file digests of the test script and package initializer: the

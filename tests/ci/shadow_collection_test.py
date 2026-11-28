@@ -1439,7 +1439,8 @@ class ConfiguredInventory(unittest.TestCase):
             return shadow.policy.canonical(replay)
 
         intact, diag = collect()
-        self.assertEqual(diag['impacted_test_ids'], [test], 'configured COPYONLY consumer MISS')
+        self.assertEqual(diag['impacted_test_ids'], [test],
+                         [u for u in diag['unknowns'] if u['reason'].startswith(test + '-')])
         self.assertEqual(diag['target_reasons'], {})
         edges = [e for e in diag['file_test_edges'] if e['test'] == test]
         self.assertEqual(edges, [{'file': cal, 'test': test, 'evidence': 'conservative-inference',
@@ -1473,6 +1474,21 @@ class ConfiguredInventory(unittest.TestCase):
         self.inv['files'] = [pin for pin in files if (pin['root'], pin['path']) != ('build', copy_init)]
         check_unknown(self.diagnostic((cal,)), 'pin-missing')
         self.inv['files'] = files
+        trace = self.fixture.CALIBRATION_TRACE
+        self.inv['files'] = [pin for pin in files if (pin['root'], pin['path']) != ('build', trace)]
+        check_unknown(self.diagnostic((cal,)), 'copy-trace-missing')
+        self.inv['files'] = files
+        trace_raw = self.original_bytes['build', trace]
+        receipt = json.loads(trace_raw)
+        receipt['sha256']['ctest'] = '0' * 64
+        self.repin('build', trace, receipt)
+        check_unknown(self.diagnostic((cal,)), 'copy-trace-context-mismatch')
+        receipt = json.loads(trace_raw)
+        receipt['commands'].append(receipt['commands'][0])
+        self.repin('build', trace, receipt)
+        check_unknown(self.diagnostic((cal,)), 'copyonly-unresolved')
+        self.repin('build', trace, trace_raw)
+
         self.changed.append(('build', copy_init))
         (build / copy_init).write_bytes(wrong)
         rejected = self.diagnostic((cal,))
@@ -1484,6 +1500,42 @@ class ConfiguredInventory(unittest.TestCase):
         restored, _ = collect()
         self.assertEqual(restored, intact)
         self.assertEqual(compare(restored), comparison)
+
+    def test_real_calibration_copy_routed_from_same_byte_decoy(self):
+        import platform
+
+        if platform.machine() != 'x86_64':
+            self.skipTest('COPYONLY attribution is scoped to native Linux x86_64')
+        self.addCleanup(self.path.write_bytes, self.path.read_bytes())
+        case = Path(tempfile.mkdtemp(prefix='calibration-routing-', dir=self.root))
+        self.inv, base = self.fixture.calibration_decoy(case)
+        cal = self.fixture.CALIBRATION_FILES[0]
+        test = 'python-calibration'
+        raw = self.fixture.encode(self.inv)
+        self.path.write_bytes(raw)
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', self.inv['roots']['source'],
+                   '--event', 'push', '--ref', 'refs/heads/develop', '--base', base, '--head', self.inv['source']['commit'],
+                   '--configured-inputs', self.path, '--configured-inputs-sha256', self.fixture.digest(raw)]
+        run = subprocess.run(command, capture_output=True, timeout=10, check=True)
+        self.assertEqual(run.stderr, b'')
+        report = json.loads(run.stdout)
+        self.assertEqual([r['path'] for r in report['acquisition']['diff']['records']], [cal])
+        self.assertFalse(report['execution_authorized'])
+        self.assertTrue(report['decision']['full_matrix_would_select'])
+        diag = report['configured_diagnostic']
+        self.assertEqual(diag['status'], 'ingested', diag.get('errors'))
+        self.full(diag)
+        corpus, _ = self.corpus_case(shadow_raw=run.stdout, case_id='calibration-copy-decoy', expected=(),
+                                     basis='independent-unchanged-package-copy-before-after-configure')
+        replay = self.compare_corpus(corpus)
+        self.assertEqual(replay['status'], 'compared', replay)
+        replay_case, = replay['cases']
+        self.assertIn(test, replay_case['full_would_select_test_ids'])
+        self.assertEqual((diag['impacted_test_ids'], replay_case['diagnostic_impacted_test_ids']), ([], []),
+                         'inactive named COPYONLY falsely attributed in collector or replay')
+        self.assertNotIn(test, {e['test'] for e in diag['file_test_edges']})
+        self.assertIn({'reason': 'python-calibration-copyonly-unresolved', 'subject': cal, 'evidence': 'unresolved'},
+                      diag['unknowns'])
 
     def test_alg03_enclosure_wrong_context_artifact_and_pins(self):
         # Restore the exact borrowed manifest even if an assertion fails; the

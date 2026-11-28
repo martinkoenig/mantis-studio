@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import subprocess
@@ -28,6 +29,7 @@ PYTHON_RECEIPT = 'mantis-protobuf-python-ninja-query.json'
 ENCLOSURE_SCRIPT = 'tests/unit/alg03_enclosure.py'
 CALIBRATION_FILES = ('sdk/python/mantis/calibration.py', 'sdk/python/mantis/__init__.py',
                      'tests/unit/python_calibration.py')
+CALIBRATION_TRACE = 'mantis-python-calibration-copy-trace.json'
 
 
 def digest(data):
@@ -224,6 +226,38 @@ def run(command, root, *, deadline=None, env=None):
     return bytes(output)
 
 
+def calibration_trace(manifest, trace):
+    """Project the real expanded trace, without resolving or opening argv paths."""
+    source, build = (Path(manifest['roots'][r]) for r in ('source', 'build'))
+    assert trace.stat().st_size <= 16_000_000, 'fixture CMake trace exceeds capture limit'
+    named_file = re.compile(r'(?<![A-Za-z0-9_.-])(?:calibration|__init__)\.py(?![A-Za-z0-9_.-])')
+    with trace.open('rb') as stream:
+        assert json.loads(stream.readline()) == {'version': {'major': 1, 'minor': 2}}
+        commands = []
+        for line in stream:
+            row = json.loads(line)
+            cmd, args = row['cmd'], row['args']
+            # Keep competing explicit routes, not just the desired COPYONLY
+            # records. A known directory-level file operation is also relevant.
+            if (any(named_file.search(arg) for arg in args) or
+                    (cmd == 'file' and args and args[0] in ('COPY', 'RENAME', 'REMOVE_RECURSE', 'CREATE_LINK', 'INSTALL')
+                     and any(arg.startswith(str(build / 'python')) or 'python/mantis' in arg for arg in args)) or
+                    (cmd in ('function', 'macro') and args and args[0].lower() == 'configure_file')):
+                commands.append({k: row[k] for k in ('cmd', 'file', 'line', 'frame', 'global_frame', 'args')})
+    index = build / manifest['index']
+    cache, = (row['jsonFile'] for row in json.loads(index.read_bytes())['objects'] if row['kind'] == 'cache')
+    pins = {'index': index, 'cache': index.parent / cache, 'ctest': build / manifest['ctest'],
+            **{p: source / p for p in ('CMakeLists.txt', *CALIBRATION_FILES)},
+            **{p: build / p for p in ('python/mantis/calibration.py', 'python/mantis/__init__.py')}}
+    receipt = {k: manifest[k] for k in ('source', 'roots', 'configuration', 'generator')}
+    receipt.update(schema='ci110-mantis-python-calibration-copy-trace-v1', commands=commands,
+                   sha256={k: digest(p.read_bytes()) for k, p in pins.items()})
+    raw = encode(receipt)
+    assert len(raw) <= 32_768, 'scoped calibration COPYONLY trace exceeds receipt limit'
+    (build / CALIBRATION_TRACE).write_bytes(raw)
+    return {'root': 'build', 'path': CALIBRATION_TRACE, 'sha256': digest(raw)}
+
+
 def produce(root, generator='Ninja', *, deadline=None):
     deadline = time.monotonic() + SETUP_SECONDS if deadline is None else deadline
     source, build = root / 'source', root / 'build'
@@ -257,8 +291,11 @@ def produce(root, generator='Ninja', *, deadline=None):
     query.mkdir(parents=True)
     for kind in ('codemodel-v2', 'cmakeFiles-v1', 'cache-v2'):
         (query / kind).touch()
+    trace = root / 'calibration-trace.jsonl'
+    trace_args = (['--trace-expand', '--trace-format=json-v1', '--trace-redirect=' + str(trace)]
+                  if generator == 'Ninja' else [])
     run(['cmake', '-S', str(source), '-B', str(build), '-G', generator,
-         '-DCMAKE_BUILD_TYPE=Debug', '-DPython3_EXECUTABLE=' + sys.executable], root, deadline=deadline)
+         '-DCMAKE_BUILD_TYPE=Debug', '-DPython3_EXECUTABLE=' + sys.executable, *trace_args], root, deadline=deadline)
     queries = {}
     python_query = ''
     ninja_paths = ('build.ninja', 'CMakeFiles/rules.ninja')
@@ -307,9 +344,89 @@ def produce(root, generator='Ninja', *, deadline=None):
     for path in sorted(reply.glob('*.json')) + [build / 'ctest.json', build / 'CMakeCache.txt', *extra]:
         manifest['files'].append({'root': 'build', 'path': path.relative_to(build).as_posix(),
                                   'sha256': digest(path.read_bytes())})
+    if generator == 'Ninja':
+        manifest['files'].append(calibration_trace(manifest, trace))
     path = root / 'inputs.json'
     path.write_bytes(encode(manifest))
     return manifest, path, base
+
+
+def calibration_decoy(root):
+    """Two real configure-only snapshots: the edited input feeds the wrong output."""
+    source, build = root / 'source', root / 'build'
+    cal, init, script = CALIBRATION_FILES
+    copy = 'python/mantis/calibration.py'
+    for path in CALIBRATION_FILES:
+        dest = source / path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(Path(__file__).resolve().parents[2] / path, dest)
+    exact = (source / cal).read_bytes()
+    (source / 'fixed.py').write_bytes(exact)
+    (source / cal).write_bytes(exact + b'\n# independent before bytes\n')
+    (source / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.25)
+project(CalibrationCopyRoute LANGUAGES NONE)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+option(MANTIS_BUILD_STUDIO "Studio" OFF)
+option(BUILD_TESTING "Testing" ON)
+enable_testing()
+add_custom_target(configured-metadata)
+configure_file({init} ${{CMAKE_BINARY_DIR}}/python/mantis/__init__.py COPYONLY)
+if(FALSE)
+    configure_file({cal} ${{CMAKE_BINARY_DIR}}/{copy} COPYONLY)
+endif()
+configure_file({cal} ${{CMAKE_BINARY_DIR}}/unrelated.py COPYONLY)
+configure_file(fixed.py ${{CMAKE_BINARY_DIR}}/{copy} COPYONLY)
+add_test(NAME python-calibration COMMAND ${{Python3_EXECUTABLE}} ${{CMAKE_CURRENT_SOURCE_DIR}}/{script} ${{CMAKE_BINARY_DIR}})
+''')
+    deadline = time.monotonic() + SETUP_SECONDS
+
+    def git(*args):
+        return run(['git', '-C', str(source), '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                    '-c', 'core.hooksPath=' + os.devnull, *args], root, deadline=deadline).decode().strip()
+
+    def configure(destination):
+        query = destination / '.cmake/api/v1/query'
+        query.mkdir(parents=True)
+        for kind in ('codemodel-v2', 'cmakeFiles-v1', 'cache-v2'):
+            (query / kind).touch()
+        command = ['cmake', '-S', str(source), '-B', str(destination), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Debug',
+                   '-DPython3_EXECUTABLE=' + sys.executable]
+        if destination == build:
+            command += ['--trace-expand', '--trace-format=json-v1', '--trace-redirect=' + str(root / 'trace.jsonl')]
+        run(command, root, deadline=deadline)
+
+    git('init', '--template=', '-b', 'develop')
+    git('add', '.')
+    git('commit', '-m', 'before copy route')
+    base = git('rev-parse', 'HEAD')
+    before = root / 'before'
+    configure(before)
+    (source / cal).write_bytes(exact)
+    git('add', cal)
+    git('commit', '-m', 'calibration module only')
+    head = git('rev-parse', 'HEAD')
+    assert git('diff', '--name-status', base, head) == f'M\t{cal}'
+    configure(build)
+    assert (before / copy).read_bytes() == (build / copy).read_bytes() == exact
+    assert (before / 'unrelated.py').read_bytes() != (build / 'unrelated.py').read_bytes() == exact
+    assert not git('status', '--porcelain')
+    ctest = run(['ctest', '--test-dir', str(build), '--show-only=json-v1'], root, deadline=deadline)
+    (build / 'ctest.json').write_bytes(ctest)
+    reply = build / '.cmake/api/v1/reply'
+    index, = reply.glob('index-*.json')
+    cmake_files, = reply.glob('cmakeFiles-*.json')
+    assert [r for r in json.loads(cmake_files.read_bytes())['inputs'] if r['path'] == cal] == [{'path': cal}]
+    version = json.loads(index.read_bytes())['cmake']['version']['string']
+    files = [('source', p) for p in git('ls-files').splitlines()] + [
+        ('build', p.relative_to(build).as_posix()) for p in sorted(reply.glob('*.json'))] + [
+        ('build', p) for p in ('ctest.json', f'CMakeFiles/{version}/CMakeSystem.cmake', copy, 'python/mantis/__init__.py')]
+    roots = {'source': str(source), 'build': str(build)}
+    manifest = {'schema': 'ci110-configured-inputs-v5', 'source': {'commit': head, 'tree': git('rev-parse', 'HEAD^{tree}')},
+                'roots': roots, 'configuration': 'Debug', 'generator': 'Ninja', 'index': index.relative_to(build).as_posix(),
+                'ctest': 'ctest.json', 'files': [{'root': r, 'path': p, 'sha256': digest((Path(roots[r]) / p).read_bytes())}
+                                                for r, p in files]}
+    manifest['files'].append(calibration_trace(manifest, root / 'trace.jsonl'))
+    return manifest, base
 
 
 def repin(manifest, root, path, value):
