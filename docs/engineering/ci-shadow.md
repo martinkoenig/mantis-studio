@@ -413,16 +413,24 @@ Capture the successful, fresh configure with `--trace-expand
 that same build. Keep the full trace private and outside the manifest. Pin a
 receipt of at most 32,768 bytes using these exact fields:
 
-- `schema`: `ci110-mantis-python-calibration-copy-trace-v1`.
+- `schema`: `ci110-mantis-python-calibration-copy-trace-v2`. An earlier draft
+  projection did not retain all relevant directory copies and is unsupported.
 - `source`, `roots`, `configuration`, `generator`: as in the input manifest.
 - `sha256`: digests keyed by `index`, `cache` (File API cache reply), `ctest`,
   and each source/copy path in the table, excluding the receipt itself.
 - `commands`: the trace records relevant to either copy route, retaining only
-  `cmd`, `file`, `line`, `frame`, `global_frame`, and expanded `args`. Keep
-  competing calls as well as the expected calls: check both input and output
-  spellings, directory writes to the package, and overrides of `configure_file`.
-  If the producer cannot resolve an opaque or indirect writer, omit the receipt
-  rather than supplying a success-only extract.
+  `cmd`, `file`, `line`, `frame`, `global_frame`, and expanded `args`. Retain
+  competing or ambiguous native file operations even when neither filename
+  appears. For example, `file(COPY <alternate>/mantis DESTINATION python)`
+  can overwrite the configured files: the relative destination is under the
+  current binary directory. The fixture producer discards only known
+  non-writers, a few native operations with unambiguous absolute outputs
+  elsewhere in the owned build, and the reviewed top-level `recipes` copy
+  to `build/recipes`. It does not resolve directory mappings or open paths
+  found in the trace. Retain overrides of `configure_file` or `file`. Omit
+  the receipt if a possible opaque or indirect writer cannot be ruled out,
+  or if the relevant records do not fit the bound; never truncate the
+  projection to just the expected calls.
 
 The importer accepts exactly two records, one active top-level `configure_file`
 per pair, with both frame depths equal to 1, the exact source recipe line,

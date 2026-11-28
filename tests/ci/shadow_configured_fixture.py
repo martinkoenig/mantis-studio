@@ -226,6 +226,33 @@ def run(command, root, *, deadline=None, env=None):
     return bytes(output)
 
 
+def calibration_file_may_compete(args, caller, source, build):
+    """Discard only known non-writers or writes visibly outside build/python."""
+    if not args:
+        return True
+    op = args[0]
+    if op in {'READ', 'STRINGS', 'SHA256', 'GLOB', 'GLOB_RECURSE', 'RELATIVE_PATH', 'MAKE_DIRECTORY'}:
+        return False
+    # The reviewed top-level recipe copy populates build/recipes, not build/python.
+    if caller == str(source / 'CMakeLists.txt') and args == ['COPY', 'recipes', 'DESTINATION', str(build)]:
+        return False
+    if op == 'GENERATE' and args[1:2] == ['OUTPUT']:
+        outputs = args[2:3]
+    elif op == 'WRITE':
+        outputs = args[1:2]
+    elif op == 'REMOVE_RECURSE':
+        outputs = args[1:]
+    else:
+        # No attempt to interpret arbitrary file operations, in particular
+        # COPY/INSTALL directory mappings or their relative destinations.
+        return True
+    return not outputs or any(
+        not output.startswith(str(build) + '/') or not output.isprintable() or
+        any(c in output for c in '$;\\') or
+        any(part in ('', '.', '..') for part in output[1:].split('/')) or
+        Path(output).is_relative_to(build / 'python') for output in outputs)
+
+
 def calibration_trace(manifest, trace):
     """Project the real expanded trace, without resolving or opening argv paths."""
     source, build = (Path(manifest['roots'][r]) for r in ('source', 'build'))
@@ -237,12 +264,11 @@ def calibration_trace(manifest, trace):
         for line in stream:
             row = json.loads(line)
             cmd, args = row['cmd'], row['args']
-            # Keep competing explicit routes, not just the desired COPYONLY
-            # records. A known directory-level file operation is also relevant.
+            # A directory-level writer need not mention either filename or the
+            # absolute package path. Do not discard uncertain native file ops.
             if (any(named_file.search(arg) for arg in args) or
-                    (cmd == 'file' and args and args[0] in ('COPY', 'RENAME', 'REMOVE_RECURSE', 'CREATE_LINK', 'INSTALL')
-                     and any(arg.startswith(str(build / 'python')) or 'python/mantis' in arg for arg in args)) or
-                    (cmd in ('function', 'macro') and args and args[0].lower() == 'configure_file')):
+                    (cmd == 'file' and calibration_file_may_compete(args, row['file'], source, build)) or
+                    (cmd in ('function', 'macro') and args and args[0].lower() in ('configure_file', 'file'))):
                 commands.append({k: row[k] for k in ('cmd', 'file', 'line', 'frame', 'global_frame', 'args')})
     index = build / manifest['index']
     cache, = (row['jsonFile'] for row in json.loads(index.read_bytes())['objects'] if row['kind'] == 'cache')
@@ -250,10 +276,11 @@ def calibration_trace(manifest, trace):
             **{p: source / p for p in ('CMakeLists.txt', *CALIBRATION_FILES)},
             **{p: build / p for p in ('python/mantis/calibration.py', 'python/mantis/__init__.py')}}
     receipt = {k: manifest[k] for k in ('source', 'roots', 'configuration', 'generator')}
-    receipt.update(schema='ci110-mantis-python-calibration-copy-trace-v1', commands=commands,
+    receipt.update(schema='ci110-mantis-python-calibration-copy-trace-v2', commands=commands,
                    sha256={k: digest(p.read_bytes()) for k, p in pins.items()})
     raw = encode(receipt)
-    assert len(raw) <= 32_768, 'scoped calibration COPYONLY trace exceeds receipt limit'
+    if len(raw) > 32_768:
+        return None  # never trim away a possible writer to fit a success-only receipt
     (build / CALIBRATION_TRACE).write_bytes(raw)
     return {'root': 'build', 'path': CALIBRATION_TRACE, 'sha256': digest(raw)}
 
@@ -345,14 +372,16 @@ def produce(root, generator='Ninja', *, deadline=None):
         manifest['files'].append({'root': 'build', 'path': path.relative_to(build).as_posix(),
                                   'sha256': digest(path.read_bytes())})
     if generator == 'Ninja':
-        manifest['files'].append(calibration_trace(manifest, trace))
+        pin = calibration_trace(manifest, trace)
+        if pin is not None:
+            manifest['files'].append(pin)
     path = root / 'inputs.json'
     path.write_bytes(encode(manifest))
     return manifest, path, base
 
 
-def calibration_decoy(root):
-    """Two real configure-only snapshots: the edited input feeds the wrong output."""
+def calibration_decoy(root, *, directory_copy=False):
+    """Two real configure-only snapshots: the package copy stays unchanged."""
     source, build = root / 'source', root / 'build'
     cal, init, script = CALIBRATION_FILES
     copy = 'python/mantis/calibration.py'
@@ -361,7 +390,23 @@ def calibration_decoy(root):
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(Path(__file__).resolve().parents[2] / path, dest)
     exact = (source / cal).read_bytes()
-    (source / 'fixed.py').write_bytes(exact)
+    active_copy = f'configure_file({cal} ${{CMAKE_BINARY_DIR}}/{copy} COPYONLY)'
+    if directory_copy:
+        alternate = source / 'alternate/mantis'
+        alternate.mkdir(parents=True)
+        fixed = alternate / 'calibration.py'
+        fixed.write_bytes(exact)
+        # CMake file(COPY) can skip equal timestamps at whole-second resolution.
+        os.utime(fixed, (946684800, 946684800))
+        route = f'''{active_copy}
+file(COPY "${{CMAKE_CURRENT_SOURCE_DIR}}/alternate/mantis" DESTINATION python)'''
+    else:
+        (source / 'fixed.py').write_bytes(exact)
+        route = f'''if(FALSE)
+    {active_copy}
+endif()
+configure_file({cal} ${{CMAKE_BINARY_DIR}}/unrelated.py COPYONLY)
+configure_file(fixed.py ${{CMAKE_BINARY_DIR}}/{copy} COPYONLY)'''
     (source / cal).write_bytes(exact + b'\n# independent before bytes\n')
     (source / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.25)
 project(CalibrationCopyRoute LANGUAGES NONE)
@@ -371,11 +416,7 @@ option(BUILD_TESTING "Testing" ON)
 enable_testing()
 add_custom_target(configured-metadata)
 configure_file({init} ${{CMAKE_BINARY_DIR}}/python/mantis/__init__.py COPYONLY)
-if(FALSE)
-    configure_file({cal} ${{CMAKE_BINARY_DIR}}/{copy} COPYONLY)
-endif()
-configure_file({cal} ${{CMAKE_BINARY_DIR}}/unrelated.py COPYONLY)
-configure_file(fixed.py ${{CMAKE_BINARY_DIR}}/{copy} COPYONLY)
+{route}
 add_test(NAME python-calibration COMMAND ${{Python3_EXECUTABLE}} ${{CMAKE_CURRENT_SOURCE_DIR}}/{script} ${{CMAKE_BINARY_DIR}})
 ''')
     deadline = time.monotonic() + SETUP_SECONDS
@@ -408,7 +449,8 @@ add_test(NAME python-calibration COMMAND ${{Python3_EXECUTABLE}} ${{CMAKE_CURREN
     assert git('diff', '--name-status', base, head) == f'M\t{cal}'
     configure(build)
     assert (before / copy).read_bytes() == (build / copy).read_bytes() == exact
-    assert (before / 'unrelated.py').read_bytes() != (build / 'unrelated.py').read_bytes() == exact
+    if not directory_copy:
+        assert (before / 'unrelated.py').read_bytes() != (build / 'unrelated.py').read_bytes() == exact
     assert not git('status', '--porcelain')
     ctest = run(['ctest', '--test-dir', str(build), '--show-only=json-v1'], root, deadline=deadline)
     (build / 'ctest.json').write_bytes(ctest)
@@ -425,7 +467,9 @@ add_test(NAME python-calibration COMMAND ${{Python3_EXECUTABLE}} ${{CMAKE_CURREN
                 'roots': roots, 'configuration': 'Debug', 'generator': 'Ninja', 'index': index.relative_to(build).as_posix(),
                 'ctest': 'ctest.json', 'files': [{'root': r, 'path': p, 'sha256': digest((Path(roots[r]) / p).read_bytes())}
                                                 for r, p in files]}
-    manifest['files'].append(calibration_trace(manifest, root / 'trace.jsonl'))
+    pin = calibration_trace(manifest, root / 'trace.jsonl')
+    if pin is not None:
+        manifest['files'].append(pin)
     return manifest, base
 
 

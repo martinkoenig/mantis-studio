@@ -1483,6 +1483,10 @@ class ConfiguredInventory(unittest.TestCase):
         self.inv['files'] = files
         trace_raw = self.original_bytes['build', trace]
         receipt = json.loads(trace_raw)
+        receipt['schema'] = 'ci110-mantis-python-calibration-copy-trace-v1'
+        self.repin('build', trace, receipt)
+        check_unknown(self.diagnostic((cal,)), 'copy-trace-unsupported')
+        receipt = json.loads(trace_raw)
         receipt['sha256']['ctest'] = '0' * 64
         self.repin('build', trace, receipt)
         check_unknown(self.diagnostic((cal,)), 'copy-trace-context-mismatch')
@@ -1505,13 +1509,19 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(compare(restored), comparison)
 
     def test_real_calibration_copy_routed_from_same_byte_decoy(self):
+        self.check_real_calibration_competing_copy(directory_copy=False)
+
+    def test_real_calibration_copy_overwritten_by_relative_directory_copy(self):
+        self.check_real_calibration_competing_copy(directory_copy=True)
+
+    def check_real_calibration_competing_copy(self, *, directory_copy):
         import platform
 
         if platform.machine() != 'x86_64':
             self.skipTest('COPYONLY attribution is scoped to native Linux x86_64')
         self.addCleanup(self.path.write_bytes, self.path.read_bytes())
         case = Path(tempfile.mkdtemp(prefix='calibration-routing-', dir=self.root))
-        self.inv, base = self.fixture.calibration_decoy(case)
+        self.inv, base = self.fixture.calibration_decoy(case, directory_copy=directory_copy)
         cal = self.fixture.CALIBRATION_FILES[0]
         test = 'python-calibration'
         raw = self.fixture.encode(self.inv)
@@ -1535,10 +1545,14 @@ class ConfiguredInventory(unittest.TestCase):
         replay_case, = replay['cases']
         self.assertIn(test, replay_case['full_would_select_test_ids'])
         self.assertEqual((diag['impacted_test_ids'], replay_case['diagnostic_impacted_test_ids']), ([], []),
-                         'inactive named COPYONLY falsely attributed in collector or replay')
+                         'unchanged package copy falsely attributed in collector or replay')
         self.assertNotIn(test, {e['test'] for e in diag['file_test_edges']})
         self.assertIn({'reason': 'python-calibration-copyonly-unresolved', 'subject': cal, 'evidence': 'unresolved'},
                       diag['unknowns'])
+        if directory_copy:
+            receipt = json.loads((case / 'build' / self.fixture.CALIBRATION_TRACE).read_bytes())
+            self.assertIn(['COPY', str(case / 'source/alternate/mantis'), 'DESTINATION', 'python'],
+                          [row['args'] for row in receipt['commands'] if row['cmd'] == 'file'])
 
     def test_alg03_enclosure_wrong_context_artifact_and_pins(self):
         # Restore the exact borrowed manifest even if an assertion fails; the
