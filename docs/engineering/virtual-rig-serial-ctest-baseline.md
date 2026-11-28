@@ -141,25 +141,39 @@ are sensitive to scheduling and shared storage.
 starts the built `mantisd` twice. It asserts default-off discovery of the rig,
 then opts in via a modified copy of [`virtual-rig-community.json`][community].
 It [checks profile disappearance/reappearance, committed capture, replay,
-high-rate profile discovery only and restart][daemon-capture]. The daemon
-discovers build-tree plugins and [opens its own Store and diagnostics][service].
-Keep serial: listener ownership and retirement are unresolved, and live
-readiness, capture, replay and Store work share resource budgets.
+high-rate profile discovery only and restart][daemon-capture]. Keep serial:
+listener ownership and retirement are unresolved, and live readiness, capture,
+replay and Store work share resource budgets.
 
-The Python probe binds IPv4 loopback with port zero, reads the assigned number,
-and **closes on leaving the `with` block**, before creating the child. Only the
-number is passed via `MANTIS_PORT`, not an open socket.
+The Python socket probe binds IPv4 loopback with port zero, reads the assigned
+number, and **closes on leaving the `with` block**, before creating the child.
+Only the number is passed via `MANTIS_PORT`, not an open socket.
 [Daemon startup][daemon-app] constructs the runtime before
 [`Socket::listen` binds and listens][socket]. There is no continuous reservation
 from the probe to the first bind, or between the first child's shutdown and the
 second bind on that port. The per-run token authenticates client requests; it
-does not reserve the port. This is a source-level reservation gap, not evidence
-of an actual collision. Each normal shutdown asserts a zero direct-child exit
+does not reserve the port. This is a source-level gap, not evidence of an
+actual collision. No port experiment was performed.
+
+**Daemon-owned startup child.** On both launches, before the bind, the
+[service][service] opens its Store and diagnostics and calls `Registry::discover`
+on the build-tree plugin directory, with the configured host executable and
+project-local `cache/hosts` scratch. CMake [builds the `crash-test` module and
+generates its manifest][crash-target]; the [manifest][crash-manifest] declares
+`isolated`. For that entry [discovery][registry] synchronously runs
+`mantis-plugin-host probe` and uses a report file under `cache/hosts`. This is a
+child of `mantisd`, not a rig/Session thread or a Python-owned child. The
+[POSIX helper][host-process] spawns, waits for and reaps that PID; on its own
+timeout/cancellation path it signals and waits on that PID only. This startup
+call uses the [30 s default timeout][host-defaults] with no owner cancellation
+token; it does not implement CTest or harness cancellation.
+
+**Python-owned direct children.** Each normal shutdown asserts a zero exit
 within five seconds. [`OwnedProcesses`][owned] registers the direct `Popen`
 child before waiting for readiness and polls, kills and waits on live tracked
-children on unwind. It does not enumerate descendants or prove process-group,
-socket or scratch retirement after cancellation. The success logs do not show
-an independent no-survivor observation. No port experiment was performed.
+children on unwind. It does not enumerate descendants. The retained CTest
+records do not show actual plugin-host launches or independent process-group,
+socket or scratch retirement under cancellation.
 
 ### `virtual-rig-storage`
 
@@ -234,6 +248,8 @@ port experiment or scheduling change was used to produce this report.
 [storage-reg]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/tests/storage/CMakeLists.txt#L31-L45
 [plugin-target]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/CMakeLists.txt#L167-L176
 [plugin-manifest]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/plugins/first-party/devices/virtual-rig.json.in
+[crash-target]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/CMakeLists.txt#L167-L185
+[crash-manifest]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/plugins/examples/crash-test.json.in#L1-L12
 [registry]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/src/plugin-runtime/plugin-runtime.cpp#L469-L505
 [producer]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/plugins/first-party/devices/virtual-rig.cpp#L254-L275
 [session]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/src/device-runtime/device-runtime.cpp#L351-L398
@@ -260,6 +276,8 @@ port experiment or scheduling change was used to produce this report.
 [store]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/src/artifact-store/artifact-store.cpp#L645-L680
 [daemon-app]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/apps/mantisd/main.cpp#L10-L70
 [socket]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/src/platform/platform.cpp#L112-L148
+[host-process]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/src/platform/platform.cpp#L332-L364
+[host-defaults]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/src/platform/include/mantis/platform.hpp#L42-L44
 [owned]: https://github.com/martinkoenig/mantis-studio/blob/2f307ad1b0554df73b1d28a99853765e16c3024d/tests/integration/capture_lifecycle.py#L211-L234
 [inventory]: https://github.com/martinkoenig/mantis-studio/issues/107#issuecomment-6722097900
 [executed]: https://github.com/martinkoenig/mantis-studio/issues/37#issuecomment-7182372600
