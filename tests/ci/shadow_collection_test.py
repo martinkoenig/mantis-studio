@@ -686,6 +686,15 @@ class ConfiguredInventory(unittest.TestCase):
         cls.original_bytes = {(row['root'], row['path']):
                               (Path(cls.original['roots'][row['root']]) / row['path']).read_bytes()
                               for row in cls.original['files']}
+        # The sealed producer supplies the optional v5 pins, but legacy
+        # collector/corpus cases should not re-read them on every replay.
+        calibration_keys = {('source', p) for p in fixture.CALIBRATION_FILES} | {
+            ('build', 'python/mantis/' + Path(p).name) for p in fixture.CALIBRATION_FILES[:2]}
+        calibration_keys.add(('build', fixture.CALIBRATION_TRACE))
+        cls.calibration_pins = [row for row in cls.original['files']
+                                if (row['root'], row['path']) in calibration_keys]
+        cls.original['files'] = [row for row in cls.original['files']
+                                 if (row['root'], row['path']) not in calibration_keys]
         cls.collector_cache = {}
 
     def setUp(self):
@@ -1387,6 +1396,7 @@ class ConfiguredInventory(unittest.TestCase):
 
         self.addCleanup(self.path.write_bytes, self.path.read_bytes())
         self.inv['schema'] = 'ci110-configured-inputs-v5'
+        self.inv['files'].extend(self.copy(self.calibration_pins))
         source, build = (Path(self.inv['roots'][root]) for root in ('source', 'build'))
         cal, init, script = self.fixture.CALIBRATION_FILES
         test = 'python-calibration'
