@@ -1,4 +1,4 @@
-# Configured CMake toolchain provenance (internal v1)
+# Configured CMake toolchain provenance (internal v1 / opt-in v2)
 
 `tools/ci_toolchain_provenance.py` is a standalone, Python 3.10+ / POSIX utility.
 It **reads configured metadata and fingerprints current files**. It does not run
@@ -63,7 +63,7 @@ is compared without dropping unknown keys. No schema migration is implicit.
 
 | Field | Meaning and origin |
 | --- | --- |
-| `schema` | Literal `configured-toolchain-v1`; internal report format, not a product/SDK contract. |
+| `schema` | `configured-toolchain-v1` by default; explicitly selected `configured-toolchain-v2` adds the bounded named-launcher form below. Internal report formats, not product/SDK contracts. |
 | `binding` | SHA-256 of resolved absolute source/build root bytes (`os.fsencode`). Cache HOME/CACHEFILE directory values must be absolute and resolve to those exact roots. Relocation requires new explicit capture. |
 | `context` | Explicit caller-declared revision (40/64 lowercase hexadecimal), `dirty` (`clean`/`dirty`), and `origin=caller-declared`. The CLI does not independently inspect Git or assert these describe configure-time source. |
 | `inputs` | Sorted caller-selected source-relative names to exact current byte SHA-256; includes `CMakeLists.txt`. No directory traversal or resolved escape from source is allowed. |
@@ -81,7 +81,7 @@ other languages, nonstandard build types and missing metadata fail explicitly.
 CMake's ID/version strings are bounded tokens; they are configured metadata, not
 independently observed version output. No fallback fabricates unavailable values.
 
-Tool paths must be absolute regular executable files (symlinks resolve and are
+In v1, tool paths must be absolute regular executable files (symlinks resolve and are
 bound by path/content hashes). Bare launcher names such as `ccache`, launcher
 lists/arguments and relative toolchain-file paths are unsupported: explicitly
 configure an absolute single launcher executable rather than resolving from the
@@ -96,6 +96,83 @@ for a writer. Unsupported inputs require a separately reviewed schema extension,
 not silent omission. The explicit source list is **not dependency closure**: it
 omits unlisted headers, generated inputs, external includes, included toolchain
 files, CMake modules, linker/runtime components and target-level settings.
+
+## Opt-in v2: caller-bound single named launchers
+
+The actual Architecture configuration uses bare `ccache` launchers. v1 correctly
+rejects those names; it is not a PATH resolver. v2 is a separate, explicit
+capability, **not an Architecture integration or cache behavior change**.
+
+For an already configured named C/CXX launcher, supply **both** the schema and
+each applicable language/name/absolute-executable tuple in **both** capture and
+verification. Append these options to the commands above, for example:
+
+```bash
+  --schema configured-toolchain-v2 \
+  --launcher-binding C ccache /usr/bin/ccache \
+  --launcher-binding CXX ccache /usr/bin/ccache
+```
+
+This example is caller-declared, not an observed ccache deployment or a
+recommendation to change the build. The collector never discovers that path.
+Verification still requires the original out-of-band report digest. Omitting
+`--schema` always selects v1, even for an existing v2 report. A schema may be
+specified only once; no report inspection upgrades the selected version. There
+is no migration, mapping inferred from the report, or cache-metadata rewriting.
+Existing v1 reports and all no-map absolute-tool identities remain unchanged.
+v2 without mappings is valid when all launchers are absent or absolute.
+
+`--launcher-binding` takes exactly three separate arguments, not shell text or a
+delimiter-encoded command. At most two tuples are retained, one per exact `C` or
+`CXX`. Names are 1–80 ASCII characters matching
+`[A-Za-z0-9][A-Za-z0-9_.+-]{0,79}`, and must exactly equal the corresponding
+nonabsolute single cache launcher value. Paths are 1–4096 printable ASCII
+characters, absolute, lexically normalized (no `.`/`..`, repeated/trailing
+slashes or leading `//`), with no semicolon or backslash; spaces within a path
+are allowed. Symlink paths are supported and bound separately from their resolved
+targets. All existing regular/executable/available/size/cycle checks still apply;
+no metadata/tool/source limit is raised.
+
+A named v2 entry in `configured.launchers.C` or `.CXX` is exactly:
+
+```json
+{
+  "configured_name": "ccache",
+  "origin": "caller-declared",
+  "file": {
+    "configured_path_sha256": "<SHA-256 of caller-supplied absolute path bytes>",
+    "resolved_path_sha256": "<SHA-256 of resolved absolute path bytes>",
+    "sha256": "<SHA-256 of current executable bytes>"
+  }
+}
+```
+
+The raw configured name is retained, not normalized away or falsely represented
+as an absolute cache path. Absolute and absent launcher entries retain their v1
+shapes. The v2 `unverified` list additionally contains `launcher-selection`.
+The caller **can lie** about the mapping. A matching report only establishes
+consistency between current configured names, explicit caller declarations and
+current file hashes. It proves neither configure/build-time PATH selection nor
+execution/use, source consumed, authenticity, OS isolation or a security policy.
+It does not attest target-level overrides. No tool is executed or selected via
+PATH/cwd/environment, and no Git/network acquisition occurs.
+
+Mappings with v1 fail `launcher-bindings-require-v2`. Missing mappings for named
+v2 launchers fail `missing-launcher-binding`; unknown language, duplicate language
+(including identical/conflicting tuples), too many tuples, invalid name/path,
+stale name and unused tuples fail respectively
+`unsupported-launcher-binding-language`, `duplicate-launcher-binding`,
+`launcher-binding-count-limit`, `invalid-launcher-binding-name`,
+`invalid-launcher-binding-path`, `launcher-binding-name-mismatch` and
+`unused-launcher-binding`. No tuple is permitted for an absent/absolute launcher.
+Unsupported relative/list/argument cache values fail `unsupported-launcher-name`;
+v1 retains `unsupported-tool-path`. Compiler, CMake, build-tool and toolchain-file
+restrictions are not extended. Invalid schema selection fails
+`unsupported-selected-schema`; a report/selected-schema disagreement fails
+`unsupported-report-schema`. Duplicate schema selection and malformed CLI syntax
+fail `duplicate-schema-selection` and `invalid-command-line`. Argument errors are
+also bounded and never echo raw values. Existing frozen comparison/claim/unknown
+field checks and no-replace publication apply without relaxation.
 
 ## Diagnoses and confidentiality
 
@@ -161,7 +238,17 @@ root/context/config/source/tool drift, nonexecution of a hostile launcher, inert
 module startup, verification under write/process/network denial, byte-identical
 inputs after verify, overwrite refusal and injected partial-publication/cleanup
 failures. Negatives require the intended exit **and** primary diagnosis; unrelated
-failures/timeouts cannot count as a passing rejection. Exact input restoration
+failures/timeouts cannot count as a passing rejection. v2 tests configure/build
+both languages with an owned single named fixture launcher, using an explicit
+trusted fixture-only PATH. This is fixture execution, not collector execution or
+real ccache/product deployment. Capture/verify work with empty/poisoned PATH;
+acquisition runs under environment/PATH/process/network denial (standard-library
+argument localization is outside the guarded metadata acquisition), and frozen
+verification additionally denies writes. Tests cover mapping/schema errors,
+stale names, executable content/path/symlink/cycle/type/size drift, and forged
+reports with adversarially recomputed digests to reach semantic/claim checks.
+The oversized executable control is a sparse file, not a 256MiB payload allocation.
+Exact input restoration
 must verify GREEN. Local product Studio ON/OFF/sanitizer suites are not run or
 claimed fresh PASS under this standalone unchanged-product-input scope; all five
 Architecture exact-head jobs plus both new native jobs remain independent gates.
