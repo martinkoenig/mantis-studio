@@ -255,11 +255,65 @@ privately; inspect normalized output before public upload. Raw command strings,
 external absolute paths, environment, cache contents and parser exceptions are
 not emitted. Command values are represented only by a byte digest.
 
+### One generated C++ Protobuf edge (explicit opt-in)
+
+For a clean, caller-owned Studio OFF Debug configuration with single-config
+Ninja, acquire the following before building, from the same tree as the pinned
+File API replies. Bound the queries, check success and verify that `build.ninja`
+and `CMakeFiles/rules.ninja` are byte-identical before and after capture.
+
+```sh
+ninja -C "$BUILD" -t query mantis.pb.cc
+ninja -C "$BUILD" -t query mantis.pb.h
+```
+
+Keep the exact stdout separately from stderr. Use the existing manifest fields
+with `schema: ci110-configured-inputs-v2` and pin the two Ninja files, the input
+`protocol/protobuf/mantis.proto`, and the build-relative fixed-name receipt
+`mantis-protobuf-ninja-query.json` in `files`. The receipt has exactly:
+
+- `schema`: `ci110-mantis-protobuf-ninja-query-v1`.
+- `source`, `roots`, `configuration`, `generator`: the same values as the
+  manifest. The index and File API cache must also agree on the relevant
+  configuration, generator, roots and Studio mode.
+- `sha256`: raw-byte digests keyed by `index`, `cache`, `owner` (the selected
+  `mantis-wire` codemodel target reply), `build.ninja`, `CMakeFiles/rules.ninja`,
+  and `protocol/protobuf/mantis.proto`. These match the already pinned bytes.
+- `queries`: `mantis.pb.cc` and `mantis.pb.h`, each holding its complete query
+  stdout (including its last newline). The receipt is limited to 32 KiB and each
+  query to 8192 characters within the existing inventory bounds.
+
+Each query must show the exact output of a `CUSTOM_COMMAND`, the exact absolute
+schema path as an **explicit** input, and the observed Ninja order dependency
+for `mantis-wire`. The codemodel must map each exact build output uniquely to
+that target as generated, with the `.cc` in a C++ compile group. Neither matching
+basenames nor having `.pb.*` in a target's sources is sufficient. The importer
+only compares pinned bytes and recognizes this bounded query shape; it does not
+parse Ninja build files or shell commands, run Ninja, or open any path named by
+the receipt or query.
+
+Only this match adds the observed `ninja-query-protobuf-cxx` edge from the schema
+to `mantis-wire`. The existing traversal follows configured reverse dependencies
+(including `mantis-protocol`) and existing CTest artifact matches. Missing,
+stale, ambiguous, unsupported or mismapped evidence adds an explicit unknown
+instead of this edge; invalid outer pins still reject ingestion. V1 inputs do
+not interpret the receipt. The diagnostic and corpus envelopes are unchanged.
+The two prepared fixture configurations still share the same setup bound; the
+tiny single-config fixture has a stand-in generator and a real CTest consumer,
+not a test of `protoc`. It verifies the proto-only change, an unrelated consumer,
+loss of the query's input edge after repinning, and exact restoration.
+
+The receipt is a consistency check for an owned capture, not authentication of
+the query producer or attestation of a build. Other Protobuf paths (including
+Python generation), generated sources, and overall closure stay unresolved.
+FULL, `execution_authorized=false` and `closure_complete=false` are unchanged.
+
 ### Edge and uncertainty semantics
 
 - `observed`: codemodel-listed file-to-target and dependency-to-consumer edges,
-  with exact pinned document/target identity. These are **listed observations**,
-  not evidence that CMake listed every semantic dependency.
+  plus the opt-in generated C++ edge above, with exact pinned document/target
+  identity. These are **listed observations**, not evidence that CMake listed
+  every semantic dependency.
 - `conservative-inference`: literal quoted include-to-target edges, with the
   including source in the reason, and target-to-test edges inferred by matching
   CTest's first command argument to a configured artifact. Include traversal is
