@@ -1,0 +1,4 @@
+syntax = "proto3";
+package shadow_fixture;
+
+message Example { int32 value = 1; }

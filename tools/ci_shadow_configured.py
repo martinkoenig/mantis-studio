@@ -13,6 +13,10 @@ import ci_shadow_policy as policy
 MAX_TOTAL_BYTES = 16_000_000
 MAX_FILES = 8192
 MAX_RECORDS = 16384
+PROTO = 'protocol/protobuf/mantis.proto'
+PROTO_OUTPUTS = ('mantis.pb.cc', 'mantis.pb.h')
+PROTO_OWNER = 'mantis-wire'
+PROTO_RECEIPT = ('build', 'mantis-protobuf-ninja-query.json')
 
 
 class InvalidInput(ValueError):
@@ -45,7 +49,8 @@ def anchor(value):
 class Inputs:
     def __init__(self, manifest, expected):
         policy.keys(manifest, 'schema source roots configuration generator index ctest files', 'configured-input-fields')
-        check(manifest['schema'] == 'ci110-configured-inputs-v1', 'configured-input-version')
+        check(manifest['schema'] in ('ci110-configured-inputs-v1', 'ci110-configured-inputs-v2'),
+              'configured-input-version')
         policy.identity(manifest['source'])
         check(manifest['source'] == expected, 'configured-source-identity-mismatch')
         check(label(manifest['configuration']) and label(manifest['generator']), 'configured-context')
@@ -119,6 +124,86 @@ def version(document, kind, major):
           'configured-unsupported-document-version')
 
 
+def check_proto_query(text, output, source):
+    """Recognize only the observed single-output Ninja query shape, not Ninja syntax."""
+    unsupported = 'protobuf-ninja-evidence-unsupported'
+    check(isinstance(text, str) and len(text) <= 8192, unsupported)
+    lines = text.split('\n')
+    check(lines[:2] == [output + ':', '  input: CUSTOM_COMMAND'] and
+          lines[-3:] == ['  outputs:', '    cmake_object_order_depends_target_' + PROTO_OWNER, '']
+          and len(lines) >= 5, unsupported)
+    deps = lines[2:-3]
+    # Only explicit inputs are admitted. In particular |, || and |@ are not
+    # interchangeable with the observed explicit dependency.
+    check(all(re.fullmatch(r'    [!-~][ -~]*', d) and d[4] != '|' and not d.endswith(' ')
+              for d in deps), unsupported)
+    check(len(deps) == len(set(deps)), 'protobuf-ninja-rule-ambiguous')
+    check('    ' + str(source) in deps, 'protobuf-ninja-rule-input-missing')
+
+
+def protobuf_owner(i, generator, configs, cache, cache_path, rows, target_docs):
+    """Bind the one caller-captured rule family to a compiled codemodel owner."""
+    unsupported = 'protobuf-ninja-evidence-unsupported'
+    mismatch = 'protobuf-ninja-evidence-context-mismatch'
+    mapping = 'protobuf-ninja-codemodel-mismatch'
+    check(i.manifest['configuration'] == 'Debug' and generator.get('name') == 'Ninja' and
+          generator.get('multiConfig') is False and len(configs) == 1, unsupported)
+    raw = i.data.get(PROTO_RECEIPT)
+    if raw is None:
+        raise InvalidInput('protobuf-ninja-evidence-missing')
+    check(len(raw) <= 32_768, unsupported)
+    context_keys = ('source', 'roots', 'configuration', 'generator')
+    try:
+        receipt = policy.strict_json(raw)
+        policy.keys(receipt, 'schema sha256 queries ' + ' '.join(context_keys), unsupported)
+    except ValueError:
+        raise InvalidInput(unsupported) from None
+    check(receipt['schema'] == 'ci110-mantis-protobuf-ninja-query-v1', unsupported)
+    check(all(receipt[k] == i.manifest[k] for k in context_keys), mismatch)
+    expected_cache = {'CMAKE_BUILD_TYPE': 'Debug', 'CMAKE_GENERATOR': 'Ninja', 'MANTIS_BUILD_STUDIO': 'OFF',
+                      'CMAKE_HOME_DIRECTORY': str(i.roots['source']), 'CMAKE_CACHEFILE_DIR': str(i.roots['build'])}
+    entries = [(r['name'], r.get('value')) for r in records(cache.get('entries'))
+               if r.get('name') in tuple(expected_cache)]
+    check(len(entries) == len(expected_cache) and dict(entries) == expected_cache, mismatch)
+
+    owner = next((r for r in rows if r['name'] == PROTO_OWNER), None)
+    if owner is None:
+        raise InvalidInput(mapping)
+    owner_id = owner['id']
+    reply = str(Path(i.manifest['index']).parent)
+    pins = {'index': ('build', i.manifest['index']), 'cache': ('build', cache_path),
+            'owner': ('build', reply + '/' + owner['jsonFile']), PROTO: ('source', PROTO)}
+    pins.update({p: ('build', p) for p in ('build.ninja', 'CMakeFiles/rules.ninja')})
+    check(all(p in i.data for p in pins.values()), 'protobuf-ninja-evidence-missing')
+    check(receipt['sha256'] == {name: policy.digest(i.data[p]) for name, p in pins.items()}, mismatch)
+    queries = receipt['queries']
+    check(isinstance(queries, dict) and set(queries) == set(PROTO_OUTPUTS), unsupported)
+
+    for output in PROTO_OUTPUTS:
+        check_proto_query(queries[output], output, i.roots['source'] / PROTO)
+        absolute = i.roots['build'] / output
+        # File API source paths inside the source tree may be source-relative,
+        # including in-tree build outputs. Compare only these exact spellings.
+        paths = {str(absolute)}
+        if absolute.is_relative_to(i.roots['source']):
+            paths.add(absolute.relative_to(i.roots['source']).as_posix())
+        matches = [(tid, idx, item) for tid, doc in target_docs.items()
+                   for idx, item in enumerate(doc.get('sources', [])) if item['path'] in paths]
+        check(len(matches) <= 1, 'protobuf-ninja-rule-ambiguous')
+        check(matches and matches[0][0] == owner_id and matches[0][2].get('isGenerated') is True, mapping)
+        _, idx, item = matches[0]
+        if output == 'mantis.pb.cc':
+            group = item.get('compileGroupIndex')
+            groups = target_docs[owner_id].get('compileGroups', [])
+            check(type(group) is int and 0 <= group < len(groups) and groups[group].get('language') == 'CXX', mapping)
+            indices = groups[group].get('sourceIndexes')
+            check(isinstance(indices, list) and all(type(n) is int for n in indices) and indices.count(idx) == 1,
+                  mapping)
+        else:
+            check('compileGroupIndex' not in item, mapping)
+    return owner_id
+
+
 def import_inputs(inputs, expected, changes):
     """Import observations, projecting ONLY reachability onto the existing policy."""
     i = Inputs(inputs, expected)
@@ -131,6 +216,7 @@ def import_inputs(inputs, expected, changes):
     check(label(cmake_version), 'configured-cmake-version')
     objects = records(index['objects'])
     by_kind = {}
+    cache_path = ''
     reply = str(Path(index_path).parent)
     for row in objects:
         kind = row.get('kind')
@@ -141,6 +227,8 @@ def import_inputs(inputs, expected, changes):
         version(document, kind, 1 if kind == 'cmakeFiles' else 2)
         check(document['version'] == row.get('version'), 'configured-index-version-mismatch')
         by_kind[kind] = document
+        if kind == 'cache':
+            cache_path = reply + '/' + row['jsonFile']
     check(set(by_kind) == {'codemodel', 'cache', 'cmakeFiles'}, 'configured-missing-index-record')
     model = by_kind['codemodel']
     for doc in (model, by_kind['cmakeFiles']):
@@ -272,6 +360,13 @@ def import_inputs(inputs, expected, changes):
                 for header in resolved:
                     file_edges.add((header, tid, 'conservative-inference', 'literal-include-from:' + path))
                     pending.append(header)
+    if inputs['schema'] == 'ci110-configured-inputs-v2':
+        try:
+            owner = protobuf_owner(i, cmake['generator'], configs, by_kind['cache'], cache_path, rows, target_docs)
+        except InvalidInput as exc:
+            unknown(str(exc), PROTO)
+        else:
+            file_edges.add((PROTO, owner, 'observed', 'ninja-query-protobuf-cxx'))
     # Detect cycles without recursion; absence of cycles says nothing about
     # omitted dependencies. The existing reachability worklist handles both.
     remaining = {t: len(info['dependencies']) for t, info in targets.items()}
