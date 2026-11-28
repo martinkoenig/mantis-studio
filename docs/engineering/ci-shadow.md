@@ -386,14 +386,57 @@ observation does not validate runtime dependencies or test
 execution. FULL, `execution_authorized=false` and `closure_complete=false`
 remain unconditional.
 
+### One configured Python calibration COPYONLY edge (separate opt-in)
+
+Use the same manifest fields with `schema: ci110-configured-inputs-v5`. V5
+retains the v4 ALG03 edge and both independent Protobuf checks. The new edge
+requires native Linux x86_64, Studio OFF, testing ON and Debug single-config
+Ninja, with the same pinned system record, File API index/cache/roots and
+CTest show-only JSON as above. Pin these additional files:
+
+| Root | Paths |
+| --- | --- |
+| Source | `CMakeLists.txt`, `tests/unit/python_calibration.py`, `sdk/python/mantis/calibration.py`, `sdk/python/mantis/__init__.py` |
+| Build | `python/mantis/calibration.py`, `python/mantis/__init__.py` |
+
+The single `python-calibration` registration must have exactly the configured
+interpreter, the absolute source-root test script and the absolute build root
+as argv, with that same working directory and no CTest environment override.
+Its backtrace must match the scoped top-level `add_test` declaration. The
+importer checks the two exact top-level `configure_file(... COPYONLY)` lines,
+their corresponding source entries in `cmakeFiles`, and byte equality of each
+source and its copy at the exact `python/mantis/` path.
+
+Matching copies alone are not import evidence. The importer recognizes the
+reviewed full-file digests of the test script and package initializer: the
+script puts `argv[1]/python` first on `sys.path`, imports `mantis` and calls
+`mantis.Calibration`; the initializer re-exports `Calibration` from
+`.calibration`. Changes to either import-bearing file require reinspection
+before updating its recognized digest. The calibration module itself has no
+fixed digest: its caller-pinned source and copy must match. This rule uses only
+already pinned bytes, never paths to open from argv, Python execution or a
+general CMake evaluator or import graph.
+
+The result is at most one new `file_test_edges` entry, from
+`sdk/python/mantis/calibration.py` to `python-calibration`, with evidence
+`conservative-inference` and reason `ctest-python-calibration-copyonly-import-match`.
+It records a direct association from configured metadata and inspected source,
+not a runtime import observation or evidence about any other consumer. Missing,
+ambiguous or unsupported scoped evidence produces a `python-calibration-*`
+unknown and no new edge. Invalid outer pins, including stale supplied copies,
+still reject ingestion. V1–v4 diagnostics and saved corpus replay keep the
+same bytes on identical inputs. No new output envelope, runner, execution
+authority, dependency completeness or selection change is introduced.
+
 ### Edge and uncertainty semantics
 
 - `observed`: codemodel-listed file-to-target and dependency-to-consumer edges,
   plus the opt-in generated Protobuf edges and direct ALG03 script edge above,
   with exact pinned document/target identity. These are **listed observations**,
   not evidence that CMake listed every semantic dependency.
-- `conservative-inference`: literal quoted include-to-target edges, with the
-  including source in the reason, and target-to-test edges inferred by matching
+- `conservative-inference`: the direct Python calibration association above,
+  literal quoted include-to-target edges (with the
+  including source in the reason), and target-to-test edges inferred by matching
   CTest's first command argument to a configured artifact. Include traversal is
   iterative and uses only pinned source bytes and listed include directories.
   It is not a preprocessor: conditionals/comments may overapproximate; macros,

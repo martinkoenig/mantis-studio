@@ -1284,15 +1284,10 @@ class ConfiguredInventory(unittest.TestCase):
             receipt_path.write_bytes(self.fixture.encode(receipt))
         return result
 
-    def test_real_alg03_enclosure_script_only_collector_and_replay(self):
-        self.addCleanup(self.path.write_bytes, self.path.read_bytes())
-        self.inv['schema'] = 'ci110-configured-inputs-v4'
-        script, test = 'tests/unit/alg03_enclosure.py', 'alg03-enclosure'
+    def one_file_comparison(self, path, evidence):
+        """Real one-file diff, leaving the shared configured checkout at HEAD."""
         source = Path(self.inv['roots']['source'])
-        evidence = Path(tempfile.mkdtemp(prefix='enclosure-evidence-', dir=self.root))
         head = self.inv['source']['commit']
-        # Construct a real one-file comparison commit without editing or moving
-        # the configured checkout shared by the other test methods.
         env = {**os.environ, 'GIT_INDEX_FILE': str(evidence / 'alternate.index')}
 
         def git(*args, data=None):
@@ -1301,14 +1296,25 @@ class ConfiguredInventory(unittest.TestCase):
                                   env=env, input=data, capture_output=True, timeout=5, check=True).stdout
 
         git('read-tree', head)
-        raw = self.original_bytes['source', script]
+        raw = self.original_bytes['source', path]
         blob = git('hash-object', '-w', '--stdin', data=raw + b'\n# disposable comparison\n').decode().strip()
-        git('update-index', '--cacheinfo', '100644', blob, script)
+        git('update-index', '--cacheinfo', '100644', blob, path)
         tree = git('write-tree').decode().strip()
         base = git('commit-tree', tree, '-p', head, '-m', 'script-only comparison').decode().strip()
         diff = git('diff', '--name-status', base, head)
-        self.assertEqual(diff, f'M\t{script}\n'.encode())
+        self.assertEqual(diff, f'M\t{path}\n'.encode())
         (evidence / 'script.diff').write_bytes(git('diff', '--binary', base, head))
+        return base
+
+    def test_real_alg03_enclosure_script_only_collector_and_replay(self):
+        self.addCleanup(self.path.write_bytes, self.path.read_bytes())
+        self.inv['schema'] = 'ci110-configured-inputs-v4'
+        script, test = 'tests/unit/alg03_enclosure.py', 'alg03-enclosure'
+        source = Path(self.inv['roots']['source'])
+        evidence = Path(tempfile.mkdtemp(prefix='enclosure-evidence-', dir=self.root))
+        head = self.inv['source']['commit']
+        raw = self.original_bytes['source', script]
+        base = self.one_file_comparison(script, evidence)
         command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', source,
                    '--event', 'push', '--ref', 'refs/heads/develop', '--base', base, '--head', head,
                    '--configured-inputs', self.path, '--configured-inputs-sha256']
@@ -1372,6 +1378,112 @@ class ConfiguredInventory(unittest.TestCase):
         restored, _ = collect('restored')
         self.assertEqual(restored, intact)
         self.assertEqual(compare(restored, 'HIT'), intact_comparison)
+
+    def test_real_python_calibration_copyonly_collector_and_replay(self):
+        import platform
+
+        self.addCleanup(self.path.write_bytes, self.path.read_bytes())
+        self.inv['schema'] = 'ci110-configured-inputs-v5'
+        source, build = (Path(self.inv['roots'][root]) for root in ('source', 'build'))
+        cal, init, script = self.fixture.CALIBRATION_FILES
+        test = 'python-calibration'
+        ctest = self.inv['ctest']
+        exact = self.original_bytes['build', ctest]
+        document = json.loads(exact)
+        row, = (t for t in document['tests'] if t['name'] == test)
+        self.assertEqual(row['command'], [sys.executable, str(source / script), str(build)])
+        for path in (cal, init):
+            self.assertEqual((source / path).read_bytes(), (build / 'python/mantis' / Path(path).name).read_bytes())
+
+        def check_unknown(diag, reason):
+            self.assertEqual(diag['status'], 'ingested', diag.get('errors'))
+            self.full(diag)
+            self.assertNotIn(test, {e['test'] for e in diag['file_test_edges']})
+            self.assertEqual(diag['impacted_test_ids'], [])
+            self.assertIn({'reason': 'python-calibration-' + reason, 'subject': cal, 'evidence': 'unresolved'},
+                          diag['unknowns'])
+
+        if platform.machine() != 'x86_64':
+            check_unknown(self.diagnostic((cal,)), 'context-unsupported')
+            return
+
+        evidence = Path(tempfile.mkdtemp(prefix='calibration-evidence-', dir=self.root))
+        base = self.one_file_comparison(cal, evidence)
+        command = [sys.executable, '-B', str(TOOLS / 'ci_shadow.py'), '--repository', source,
+                   '--event', 'push', '--ref', 'refs/heads/develop', '--base', base,
+                   '--head', self.inv['source']['commit'], '--configured-inputs', self.path,
+                   '--configured-inputs-sha256']
+
+        def collect():
+            raw = self.fixture.encode(self.inv)
+            self.path.write_bytes(raw)
+            run = subprocess.run(command + [self.fixture.digest(raw)], capture_output=True, timeout=10, check=True)
+            self.assertEqual(run.stderr, b'')
+            report = json.loads(run.stdout)
+            self.assertEqual([r['path'] for r in report['acquisition']['diff']['records']], [cal])
+            self.assertFalse(report['execution_authorized'])
+            self.assertTrue(report['decision']['full_matrix_would_select'])
+            diag = report['configured_diagnostic']
+            self.assertEqual(diag['status'], 'ingested', diag.get('errors'))
+            self.full(diag)
+            return run.stdout, diag
+
+        def compare(raw):
+            corpus, _ = self.corpus_case(shadow_raw=raw, case_id='python-calibration-copy', expected=(test,),
+                                         basis='independent-copyonly-registration-and-reexport')
+            replay = self.compare_corpus(corpus)
+            self.assertEqual(replay['status'], 'compared', replay)
+            case, = replay['cases']
+            self.assertEqual(case['diagnostic'], {'state': 'HIT', 'denominator': 1, 'hits': [test], 'misses': []})
+            self.assertIn('peer-contract', case['full_would_select_test_ids'])
+            return shadow.policy.canonical(replay)
+
+        intact, diag = collect()
+        self.assertEqual(diag['impacted_test_ids'], [test], 'configured COPYONLY consumer MISS')
+        self.assertEqual(diag['target_reasons'], {})
+        edges = [e for e in diag['file_test_edges'] if e['test'] == test]
+        self.assertEqual(edges, [{'file': cal, 'test': test, 'evidence': 'conservative-inference',
+                                  'reason': 'ctest-python-calibration-copyonly-import-match'}])
+        self.assertIn({'reason': 'test-runtime-closure-unqualified', 'subject': test, 'evidence': 'unresolved'},
+                      diag['unknowns'])
+        comparison = compare(intact)
+
+        row['command'][2] = str(build / 'elsewhere')
+        self.repin('build', ctest, document)
+        check_unknown(self.diagnostic((cal,)), 'argv-mismatch')
+        row['command'][2] = str(build)
+        row['backtrace'] = -1
+        self.repin('build', ctest, document)
+        check_unknown(self.diagnostic((cal,)), 'registration-unresolved')
+        self.repin('build', ctest, exact)
+
+        copy_init = 'python/mantis/__init__.py'
+        init_raw = self.original_bytes['source', init]
+        # Both copies still match and all digests are refreshed, but the named
+        # export is gone. Missing import evidence cannot be inferred from bytes alone.
+        wrong = init_raw.replace(b'from .calibration import (Calibration,', b'from .calibration import (', 1)
+        self.assertNotEqual(wrong, init_raw)
+        self.repin('source', init, wrong)
+        self.repin('build', copy_init, wrong)
+        check_unknown(self.diagnostic((cal,)), 'import-unrecognized')
+        self.repin('source', init, init_raw)
+        self.repin('build', copy_init, init_raw)
+
+        files = self.inv['files']
+        self.inv['files'] = [pin for pin in files if (pin['root'], pin['path']) != ('build', copy_init)]
+        check_unknown(self.diagnostic((cal,)), 'pin-missing')
+        self.inv['files'] = files
+        self.changed.append(('build', copy_init))
+        (build / copy_init).write_bytes(wrong)
+        rejected = self.diagnostic((cal,))
+        self.assertEqual(rejected['status'], 'rejected')
+        self.assertEqual(rejected['errors'], ['configured-file-digest-mismatch'])
+        self.full(rejected)
+        (build / copy_init).write_bytes(init_raw)
+
+        restored, _ = collect()
+        self.assertEqual(restored, intact)
+        self.assertEqual(compare(restored), comparison)
 
     def test_alg03_enclosure_wrong_context_artifact_and_pins(self):
         # Restore the exact borrowed manifest even if an assertion fails; the
@@ -1483,7 +1595,7 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(case['diagnostic_impacted_test_ids'], ['app-contract'])
         self.assertEqual(case['full_would_select_test_ids'],
                          ['alg03-enclosure', 'alg03-numeric', 'app-contract', 'fixture-setup',
-                          'peer-contract', 'python-generator-contract'])
+                          'peer-contract', 'python-calibration', 'python-generator-contract'])
         self.assertEqual(result, self.compare_corpus(corpus), 'replay output must be deterministic')
         absent = self.copy(corpus); absent['schema'] = 'ci110-impact-corpus-v2'
         absent['cases'][0]['static_inventory'] = None

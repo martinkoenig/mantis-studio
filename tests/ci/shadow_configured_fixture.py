@@ -26,6 +26,8 @@ RULE_RECEIPT = 'mantis-protobuf-ninja-query.json'
 PYTHON_OUTPUT = 'python/mantis/mantis_pb2.py'
 PYTHON_RECEIPT = 'mantis-protobuf-python-ninja-query.json'
 ENCLOSURE_SCRIPT = 'tests/unit/alg03_enclosure.py'
+CALIBRATION_FILES = ('sdk/python/mantis/calibration.py', 'sdk/python/mantis/__init__.py',
+                     'tests/unit/python_calibration.py')
 
 
 def digest(data):
@@ -226,6 +228,12 @@ def produce(root, generator='Ninja', *, deadline=None):
     deadline = time.monotonic() + SETUP_SECONDS if deadline is None else deadline
     source, build = root / 'source', root / 'build'
     shutil.copytree(FIXTURE, source)
+    # Exact import-bearing source bytes, not lookalike Python programs. The
+    # fixture configures their copies and CTest argv but never executes them.
+    for path in CALIBRATION_FILES:
+        dest = source / path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(Path(__file__).resolve().parents[2] / path, dest)
     env = dict(os.environ, GIT_AUTHOR_NAME='Fixture', GIT_AUTHOR_EMAIL='fixture@example.invalid',
                GIT_COMMITTER_NAME='Fixture', GIT_COMMITTER_EMAIL='fixture@example.invalid',
                GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
@@ -274,14 +282,14 @@ def produce(root, generator='Ninja', *, deadline=None):
                 'roots': {'source': str(source), 'build': str(build)}, 'configuration': 'Debug',
                 'generator': generator, 'index': indexes[0].relative_to(build).as_posix(),
                 'ctest': 'ctest.json', 'files': []}
-    for path in sorted(source.iterdir()) + [source / PROTO, source / ENCLOSURE_SCRIPT]:
+    for path in sorted(source.iterdir()) + [source / p for p in (PROTO, ENCLOSURE_SCRIPT, *CALIBRATION_FILES)]:
         if path.is_file():
             manifest['files'].append({'root': 'source', 'path': path.relative_to(source).as_posix(),
                                       'sha256': digest(path.read_bytes())})
     reply = indexes[0].parent
     index = json.loads(indexes[0].read_bytes())
     system = build / 'CMakeFiles' / index['cmake']['version']['string'] / 'CMakeSystem.cmake'
-    extra = [system]
+    extra = [system, *(build / 'python/mantis' / Path(p).name for p in CALIBRATION_FILES[:2])]
     if generator == 'Ninja':
         assert ninja_pins == {p: digest((build / p).read_bytes()) for p in ninja_paths}, 'Ninja graph changed after query'
         bindings = {**ninja_pins, PROTO: digest((source / PROTO).read_bytes()),
@@ -325,8 +333,8 @@ def producer_inputs():
     """Exact local fixture/source identity, not producer authentication."""
     paths = [Path(__file__), Path(__file__).with_name('shadow_collection_test.py'),
              *sorted(FIXTURE.rglob('*'))]
-    return {str(p.relative_to(Path(__file__).parent)): digest(p.read_bytes())
-            for p in paths if p.is_file()}
+    return {**{str(p.relative_to(Path(__file__).parent)): digest(p.read_bytes()) for p in paths if p.is_file()},
+            **{p: digest((Path(__file__).resolve().parents[2] / p).read_bytes()) for p in CALIBRATION_FILES}}
 
 
 def prepare(root):
