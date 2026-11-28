@@ -346,16 +346,52 @@ configured dependency and leaves `peer-contract` untouched. It checks actual
 Ninja input removal, wrong File API association, stale/crossed pins, and exact
 restoration. It does not run these fixture executables or test Python imports.
 
-Other generated sources, Python runtime/CTest membership and overall closure
+Other generated sources, Python runtime dependencies and overall closure
 remain unqualified. The diagnostic and corpus envelopes are unchanged. FULL,
 `execution_authorized=false` and `closure_complete=false` remain binding.
+
+### One direct ALG03 enclosure script edge (separate opt-in)
+
+Use the same manifest fields with `schema: ci110-configured-inputs-v4` for this
+observation. V4 retains both independent Protobuf checks from v3. Keep the
+exact File API index, cache, codemodel and target replies, CTest show-only JSON
+and `tests/unit/alg03_enclosure.py` pinned from the clean tested source. Also
+pin `CMakeFiles/<index CMake version>/CMakeSystem.cmake` under `build`. The
+importer recognizes the generated native Linux host/target record without
+evaluating CMake. Only a Studio OFF Debug single-config Ninja configuration
+with matching cache roots is supported.
+
+Only the registration named `alg03-enclosure` is eligible. Its entire argv
+must be the cache's absolute configured interpreter (`_Python3_EXECUTABLE`,
+which must agree with `Python3_EXECUTABLE` when present), `-B`, the exact
+absolute source-root script, and the exact absolute build-root artifact of the
+configured `mantis-alg03-numeric-tests` executable. That target must have one
+unambiguously owned artifact; neither the interpreter nor the artifact is
+resolved through the filesystem on the basis of argv. The artifact need not
+exist for show-only to expand this registration. No basename, generic Python,
+shell, extra-argument or import matching is performed.
+
+V4 reports `file_test_edges` (empty or one `observed` edge with reason
+`ctest-alg03-enclosure-argv-match`). The existing closure reads it as a direct
+file-to-test association: a script-only diff impacts `alg03-enclosure`, not
+`alg03-numeric` or another consumer. Missing, ambiguous or unsupported scoped
+evidence leaves an ALG03 unknown and no direct edge; invalid outer pins or
+malformed core metadata still reject ingestion. A missing optional script or
+system-file pin is an unknown; a supplied stale pin is a rejection. V1–v3
+retain their prior output bytes on identical inputs; the shadow and corpus
+envelopes are unchanged. With the same tiny fixture, a same-basename decoy
+causes a diagnostic and corpus miss; exact restoration reproduces both outputs.
+The fixture also checks wrong argv/artifact/context and invalid pins. This
+observation does not validate runtime dependencies or test
+execution. FULL, `execution_authorized=false` and `closure_complete=false`
+remain unconditional.
 
 ### Edge and uncertainty semantics
 
 - `observed`: codemodel-listed file-to-target and dependency-to-consumer edges,
-  plus the opt-in generated Protobuf edges above, with exact pinned document/target
-  identity. These are **listed observations**, not evidence that CMake listed
-  every semantic dependency.
+  plus the opt-in generated Protobuf edges and direct ALG03 script edge above,
+  with exact pinned document/target identity. These are **listed observations**,
+  not evidence that CMake listed every semantic dependency.
 - `conservative-inference`: literal quoted include-to-target edges, with the
   including source in the reason, and target-to-test edges inferred by matching
   CTest's first command argument to a configured artifact. Include traversal is

@@ -21,6 +21,10 @@ PYTHON_PROTO_OUTPUT = 'python/mantis/mantis_pb2.py'
 PYTHON_PROTO_OWNER = 'mantis-python'
 PYTHON_PROTO_RECEIPT = ('build', 'mantis-protobuf-python-ninja-query.json')
 PYTHON_PROTO_INPUT_SCHEMA = 'ci110-configured-inputs-v3'
+ALG03_INPUT_SCHEMA = 'ci110-configured-inputs-v4'
+ALG03_SCRIPT = 'tests/unit/alg03_enclosure.py'
+ALG03_TEST = 'alg03-enclosure'
+ALG03_NUMERIC = 'mantis-alg03-numeric-tests'
 
 
 class InvalidInput(ValueError):
@@ -54,7 +58,7 @@ class Inputs:
     def __init__(self, manifest, expected):
         policy.keys(manifest, 'schema source roots configuration generator index ctest files', 'configured-input-fields')
         check(manifest['schema'] in ('ci110-configured-inputs-v1', 'ci110-configured-inputs-v2',
-                                     PYTHON_PROTO_INPUT_SCHEMA),
+                                     PYTHON_PROTO_INPUT_SCHEMA, ALG03_INPUT_SCHEMA),
               'configured-input-version')
         policy.identity(manifest['source'])
         check(manifest['source'] == expected, 'configured-source-identity-mismatch')
@@ -65,6 +69,8 @@ class Inputs:
             check(isinstance(value, str) and Path(value).is_absolute(), 'configured-root-path')
             root = Path(value)
             check(root == root.resolve() and root.is_dir(), 'configured-root-not-canonical')
+            if manifest['schema'] == ALG03_INPUT_SCHEMA:
+                check(value == str(root), 'configured-root-not-canonical')
             self.roots[name] = root
         check(self.roots['source'] != self.roots['build'] and
               self.roots['build'] not in self.roots['source'].parents, 'configured-root-overlap')
@@ -279,6 +285,68 @@ def python_protobuf_owner(i, generator, configs, cache, cache_path, rows, target
     return owner_id
 
 
+def alg03_interpreter(i, cmake_version, generator, configs, cache):
+    """Return the configured interpreter spelling for the supported context only."""
+    unsupported = 'alg03-enclosure-context-unsupported'
+    check(i.manifest['configuration'] == 'Debug' and generator.get('name') == 'Ninja' and
+          generator.get('multiConfig') is False and len(configs) == 1, unsupported)
+    # Cache/codemodel do not normally report the target OS. Read only the pinned
+    # generator output for this exact CMake version; recognize the native Linux
+    # template without interpreting CMake code, includes or a toolchain file.
+    system = i.data.get(('build', f'CMakeFiles/{cmake_version}/CMakeSystem.cmake'))
+    check(system is not None, 'alg03-enclosure-system-pin-missing')
+    check(len(system) <= 4096 and re.fullmatch(
+        rb'set\(CMAKE_HOST_SYSTEM "Linux-(?P<release>[A-Za-z0-9._+~-]+)"\)\n'
+        rb'set\(CMAKE_HOST_SYSTEM_NAME "Linux"\)\n'
+        rb'set\(CMAKE_HOST_SYSTEM_VERSION "(?P=release)"\)\n'
+        rb'set\(CMAKE_HOST_SYSTEM_PROCESSOR "(?P<arch>[A-Za-z0-9_]+)"\)\n\n\n\n'
+        rb'set\(CMAKE_SYSTEM "Linux-(?P=release)"\)\n'
+        rb'set\(CMAKE_SYSTEM_NAME "Linux"\)\n'
+        rb'set\(CMAKE_SYSTEM_VERSION "(?P=release)"\)\n'
+        rb'set\(CMAKE_SYSTEM_PROCESSOR "(?P=arch)"\)\n\n'
+        rb'set\(CMAKE_CROSSCOMPILING "FALSE"\)\n\nset\(CMAKE_SYSTEM_LOADED 1\)\n', system), unsupported)
+    context = {'CMAKE_BUILD_TYPE': 'Debug', 'CMAKE_GENERATOR': 'Ninja', 'MANTIS_BUILD_STUDIO': 'OFF',
+               'CMAKE_HOME_DIRECTORY': str(i.roots['source']), 'CMAKE_CACHEFILE_DIR': str(i.roots['build'])}
+    entries = records(cache.get('entries'))
+    pinned = [(r['name'], r.get('value')) for r in entries if r.get('name') in context]
+    check(len(pinned) == len(context) and dict(pinned) == context, 'alg03-enclosure-cache-mismatch')
+    selected = [r.get('value') for r in entries if r.get('name') == '_Python3_EXECUTABLE']
+    override = [r.get('value') for r in entries if r.get('name') == 'Python3_EXECUTABLE']
+    check(len(selected) == 1 and (not override or override == selected), 'alg03-enclosure-interpreter-unresolved')
+    python = selected[0]
+    # Compare the cache's absolute spelling, not a realpath (the interpreter
+    # may be a symlink). Reject relative, aliased or nonliteral path spellings.
+    check(isinstance(python, str) and 0 < len(python) <= 4096 and python.startswith('/') and
+          '\\' not in python and python.isprintable() and
+          all(part not in ('', '.', '..') for part in python[1:].split('/')),
+          'alg03-enclosure-interpreter-unresolved')
+    return python
+
+
+def check_alg03_registration(i, python, target, artifacts, registration):
+    """Match exactly one named registration using already pinned metadata, never argv I/O."""
+    check(('source', ALG03_SCRIPT) in i.data, 'alg03-enclosure-script-pin-missing')
+    script = str(i.roots['source'] / ALG03_SCRIPT)
+    check(i.locate(script) == ('source', ALG03_SCRIPT), 'alg03-enclosure-context-unsupported')
+
+    artifact_error = 'alg03-enclosure-artifact-unresolved'
+    if target is None or target['type'] != 'EXECUTABLE':
+        raise InvalidInput(artifact_error)
+    outputs = target.get('artifacts', [])
+    check(len(outputs) == 1, artifact_error)
+    spelling = outputs[0]['path']
+    loc = i.locate(spelling, 'build')
+    if loc is None or loc[0] != 'build' or not loc[1] or artifacts.get(loc) != {target['id']}:
+        raise InvalidInput(artifact_error)
+    artifact = str(i.roots['build'] / loc[1])
+    check(spelling in (loc[1], artifact), artifact_error)
+
+    check(registration is not None, 'alg03-enclosure-registration-missing')
+    command = registration.get('command')
+    check(command is not None, 'alg03-enclosure-command-missing')
+    check(command == [python, '-B', script, artifact], 'alg03-enclosure-argv-mismatch')
+
+
 def import_inputs(inputs, expected, changes):
     """Import observations, projecting ONLY reachability onto the existing policy."""
     i = Inputs(inputs, expected)
@@ -435,7 +503,7 @@ def import_inputs(inputs, expected, changes):
                 for header in resolved:
                     file_edges.add((header, tid, 'conservative-inference', 'literal-include-from:' + path))
                     pending.append(header)
-    if inputs['schema'] in ('ci110-configured-inputs-v2', PYTHON_PROTO_INPUT_SCHEMA):
+    if inputs['schema'] in ('ci110-configured-inputs-v2', PYTHON_PROTO_INPUT_SCHEMA, ALG03_INPUT_SCHEMA):
         try:
             owner = protobuf_owner(i, cmake['generator'], configs, by_kind['cache'], cache_path, rows, target_docs)
         except InvalidInput as exc:
@@ -443,7 +511,7 @@ def import_inputs(inputs, expected, changes):
         else:
             file_edges.add((PROTO, owner, 'observed', 'ninja-query-protobuf-cxx'))
     # Separate opt-in keeps the canonical v1/v2 diagnostic replayable as-is.
-    if inputs['schema'] == PYTHON_PROTO_INPUT_SCHEMA:
+    if inputs['schema'] in (PYTHON_PROTO_INPUT_SCHEMA, ALG03_INPUT_SCHEMA):
         try:
             owner = python_protobuf_owner(i, cmake['generator'], configs, by_kind['cache'], cache_path,
                                           rows, target_docs)
@@ -473,6 +541,7 @@ def import_inputs(inputs, expected, changes):
           'configured-ctest-version')
     tests = []
     test_ids = set()
+    enclosure_registration = None
     for row in records(ctest['tests']):
         name = row['name']
         check(label(name) and name not in test_ids, 'configured-duplicate-or-invalid-test')
@@ -501,7 +570,20 @@ def import_inputs(inputs, expected, changes):
             unknown('test-fixture-or-runtime-dependency-unresolved', name)
         unknown('test-runtime-closure-unqualified', name)
         tests.append({'id': name, 'targets': mapped, 'command_sha256': policy.digest(policy.canonical(command))})
+        if inputs['schema'] == ALG03_INPUT_SCHEMA and name == ALG03_TEST:
+            enclosure_registration = row
     check(tests, 'configured-empty-tests')
+    file_test_edges = []
+    if inputs['schema'] == ALG03_INPUT_SCHEMA:
+        try:
+            python = alg03_interpreter(i, cmake_version, cmake['generator'], configs, by_kind['cache'])
+            check_alg03_registration(i, python, target_docs.get(names.get(ALG03_NUMERIC)), artifacts,
+                                     enclosure_registration)
+        except InvalidInput as exc:
+            unknown(str(exc), ALG03_SCRIPT)
+        else:
+            file_test_edges.append({'file': ALG03_SCRIPT, 'test': ALG03_TEST, 'evidence': 'observed',
+                                    'reason': 'ctest-alg03-enclosure-argv-match'})
     for path, tid, _, _ in sorted(file_edges):
         targets[tid]['sources'].append(path)
     for info in targets.values():
@@ -526,6 +608,8 @@ def import_inputs(inputs, expected, changes):
             'limits': ['caller-pins-are-not-authentication', 'no-complete-product-closure',
                        'no-provider-event-authentication', 'no-signatures-or-OS-isolation',
                        'no-historical-recall-or-performance-qualification']}
+    if inputs['schema'] == ALG03_INPUT_SCHEMA:
+        result['file_test_edges'] = file_test_edges
     project(result, changes)
     return result
 
@@ -555,6 +639,8 @@ def project(result, changes):
     files = {}
     for edge in result['file_target_edges']:
         files.setdefault(edge['file'], {'targets': [], 'tests': []})['targets'].append(edge['target'])
+    for edge in result.get('file_test_edges', ()):
+        files.setdefault(edge['file'], {'targets': [], 'tests': []})['tests'].append(edge['test'])
     targets = {t['id']: t for t in result['targets']}
     reasons, impacted = policy.closure({'files': files, 'targets': targets, 'tests': result['tests']}, changes)
     result['target_reasons'] = dict(sorted(reasons.items()))

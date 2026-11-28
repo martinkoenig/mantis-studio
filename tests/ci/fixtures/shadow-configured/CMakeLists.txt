@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 project(ShadowMetadataFixture LANGUAGES CXX)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 enable_testing()
 configure_file(generated.cpp.in generated.cpp COPYONLY)
 option(MANTIS_BUILD_STUDIO "Studio mode of the configured evidence fixture" OFF)
@@ -34,3 +35,9 @@ add_test(NAME peer-contract COMMAND peer)
 add_test(NAME python-generator-contract COMMAND python-consumer)
 add_test(NAME fixture-setup COMMAND "${CMAKE_COMMAND}" -E true)
 set_tests_properties(fixture-setup PROPERTIES FIXTURES_SETUP prepared)
+# Mirror only the supported command shape, not the product test behavior.
+add_executable(mantis-alg03-numeric-tests python-consumer.cpp)
+add_test(NAME alg03-numeric COMMAND mantis-alg03-numeric-tests)
+add_test(NAME alg03-enclosure COMMAND "${Python3_EXECUTABLE}" -B
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/alg03_enclosure.py"
+    "$<TARGET_FILE:mantis-alg03-numeric-tests>")
