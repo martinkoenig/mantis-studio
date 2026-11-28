@@ -682,7 +682,8 @@ class ConfiguredInventory(unittest.TestCase):
         cls.prepared_sha256 = (os.environ.get('MANTIS_SHADOW_PREPARED_SHA256') if prepared
                                else fixture.prepare(cls.root))
         first, cls.multi_inputs = fixture.load_prepared(cls.root, cls.prepared_sha256)
-        cls.original, cls.path, cls.base = first
+        cls.sealed_original, cls.path, cls.base = first
+        cls.original = cls.copy(cls.sealed_original)
         cls.original_bytes = {(row['root'], row['path']):
                               (Path(cls.original['roots'][row['root']]) / row['path']).read_bytes()
                               for row in cls.original['files']}
@@ -1073,7 +1074,7 @@ class ConfiguredInventory(unittest.TestCase):
                     self.fixture.load_prepared(self.root, self.prepared_sha256)
             finally:
                 public.write_bytes(pristine)
-            self.assertEqual(self.fixture.load_prepared(self.root, self.prepared_sha256)[0][0], self.original)
+            self.assertEqual(self.fixture.load_prepared(self.root, self.prepared_sha256)[0][0], self.sealed_original)
         result = self.diagnostic()
         before = {key: (self.fixture.digest(data), (Path(self.inv['roots'][key[0]]) / key[1]).stat().st_mtime_ns)
                   for key, data in self.original_bytes.items()}

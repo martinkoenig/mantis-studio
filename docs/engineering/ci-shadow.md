@@ -425,8 +425,8 @@ receipt of at most 32,768 bytes using these exact fields:
   toolchain probes from the installed CMake modules before the first package
   copy. The probes assume a trusted native toolchain and a fresh owned build;
   the producer does not qualify configured compiler launchers or toolchain
-  files. It uses the CMake
-  module root reported by the File API and cache; it does not resolve
+  files. It uses the CMake module root reported by the File API and cache;
+  it does not resolve
   directory-copy mappings, read paths from trace arguments, or interpret
   subprocess code. Retain unclassified operations and copy-command overrides,
   even when they name neither Python file. For example, a native directory
