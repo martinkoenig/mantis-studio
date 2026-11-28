@@ -412,7 +412,7 @@ def check_calibration_trace(i, expected, evidence_pins):
         policy.keys(receipt, 'schema sha256 commands ' + ' '.join(context), unsupported)
     except ValueError:
         raise InvalidInput(unsupported) from None
-    check(receipt['schema'] == 'ci110-mantis-python-calibration-copy-trace-v2', unsupported)
+    check(receipt['schema'] == 'ci110-mantis-python-calibration-copy-trace-v3', unsupported)
     check(all(receipt[k] == i.manifest[k] for k in context) and
           receipt['sha256'] == {name: policy.digest(i.data[key]) for name, key in evidence_pins.items()},
           'python-calibration-copy-trace-context-mismatch')

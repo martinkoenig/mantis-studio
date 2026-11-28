@@ -1483,7 +1483,7 @@ class ConfiguredInventory(unittest.TestCase):
         self.inv['files'] = files
         trace_raw = self.original_bytes['build', trace]
         receipt = json.loads(trace_raw)
-        receipt['schema'] = 'ci110-mantis-python-calibration-copy-trace-v1'
+        receipt['schema'] = 'ci110-mantis-python-calibration-copy-trace-v2'
         self.repin('build', trace, receipt)
         check_unknown(self.diagnostic((cal,)), 'copy-trace-unsupported')
         receipt = json.loads(trace_raw)
@@ -1509,19 +1509,22 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertEqual(compare(restored), comparison)
 
     def test_real_calibration_copy_routed_from_same_byte_decoy(self):
-        self.check_real_calibration_competing_copy(directory_copy=False)
+        self.check_real_calibration_competing_copy(writer='alternate')
 
     def test_real_calibration_copy_overwritten_by_relative_directory_copy(self):
-        self.check_real_calibration_competing_copy(directory_copy=True)
+        self.check_real_calibration_competing_copy(writer='directory')
 
-    def check_real_calibration_competing_copy(self, *, directory_copy):
+    def test_real_calibration_copy_overwritten_by_configure_subprocess(self):
+        self.check_real_calibration_competing_copy(writer='subprocess')
+
+    def check_real_calibration_competing_copy(self, *, writer):
         import platform
 
         if platform.machine() != 'x86_64':
             self.skipTest('COPYONLY attribution is scoped to native Linux x86_64')
         self.addCleanup(self.path.write_bytes, self.path.read_bytes())
         case = Path(tempfile.mkdtemp(prefix='calibration-routing-', dir=self.root))
-        self.inv, base = self.fixture.calibration_decoy(case, directory_copy=directory_copy)
+        self.inv, base = self.fixture.calibration_decoy(case, writer=writer)
         cal = self.fixture.CALIBRATION_FILES[0]
         test = 'python-calibration'
         raw = self.fixture.encode(self.inv)
@@ -1549,10 +1552,15 @@ class ConfiguredInventory(unittest.TestCase):
         self.assertNotIn(test, {e['test'] for e in diag['file_test_edges']})
         self.assertIn({'reason': 'python-calibration-copyonly-unresolved', 'subject': cal, 'evidence': 'unresolved'},
                       diag['unknowns'])
-        if directory_copy:
+        if writer == 'directory':
             receipt = json.loads((case / 'build' / self.fixture.CALIBRATION_TRACE).read_bytes())
             self.assertIn(['COPY', str(case / 'source/alternate/mantis'), 'DESTINATION', 'python'],
                           [row['args'] for row in receipt['commands'] if row['cmd'] == 'file'])
+        if writer == 'subprocess':
+            receipt = json.loads((case / 'build' / self.fixture.CALIBRATION_TRACE).read_bytes())
+            self.assertIn(['-E', 'copy_directory', str(case / 'source/alternate/mantis'),
+                           str(case / 'build/python/mantis'), 'COMMAND_ERROR_IS_FATAL', 'ANY'],
+                          [row['args'][2:] for row in receipt['commands'] if row['cmd'] == 'execute_process'])
 
     def test_alg03_enclosure_wrong_context_artifact_and_pins(self):
         # Restore the exact borrowed manifest even if an assertion fails; the

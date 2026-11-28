@@ -30,6 +30,20 @@ ENCLOSURE_SCRIPT = 'tests/unit/alg03_enclosure.py'
 CALIBRATION_FILES = ('sdk/python/mantis/calibration.py', 'sdk/python/mantis/__init__.py',
                      'tests/unit/python_calibration.py')
 CALIBRATION_TRACE = 'mantis-python-calibration-copy-trace.json'
+# Metadata operations and control flow whose nested CMake calls appear in the
+# full trace. Unknown operations are retained, not classified by filenames.
+CALIBRATION_METADATA_COMMANDS = frozenset('''
+    add_custom_command add_custom_target add_definitions add_dependencies add_executable
+    add_library add_subdirectory add_test block break build_command cmake_host_system_information
+    cmake_initialize_per_config_variable cmake_minimum_required cmake_parse_arguments cmake_policy
+    continue define_property else elseif enable_testing find_file find_library find_package
+    find_package_check_version find_path find_program foreach get_filename_component get_property
+    get_target_property if include include_directories include_guard link_directories list
+    mark_as_advanced math message option project return separate_arguments set set_property
+    set_source_files_properties set_target_properties set_tests_properties string target_compile_definitions
+    target_compile_options target_include_directories target_link_libraries target_link_options
+    target_sources unset while
+'''.split())
 
 
 def digest(data):
@@ -226,6 +240,13 @@ def run(command, root, *, deadline=None, env=None):
     return bytes(output)
 
 
+def calibration_other_output(output, build):
+    return (output.startswith(str(build) + '/') and output.isprintable() and
+            not any(c in output for c in '$;\\') and
+            all(part not in ('', '.', '..') for part in output[1:].split('/')) and
+            not Path(output).is_relative_to(build / 'python'))
+
+
 def calibration_file_may_compete(args, caller, source, build):
     """Discard only known non-writers or writes visibly outside build/python."""
     if not args:
@@ -246,37 +267,149 @@ def calibration_file_may_compete(args, caller, source, build):
         # No attempt to interpret arbitrary file operations, in particular
         # COPY/INSTALL directory mappings or their relative destinations.
         return True
-    return not outputs or any(
-        not output.startswith(str(build) + '/') or not output.isprintable() or
-        any(c in output for c in '$;\\') or
-        any(part in ('', '.', '..') for part in output[1:].split('/')) or
-        Path(output).is_relative_to(build / 'python') for output in outputs)
+    return not outputs or not all(calibration_other_output(output, build) for output in outputs)
+
+
+def calibration_bootstrap_process(module, args, cache, build):
+    """Recognize stock native toolchain probes from the installed CMake modules."""
+    if args[:1] != ['COMMAND']:
+        return False
+    # No redirections, chained commands, launchers or unscoped options.
+    value_options = {'OUTPUT_VARIABLE', 'ERROR_VARIABLE', 'RESULT_VARIABLE'}
+    flags = {'OUTPUT_STRIP_TRAILING_WHITESPACE', 'ERROR_QUIET'}
+
+    def output_options(rest):
+        while rest:
+            if rest[0] in value_options and len(rest) >= 2 and re.fullmatch(r'\w+', rest[1]):
+                rest = rest[2:]
+            elif rest[0] in flags:
+                rest = rest[1:]
+            else:
+                return False
+        return True
+
+    argv = args[1:]
+    compiler = {cache.get('CMAKE_C_COMPILER'), cache.get('CMAKE_CXX_COMPILER')} - {None, ''}
+    tool = argv[0] if argv else None
+    if module == 'CMakeDetermineSystem.cmake':
+        return (argv[:1] in (['/usr/bin/uname'], ['/bin/uname']) and
+                argv[1:2] in (['-r'], ['-m']) and output_options(argv[2:]))
+    if module == 'CMakeDetermineCompiler.cmake':
+        return (tool in compiler and argv[1:2] == ['-print-sysroot'] and output_options(argv[2:]))
+    if module == 'CMakeDetermineCompilerId.cmake' and tool in compiler and 'WORKING_DIRECTORY' in argv:
+        n = argv.index('WORKING_DIRECTORY')
+        return (n >= 2 and argv[n-1] in ('CMakeCCompilerId.c', 'CMakeCXXCompilerId.cpp') and
+                not any(argv[1:n-1]) and len(argv) > n + 1 and
+                calibration_other_output(argv[n+1], build / 'CMakeFiles') and output_options(argv[n+2:]))
+    if module == 'Platform/Linux.cmake':
+        return (tool in ('', cache.get('CMAKE_LINKER')) and argv[1:2] == ['--help'] and
+                output_options(argv[2:]))
+    if module == 'Compiler/GNU.cmake':
+        return (((tool == cache.get('CMAKE_MAKE_PROGRAM') and argv[1:2] == ['--version']) or
+                 (tool in compiler and argv[1:2] == ['-Wl,--help'])) and output_options(argv[2:]))
+    if module == 'FindProtobuf.cmake':
+        return (tool == cache.get('Protobuf_PROTOC_EXECUTABLE') and argv[1:2] == ['--version'] and
+                output_options(argv[2:]))
+    if module == 'FindPython/Support.cmake':
+        if argv[:1] == ['']:  # empty documented launcher slot in the trace
+            argv = argv[1:]
+        if argv[:1] != [cache.get('_Python3_EXECUTABLE')]:
+            return False
+        # Probe source is from the trusted installed FindPython module, not
+        # Python read from the checkout or inferred from arbitrary argv.
+        if argv[1:2] == ['-V']:
+            return output_options(argv[2:])
+        return argv[1:2] == ['-c'] and len(argv) > 2 and output_options(argv[3:])
+    return False
+
+
+def calibration_bootstrap_compile(module, args, modules, build):
+    """Allow only the observed C/C++ ABI and libc pthread configure probes."""
+    if module == 'CMakeDetermineCompilerABI.cmake':
+        for lang, ext in (('C', '.c'), ('CXX', '.cpp')):
+            if args[:10] == [f'CMAKE_{lang}_ABI_COMPILED', 'SOURCES',
+                             modules + f'CMake{lang}CompilerABI{ext}', 'CMAKE_FLAGS',
+                             f'-DEXE_LINKER_FLAGS=-v;-DCMAKE_{lang}_STANDARD_LIBRARIES=',
+                             '--no-warn-unused-cli', 'COMPILE_DEFINITIONS', '-v', 'OUTPUT_VARIABLE', 'OUTPUT']:
+                return (len(args) == 16 and args[10] == 'COPY_FILE' and
+                        calibration_other_output(args[11], build / 'CMakeFiles') and
+                        args[12:] == ['COPY_FILE_ERROR', '_copy_error', '__CMAKE_INTERNAL', 'ABI'])
+    return module == 'Internal/CheckSourceCompiles.cmake' and args == [
+        'CMAKE_HAVE_LIBC_PTHREAD', 'SOURCE_FROM_VAR', 'src.c', '_source',
+        'COMPILE_DEFINITIONS', '-DCMAKE_HAVE_LIBC_PTHREAD', '', '', '',
+        'CMAKE_FLAGS', '-DCOMPILE_DEFINITIONS:STRING=', '', 'OUTPUT_VARIABLE', 'OUTPUT']
 
 
 def calibration_trace(manifest, trace):
     """Project the real expanded trace, without resolving or opening argv paths."""
     source, build = (Path(manifest['roots'][r]) for r in ('source', 'build'))
-    assert trace.stat().st_size <= 16_000_000, 'fixture CMake trace exceeds capture limit'
-    named_file = re.compile(r'(?<![A-Za-z0-9_.-])(?:calibration|__init__)\.py(?![A-Za-z0-9_.-])')
+    if trace.stat().st_size > 16_000_000:
+        return None
+    index = build / manifest['index']
+    index_doc = json.loads(index.read_bytes())
+    cache, = (row['jsonFile'] for row in index_doc['objects'] if row['kind'] == 'cache')
+    cache_path = index.parent / cache
+    cache_values = {row['name']: row['value'] for row in json.loads(cache_path.read_bytes())['entries']}
+    cmake_root = index_doc['cmake']['paths']['root']
+    if not Path(cmake_root).is_absolute() or cmake_root != cache_values.get('CMAKE_ROOT'):
+        return None
+    if any(cache_values.get(key) for key in ('CMAKE_TOOLCHAIN_FILE', 'CMAKE_C_COMPILER_LAUNCHER',
+                                             'CMAKE_CXX_COMPILER_LAUNCHER')):
+        return None
+    modules = str(Path(cmake_root) / 'Modules') + '/'
+    top = str(source / 'CMakeLists.txt')
+    copies = {(p, str(build / 'python/mantis' / Path(p).name), 'COPYONLY') for p in CALIBRATION_FILES[:2]}
+    defined = set()
+    bootstrap = True
     with trace.open('rb') as stream:
-        assert json.loads(stream.readline()) == {'version': {'major': 1, 'minor': 2}}
+        if json.loads(stream.readline()) != {'version': {'major': 1, 'minor': 2}}:
+            return None
         commands = []
         for line in stream:
             row = json.loads(line)
-            cmd, args = row['cmd'], row['args']
-            # A directory-level writer need not mention either filename or the
-            # absolute package path. Do not discard uncertain native file ops.
-            if (any(named_file.search(arg) for arg in args) or
-                    (cmd == 'file' and calibration_file_may_compete(args, row['file'], source, build)) or
-                    (cmd in ('function', 'macro') and args and args[0].lower() in ('configure_file', 'file'))):
-                commands.append({k: row[k] for k in ('cmd', 'file', 'line', 'frame', 'global_frame', 'args')})
-    index = build / manifest['index']
-    cache, = (row['jsonFile'] for row in json.loads(index.read_bytes())['objects'] if row['kind'] == 'cache')
-    pins = {'index': index, 'cache': index.parent / cache, 'ctest': build / manifest['ctest'],
+            cmd, args, caller = row['cmd'].lower(), row['args'], row['file']
+            module = caller.removeprefix(modules) if caller.startswith(modules) else None
+            if cmd == 'configure_file':
+                if caller == top and tuple(args) in copies:
+                    bootstrap = False
+                elif caller == top and args == ['generated.cpp.in', 'generated.cpp', 'COPYONLY']:
+                    continue  # fixed tiny-fixture copy outside the package
+                elif (bootstrap and module and len(args) >= 2 and
+                      (args[1] == str(build / 'DartConfiguration.tcl') or
+                       calibration_other_output(args[1], build / 'CMakeFiles'))):
+                    continue
+            elif cmd == 'file':
+                if not calibration_file_may_compete(args, caller, source, build):
+                    continue
+            elif cmd == 'execute_process':
+                if bootstrap and calibration_bootstrap_process(module, args, cache_values, build):
+                    continue
+            elif cmd == 'try_compile':
+                if bootstrap and calibration_bootstrap_compile(module, args, modules, build):
+                    continue
+            elif cmd in ('function', 'macro') and args:
+                name = args[0].lower()
+                if name not in ('configure_file', 'file', 'execute_process', 'try_compile', 'try_run',
+                                'cmake_language', 'load_command', 'function', 'macro'):
+                    defined.add(name)
+                    continue
+            elif cmd in ('set', 'unset') and args and args[0].startswith('ENV{'):
+                # Do not qualify an altered subprocess environment. Stock CMake
+                # temporarily selects a stable locale for its compiler ABI probe.
+                if (bootstrap and module == 'CMakeDetermineCompilerABI.cmake' and cmd == 'set' and
+                        len(args) == 2 and args[0] in ('ENV{LC_ALL}', 'ENV{LC_MESSAGES}', 'ENV{LANG}') and
+                        re.fullmatch(r'[\w.@-]*', args[1])):
+                    continue
+            elif cmd in CALIBRATION_METADATA_COMMANDS or cmd in defined:
+                continue
+            # Retain every unclassified operation, so only the two checked
+            # COPYONLY invocations can qualify. Never open a path from argv.
+            commands.append({k: row[k] for k in ('cmd', 'file', 'line', 'frame', 'global_frame', 'args')})
+    pins = {'index': index, 'cache': cache_path, 'ctest': build / manifest['ctest'],
             **{p: source / p for p in ('CMakeLists.txt', *CALIBRATION_FILES)},
             **{p: build / p for p in ('python/mantis/calibration.py', 'python/mantis/__init__.py')}}
     receipt = {k: manifest[k] for k in ('source', 'roots', 'configuration', 'generator')}
-    receipt.update(schema='ci110-mantis-python-calibration-copy-trace-v2', commands=commands,
+    receipt.update(schema='ci110-mantis-python-calibration-copy-trace-v3', commands=commands,
                    sha256={k: digest(p.read_bytes()) for k, p in pins.items()})
     raw = encode(receipt)
     if len(raw) > 32_768:
@@ -380,7 +513,7 @@ def produce(root, generator='Ninja', *, deadline=None):
     return manifest, path, base
 
 
-def calibration_decoy(root, *, directory_copy=False):
+def calibration_decoy(root, *, writer):
     """Two real configure-only snapshots: the package copy stays unchanged."""
     source, build = root / 'source', root / 'build'
     cal, init, script = CALIBRATION_FILES
@@ -391,16 +524,22 @@ def calibration_decoy(root, *, directory_copy=False):
         shutil.copyfile(Path(__file__).resolve().parents[2] / path, dest)
     exact = (source / cal).read_bytes()
     active_copy = f'configure_file({cal} ${{CMAKE_BINARY_DIR}}/{copy} COPYONLY)'
-    if directory_copy:
+    if writer in ('directory', 'subprocess'):
         alternate = source / 'alternate/mantis'
         alternate.mkdir(parents=True)
         fixed = alternate / 'calibration.py'
         fixed.write_bytes(exact)
         # CMake file(COPY) can skip equal timestamps at whole-second resolution.
         os.utime(fixed, (946684800, 946684800))
-        route = f'''{active_copy}
-file(COPY "${{CMAKE_CURRENT_SOURCE_DIR}}/alternate/mantis" DESTINATION python)'''
+        if writer == 'directory':
+            overwrite = 'file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/alternate/mantis" DESTINATION python)'
+        else:
+            overwrite = '''execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/alternate/mantis" "${CMAKE_CURRENT_BINARY_DIR}/python/mantis"
+    COMMAND_ERROR_IS_FATAL ANY)'''
+        route = f'{active_copy}\n{overwrite}'
     else:
+        assert writer == 'alternate'
         (source / 'fixed.py').write_bytes(exact)
         route = f'''if(FALSE)
     {active_copy}
@@ -449,7 +588,7 @@ add_test(NAME python-calibration COMMAND ${{Python3_EXECUTABLE}} ${{CMAKE_CURREN
     assert git('diff', '--name-status', base, head) == f'M\t{cal}'
     configure(build)
     assert (before / copy).read_bytes() == (build / copy).read_bytes() == exact
-    if not directory_copy:
+    if writer == 'alternate':
         assert (before / 'unrelated.py').read_bytes() != (build / 'unrelated.py').read_bytes() == exact
     assert not git('status', '--porcelain')
     ctest = run(['ctest', '--test-dir', str(build), '--show-only=json-v1'], root, deadline=deadline)

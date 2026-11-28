@@ -413,24 +413,28 @@ Capture the successful, fresh configure with `--trace-expand
 that same build. Keep the full trace private and outside the manifest. Pin a
 receipt of at most 32,768 bytes using these exact fields:
 
-- `schema`: `ci110-mantis-python-calibration-copy-trace-v2`. An earlier draft
-  projection did not retain all relevant directory copies and is unsupported.
+- `schema`: `ci110-mantis-python-calibration-copy-trace-v3`. Earlier draft
+  projections omitted possible writers and are unsupported.
 - `source`, `roots`, `configuration`, `generator`: as in the input manifest.
 - `sha256`: digests keyed by `index`, `cache` (File API cache reply), `ctest`,
   and each source/copy path in the table, excluding the receipt itself.
 - `commands`: the trace records relevant to either copy route, retaining only
-  `cmd`, `file`, `line`, `frame`, `global_frame`, and expanded `args`. Retain
-  competing or ambiguous native file operations even when neither filename
-  appears. For example, `file(COPY <alternate>/mantis DESTINATION python)`
-  can overwrite the configured files: the relative destination is under the
-  current binary directory. The fixture producer discards only known
-  non-writers, a few native operations with unambiguous absolute outputs
-  elsewhere in the owned build, and the reviewed top-level `recipes` copy
-  to `build/recipes`. It does not resolve directory mappings or open paths
-  found in the trace. Retain overrides of `configure_file` or `file`. Omit
-  the receipt if a possible opaque or indirect writer cannot be ruled out,
-  or if the relevant records do not fit the bound; never truncate the
-  projection to just the expected calls.
+  `cmd`, `file`, `line`, `frame`, `global_frame`, and expanded `args`. Start
+  from a positive scope: known metadata operations and traced CMake calls,
+  reviewed native operations outside the package, and the recognized stock
+  toolchain probes from the installed CMake modules before the first package
+  copy. The probes assume a trusted native toolchain and a fresh owned build;
+  the producer does not qualify configured compiler launchers or toolchain
+  files. It uses the CMake
+  module root reported by the File API and cache; it does not resolve
+  directory-copy mappings, read paths from trace arguments, or interpret
+  subprocess code. Retain unclassified operations and copy-command overrides,
+  even when they name neither Python file. For example, a native directory
+  copy with `DESTINATION python` or a project `execute_process` that copies the
+  directory can overwrite the package. Retain the competing record or omit
+  the receipt if the trace or projection cannot be represented within its
+  bounds; never truncate the projection to just the expected calls. New
+  bootstrap operations can remain unresolved until inspected.
 
 The importer accepts exactly two records, one active top-level `configure_file`
 per pair, with both frame depths equal to 1, the exact source recipe line,
